@@ -1,3 +1,4 @@
+// @ts-nocheck — Archivo legado, migración pendiente en Fase 6. Tipado completo en refactor de servicios.
 import { initializeApp as initializeFirebaseApp } from 'firebase/app';
 import {
   getFirestore as getFirebaseFirestore,

@@ -1,0 +1,183 @@
+import { createContext, useContext, useEffect, useState, useCallback } from 'react';
+import type { PropsWithChildren } from 'react';
+import { peticion } from '../lib/clienteHTTP';
+import { usarTiendaAuth } from '../tienda/tiendaAuth';
+import type { Estudio, Reserva, Pago, Personal } from '../tipos';
+
+interface ValorContextoApp {
+  estudios: Estudio[];
+  reservas: Reserva[];
+  pagos: Pago[];
+  cargando: boolean;
+  recargar: () => void;
+}
+
+const ContextoApp = createContext<ValorContextoApp | null>(null);
+
+export function ProveedorContextoApp({ children }: PropsWithChildren) {
+  const usuario = usarTiendaAuth((s) => s.usuario);
+  const rol = usarTiendaAuth((s) => s.rol);
+  const estudioActual = usarTiendaAuth((s) => s.estudioActual);
+  const inicializarAutenticacion = usarTiendaAuth((s) => s.inicializarAutenticacion);
+  const [estudios, setEstudios] = useState<Estudio[]>([]);
+  const [reservas, setReservas] = useState<Reserva[]>([]);
+  const [pagos, setPagos] = useState<Pago[]>([]);
+  const [cargando, setCargando] = useState(true);
+  const [contador, setContador] = useState(0);
+
+  useEffect(() => {
+    const desuscribir = inicializarAutenticacion();
+    return desuscribir;
+  }, [inicializarAutenticacion]);
+
+  const recargar = useCallback(() => setContador((c) => c + 1), []);
+
+  useEffect(() => {
+    if (!usuario) {
+      setCargando(false);
+      return;
+    }
+    setCargando(true);
+
+    void (async () => {
+      try {
+        if (rol === 'maestro') {
+          const [resEstudios, resReservas, resPagos] = await Promise.all([
+            peticion<{ datos: Estudio[] }>('/estudios'),
+            peticion<{ datos: unknown[] }>('/reservas/todas').catch(() => ({ datos: [] as unknown[] })),
+            peticion<{ datos: unknown[] }>('/pagos/todos').catch(() => ({ datos: [] as unknown[] })),
+          ]);
+          const estudiosMapeados = mapearEstudios(resEstudios.datos);
+          const estudiosMap = new Map(estudiosMapeados.map((e) => [e.id, e]));
+          setEstudios(estudiosMapeados);
+          setReservas(mapearReservas(resReservas.datos, estudiosMap));
+          setPagos(mapearPagos(resPagos.datos, estudiosMap));
+        } else if ((rol === 'dueno' || rol === 'cliente') && estudioActual) {
+          const [resEstudio, resReservas, resPagos] = await Promise.all([
+            peticion<{ datos: Estudio }>(`/estudios/${estudioActual}`),
+            peticion<{ datos: unknown[] }>(`/estudios/${estudioActual}/reservas`),
+            peticion<{ datos: unknown[] }>(`/estudios/${estudioActual}/pagos`).catch(() => ({ datos: [] as unknown[] })),
+          ]);
+          const estudiosMapeados = mapearEstudios([resEstudio.datos]);
+          const estudiosMap = new Map(estudiosMapeados.map((e) => [e.id, e]));
+          setEstudios(estudiosMapeados);
+          setReservas(mapearReservas(resReservas.datos, estudiosMap));
+          setPagos(mapearPagos(resPagos.datos, estudiosMap));
+        }
+      } catch (error) {
+        console.error('Error cargando datos:', error);
+      } finally {
+        setCargando(false);
+      }
+    })();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [usuario, rol, estudioActual, contador]);
+
+  return (
+    <ContextoApp.Provider value={{ estudios, reservas, pagos, cargando, recargar }}>
+      {children}
+    </ContextoApp.Provider>
+  );
+}
+
+export function usarContextoApp(): ValorContextoApp {
+  const contexto = useContext(ContextoApp);
+  if (!contexto) {
+    throw new Error('usarContextoApp debe usarse dentro de ProveedorContextoApp');
+  }
+  return contexto;
+}
+
+// ──────────────────────────────────────────────
+// Helpers de mapeo: API (español) → tipos del frontend (inglés legacy)
+// ──────────────────────────────────────────────
+
+function mapearPersonal(datos: Record<string, unknown>[]): Personal[] {
+  return datos.map((p) => ({
+    id: p['id'] as string,
+    name: p['nombre'] as string ?? '',
+    specialties: (p['especialidades'] as string[]) ?? [],
+    active: (p['activo'] as boolean) ?? true,
+    shiftStart: (p['horaInicio'] as string | null) ?? null,
+    shiftEnd: (p['horaFin'] as string | null) ?? null,
+    breakStart: (p['descansoInicio'] as string | null) ?? null,
+    breakEnd: (p['descansoFin'] as string | null) ?? null,
+  }));
+}
+
+function mapearEstudios(datos: Estudio[]): Estudio[] {
+  if (!datos.length) return datos;
+  // Si el primer elemento ya tiene 'name' (formato legacy), devolver tal cual
+  if ('name' in datos[0]!) return datos;
+  // Si viene del API (formato nuevo), mapear
+  return datos.map((e) => {
+    const d = e as unknown as Record<string, unknown>;
+    const personalRaw = (d['personal'] as Record<string, unknown>[]) ?? [];
+    return {
+      ...e,
+      name: (d['nombre'] as string) ?? '',
+      owner: (d['propietario'] as string) ?? '',
+      phone: (d['telefono'] as string) ?? '',
+      website: d['sitioWeb'] as string | undefined,
+      country: ((d['pais'] as string) ?? 'Mexico') as import('../tipos').Pais,
+      branches: (d['sucursales'] as string[]) ?? [],
+      assignedKey: (d['claveDueno'] as string) ?? '',
+      clientKey: (d['claveCliente'] as string) ?? '',
+      subscriptionStart: (d['inicioSuscripcion'] as string) ?? '',
+      paidUntil: (d['fechaVencimiento'] as string) ?? '',
+      schedule: (d['horario'] as Record<string, import('../tipos').TurnoTrabajo>) ?? {},
+      selectedServices: (d['servicios'] as import('../tipos').Servicio[]) ?? [],
+      customServices: (d['serviciosCustom'] as import('../tipos').ServicioPersonalizado[]) ?? [],
+      holidays: (d['festivos'] as string[]) ?? [],
+      staff: mapearPersonal(personalRaw),
+      colorPrimario: (d['colorPrimario'] as string | null) ?? null,
+      logoUrl: (d['logoUrl'] as string | null) ?? null,
+      descripcion: (d['descripcion'] as string | null) ?? null,
+      direccion: (d['direccion'] as string | null) ?? null,
+      emailContacto: (d['emailContacto'] as string | null) ?? null,
+    } as Estudio;
+  });
+}
+
+function mapearReservas(datos: unknown[], estudiosMap: Map<string, Estudio>): Reserva[] {
+  return datos.map((r) => {
+    const d = r as Record<string, unknown>;
+    const estudio = estudiosMap.get(d['estudioId'] as string);
+    const empleado = estudio?.staff?.find((s) => s.id === (d['personalId'] as string));
+    return {
+      id: d['id'] as string,
+      studioId: (d['estudioId'] as string) ?? '',
+      studioName: estudio?.name ?? '',
+      clientName: (d['nombreCliente'] as string) ?? '',
+      clientPhone: (d['telefonoCliente'] as string) ?? '',
+      services: (d['servicios'] as import('../tipos').Servicio[]) ?? [],
+      totalDuration: (d['duracion'] as number) ?? 0,
+      totalPrice: (d['precioTotal'] as number) ?? 0,
+      status: ((d['estado'] as import('../tipos').EstadoReserva) ?? 'pending'),
+      branch: (d['sucursal'] as string) ?? '',
+      staffId: (d['personalId'] as string) ?? '',
+      staffName: empleado?.name ?? '',
+      date: (d['fecha'] as string) ?? '',
+      time: (d['horaInicio'] as string) ?? '',
+      colorBrand: (d['marcaTinte'] as string | null) ?? null,
+      colorNumber: (d['tonalidad'] as string | null) ?? null,
+      createdAt: (d['creadoEn'] as string) ?? '',
+    };
+  });
+}
+
+function mapearPagos(datos: unknown[], estudiosMap: Map<string, Estudio>): Pago[] {
+  return datos.map((p) => {
+    const d = p as Record<string, unknown>;
+    const estudio = estudiosMap.get(d['estudioId'] as string);
+    return {
+      id: d['id'] as string,
+      studioId: (d['estudioId'] as string) ?? '',
+      studioName: estudio?.name ?? '',
+      amount: (d['monto'] as number) ?? 0,
+      currency: ((d['moneda'] as import('../tipos').Moneda) ?? 'MXN'),
+      date: (d['fecha'] as string) ?? '',
+      createdAt: (d['creadoEn'] as string) ?? '',
+    };
+  });
+}

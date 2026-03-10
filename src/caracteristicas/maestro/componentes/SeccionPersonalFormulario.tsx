@@ -1,0 +1,161 @@
+import { useReducer } from 'react';
+import { UserPlus, Clock, Coffee } from 'lucide-react';
+import type { Personal, Servicio } from '../../../tipos';
+
+interface PropsSeccionPersonalFormulario {
+  serviciosDisponibles: Servicio[];
+  onAgregarPersonal: (personal: Personal) => void;
+}
+
+interface EstadoFormPersonal {
+  nombre: string;
+  turnoInicio: string;
+  turnoFin: string;
+  descansoInicio: string;
+  descansoFin: string;
+  especialidades: string[];
+}
+
+type AccionFormPersonal =
+  | { tipo: 'NOMBRE'; valor: string }
+  | { tipo: 'TURNO_INICIO'; valor: string }
+  | { tipo: 'TURNO_FIN'; valor: string }
+  | { tipo: 'DESCANSO_INICIO'; valor: string }
+  | { tipo: 'DESCANSO_FIN'; valor: string }
+  | { tipo: 'TOGGLE_ESPECIALIDAD'; nombre: string }
+  | { tipo: 'RESET' };
+
+const estadoInicial: EstadoFormPersonal = {
+  nombre: '',
+  turnoInicio: '09:00',
+  turnoFin: '19:00',
+  descansoInicio: '14:00',
+  descansoFin: '15:00',
+  especialidades: [],
+};
+
+function reducer(estado: EstadoFormPersonal, accion: AccionFormPersonal): EstadoFormPersonal {
+  switch (accion.tipo) {
+    case 'NOMBRE':
+      return { ...estado, nombre: accion.valor };
+    case 'TURNO_INICIO':
+      return { ...estado, turnoInicio: accion.valor };
+    case 'TURNO_FIN':
+      return { ...estado, turnoFin: accion.valor };
+    case 'DESCANSO_INICIO':
+      return { ...estado, descansoInicio: accion.valor };
+    case 'DESCANSO_FIN':
+      return { ...estado, descansoFin: accion.valor };
+    case 'TOGGLE_ESPECIALIDAD': {
+      const lista = estado.especialidades.includes(accion.nombre)
+        ? estado.especialidades.filter((e) => e !== accion.nombre)
+        : [...estado.especialidades, accion.nombre];
+      return { ...estado, especialidades: lista };
+    }
+    case 'RESET':
+      return estadoInicial;
+    default:
+      return estado;
+  }
+}
+
+export function SeccionPersonalFormulario({
+  serviciosDisponibles,
+  onAgregarPersonal,
+}: PropsSeccionPersonalFormulario) {
+  const [form, dispatch] = useReducer(reducer, estadoInicial);
+
+  const manejarAgregar = () => {
+    if (!form.nombre.trim()) return;
+    onAgregarPersonal({
+      id: `staff_${Date.now()}`,
+      name: form.nombre.trim(),
+      specialties: form.especialidades,
+      active: true,
+      shiftStart: form.turnoInicio || '09:00',
+      shiftEnd: form.turnoFin || '19:00',
+      breakStart: form.descansoInicio || null,
+      breakEnd: form.descansoFin || null,
+    });
+    dispatch({ tipo: 'RESET' });
+  };
+
+  return (
+    <div className="bg-slate-50 p-6 rounded-[2rem] border border-slate-100 space-y-4">
+      <div className="font-black text-xs text-pink-600 uppercase tracking-widest flex items-center gap-2">
+        <UserPlus className="w-4 h-4" /> Personal
+      </div>
+      <input
+        type="text"
+        placeholder="Nombre completo"
+        value={form.nombre}
+        onChange={(e) => dispatch({ tipo: 'NOMBRE', valor: e.target.value })}
+        className="w-full p-3 bg-white border border-slate-200 rounded-xl font-bold text-sm outline-none focus:ring-2 focus:ring-pink-500"
+      />
+      <div className="p-4 bg-white rounded-2xl border border-slate-100 space-y-4">
+        <div className="flex items-center gap-3">
+          <Clock className="w-3 h-3 text-blue-600 shrink-0" />
+          <span className="text-[9px] font-black text-slate-600 uppercase">Turno:</span>
+          <input
+            type="time"
+            value={form.turnoInicio}
+            onChange={(e) => dispatch({ tipo: 'TURNO_INICIO', valor: e.target.value })}
+            className="bg-slate-50 border border-slate-200 rounded-lg p-2 text-xs font-bold text-slate-700 outline-none"
+          />
+          <span className="text-slate-400 text-xs font-bold">a</span>
+          <input
+            type="time"
+            value={form.turnoFin}
+            onChange={(e) => dispatch({ tipo: 'TURNO_FIN', valor: e.target.value })}
+            className="bg-slate-50 border border-slate-200 rounded-lg p-2 text-xs font-bold text-slate-700 outline-none"
+          />
+        </div>
+        <div className="flex items-center gap-3">
+          <Coffee className="w-3 h-3 text-yellow-600 shrink-0" />
+          <span className="text-[9px] font-black text-slate-600 uppercase">Comida:</span>
+          <input
+            type="time"
+            value={form.descansoInicio}
+            onChange={(e) => dispatch({ tipo: 'DESCANSO_INICIO', valor: e.target.value })}
+            className="bg-slate-50 border border-slate-200 rounded-lg p-2 text-xs font-bold text-slate-700 outline-none"
+          />
+          <span className="text-slate-400 text-xs font-bold">a</span>
+          <input
+            type="time"
+            value={form.descansoFin}
+            onChange={(e) => dispatch({ tipo: 'DESCANSO_FIN', valor: e.target.value })}
+            className="bg-slate-50 border border-slate-200 rounded-lg p-2 text-xs font-bold text-slate-700 outline-none"
+          />
+        </div>
+      </div>
+      {serviciosDisponibles.length > 0 && (
+        <div>
+          <p className="text-[10px] font-black text-slate-400 uppercase mb-2">¿Qué servicios realiza?</p>
+          <div className="flex flex-wrap gap-2">
+            {serviciosDisponibles.map((s) => (
+              <button
+                key={s.name}
+                type="button"
+                onClick={() => dispatch({ tipo: 'TOGGLE_ESPECIALIDAD', nombre: s.name })}
+                className={`px-3 py-1.5 rounded-lg text-[9px] font-black uppercase border transition-colors ${
+                  form.especialidades.includes(s.name)
+                    ? 'bg-slate-900 text-white border-slate-900'
+                    : 'bg-slate-50 text-slate-500 border-slate-200'
+                }`}
+              >
+                {s.name}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+      <button
+        type="button"
+        onClick={manejarAgregar}
+        className="w-full py-3 bg-pink-100 text-pink-700 font-black rounded-xl text-xs uppercase flex items-center justify-center gap-2 hover:bg-pink-200"
+      >
+        <UserPlus className="w-4 h-4" /> Guardar Empleado
+      </button>
+    </div>
+  );
+}

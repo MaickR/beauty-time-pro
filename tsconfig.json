@@ -1,0 +1,32 @@
+{
+  "compilerOptions": {
+    // Target moderno compatible con todos los browsers actuales
+    "target": "ES2020",
+    "lib": ["ES2020", "DOM", "DOM.Iterable"],
+
+    // Módulos ESM, resolución tipo "bundler" (la correcta para Vite)
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "allowImportingTsExtensions": true,
+    "resolveJsonModule": true,
+    "isolatedModules": true,
+    "moduleDetection": "force",
+
+    // React JSX moderno (no necesita import React)
+    "jsx": "react-jsx",
+
+    // Strict mode completo
+    "strict": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "noFallthroughCasesInSwitch": true,
+
+    // Solo verificar tipos, Vite compila
+    "noEmit": true,
+    "skipLibCheck": true
+  },
+  // Solo se verifican los archivos nuevos en src/.
+  // Los archivos legacy en la raíz (app.tsx, main.tsx, firebaseClient.ts)
+  // se migrarán progresivamente en fases posteriores.
+  "include": ["src"]
+}

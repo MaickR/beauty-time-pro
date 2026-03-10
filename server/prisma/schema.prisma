@@ -1,0 +1,215 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+// ─────────────────────────────────────────
+// Modelos de dominio — Beauty Time Pro
+// ─────────────────────────────────────────
+
+model Estudio {
+  id                String       @id @default(cuid())
+  nombre            String
+  propietario       String
+  telefono          String
+  sitioWeb          String?
+  pais              String       @default("Mexico")
+  sucursales        Json         // string[]
+  claveDueno        String       @unique
+  claveCliente      String       @unique
+  activo            Boolean      @default(true)
+  suscripcion       String       @default("mensual")
+  inicioSuscripcion String       // "YYYY-MM-DD"
+  fechaVencimiento  String       // "YYYY-MM-DD"
+  horario           Json         // Record<string, TurnoTrabajo>
+  servicios         Json         // Servicio[]
+  serviciosCustom   Json         // ServicioPersonalizado[]
+  festivos          Json         // string[] fechas bloqueadas
+  colorPrimario     String?      @default("#C2185B")
+  logoUrl           String?
+  descripcion       String?
+  direccion         String?
+  emailContacto     String?
+  creadoEn          DateTime     @default(now())
+  actualizadoEn     DateTime     @updatedAt
+
+  personal          Personal[]
+  reservas          Reserva[]
+  pagos             Pago[]
+  diasFestivos      DiaFestivo[]
+  usuarios          Usuario[]
+  clientes          Cliente[]
+  configFidelidad   ConfigFidelidad?
+  puntosFidelidad   PuntosFidelidad[]
+
+  @@map("estudios")
+}
+
+model Personal {
+  id             String    @id @default(cuid())
+  estudioId      String
+  nombre         String
+  especialidades Json      // string[]
+  activo         Boolean   @default(true)
+  horaInicio     String?   // "HH:mm"
+  horaFin        String?   // "HH:mm"
+  descansoInicio String?   // "HH:mm"
+  descansoFin    String?   // "HH:mm"
+  diasTrabajo    Json?     // number[] (0=Dom…6=Sab) | null usa horario del estudio
+  creadoEn       DateTime  @default(now())
+
+  estudio        Estudio   @relation(fields: [estudioId], references: [id], onDelete: Cascade)
+  reservas       Reserva[]
+
+  @@map("personal")
+}
+
+model Cliente {
+  id              String    @id @default(uuid())
+  estudioId       String
+  estudio         Estudio   @relation(fields: [estudioId], references: [id], onDelete: Cascade)
+  nombre          String
+  telefono        String
+  fechaNacimiento DateTime
+  email           String?
+  notas           String?   @db.Text
+  activo          Boolean   @default(true)
+  creadoEn        DateTime  @default(now())
+  actualizadoEn   DateTime  @updatedAt
+
+  reservas        Reserva[]
+  puntosFidelidad PuntosFidelidad[]
+
+  @@unique([estudioId, telefono])
+  @@map("clientes")
+}
+
+model ConfigFidelidad {
+  id                     String   @id @default(uuid())
+  estudioId              String   @unique
+  estudio                Estudio  @relation(fields: [estudioId], references: [id], onDelete: Cascade)
+  activo                 Boolean  @default(false)
+  visitasRequeridas      Int      @default(5)
+  tipoRecompensa         String   @default("descuento") // descuento | servicio_gratis
+  porcentajeDescuento    Int?     @default(100)
+  descripcionRecompensa  String   @default("Servicio gratis en tu próxima visita")
+  creadoEn               DateTime @default(now())
+  actualizadoEn          DateTime @updatedAt
+
+  @@map("config_fidelidad")
+}
+
+model PuntosFidelidad {
+  id                  String   @id @default(uuid())
+  clienteId           String
+  cliente             Cliente  @relation(fields: [clienteId], references: [id], onDelete: Cascade)
+  estudioId           String
+  estudio             Estudio  @relation(fields: [estudioId], references: [id], onDelete: Cascade)
+  visitasAcumuladas   Int      @default(0)
+  visitasUsadas       Int      @default(0)
+  recompensasGanadas  Int      @default(0)
+  recompensasUsadas   Int      @default(0)
+  ultimaVisita        DateTime?
+  creadoEn            DateTime @default(now())
+  actualizadoEn       DateTime @updatedAt
+
+  @@unique([clienteId, estudioId])
+  @@map("puntos_fidelidad")
+}
+
+model Reserva {
+  id              String   @id @default(cuid())
+  estudioId       String
+  personalId      String
+  clienteId       String
+  nombreCliente   String
+  telefonoCliente String
+  fecha           String   // "YYYY-MM-DD"
+  horaInicio      String   // "HH:mm"
+  duracion        Int      // minutos
+  servicios       Json     // Servicio[]
+  precioTotal     Float    @default(0)
+  estado          String   @default("pending") // pending | confirmed | completed | cancelled
+  sucursal        String   @default("")
+  marcaTinte      String?
+  tonalidad       String?
+  notasMenorEdad  String?
+  recordatorioEnviado Boolean @default(false)
+  tokenCancelacion String @unique @default(uuid())
+  creadoEn        DateTime @default(now())
+
+  estudio         Estudio  @relation(fields: [estudioId], references: [id], onDelete: Cascade)
+  empleado        Personal @relation(fields: [personalId], references: [id])
+  cliente         Cliente  @relation(fields: [clienteId], references: [id])
+
+  @@map("reservas")
+}
+
+model Pago {
+  id          String   @id @default(cuid())
+  estudioId   String
+  monto       Float
+  moneda      String   @default("MXN")
+  concepto    String
+  fecha       String   // "YYYY-MM-DD"
+  tipo        String   @default("suscripcion") // suscripcion | otro
+  referencia  String?
+  creadoEn    DateTime @default(now())
+
+  estudio     Estudio  @relation(fields: [estudioId], references: [id], onDelete: Cascade)
+
+  @@map("pagos")
+}
+
+model DiaFestivo {
+  id          String   @id @default(cuid())
+  estudioId   String
+  fecha       String   // "YYYY-MM-DD"
+  descripcion String   @default("")
+  creadoEn    DateTime @default(now())
+
+  estudio     Estudio  @relation(fields: [estudioId], references: [id], onDelete: Cascade)
+
+  @@unique([estudioId, fecha])
+  @@map("dias_festivos")
+}
+
+model Usuario {
+  id              String        @id @default(uuid())
+  email           String        @unique
+  hashContrasena  String
+  nombre          String        @default("")
+  rol             String        // "maestro" | "dueno"
+  activo          Boolean       @default(true)
+  estudioId       String?
+  estudio         Estudio?      @relation(fields: [estudioId], references: [id])
+  ultimoAcceso    DateTime?
+  creadoEn        DateTime      @default(now())
+  actualizadoEn   DateTime      @updatedAt
+
+  tokensReset     TokenReset[]
+
+  @@map("usuarios")
+}
+
+model TokenReset {
+  id        String   @id @default(uuid())
+  usuarioId String
+  token     String   @unique
+  expiraEn  DateTime
+  usado     Boolean  @default(false)
+  creadoEn  DateTime @default(now())
+
+  usuario   Usuario  @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
+
+  @@map("tokens_reset")
+}
+

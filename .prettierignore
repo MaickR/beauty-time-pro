@@ -1,0 +1,5 @@
+dist
+node_modules
+backup.txt
+*.config.js
+*.config.ts

@@ -1,0 +1,10 @@
+/* Punto de entrada de estilos — Beauty Time Pro
+ * Importa Tailwind CSS v4 (sin tailwind.config.js, detección automática de clases)
+ * y los estilos base del proyecto.
+ */
+@import "tailwindcss";
+
+:root {
+  --color-primario: #C2185B;
+  --color-primario-oscuro: #880E4F;
+}
