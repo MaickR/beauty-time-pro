@@ -11,6 +11,26 @@ const COOKIE_REFRESH = 'refresh_token';
 
 const REGEX_CONTRASENA = /^(?=.*[A-Z])(?=.*[0-9]).{8,}$/;
 
+interface PermisosJWT {
+  aprobarSalones: boolean;
+  gestionarPagos: boolean;
+  crearAdmins: boolean;
+  verAuditLog: boolean;
+  verMetricas: boolean;
+  suspenderSalones: boolean;
+}
+
+function crearPermisosVacios(): PermisosJWT {
+  return {
+    aprobarSalones: false,
+    gestionarPagos: false,
+    crearAdmins: false,
+    verAuditLog: false,
+    verMetricas: false,
+    suspenderSalones: false,
+  };
+}
+
 export async function rutasAuth(servidor: FastifyInstance): Promise<void> {
   /**
    * POST /auth/iniciar-sesion
@@ -19,6 +39,17 @@ export async function rutasAuth(servidor: FastifyInstance): Promise<void> {
    */
   servidor.post<{ Body: { email?: string; contrasena?: string; clave?: string } }>(
     '/auth/iniciar-sesion',
+    {
+      config: {
+        rateLimit: {
+          max: 10,
+          timeWindow: '15 minutes',
+          errorResponseBuilder: () => ({
+            error: 'Demasiados intentos. Espera 15 minutos.',
+          }),
+        },
+      },
+    },
     async (solicitud, respuesta) => {
       const { email, contrasena, clave } = solicitud.body;
 
@@ -62,16 +93,83 @@ export async function rutasAuth(servidor: FastifyInstance): Promise<void> {
         return respuesta.code(400).send({ error: 'Email y contraseña son requeridos' });
       }
 
-      const usuario = await prisma.usuario.findUnique({
-        where: { email: email.trim().toLowerCase() },
+      const emailNorm = email.trim().toLowerCase();
+
+      // ─── Verificar si es un ClienteApp (cliente final con cuenta) ──────────
+      const clienteApp = await prisma.clienteApp.findUnique({
+        where: { email: emailNorm },
+        select: { id: true, hashContrasena: true, emailVerificado: true, activo: true, nombre: true, apellido: true },
       });
 
-      if (!usuario || !(await bcrypt.compare(contrasena, usuario.hashContrasena))) {
-        return respuesta.code(401).send({ error: 'Credenciales incorrectas' });
+      if (clienteApp) {
+        if (!(await bcrypt.compare(contrasena, clienteApp.hashContrasena))) {
+          return respuesta.code(401).send({ error: 'La contraseña es incorrecta.', codigo: 'CONTRASENA_INCORRECTA' });
+        }
+        if (!clienteApp.activo) {
+          return respuesta.code(403).send({ error: 'Cuenta suspendida. Contacta al administrador.' });
+        }
+        if (!clienteApp.emailVerificado) {
+          return respuesta.code(403).send({ error: 'Debes verificar tu correo antes de iniciar sesión.', codigo: 'EMAIL_NO_VERIFICADO' });
+        }
+        void prisma.clienteApp.update({ where: { id: clienteApp.id }, data: { ultimoAcceso: new Date() } });
+        return emitirTokens(servidor, respuesta, {
+          sub: clienteApp.id,
+          rol: 'cliente',
+          estudioId: null,
+          nombre: `${clienteApp.nombre} ${clienteApp.apellido}`,
+          email: emailNorm,
+        });
+      }
+
+      // ─── Verificar Usuario (dueño / maestro) ─────────────────────────────
+      const usuario = await prisma.usuario.findUnique({
+        where: { email: emailNorm },
+        include: { estudio: { select: { id: true, estado: true, motivoRechazo: true } } },
+      });
+
+      if (!clienteApp && !usuario) {
+        return respuesta.code(404).send({
+          error: 'No existe ninguna cuenta registrada con ese correo.',
+          codigo: 'CUENTA_NO_EXISTE',
+        });
+      }
+
+      if (!usuario) {
+        return respuesta.code(404).send({
+          error: 'No existe ninguna cuenta registrada con ese correo.',
+          codigo: 'CUENTA_NO_EXISTE',
+        });
+      }
+
+      if (!(await bcrypt.compare(contrasena, usuario.hashContrasena))) {
+        return respuesta.code(401).send({ error: 'La contraseña es incorrecta.', codigo: 'CONTRASENA_INCORRECTA' });
       }
 
       if (!usuario.activo) {
-        return respuesta.code(403).send({ error: 'Cuenta suspendida. Contacta al administrador.' });
+        if (usuario.rol === 'dueno' && !usuario.estudioId && !usuario.estudio) {
+          return respuesta.code(410).send({
+            error: 'Esta cuenta fue eliminada definitivamente del sistema. Puedes registrarla de nuevo con este correo.',
+            codigo: 'CUENTA_ELIMINADA',
+          });
+        }
+
+        // Dueño pendiente de aprobación — verificar estado del estudio
+        if (usuario.rol === 'dueno' && usuario.estudio) {
+          if (usuario.estudio.estado === 'pendiente') {
+            return respuesta.code(403).send({
+              error: 'Tu solicitud está siendo revisada',
+              codigo: 'PENDIENTE_APROBACION',
+            });
+          }
+          if (usuario.estudio.estado === 'rechazado') {
+            return respuesta.code(403).send({
+              error: 'Tu solicitud fue rechazada',
+              codigo: 'SOLICITUD_RECHAZADA',
+              motivo: usuario.estudio.motivoRechazo ?? '',
+            });
+          }
+        }
+        return respuesta.code(403).send({ error: 'Esta cuenta existe pero no tiene acceso activo. Contacta al administrador.' });
       }
 
       void prisma.usuario.update({
@@ -79,12 +177,55 @@ export async function rutasAuth(servidor: FastifyInstance): Promise<void> {
         data: { ultimoAcceso: new Date() },
       });
 
+      let esMaestroTotal = false;
+      let permisosJWT = crearPermisosVacios();
+      if (usuario.rol === 'maestro') {
+        const permisos = await prisma.permisosMaestro.findUnique({
+          where: { usuarioId: usuario.id },
+          select: {
+            aprobarSalones: true,
+            gestionarPagos: true,
+            crearAdmins: true,
+            verAuditLog: true,
+            verMetricas: true,
+            suspenderSalones: true,
+            esMaestroTotal: true,
+          },
+        });
+        if (permisos) {
+          esMaestroTotal = permisos.esMaestroTotal;
+          permisosJWT = {
+            aprobarSalones: permisos.aprobarSalones,
+            gestionarPagos: permisos.gestionarPagos,
+            crearAdmins: permisos.crearAdmins,
+            verAuditLog: permisos.verAuditLog,
+            verMetricas: permisos.verMetricas,
+            suspenderSalones: permisos.suspenderSalones,
+          };
+        } else {
+          const totalMaestros = await prisma.usuario.count({ where: { rol: 'maestro' } });
+          esMaestroTotal = totalMaestros === 1;
+          if (esMaestroTotal) {
+            permisosJWT = {
+              aprobarSalones: true,
+              gestionarPagos: true,
+              crearAdmins: true,
+              verAuditLog: true,
+              verMetricas: true,
+              suspenderSalones: true,
+            };
+          }
+        }
+      }
+
       return emitirTokens(servidor, respuesta, {
         sub: usuario.id,
         rol: usuario.rol,
         estudioId: usuario.estudioId,
         nombre: usuario.nombre,
         email: usuario.email,
+        esMaestroTotal,
+        permisos: permisosJWT,
       });
     },
   );
@@ -127,6 +268,17 @@ export async function rutasAuth(servidor: FastifyInstance): Promise<void> {
    */
   servidor.post<{ Body: { email: string } }>(
     '/auth/solicitar-reset',
+    {
+      config: {
+        rateLimit: {
+          max: 3,
+          timeWindow: '1 hour',
+          errorResponseBuilder: () => ({
+            error: 'Demasiados intentos. Espera 1 hora.',
+          }),
+        },
+      },
+    },
     async (solicitud, respuesta) => {
       const { email } = solicitud.body;
       const usuario = await prisma.usuario.findUnique({
@@ -140,7 +292,8 @@ export async function rutasAuth(servidor: FastifyInstance): Promise<void> {
         const expiraEn = new Date(Date.now() + 60 * 60 * 1000);
 
         await prisma.tokenReset.create({ data: { usuarioId: usuario.id, token, expiraEn } });
-        console.log('Token de reset:', token);
+        console.log('[Auth] Token de reset enviado para:', usuario.email.split('@')[0] + '@***');
+        await enviarEmailResetContrasena(usuario.email, token);
       }
 
       return respuesta.send({ datos: { mensaje: 'Si el correo existe, recibirás instrucciones en breve.' } });
@@ -189,14 +342,59 @@ export async function rutasAuth(servidor: FastifyInstance): Promise<void> {
         sub: string; rol: string; estudioId: string | null; nombre: string; email: string;
       }>(refreshToken);
 
+      let esMaestroTotal = false;
+      let permisos = crearPermisosVacios();
+
+      if (payload.rol === 'maestro') {
+        const usuario = await prisma.usuario.findUnique({
+          where: { id: payload.sub },
+          select: { activo: true },
+        });
+
+        if (!usuario) {
+          return respuesta.code(401).send({ error: 'No autenticado' });
+        }
+
+        if (!usuario.activo) {
+          return respuesta.code(403).send({ error: 'Tu cuenta ha sido desactivada. Contacta al administrador principal.' });
+        }
+
+        const permisosActuales = await prisma.permisosMaestro.findUnique({
+          where: { usuarioId: payload.sub },
+          select: {
+            aprobarSalones: true,
+            gestionarPagos: true,
+            crearAdmins: true,
+            verAuditLog: true,
+            verMetricas: true,
+            suspenderSalones: true,
+            esMaestroTotal: true,
+          },
+        });
+
+        esMaestroTotal = permisosActuales?.esMaestroTotal ?? false;
+        permisos = permisosActuales
+          ? {
+              aprobarSalones: permisosActuales.aprobarSalones,
+              gestionarPagos: permisosActuales.gestionarPagos,
+              crearAdmins: permisosActuales.crearAdmins,
+              verAuditLog: permisosActuales.verAuditLog,
+              verMetricas: permisosActuales.verMetricas,
+              suspenderSalones: permisosActuales.suspenderSalones,
+            }
+          : permisos;
+      }
+
       const accessToken = servidor.jwt.sign({
         sub: payload.sub,
         rol: payload.rol,
         estudioId: payload.estudioId,
         nombre: payload.nombre ?? '',
         email: payload.email ?? '',
+        esMaestroTotal,
+        permisos,
       });
-      return respuesta.send({ datos: { token: accessToken } });
+      return respuesta.send({ datos: { token: accessToken, rol: payload.rol, estudioId: payload.estudioId, nombre: payload.nombre ?? '', email: payload.email ?? '', esMaestroTotal, permisos } });
     } catch {
       return respuesta.code(401).send({ error: 'Sesión expirada. Inicia sesión nuevamente.' });
     }
@@ -206,7 +404,12 @@ export async function rutasAuth(servidor: FastifyInstance): Promise<void> {
    * POST /auth/cerrar-sesion
    */
   servidor.post('/auth/cerrar-sesion', async (_solicitud, respuesta) => {
-    respuesta.clearCookie(COOKIE_REFRESH, { path: '/' });
+    respuesta.clearCookie(COOKIE_REFRESH, {
+      httpOnly: true,
+      secure: env.ENTORNO === 'production',
+      sameSite: 'strict',
+      path: '/auth/refrescar',
+    });
     return respuesta.send({ datos: { mensaje: 'Sesión cerrada' } });
   });
 }
@@ -214,7 +417,15 @@ export async function rutasAuth(servidor: FastifyInstance): Promise<void> {
 async function emitirTokens(
   servidor: FastifyInstance,
   respuesta: import('fastify').FastifyReply,
-  payload: { sub: string; rol: string; estudioId: string | null; nombre: string; email: string },
+  payload: {
+    sub: string;
+    rol: string;
+    estudioId: string | null;
+    nombre: string;
+    email: string;
+    esMaestroTotal?: boolean;
+    permisos?: PermisosJWT;
+  },
 ): Promise<import('fastify').FastifyReply> {
   const accessToken = servidor.jwt.sign(payload);
   const refreshToken = servidor.jwt.sign(payload, { expiresIn: REFRESH_EXPIRA });
@@ -223,7 +434,7 @@ async function emitirTokens(
     httpOnly: true,
     secure: env.ENTORNO === 'production',
     sameSite: 'strict',
-    path: '/',
+    path: '/auth/refrescar',
     maxAge: 60 * 60 * 24 * 7,
   });
 
@@ -234,6 +445,8 @@ async function emitirTokens(
       estudioId: payload.estudioId,
       nombre: payload.nombre,
       email: payload.email,
+      esMaestroTotal: payload.esMaestroTotal ?? false,
+      permisos: payload.permisos ?? crearPermisosVacios(),
     },
   });
 }

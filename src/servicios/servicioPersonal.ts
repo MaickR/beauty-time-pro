@@ -1,7 +1,96 @@
-/**
- * Servicio de personal — delega en servicioEstudios.
- *
- * Fase 5: Re-exporta las operaciones de staff desde el servicio de estudios.
- * Fase 6: Reemplazar con llamadas HTTP al backend Fastify/MySQL.
- */
-export { actualizarStaff as actualizarPersonal } from './servicioEstudios';
+import { peticion } from '../lib/clienteHTTP';
+import type { Personal } from '../tipos';
+
+interface PersonalServidor {
+  id: string;
+  nombre: string;
+  especialidades?: string[];
+  activo?: boolean;
+  horaInicio?: string | null;
+  horaFin?: string | null;
+  descansoInicio?: string | null;
+  descansoFin?: string | null;
+  diasTrabajo?: number[] | null;
+}
+
+interface RespuestaPersonal {
+  datos: PersonalServidor;
+}
+
+interface RespuestaListaPersonal {
+  datos: PersonalServidor[];
+}
+
+function mapearPersonal(personal: PersonalServidor): Personal {
+  return {
+    id: personal.id,
+    name: personal.nombre,
+    specialties: personal.especialidades ?? [],
+    active: personal.activo ?? true,
+    shiftStart: personal.horaInicio ?? null,
+    shiftEnd: personal.horaFin ?? null,
+    breakStart: personal.descansoInicio ?? null,
+    breakEnd: personal.descansoFin ?? null,
+    workingDays: personal.diasTrabajo ?? null,
+  };
+}
+
+function serializarPersonal(personal: Partial<Personal>) {
+  const cuerpo: Record<string, unknown> = {};
+  if (personal.name !== undefined) cuerpo['nombre'] = personal.name;
+  if (personal.specialties !== undefined) cuerpo['especialidades'] = personal.specialties;
+  if (personal.active !== undefined) cuerpo['activo'] = personal.active;
+  if (personal.shiftStart !== undefined) cuerpo['horaInicio'] = personal.shiftStart;
+  if (personal.shiftEnd !== undefined) cuerpo['horaFin'] = personal.shiftEnd;
+  if (personal.breakStart !== undefined) cuerpo['descansoInicio'] = personal.breakStart;
+  if (personal.breakEnd !== undefined) cuerpo['descansoFin'] = personal.breakEnd;
+  if (personal.workingDays !== undefined) cuerpo['diasTrabajo'] = personal.workingDays;
+  return cuerpo;
+}
+
+export async function listarPersonal(estudioId: string): Promise<Personal[]> {
+  const respuesta = await peticion<RespuestaListaPersonal>(`/estudios/${estudioId}/personal`);
+  return respuesta.datos.map(mapearPersonal);
+}
+
+export async function crearPersonal(
+  estudioId: string,
+  personal: Omit<Personal, 'id'>,
+): Promise<Personal> {
+  const respuesta = await peticion<RespuestaPersonal>(`/estudios/${estudioId}/personal`, {
+    method: 'POST',
+    body: JSON.stringify(serializarPersonal(personal)),
+  });
+  return mapearPersonal(respuesta.datos);
+}
+
+export async function actualizarPersonal(
+  personalId: string,
+  cambios: Partial<Personal>,
+): Promise<Personal> {
+  const respuesta = await peticion<RespuestaPersonal>(`/personal/${personalId}`, {
+    method: 'PUT',
+    body: JSON.stringify(serializarPersonal(cambios)),
+  });
+  return mapearPersonal(respuesta.datos);
+}
+
+export async function sincronizarPersonalEstudio(
+  estudioId: string,
+  personalDeseado: Personal[],
+): Promise<void> {
+  const personalActual = await listarPersonal(estudioId);
+  const idsActuales = new Set(personalActual.map((personal) => personal.id));
+
+  await Promise.all(
+    personalDeseado.map(async (personal) => {
+      if (idsActuales.has(personal.id)) {
+        await actualizarPersonal(personal.id, personal);
+        return;
+      }
+
+      const { id: _id, ...personalNuevo } = personal;
+      await crearPersonal(estudioId, personalNuevo);
+    }),
+  );
+}

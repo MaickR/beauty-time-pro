@@ -3,7 +3,11 @@ import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { Palette, AlertTriangle, Gift } from 'lucide-react';
-import { buscarClienteFidelidadPorTelefono, type EstadoFidelidadCliente } from '../../../servicios/servicioFidelidad';
+import { SelectorFecha } from '../../../componentes/ui/SelectorFecha';
+import {
+  buscarClienteFidelidadPorTelefono,
+  type EstadoFidelidadCliente,
+} from '../../../servicios/servicioFidelidad';
 import type { Estudio } from '../../../tipos';
 import type { usarFlujoReserva } from '../hooks/usarFlujoReserva';
 
@@ -23,11 +27,7 @@ const esquema = z.object({
       hace100.setFullYear(hace100.getFullYear() - 100);
       return d >= hace100;
     }, 'Fecha no puede ser mayor a 100 años'),
-  email: z
-    .string()
-    .email('Correo electrónico inválido')
-    .or(z.literal(''))
-    .optional(),
+  email: z.string().email('Correo electrónico inválido').or(z.literal('')).optional(),
 });
 
 type CamposContacto = z.infer<typeof esquema>;
@@ -50,13 +50,19 @@ function calcularEdad(fechaNacimiento: string): number {
   return edad;
 }
 
-export function FormularioContacto({ estudio, flujo, requiereColor, onEnviar }: PropsFormularioContacto) {
+export function FormularioContacto({
+  estudio,
+  flujo,
+  requiereColor,
+  onEnviar,
+}: PropsFormularioContacto) {
   const [fidelidadCliente, setFidelidadCliente] = useState<EstadoFidelidadCliente | null>(null);
   const [consultandoFidelidad, setConsultandoFidelidad] = useState(false);
   const [usarRecompensa, setUsarRecompensa] = useState(false);
   const {
     register,
     handleSubmit,
+    setValue,
     watch,
     formState: { errors },
   } = useForm<CamposContacto>({
@@ -70,9 +76,10 @@ export function FormularioContacto({ estudio, flujo, requiereColor, onEnviar }: 
   });
 
   const fechaNacimientoValor = watch('fechaNacimiento');
-  const esMenor = fechaNacimientoValor && !errors.fechaNacimiento
-    ? calcularEdad(fechaNacimientoValor) < 18
-    : false;
+  const esMenor =
+    fechaNacimientoValor && !errors.fechaNacimiento
+      ? calcularEdad(fechaNacimientoValor) < 18
+      : false;
 
   // Sincronizar cambios con el flujo para que enviarReserva tenga los valores
   const valores = watch();
@@ -81,13 +88,10 @@ export function FormularioContacto({ estudio, flujo, requiereColor, onEnviar }: 
     flujo.actualizarContacto('telefonoCliente', valores.telefonoCliente ?? '');
     flujo.actualizarContacto('fechaNacimiento', valores.fechaNacimiento ?? '');
     flujo.actualizarContacto('email', valores.email ?? '');
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [valores.nombreCliente, valores.telefonoCliente, valores.fechaNacimiento, valores.email]);
 
   const formularioValido =
-    flujo.personalSeleccionado &&
-    flujo.horaSeleccionada &&
-    flujo.serviciosSeleccionados.length > 0;
+    flujo.personalSeleccionado && flujo.horaSeleccionada && flujo.serviciosSeleccionados.length > 0;
 
   const telefonoActual = valores.telefonoCliente?.trim() ?? '';
 
@@ -126,7 +130,12 @@ export function FormularioContacto({ estudio, flujo, requiereColor, onEnviar }: 
   return (
     <section className="bg-slate-900 rounded-[3.5rem] p-10 shadow-2xl flex flex-col text-white">
       <h3 className="text-xl md:text-2xl font-black italic uppercase tracking-tighter mb-8 flex items-center gap-3">
-        <span className="bg-pink-600 text-white w-8 h-8 rounded-full flex items-center justify-center text-sm" aria-hidden="true">4</span>
+        <span
+          className="bg-pink-600 text-white w-8 h-8 rounded-full flex items-center justify-center text-sm"
+          aria-hidden="true"
+        >
+          4
+        </span>
         Tus Datos de Contacto
       </h3>
 
@@ -137,7 +146,12 @@ export function FormularioContacto({ estudio, flujo, requiereColor, onEnviar }: 
           </p>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <div>
-              <label htmlFor="marcaTinte" className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 ml-2">Marca de Tinte Preferida</label>
+              <label
+                htmlFor="marcaTinte"
+                className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 ml-2"
+              >
+                Marca de Tinte Preferida
+              </label>
               <input
                 id="marcaTinte"
                 type="text"
@@ -148,7 +162,12 @@ export function FormularioContacto({ estudio, flujo, requiereColor, onEnviar }: 
               />
             </div>
             <div>
-              <label htmlFor="numeroTinte" className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 ml-2">Número / Tono del Tinte</label>
+              <label
+                htmlFor="numeroTinte"
+                className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 ml-2"
+              >
+                Número / Tono del Tinte
+              </label>
               <input
                 id="numeroTinte"
                 type="text"
@@ -162,13 +181,18 @@ export function FormularioContacto({ estudio, flujo, requiereColor, onEnviar }: 
         </div>
       )}
 
-      {/* eslint-disable-next-line @typescript-eslint/no-misused-promises */}
       <form onSubmit={handleSubmit((datos) => onEnviar({ ...datos, usarRecompensa }))} noValidate>
         <div className="space-y-6 mb-10">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <div>
-              <label htmlFor="nombreCliente" className="block text-[10px] font-black text-pink-400 uppercase tracking-widest mb-3 ml-2">
-                Nombre Completo <span className="text-red-500 text-sm" aria-hidden="true">*</span>
+              <label
+                htmlFor="nombreCliente"
+                className="block text-[10px] font-black text-pink-400 uppercase tracking-widest mb-3 ml-2"
+              >
+                Nombre Completo{' '}
+                <span className="text-red-500 text-sm" aria-hidden="true">
+                  *
+                </span>
               </label>
               <input
                 id="nombreCliente"
@@ -180,15 +204,25 @@ export function FormularioContacto({ estudio, flujo, requiereColor, onEnviar }: 
                 aria-describedby={errors.nombreCliente ? 'error-nombre' : undefined}
               />
               {errors.nombreCliente && (
-                <p id="error-nombre" role="alert" className="mt-2 ml-2 text-red-400 text-xs font-bold">
+                <p
+                  id="error-nombre"
+                  role="alert"
+                  className="mt-2 ml-2 text-red-400 text-xs font-bold"
+                >
                   {errors.nombreCliente.message}
                 </p>
               )}
             </div>
 
             <div>
-              <label htmlFor="telefonoCliente" className="block text-[10px] font-black text-pink-400 uppercase tracking-widest mb-3 ml-2">
-                Teléfono Celular <span className="text-red-500 text-sm" aria-hidden="true">*</span>
+              <label
+                htmlFor="telefonoCliente"
+                className="block text-[10px] font-black text-pink-400 uppercase tracking-widest mb-3 ml-2"
+              >
+                Teléfono Celular{' '}
+                <span className="text-red-500 text-sm" aria-hidden="true">
+                  *
+                </span>
               </label>
               <input
                 id="telefonoCliente"
@@ -200,7 +234,11 @@ export function FormularioContacto({ estudio, flujo, requiereColor, onEnviar }: 
                 aria-describedby={errors.telefonoCliente ? 'error-telefono' : undefined}
               />
               {errors.telefonoCliente && (
-                <p id="error-telefono" role="alert" className="mt-2 ml-2 text-red-400 text-xs font-bold">
+                <p
+                  id="error-telefono"
+                  role="alert"
+                  className="mt-2 ml-2 text-red-400 text-xs font-bold"
+                >
                   {errors.telefonoCliente.message}
                 </p>
               )}
@@ -209,34 +247,50 @@ export function FormularioContacto({ estudio, flujo, requiereColor, onEnviar }: 
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <div>
-              <label htmlFor="fechaNacimiento" className="block text-[10px] font-black text-pink-400 uppercase tracking-widest mb-3 ml-2">
-                Fecha de Nacimiento <span className="text-red-500 text-sm" aria-hidden="true">*</span>
+              <label
+                htmlFor="fechaNacimiento"
+                className="block text-[10px] font-black text-pink-400 uppercase tracking-widest mb-3 ml-2"
+              >
+                Fecha de Nacimiento{' '}
+                <span className="text-red-500 text-sm" aria-hidden="true">
+                  *
+                </span>
               </label>
-              <input
+              <input type="hidden" {...register('fechaNacimiento')} />
+              <SelectorFecha
                 id="fechaNacimiento"
-                type="date"
-                {...register('fechaNacimiento')}
+                etiqueta="Fecha de nacimiento"
+                valor={fechaNacimientoValor ?? ''}
                 max={new Date().toISOString().split('T')[0]}
-                className="w-full px-6 py-4 bg-slate-800 border border-slate-700 rounded-2xl font-bold text-white outline-none focus:border-pink-500 transition-all"
-                aria-required="true"
-                aria-describedby={errors.fechaNacimiento ? 'error-fecha' : esMenor ? 'aviso-menor' : undefined}
+                error={errors.fechaNacimiento?.message}
+                alCambiar={(valor) =>
+                  setValue('fechaNacimiento', valor, {
+                    shouldDirty: true,
+                    shouldTouch: true,
+                    shouldValidate: true,
+                  })
+                }
+                claseSelect="w-full rounded-2xl border border-slate-700 bg-slate-800 px-4 py-4 text-sm font-bold text-white outline-none transition-all focus:ring-2 focus:ring-pink-500"
               />
-              {errors.fechaNacimiento && (
-                <p id="error-fecha" role="alert" className="mt-2 ml-2 text-red-400 text-xs font-bold">
-                  {errors.fechaNacimiento.message}
-                </p>
-              )}
               {esMenor && !errors.fechaNacimiento && (
-                <p id="aviso-menor" className="mt-3 px-4 py-3 bg-yellow-900/40 border border-yellow-700/60 rounded-xl text-yellow-300 text-xs font-bold flex items-start gap-2">
+                <p
+                  id="aviso-menor"
+                  className="mt-3 px-4 py-3 bg-yellow-900/40 border border-yellow-700/60 rounded-xl text-yellow-300 text-xs font-bold flex items-start gap-2"
+                >
                   <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" aria-hidden="true" />
-                  Cliente menor de edad. Al confirmar, el salón quedará informado de que se requiere acompañante adulto el día de la cita.
+                  Cliente menor de edad. Al confirmar, el salón quedará informado de que se requiere
+                  acompañante adulto el día de la cita.
                 </p>
               )}
             </div>
 
             <div>
-              <label htmlFor="email" className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3 ml-2">
-                Correo Electrónico <span className="text-slate-600 text-[9px] normal-case">(opcional)</span>
+              <label
+                htmlFor="email"
+                className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3 ml-2"
+              >
+                Correo Electrónico{' '}
+                <span className="text-slate-600 text-[9px] normal-case">(opcional)</span>
               </label>
               <input
                 id="email"
@@ -247,7 +301,11 @@ export function FormularioContacto({ estudio, flujo, requiereColor, onEnviar }: 
                 aria-describedby={errors.email ? 'error-email' : undefined}
               />
               {errors.email && (
-                <p id="error-email" role="alert" className="mt-2 ml-2 text-red-400 text-xs font-bold">
+                <p
+                  id="error-email"
+                  role="alert"
+                  className="mt-2 ml-2 text-red-400 text-xs font-bold"
+                >
                   {errors.email.message}
                 </p>
               )}
@@ -266,7 +324,8 @@ export function FormularioContacto({ estudio, flujo, requiereColor, onEnviar }: 
                 <Gift className="w-5 h-5 mt-0.5 shrink-0" aria-hidden="true" />
                 <div className="flex-1">
                   <p className="text-sm font-black">
-                    🎁 Tienes una recompensa disponible: {fidelidadCliente.descripcionRecompensa}. ¿Deseas usarla en esta reserva?
+                    🎁 Tienes una recompensa disponible: {fidelidadCliente.descripcionRecompensa}.
+                    ¿Deseas usarla en esta reserva?
                   </p>
                   <button
                     type="button"
@@ -282,8 +341,14 @@ export function FormularioContacto({ estudio, flujo, requiereColor, onEnviar }: 
 
           {estudio.branches.length > 1 && (
             <div>
-              <label htmlFor="sucursalSelect" className="block text-[10px] font-black text-pink-400 uppercase tracking-widest mb-3 ml-2">
-                Elige tu Sucursal <span className="text-red-500 text-sm" aria-hidden="true">*</span>
+              <label
+                htmlFor="sucursalSelect"
+                className="block text-[10px] font-black text-pink-400 uppercase tracking-widest mb-3 ml-2"
+              >
+                Elige tu Sucursal{' '}
+                <span className="text-red-500 text-sm" aria-hidden="true">
+                  *
+                </span>
               </label>
               <select
                 id="sucursalSelect"
@@ -291,7 +356,11 @@ export function FormularioContacto({ estudio, flujo, requiereColor, onEnviar }: 
                 value={flujo.sucursalSeleccionada}
                 onChange={(e) => flujo.seleccionarSucursal(e.target.value)}
               >
-                {estudio.branches.map((b, i) => <option key={i} value={b}>{b}</option>)}
+                {estudio.branches.map((b, i) => (
+                  <option key={i} value={b}>
+                    {b}
+                  </option>
+                ))}
               </select>
             </div>
           )}
@@ -304,8 +373,10 @@ export function FormularioContacto({ estudio, flujo, requiereColor, onEnviar }: 
         >
           Confirmar mi Reservación
         </button>
+        <p className="mt-4 text-center text-xs font-bold uppercase tracking-widest text-slate-300">
+          Pago en el salón al llegar a tu cita. No se realiza ningún cobro en línea.
+        </p>
       </form>
     </section>
   );
 }
-

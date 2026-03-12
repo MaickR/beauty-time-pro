@@ -1,15 +1,27 @@
 import type { FastifyInstance } from 'fastify';
 import fs from 'fs';
 import path from 'path';
+import { z } from 'zod';
 import { prisma } from '../prismaCliente.js';
 import { verificarJWT } from '../middleware/autenticacion.js';
+import { colorHexSchema, emailOpcionalONuloSchema, obtenerMensajeValidacion, telefonoSchema, textoOpcionalONuloSchema, textoSchema } from '../lib/validacion.js';
 
 const MIME_PERMITIDOS: Record<string, string> = {
   'image/jpeg': 'jpg',
   'image/png': 'png',
-  'image/webp': 'webp',
 };
 const LIMITE_BYTES = 2 * 1024 * 1024; // 2 MB
+
+const esquemaPerfil = z.object({
+  nombre: textoSchema('nombre', 120).optional(),
+  descripcion: textoOpcionalONuloSchema('descripcion', 500),
+  direccion: textoOpcionalONuloSchema('direccion', 180),
+  telefono: z.union([z.literal(''), telefonoSchema]).optional(),
+  emailContacto: emailOpcionalONuloSchema('emailContacto'),
+  colorPrimario: colorHexSchema.optional(),
+}).strict().refine((datos) => Object.keys(datos).length > 0, {
+  message: 'Debes enviar al menos un campo para actualizar',
+});
 
 function dirLogos(): string {
   return path.join(process.cwd(), 'uploads', 'logos');
@@ -67,12 +79,12 @@ export async function rutasPerfil(servidor: FastifyInstance): Promise<void> {
         return respuesta.code(403).send({ error: 'Sin permisos para esta acción' });
       }
 
-      const { nombre, descripcion, direccion, telefono, emailContacto, colorPrimario } = solicitud.body;
-
-      // Validar formato de color hexadecimal si se envía
-      if (colorPrimario !== undefined && !/^#[0-9A-Fa-f]{6}$/.test(colorPrimario)) {
-        return respuesta.code(400).send({ error: 'colorPrimario debe ser un color hex válido (#RRGGBB)' });
+      const resultado = esquemaPerfil.safeParse(solicitud.body);
+      if (!resultado.success) {
+        return respuesta.code(400).send({ error: obtenerMensajeValidacion(resultado.error) });
       }
+
+      const { nombre, descripcion, direccion, telefono, emailContacto, colorPrimario } = resultado.data;
 
       const estudio = await prisma.estudio.update({
         where: { id },
@@ -119,7 +131,7 @@ export async function rutasPerfil(servidor: FastifyInstance): Promise<void> {
       const extension = MIME_PERMITIDOS[archivo.mimetype];
       if (!extension) {
         archivo.file.resume();
-        return respuesta.code(400).send({ error: 'Solo se aceptan imágenes JPG, PNG o WebP' });
+        return respuesta.code(400).send({ error: 'Solo se aceptan imágenes JPG o PNG' });
       }
 
       let buffer: Buffer;

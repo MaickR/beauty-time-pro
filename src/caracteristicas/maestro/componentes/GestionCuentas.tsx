@@ -12,8 +12,11 @@ import {
   Eye,
   EyeOff,
   AlertCircle,
+  CalendarDays,
 } from 'lucide-react';
 import { peticion } from '../../../lib/clienteHTTP';
+import { SelectorFecha } from '../../../componentes/ui/SelectorFecha';
+import { Tooltip } from '../../../componentes/ui/Tooltip';
 import { usarToast } from '../../../componentes/ui/ProveedorToast';
 
 // ─── Tipos ────────────────────────────────────────────────────────────────────
@@ -47,6 +50,10 @@ interface ResultadoReset {
   datos: { contrasenaTemporal: string; email: string };
 }
 
+interface ResultadoRenovarSuscripcion {
+  datos: { fechaVencimiento: string; mensaje: string };
+}
+
 // ─── Esquema del formulario nuevo salón ──────────────────────────────────────
 
 const esquemaCrear = z.object({
@@ -58,7 +65,10 @@ const esquemaCrear = z.object({
     .min(8, 'Mínimo 8 caracteres')
     .regex(/[A-Z]/, 'Debe incluir una mayúscula')
     .regex(/[0-9]/, 'Debe incluir un número'),
-  telefono: z.string().optional(),
+  telefono: z
+    .string()
+    .trim()
+    .regex(/^[0-9()+\-\s]{7,20}$/, 'Ingresa un teléfono válido de 7 a 20 caracteres'),
   pais: z.enum(['Mexico', 'Colombia']),
 });
 
@@ -107,15 +117,90 @@ function BadgeEstado({ activo }: PropsBadgeEstado) {
   );
 }
 
+interface EstadoSuscripcionSalon {
+  etiqueta: 'Activa' | 'Por vencer' | 'Vencida' | 'Suspendida';
+  clases: string;
+}
+
+function convertirFechaSolo(fechaISO: string): Date {
+  const [ano = '0', mes = '1', dia = '1'] = fechaISO.split('-');
+  return new Date(Number(ano), Number(mes) - 1, Number(dia));
+}
+
+function obtenerEstadoSuscripcionSalon(estudio: EstudioConAdmin): EstadoSuscripcionSalon {
+  const admin = estudio.usuarios[0];
+  if (admin && !admin.activo) {
+    return {
+      etiqueta: 'Suspendida',
+      clases: 'bg-slate-200 text-slate-700',
+    };
+  }
+
+  const hoy = new Date();
+  hoy.setHours(0, 0, 0, 0);
+
+  const fechaVencimiento = convertirFechaSolo(estudio.fechaVencimiento);
+  fechaVencimiento.setHours(0, 0, 0, 0);
+  const diferenciaDias = Math.ceil(
+    (fechaVencimiento.getTime() - hoy.getTime()) / (1000 * 60 * 60 * 24),
+  );
+
+  if (diferenciaDias < 0) {
+    return {
+      etiqueta: 'Vencida',
+      clases: 'bg-red-100 text-red-700',
+    };
+  }
+
+  if (diferenciaDias < 7) {
+    return {
+      etiqueta: 'Por vencer',
+      clases: 'bg-yellow-100 text-yellow-800',
+    };
+  }
+
+  return {
+    etiqueta: 'Activa',
+    clases: 'bg-green-100 text-green-700',
+  };
+}
+
+interface PropsBadgeSuscripcion {
+  estudio: EstudioConAdmin;
+}
+
+function BadgeSuscripcion({ estudio }: PropsBadgeSuscripcion) {
+  const estado = obtenerEstadoSuscripcionSalon(estudio);
+
+  return (
+    <span
+      className={`inline-flex items-center gap-2 rounded-full px-2.5 py-1 text-xs font-semibold ${estado.clases}`}
+    >
+      <span className="h-2 w-2 rounded-full bg-current opacity-70" />
+      {estado.etiqueta}
+    </span>
+  );
+}
+
 interface PropsFila {
   estudio: EstudioConAdmin;
   alSuspender: (id: string) => void;
   alResetear: (id: string) => void;
+  alRenovar: (estudio: EstudioConAdmin) => void;
   suspendiendo: boolean;
   reseteando: boolean;
+  renovando: boolean;
 }
 
-function FilaEstudio({ estudio, alSuspender, alResetear, suspendiendo, reseteando }: PropsFila) {
+function FilaEstudio({
+  estudio,
+  alSuspender,
+  alResetear,
+  alRenovar,
+  suspendiendo,
+  reseteando,
+  renovando,
+}: PropsFila) {
   const admin = estudio.usuarios[0];
 
   return (
@@ -135,35 +220,128 @@ function FilaEstudio({ estudio, alSuspender, alResetear, suspendiendo, reseteand
         )}
       </td>
       <td className="px-4 py-3 text-sm text-slate-600">
-        {formatearFecha(estudio.fechaVencimiento)}
+        <div className="space-y-2">
+          <p>{formatearFecha(estudio.fechaVencimiento)}</p>
+          <BadgeSuscripcion estudio={estudio} />
+        </div>
       </td>
       <td className="px-4 py-3 text-sm text-slate-400">
         {admin ? formatearFecha(admin.ultimoAcceso) : '—'}
       </td>
-      <td className="px-4 py-3">
-        {admin ? <BadgeEstado activo={admin.activo} /> : null}
-      </td>
+      <td className="px-4 py-3">{admin ? <BadgeEstado activo={admin.activo} /> : null}</td>
       <td className="px-4 py-3">
         <div className="flex items-center gap-2">
-          <button
-            onClick={() => alResetear(estudio.id)}
-            disabled={!admin || reseteando}
-            className="p-1.5 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-all disabled:opacity-40 disabled:cursor-not-allowed"
-            aria-label={`Resetear contraseña del salón ${estudio.nombre}`}
-          >
-            <RefreshCw className="w-4 h-4" />
-          </button>
-          <button
-            onClick={() => alSuspender(estudio.id)}
-            disabled={!admin || suspendiendo}
-            className="p-1.5 text-slate-400 hover:text-amber-600 hover:bg-amber-50 rounded-lg transition-all disabled:opacity-40 disabled:cursor-not-allowed"
-            aria-label={`${admin?.activo ? 'Suspender' : 'Activar'} acceso del salón ${estudio.nombre}`}
-          >
-            {admin?.activo ? <ToggleRight className="w-4 h-4" /> : <ToggleLeft className="w-4 h-4" />}
-          </button>
+          <Tooltip texto="Resetear contraseña">
+            <button
+              onClick={() => alResetear(estudio.id)}
+              disabled={!admin || reseteando}
+              className="no-imprimir p-1.5 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-all disabled:opacity-40 disabled:cursor-not-allowed"
+              aria-label={`Resetear contraseña del salón ${estudio.nombre}`}
+              title="Resetear contraseña"
+            >
+              <RefreshCw className="w-4 h-4" />
+            </button>
+          </Tooltip>
+          <Tooltip texto="Renovar suscripción">
+            <button
+              onClick={() => alRenovar(estudio)}
+              disabled={renovando}
+              className="no-imprimir p-1.5 text-slate-400 hover:text-emerald-600 hover:bg-emerald-50 rounded-lg transition-all disabled:opacity-40 disabled:cursor-not-allowed"
+              aria-label={`Renovar suscripción del salón ${estudio.nombre}`}
+              title="Renovar suscripción"
+            >
+              <CalendarDays className="w-4 h-4" />
+            </button>
+          </Tooltip>
+          <Tooltip texto={admin?.activo ? 'Suspender salón' : 'Activar salón'}>
+            <button
+              onClick={() => alSuspender(estudio.id)}
+              disabled={!admin || suspendiendo}
+              className="no-imprimir p-1.5 text-slate-400 hover:text-amber-600 hover:bg-amber-50 rounded-lg transition-all disabled:opacity-40 disabled:cursor-not-allowed"
+              aria-label={`${admin?.activo ? 'Suspender' : 'Activar'} acceso del salón ${estudio.nombre}`}
+              title={admin?.activo ? 'Suspender salón' : 'Activar salón'}
+            >
+              {admin?.activo ? (
+                <ToggleRight className="w-4 h-4" />
+              ) : (
+                <ToggleLeft className="w-4 h-4" />
+              )}
+            </button>
+          </Tooltip>
         </div>
       </td>
     </tr>
+  );
+}
+
+interface PropsModalRenovarSuscripcion {
+  estudio: EstudioConAdmin;
+  renovando: boolean;
+  alCerrar: () => void;
+  alConfirmar: (id: string, nuevaFecha: string) => void;
+}
+
+function ModalRenovarSuscripcion({
+  estudio,
+  renovando,
+  alCerrar,
+  alConfirmar,
+}: PropsModalRenovarSuscripcion) {
+  const [nuevaFecha, setNuevaFecha] = useState(estudio.fechaVencimiento);
+
+  return (
+    <div
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="titulo-modal-renovar"
+      className="fixed inset-0 z-50 flex items-center justify-center p-4"
+    >
+      <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={alCerrar} />
+      <div className="relative w-full max-w-lg rounded-[2rem] bg-white p-6 shadow-2xl">
+        <h2 id="titulo-modal-renovar" className="text-xl font-black text-slate-900">
+          Renovar suscripción
+        </h2>
+        <p className="mt-2 text-sm text-slate-500">
+          Salón: <span className="font-bold text-slate-900">{estudio.nombre}</span>
+        </p>
+
+        <div className="mt-5 rounded-2xl border border-slate-200 bg-slate-50 p-4">
+          <p className="text-[11px] font-black uppercase tracking-widest text-slate-400">
+            Fecha de vencimiento actual
+          </p>
+          <p className="mt-2 text-lg font-black text-slate-900">
+            {formatearFecha(estudio.fechaVencimiento)}
+          </p>
+        </div>
+
+        <div className="mt-5">
+          <SelectorFecha
+            etiqueta="Nueva fecha de vencimiento"
+            valor={nuevaFecha}
+            alCambiar={setNuevaFecha}
+            requerido
+          />
+        </div>
+
+        <div className="mt-6 flex gap-3">
+          <button
+            type="button"
+            onClick={alCerrar}
+            className="flex-1 rounded-xl border border-slate-200 py-3 text-sm font-semibold text-slate-600 transition-all hover:bg-slate-50"
+          >
+            Cancelar
+          </button>
+          <button
+            type="button"
+            onClick={() => alConfirmar(estudio.id, nuevaFecha)}
+            disabled={renovando}
+            className="flex-1 rounded-xl bg-linear-to-r from-[#880E4F] to-[#C2185B] py-3 text-sm font-bold text-white transition-all disabled:opacity-60"
+          >
+            {renovando ? 'Guardando...' : 'Confirmar renovación'}
+          </button>
+        </div>
+      </div>
+    </div>
   );
 }
 
@@ -200,7 +378,8 @@ function ModalCrearSalon({ alCerrar }: PropsModalCrear) {
       alCerrar();
     } catch (error) {
       setError('root', {
-        message: error instanceof Error ? error.message : 'Error al crear el salón. Intenta nuevamente.',
+        message:
+          error instanceof Error ? error.message : 'Error al crear el salón. Intenta nuevamente.',
       });
     }
   };
@@ -221,13 +400,31 @@ function ModalCrearSalon({ alCerrar }: PropsModalCrear) {
 
           <form onSubmit={handleSubmit(alEnviar)} noValidate className="space-y-4">
             {[
-              { id: 'nombreSalon', label: 'Nombre del salón', type: 'text', autoComplete: 'off' },
-              { id: 'nombreAdmin', label: 'Nombre del administrador', type: 'text', autoComplete: 'name' },
-              { id: 'email', label: 'Correo del administrador', type: 'email', autoComplete: 'email' },
-              { id: 'telefono', label: 'Teléfono (opcional)', type: 'tel', autoComplete: 'tel' },
+              {
+                id: 'nombreSalon',
+                label: 'Nombre del salón',
+                type: 'text',
+                autoComplete: 'organization',
+              },
+              {
+                id: 'nombreAdmin',
+                label: 'Nombre del administrador',
+                type: 'text',
+                autoComplete: 'name',
+              },
+              {
+                id: 'email',
+                label: 'Correo del administrador',
+                type: 'email',
+                autoComplete: 'email',
+              },
+              { id: 'telefono', label: 'Teléfono del salón', type: 'tel', autoComplete: 'tel' },
             ].map(({ id, label, type, autoComplete }) => (
               <div key={id}>
-                <label htmlFor={`crear-${id}`} className="block text-sm font-semibold text-slate-700 mb-1">
+                <label
+                  htmlFor={`crear-${id}`}
+                  className="block text-sm font-semibold text-slate-700 mb-1"
+                >
                   {label}
                 </label>
                 <input
@@ -236,6 +433,7 @@ function ModalCrearSalon({ alCerrar }: PropsModalCrear) {
                   autoComplete={autoComplete}
                   className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-slate-900 text-sm outline-none focus:ring-2 focus:ring-pink-500 focus:border-transparent transition-all"
                   aria-invalid={!!errors[id as keyof CamposCrear]}
+                  placeholder={id === 'telefono' ? 'Ej. 5512345678' : undefined}
                   {...register(id as keyof CamposCrear)}
                 />
                 {errors[id as keyof CamposCrear] && (
@@ -248,7 +446,10 @@ function ModalCrearSalon({ alCerrar }: PropsModalCrear) {
 
             {/* Contraseña con generador */}
             <div>
-              <label htmlFor="crear-contrasena" className="block text-sm font-semibold text-slate-700 mb-1">
+              <label
+                htmlFor="crear-contrasena"
+                className="block text-sm font-semibold text-slate-700 mb-1"
+              >
                 Contraseña inicial
               </label>
               <div className="flex gap-2">
@@ -267,12 +468,18 @@ function ModalCrearSalon({ alCerrar }: PropsModalCrear) {
                     className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 transition-colors"
                     aria-label={mostrarContrasena ? 'Ocultar contraseña' : 'Mostrar contraseña'}
                   >
-                    {mostrarContrasena ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                    {mostrarContrasena ? (
+                      <EyeOff className="w-4 h-4" />
+                    ) : (
+                      <Eye className="w-4 h-4" />
+                    )}
                   </button>
                 </div>
                 <button
                   type="button"
-                  onClick={() => setValue('contrasena', generarContrasena(), { shouldValidate: true })}
+                  onClick={() =>
+                    setValue('contrasena', generarContrasena(), { shouldValidate: true })
+                  }
                   className="px-3 py-2.5 bg-slate-100 hover:bg-slate-200 rounded-xl text-xs font-semibold text-slate-600 transition-all"
                   aria-label="Generar contraseña automática"
                 >
@@ -288,7 +495,10 @@ function ModalCrearSalon({ alCerrar }: PropsModalCrear) {
 
             {/* País */}
             <div>
-              <label htmlFor="crear-pais" className="block text-sm font-semibold text-slate-700 mb-1">
+              <label
+                htmlFor="crear-pais"
+                className="block text-sm font-semibold text-slate-700 mb-1"
+              >
                 País
               </label>
               <select
@@ -302,7 +512,10 @@ function ModalCrearSalon({ alCerrar }: PropsModalCrear) {
             </div>
 
             {errors.root && (
-              <div role="alert" className="flex items-start gap-2 bg-red-50 border border-red-200 rounded-xl p-3">
+              <div
+                role="alert"
+                className="flex items-start gap-2 bg-red-50 border border-red-200 rounded-xl p-3"
+              >
                 <AlertCircle className="w-4 h-4 text-red-500 shrink-0 mt-0.5" aria-hidden="true" />
                 <p className="text-sm text-red-600 font-medium">{errors.root.message}</p>
               </div>
@@ -397,15 +610,18 @@ function ModalContrasena({ email, contrasena, alCerrar }: PropsModalContrasena) 
 
 export function GestionCuentas() {
   const [modalCrear, setModalCrear] = useState(false);
-  const [contrasenaTemporal, setContrasenaTemporal] = useState<{ email: string; contrasena: string } | null>(
-    null,
-  );
+  const [estudioRenovar, setEstudioRenovar] = useState<EstudioConAdmin | null>(null);
+  const [contrasenaTemporal, setContrasenaTemporal] = useState<{
+    email: string;
+    contrasena: string;
+  } | null>(null);
   const { mostrarToast } = usarToast();
   const queryClient = useQueryClient();
 
   const { data, isLoading, isError } = useQuery({
     queryKey: ['admin-salones'],
     queryFn: () => peticion<RespuestaSalones>('/admin/salones'),
+    staleTime: 2 * 60 * 1000,
   });
 
   const mutacionSuspender = useMutation({
@@ -427,29 +643,55 @@ export function GestionCuentas() {
     onError: () => mostrarToast('Error al resetear la contraseña. Intenta nuevamente.'),
   });
 
+  const mutacionRenovar = useMutation({
+    mutationFn: ({ id, fechaVencimiento }: { id: string; fechaVencimiento: string }) =>
+      peticion<ResultadoRenovarSuscripcion>(`/admin/salones/${id}`, {
+        method: 'PUT',
+        body: JSON.stringify({ fechaVencimiento }),
+      }),
+    onSuccess: async (resultado) => {
+      await queryClient.invalidateQueries({ queryKey: ['admin-salones'] });
+      mostrarToast({
+        mensaje: resultado.datos.mensaje,
+        variante: 'exito',
+        icono: '✓',
+        duracionMs: 4000,
+      });
+      setEstudioRenovar(null);
+    },
+    onError: () =>
+      mostrarToast({
+        mensaje: 'No fue posible renovar la suscripción. Intenta nuevamente.',
+        variante: 'error',
+        icono: '✗',
+        duracionMs: 4000,
+      }),
+  });
+
   const salones = data?.datos ?? [];
 
   return (
     <section aria-labelledby="titulo-gestion-cuentas">
       <div className="flex items-center justify-between mb-6">
         <div>
-          <h2
-            id="titulo-gestion-cuentas"
-            className="text-2xl font-black text-slate-900"
-          >
+          <h2 id="titulo-gestion-cuentas" className="text-2xl font-black text-slate-900">
             Gestión de cuentas
           </h2>
           <p className="text-sm text-slate-500">
             {salones.length} {salones.length === 1 ? 'salón registrado' : 'salones registrados'}
           </p>
         </div>
-        <button
-          onClick={() => setModalCrear(true)}
-          className="inline-flex items-center gap-2 bg-linear-to-r from-[#880E4F] to-[#C2185B] text-white font-bold px-4 py-2.5 rounded-xl text-sm shadow-lg shadow-pink-500/25 hover:from-[#6D0B3F] hover:to-[#A3153F] transition-all"
-        >
-          <PlusCircle className="w-4 h-4" aria-hidden="true" />
-          Crear salón
-        </button>
+        <Tooltip texto="Crear nuevo salón">
+          <button
+            onClick={() => setModalCrear(true)}
+            className="no-imprimir inline-flex items-center gap-2 bg-linear-to-r from-[#880E4F] to-[#C2185B] text-white font-bold px-4 py-2.5 rounded-xl text-sm shadow-lg shadow-pink-500/25 hover:from-[#6D0B3F] hover:to-[#A3153F] transition-all"
+            aria-label="Crear nuevo salón"
+            title="Crear nuevo salón"
+          >
+            <PlusCircle className="w-4 h-4" aria-hidden="true" />
+            Crear nuevo salón
+          </button>
+        </Tooltip>
       </div>
 
       {isLoading && (
@@ -481,21 +723,27 @@ export function GestionCuentas() {
 
       {!isLoading && !isError && salones.length > 0 && (
         <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden">
-          <div className="overflow-x-auto">
+          {/* Vista de tabla — solo en pantallas medianas en adelante */}
+          <div className="hidden md:block overflow-x-auto">
             <table className="w-full text-left">
               <thead>
                 <tr className="bg-slate-50 border-b border-slate-200">
-                  {['Salón', 'Administrador', 'Vencimiento', 'Último acceso', 'Estado', 'Acciones'].map(
-                    (col) => (
-                      <th
-                        key={col}
-                        scope="col"
-                        className="px-4 py-3 text-xs font-black uppercase tracking-wider text-slate-500"
-                      >
-                        {col}
-                      </th>
-                    ),
-                  )}
+                  {[
+                    'Salón',
+                    'Administrador',
+                    'Vencimiento',
+                    'Último acceso',
+                    'Estado',
+                    'Acciones',
+                  ].map((col) => (
+                    <th
+                      key={col}
+                      scope="col"
+                      className="px-4 py-3 text-xs font-black uppercase tracking-wider text-slate-500"
+                    >
+                      {col}
+                    </th>
+                  ))}
                 </tr>
               </thead>
               <tbody>
@@ -505,17 +753,84 @@ export function GestionCuentas() {
                     estudio={estudio}
                     alSuspender={(id) => mutacionSuspender.mutate(id)}
                     alResetear={(id) => mutacionReset.mutate(id)}
+                    alRenovar={setEstudioRenovar}
                     suspendiendo={mutacionSuspender.isPending}
                     reseteando={mutacionReset.isPending}
+                    renovando={mutacionRenovar.isPending}
                   />
                 ))}
               </tbody>
             </table>
           </div>
+
+          {/* Vista de tarjetas — solo en móvil */}
+          <div className="md:hidden divide-y divide-slate-100">
+            {salones.map((estudio) => {
+              const admin = estudio.usuarios[0];
+              return (
+                <div key={estudio.id} className="p-4 space-y-3">
+                  <div className="flex justify-between items-start">
+                    <div>
+                      <p className="font-bold text-slate-900">{estudio.nombre}</p>
+                      <p className="text-xs text-slate-400">{estudio.pais}</p>
+                    </div>
+                    <BadgeSuscripcion estudio={estudio} />
+                  </div>
+                  {admin && (
+                    <div className="text-sm space-y-1">
+                      <p className="text-slate-600">{admin.nombre}</p>
+                      <p className="text-xs text-slate-400">{admin.email}</p>
+                      <BadgeEstado activo={admin.activo} />
+                    </div>
+                  )}
+                  <p className="text-xs text-slate-500">
+                    Vence: {formatearFecha(estudio.fechaVencimiento)}
+                  </p>
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => mutacionReset.mutate(estudio.id)}
+                      disabled={!admin || mutacionReset.isPending}
+                      className="flex-1 py-2 rounded-xl border border-slate-200 text-xs font-semibold text-slate-600 hover:bg-slate-50 disabled:opacity-40"
+                      aria-label={`Resetear contraseña de ${estudio.nombre}`}
+                    >
+                      Resetear
+                    </button>
+                    <button
+                      onClick={() => setEstudioRenovar(estudio)}
+                      disabled={mutacionRenovar.isPending}
+                      className="flex-1 py-2 rounded-xl border border-slate-200 text-xs font-semibold text-slate-600 hover:bg-slate-50 disabled:opacity-40"
+                      aria-label={`Renovar suscripción de ${estudio.nombre}`}
+                    >
+                      Renovar
+                    </button>
+                    <button
+                      onClick={() => mutacionSuspender.mutate(estudio.id)}
+                      disabled={!admin || mutacionSuspender.isPending}
+                      className="flex-1 py-2 rounded-xl border border-slate-200 text-xs font-semibold text-amber-600 hover:bg-amber-50 disabled:opacity-40"
+                      aria-label={`${admin?.activo ? 'Suspender' : 'Activar'} ${estudio.nombre}`}
+                    >
+                      {admin?.activo ? 'Suspender' : 'Activar'}
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
         </div>
       )}
 
       {modalCrear && <ModalCrearSalon alCerrar={() => setModalCrear(false)} />}
+
+      {estudioRenovar && (
+        <ModalRenovarSuscripcion
+          estudio={estudioRenovar}
+          renovando={mutacionRenovar.isPending}
+          alCerrar={() => setEstudioRenovar(null)}
+          alConfirmar={(id, nuevaFecha) =>
+            mutacionRenovar.mutate({ id, fechaVencimiento: nuevaFecha })
+          }
+        />
+      )}
 
       {contrasenaTemporal && (
         <ModalContrasena

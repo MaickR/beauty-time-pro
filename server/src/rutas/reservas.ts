@@ -86,9 +86,9 @@ export async function rutasReservas(servidor: FastifyInstance): Promise<void> {
     Body: {
       estudioId: string;
       personalId: string;
-      nombreCliente: string;
-      telefonoCliente: string;
-      fechaNacimiento: string; // "YYYY-MM-DD"
+      nombreCliente?: string;
+      telefonoCliente?: string;
+      fechaNacimiento?: string; // "YYYY-MM-DD"
       email?: string;
       fecha: string;
       horaInicio: string;
@@ -102,15 +102,59 @@ export async function rutasReservas(servidor: FastifyInstance): Promise<void> {
       usarRecompensa?: boolean;
     };
   }>('/reservas', { preHandler: verificarJWT }, async (solicitud, respuesta) => {
+    const payload = solicitud.user as { sub: string; rol: string; estudioId: string | null };
     const {
-      estudioId, personalId, nombreCliente, telefonoCliente,
-      fechaNacimiento, email,
+      estudioId, personalId,
       fecha, horaInicio, duracion, servicios, precioTotal, estado, sucursal, marcaTinte, tonalidad, usarRecompensa,
     } = solicitud.body;
 
-    if (!estudioId || !personalId || !nombreCliente || !fecha || !horaInicio || !fechaNacimiento) {
+    let nombreCliente = solicitud.body.nombreCliente ?? '';
+    let telefonoCliente = solicitud.body.telefonoCliente ?? '';
+    let fechaNacimiento = solicitud.body.fechaNacimiento ?? '';
+    const email = solicitud.body.email;
+    let clienteAppId: string | undefined;
+
+    if (payload.rol === 'dueno' && payload.estudioId !== estudioId) {
+      return respuesta.code(403).send({ error: 'Sin permisos para crear reservas en este salón' });
+    }
+
+    const personal = await prisma.personal.findFirst({
+      where: { id: personalId, estudioId },
+      select: { id: true },
+    });
+
+    if (!personal) {
+      return respuesta.code(400).send({ error: 'El especialista no pertenece a este salón' });
+    }
+
+    // ─── Si es un ClienteApp autenticado, rellenar datos desde su perfil ──
+    const esClienteApp = payload.rol === 'cliente' && payload.estudioId === null;
+    if (esClienteApp) {
+      const clienteApp = await prisma.clienteApp.findUnique({
+        where: { id: payload.sub },
+        select: { id: true, nombre: true, apellido: true, telefono: true, fechaNacimiento: true },
+      });
+      if (!clienteApp) {
+        return respuesta.code(401).send({ error: 'No autenticado' });
+      }
+      clienteAppId = clienteApp.id;
+      if (!nombreCliente) nombreCliente = `${clienteApp.nombre} ${clienteApp.apellido}`;
+      if (!telefonoCliente) {
+        if (!clienteApp.telefono) {
+          return respuesta.code(400).send({
+            error: 'Teléfono requerido. Actualiza tu perfil o ingrésalo en el formulario.',
+          });
+        }
+        telefonoCliente = clienteApp.telefono;
+      }
+      if (!fechaNacimiento) {
+        fechaNacimiento = clienteApp.fechaNacimiento.toISOString().split('T')[0]!;
+      }
+    }
+
+    if (!estudioId || !personalId || !nombreCliente || !telefonoCliente || !fecha || !horaInicio || !fechaNacimiento) {
       return respuesta.code(400).send({
-        error: 'Campos requeridos: estudioId, personalId, nombreCliente, fecha, horaInicio, fechaNacimiento',
+        error: 'Campos requeridos: estudioId, personalId, nombreCliente, telefonoCliente, fecha, horaInicio, fechaNacimiento',
       });
     }
 
@@ -175,6 +219,7 @@ export async function rutasReservas(servidor: FastifyInstance): Promise<void> {
           ? 'Cliente menor de edad — requiere acompañante adulto'
           : null,
         estado: estadoReserva,
+        ...(clienteAppId !== undefined && { clienteAppId }),
       },
     });
 
@@ -186,10 +231,10 @@ export async function rutasReservas(servidor: FastifyInstance): Promise<void> {
       ? (await obtenerConfigFidelidad(estudioId)).descripcionRecompensa
       : null;
 
-    // void enviarEmailConfirmacion(reserva.id, {
-    //   recompensaAplicada: Boolean(usarRecompensa),
-    //   descripcionRecompensa: descripcionRecompensaAplicada,
-    // });
+    void enviarEmailConfirmacion(reserva.id, {
+      recompensaAplicada: Boolean(usarRecompensa),
+      descripcionRecompensa: descripcionRecompensaAplicada,
+    });
 
     return respuesta.code(201).send({
       datos: reserva,

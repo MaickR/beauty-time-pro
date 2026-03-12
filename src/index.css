@@ -2,9 +2,42 @@
  * Importa Tailwind CSS v4 (sin tailwind.config.js, detección automática de clases)
  * y los estilos base del proyecto.
  */
-@import "tailwindcss";
+@import 'tailwindcss';
+@import 'react-day-picker/dist/style.css';
 
 :root {
-  --color-primario: #C2185B;
-  --color-primario-oscuro: #880E4F;
+  --color-primario: #c2185b;
+  --color-primario-oscuro: #880e4f;
+}
+
+.selector-fecha-popover .rdp-root {
+  --rdp-accent-color: var(--color-primario);
+  --rdp-day_button-border-radius: 1rem;
+  margin: 0;
+}
+
+.selector-fecha-popover .rdp-chevron {
+  fill: currentColor;
+}
+
+.solo-imprimir {
+  display: none !important;
+}
+
+@media print {
+  nav,
+  aside,
+  .no-imprimir {
+    display: none !important;
+  }
+
+  body {
+    font-size: 12pt;
+    color: black;
+    background: white;
+  }
+
+  .solo-imprimir {
+    display: block !important;
+  }
 }

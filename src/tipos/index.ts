@@ -41,6 +41,7 @@ export interface Personal {
   shiftEnd: string | null; // "HH:mm"
   breakStart: string | null; // "HH:mm"
   breakEnd: string | null; // "HH:mm"
+  workingDays: number[] | null;
 }
 
 export interface Estudio {
@@ -65,8 +66,38 @@ export interface Estudio {
   descripcion?: string | null;
   direccion?: string | null;
   emailContacto?: string | null;
+  estado?: string | null;
+  primeraVez?: boolean;
   createdAt: string; // ISO datetime
   updatedAt: string; // ISO datetime
+}
+
+export type EstadoSalon = 'pendiente' | 'aprobado' | 'rechazado' | 'suspendido';
+
+/** Solicitud de alta de salón con datos del dueño */
+export interface SolicitudSalon {
+  id: string;
+  nombre: string;
+  descripcion?: string | null;
+  direccion?: string | null;
+  telefono: string;
+  categorias?: string | null;
+  colorPrimario?: string | null;
+  horarioApertura?: string | null;
+  horarioCierre?: string | null;
+  diasAtencion?: string | null;
+  numeroEspecialistas?: number | null;
+  estado: EstadoSalon;
+  motivoRechazo?: string | null;
+  fechaSolicitud: string;
+  fechaAprobacion?: string | null;
+  fechaVencimiento: string;
+  diasDesdeRegistro: number;
+  dueno: {
+    id: string;
+    email: string;
+    nombre: string;
+  } | null;
 }
 
 export interface Reserva {
@@ -89,14 +120,98 @@ export interface Reserva {
   createdAt: string; // ISO datetime
 }
 
+// ─── Tipos del dashboard de cliente final ───────────────────────────────────
+
+export interface SalonPublico {
+  id: string;
+  nombre: string;
+  descripcion: string | null;
+  direccion: string | null;
+  telefono: string;
+  emailContacto: string | null;
+  logoUrl: string | null;
+  colorPrimario: string | null;
+  horarioApertura: string | null;
+  horarioCierre: string | null;
+  diasAtencion: string | null;
+  categorias: string | null;
+}
+
+export interface EspecialistaPublico {
+  id: string;
+  nombre: string;
+  especialidades: string[];
+  horaInicio: string | null;
+  horaFin: string | null;
+  descansoInicio: string | null;
+  descansoFin: string | null;
+  diasTrabajo: unknown;
+}
+
+export interface SalonDetalle extends SalonPublico {
+  servicios: Servicio[];
+  horario: Record<string, TurnoTrabajo>;
+  festivos: string[];
+  personal: EspecialistaPublico[];
+}
+
+export interface FidelidadSalon {
+  estudioId: string;
+  nombreSalon: string;
+  colorPrimario: string | null;
+  logoUrl: string | null;
+  visitasAcumuladas: number;
+  visitasUsadas: number;
+  recompensasGanadas: number;
+  recompensasUsadas: number;
+  visitasRequeridas: number;
+  descripcionRecompensa: string;
+  activo: boolean;
+}
+
+export interface ReservaCliente {
+  id: string;
+  fecha: string;
+  horaInicio: string;
+  duracion: number;
+  estado: EstadoReserva;
+  servicios: Servicio[];
+  precioTotal: number;
+  tokenCancelacion: string;
+  salon: { id: string; nombre: string; colorPrimario: string | null; logoUrl: string | null };
+  especialista: { id: string; nombre: string };
+}
+
+export interface PerfilClienteApp {
+  id: string;
+  email: string;
+  nombre: string;
+  apellido: string;
+  telefono: string | null;
+  fechaNacimiento: string;
+  avatarUrl: string | null;
+  creadoEn: string;
+  mensajeFidelidad: string | null;
+  reservas: ReservaCliente[];
+  fidelidad: FidelidadSalon[];
+}
+
 export interface Pago {
   id: string;
   studioId: string;
   studioName: string;
   amount: number;
   currency: Moneda;
+  country?: Pais;
   date: string; // "YYYY-MM-DD"
   createdAt: string; // ISO datetime
+  concepto?: string;
+  referencia?: string | null;
+  registradoPorNombre?: string | null;
+  registradoPorEmail?: string | null;
+  fechaBaseRenovacion?: string | null;
+  nuevaFechaVencimiento?: string | null;
+  estrategiaRenovacion?: 'desde_vencimiento_actual' | 'desde_hoy' | 'manual' | null;
 }
 
 export interface EstadoSuscripcion {

@@ -1,6 +1,20 @@
 import type { FastifyInstance } from 'fastify';
+import { z } from 'zod';
 import { prisma } from '../prismaCliente.js';
 import { verificarJWT } from '../middleware/autenticacion.js';
+import { emailSchema, obtenerMensajeValidacion, textoSchema } from '../lib/validacion.js';
+
+const esquemaBusquedaClientes = z.object({
+  buscar: textoSchema('buscar', 80).optional(),
+});
+
+const esquemaActualizarCliente = z.object({
+  nombre: textoSchema('nombre', 120).optional(),
+  email: z.union([z.literal(''), emailSchema]).optional().transform((valor) => (valor === '' ? null : valor)),
+  notas: textoSchema('notas', 1000).nullable().optional(),
+}).strict().refine((datos) => Object.keys(datos).length > 0, {
+  message: 'Debes enviar al menos un campo para actualizar',
+});
 
 export async function rutasClientes(servidor: FastifyInstance): Promise<void> {
   // GET /estudios/:id/clientes — lista clientes del estudio
@@ -17,7 +31,12 @@ export async function rutasClientes(servidor: FastifyInstance): Promise<void> {
         return respuesta.code(403).send({ error: 'Sin permisos para esta acción' });
       }
 
-      const { buscar } = solicitud.query;
+      const consulta = esquemaBusquedaClientes.safeParse(solicitud.query);
+      if (!consulta.success) {
+        return respuesta.code(400).send({ error: obtenerMensajeValidacion(consulta.error) });
+      }
+
+      const { buscar } = consulta.data;
       const where: Record<string, unknown> = { estudioId: id, activo: true };
       if (buscar) {
         where['OR'] = [
@@ -117,7 +136,12 @@ export async function rutasClientes(servidor: FastifyInstance): Promise<void> {
         return respuesta.code(403).send({ error: 'Sin permisos para esta acción' });
       }
 
-      const { nombre, email, notas } = solicitud.body;
+      const resultado = esquemaActualizarCliente.safeParse(solicitud.body);
+      if (!resultado.success) {
+        return respuesta.code(400).send({ error: obtenerMensajeValidacion(resultado.error) });
+      }
+
+      const { nombre, email, notas } = resultado.data;
       const actualizado = await prisma.cliente.update({
         where: { id: solicitud.params.id },
         data: {

@@ -3,18 +3,71 @@
  *
  * Todas las operaciones hablan con /auth/* en lugar de Firebase Auth.
  */
-import { peticion, guardarToken, limpiarToken, URL_BASE } from '../lib/clienteHTTP';
+import { ErrorAPI, peticion, guardarToken, limpiarToken, URL_BASE } from '../lib/clienteHTTP';
 
 export type FuncionDesuscribir = () => void;
 
+export interface PermisosSesionMaestro {
+  aprobarSalones: boolean;
+  gestionarPagos: boolean;
+  crearAdmins: boolean;
+  verAuditLog: boolean;
+  verMetricas: boolean;
+  suspenderSalones: boolean;
+}
+
+interface DatosSesion {
+  token: string;
+  rol: string;
+  estudioId: string | null;
+  nombre: string;
+  email: string;
+  esMaestroTotal: boolean;
+  permisos?: PermisosSesionMaestro;
+}
+
 interface RespuestaInicioSesion {
-  datos: {
-    token: string;
-    rol: string;
-    estudioId: string | null;
-    nombre: string;
-    email: string;
-  };
+  datos: DatosSesion;
+}
+
+const RETRASO_REINTENTO_LOGIN_MS = 450;
+
+function esperar(ms: number): Promise<void> {
+  return new Promise((resolver) => {
+    setTimeout(resolver, ms);
+  });
+}
+
+function esErrorTransitorioLogin(error: unknown): boolean {
+  if (!(error instanceof ErrorAPI)) return false;
+  return error.estado === 404 || error.estado >= 500;
+}
+
+async function autenticarConReintento(payload: {
+  email?: string;
+  contrasena?: string;
+  clave?: string;
+}): Promise<DatosSesion> {
+  try {
+    const res = await peticion<RespuestaInicioSesion>('/auth/iniciar-sesion', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    });
+    guardarToken(res.datos.token);
+    return res.datos;
+  } catch (error) {
+    // Reintento único para cubrir reinicios breves del backend durante desarrollo.
+    if (esErrorTransitorioLogin(error)) {
+      await esperar(RETRASO_REINTENTO_LOGIN_MS);
+      const res = await peticion<RespuestaInicioSesion>('/auth/iniciar-sesion', {
+        method: 'POST',
+        body: JSON.stringify(payload),
+      });
+      guardarToken(res.datos.token);
+      return res.datos;
+    }
+    throw error;
+  }
 }
 
 /**
@@ -24,27 +77,15 @@ interface RespuestaInicioSesion {
 export async function iniciarSesionConEmailAPI(
   email: string,
   contrasena: string,
-): Promise<{ token: string; rol: string; estudioId: string | null; nombre: string; email: string }> {
-  const res = await peticion<RespuestaInicioSesion>('/auth/iniciar-sesion', {
-    method: 'POST',
-    body: JSON.stringify({ email, contrasena }),
-  });
-  guardarToken(res.datos.token);
-  return res.datos;
+): Promise<DatosSesion> {
+  return autenticarConReintento({ email, contrasena });
 }
 
 /**
  * Autentica con clave de estudio — para clientes que acceden por URL de reserva.
  */
-export async function iniciarSesionConClaveAPI(
-  clave: string,
-): Promise<{ token: string; rol: string; estudioId: string | null; nombre: string; email: string }> {
-  const res = await peticion<RespuestaInicioSesion>('/auth/iniciar-sesion', {
-    method: 'POST',
-    body: JSON.stringify({ clave }),
-  });
-  guardarToken(res.datos.token);
-  return res.datos;
+export async function iniciarSesionConClaveAPI(clave: string): Promise<DatosSesion> {
+  return autenticarConReintento({ clave });
 }
 
 /**
@@ -59,6 +100,8 @@ export async function refrescarSesion(): Promise<{
   estudioId: string | null;
   nombre: string;
   email: string;
+  esMaestroTotal: boolean;
+  permisos?: PermisosSesionMaestro;
 } | null> {
   try {
     const res = await fetch(`${URL_BASE}/auth/refrescar`, {
@@ -98,7 +141,10 @@ export async function confirmarResetAPI(token: string, contrasenaNueva: string):
 /**
  * Cambia la contraseña con la contraseña actual (usuario autenticado).
  */
-export async function cambiarContrasenaAPI(contrasenaActual: string, contrasenaNueva: string): Promise<void> {
+export async function cambiarContrasenaAPI(
+  contrasenaActual: string,
+  contrasenaNueva: string,
+): Promise<void> {
   await peticion('/auth/cambiar-contrasena', {
     method: 'POST',
     body: JSON.stringify({ contrasenaActual, contrasenaNueva }),
@@ -115,4 +161,3 @@ export async function cerrarSesionAPI(): Promise<void> {
     limpiarToken();
   }
 }
-

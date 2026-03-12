@@ -1,8 +1,34 @@
 /**
  * Servicio de reservas — llama al backend Fastify en lugar de Firebase.
  */
-import type { Reserva, EstadoReserva } from '../tipos/index';
+import type { Reserva, EstadoReserva, SlotTiempo } from '../tipos/index';
 import { peticion } from '../lib/clienteHTTP';
+
+interface SlotBackend {
+  hora?: string;
+  disponible?: boolean;
+  time?: string;
+  status?: SlotTiempo['status'];
+}
+
+function normalizarSlots(slots: SlotBackend[]): SlotTiempo[] {
+  return slots
+    .map((slot) => {
+      if (slot.time && slot.status) {
+        return { time: slot.time, status: slot.status };
+      }
+
+      if (slot.hora) {
+        return {
+          time: slot.hora,
+          status: slot.disponible ? 'AVAILABLE' : 'OCCUPIED',
+        };
+      }
+
+      return null;
+    })
+    .filter((slot): slot is SlotTiempo => slot !== null);
+}
 
 interface DatosCrearReserva extends Omit<Reserva, 'id'> {
   fechaNacimiento: string; // "YYYY-MM-DD"
@@ -70,4 +96,16 @@ export async function cancelarReservaPorToken(token: string): Promise<void> {
   await peticion(`/reservas/cancelar/${token}`, {
     method: 'POST',
   });
+}
+
+export async function obtenerDisponibilidadEstudio(
+  estudioId: string,
+  personalId: string,
+  fecha: string,
+  duracion: number,
+): Promise<SlotTiempo[]> {
+  const respuesta = await peticion<{ datos: SlotBackend[] }>(
+    `/estudios/${estudioId}/disponibilidad?personalId=${personalId}&fecha=${fecha}&duracion=${duracion}`,
+  );
+  return normalizarSlots(respuesta.datos);
 }

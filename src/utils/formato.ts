@@ -1,8 +1,31 @@
 import type { EstadoSuscripcion } from '../tipos/index';
 
+export function obtenerMonedaPorPais(pais: string | null | undefined): 'MXN' | 'COP' {
+  return pais === 'Colombia' ? 'COP' : 'MXN';
+}
+
+export function formatearPaisMoneda(pais: string | null | undefined): string {
+  const paisNormalizado = pais === 'Colombia' ? 'Colombia' : 'Mexico';
+  return `${paisNormalizado} / ${obtenerMonedaPorPais(paisNormalizado)}`;
+}
+
+export function formatearFechaHumana(fechaISO: string | null | undefined): string {
+  if (!fechaISO) return 'Sin fecha';
+
+  const partes = fechaISO.split('-').map(Number);
+  if (partes.length < 3) return fechaISO;
+
+  return new Date(partes[0]!, partes[1]! - 1, partes[2]!).toLocaleDateString('es-MX', {
+    day: 'numeric',
+    month: 'long',
+    year: 'numeric',
+  });
+}
+
 /** Formatea un número como moneda. Por defecto usa MXN y locale es-MX. */
 export function formatearDinero(monto: number, moneda: string = 'MXN'): string {
-  return new Intl.NumberFormat('es-MX', { style: 'currency', currency: moneda }).format(monto || 0);
+  const locale = moneda === 'COP' ? 'es-CO' : 'es-MX';
+  return new Intl.NumberFormat(locale, { style: 'currency', currency: moneda }).format(monto || 0);
 }
 
 /** Convierte un objeto Date a cadena "YYYY-MM-DD" usando la zona horaria local del dispositivo. */

@@ -19,10 +19,12 @@ export function ConfigFidelidad({ estudioId }: PropsConfigFidelidad) {
   const { data: config } = useQuery({
     queryKey: ['fidelidad-config', estudioId],
     queryFn: () => obtenerConfigFidelidad(estudioId),
+    staleTime: 2 * 60 * 1000,
   });
   const { data: ranking = [] } = useQuery({
     queryKey: ['fidelidad-ranking', estudioId],
     queryFn: () => obtenerRankingFidelidad(estudioId, 10),
+    staleTime: 10 * 1000,
     refetchInterval: 10000,
   });
 
@@ -43,10 +45,17 @@ export function ConfigFidelidad({ estudioId }: PropsConfigFidelidad) {
   });
 
   if (!formulario) {
-    return <div className="flex justify-center p-12"><div className="w-8 h-8 border-2 border-pink-600 border-t-transparent rounded-full animate-spin" /></div>;
+    return (
+      <div className="flex justify-center p-12">
+        <div className="w-8 h-8 border-2 border-pink-600 border-t-transparent rounded-full animate-spin" />
+      </div>
+    );
   }
 
-  const actualizar = <K extends keyof ConfiguracionFidelidad>(campo: K, valor: ConfiguracionFidelidad[K]) => {
+  const actualizar = <K extends keyof ConfiguracionFidelidad>(
+    campo: K,
+    valor: ConfiguracionFidelidad[K],
+  ) => {
     setFormulario((actual) => (actual ? { ...actual, [campo]: valor } : actual));
   };
 
@@ -56,7 +65,9 @@ export function ConfigFidelidad({ estudioId }: PropsConfigFidelidad) {
         <div className="flex items-start justify-between gap-4 flex-wrap">
           <div>
             <h3 className="text-xl font-black uppercase tracking-tight">Programa de Fidelidad</h3>
-            <p className="text-sm text-slate-500 mt-2">Premia a tus clientes frecuentes automáticamente.</p>
+            <p className="text-sm text-slate-500 mt-2">
+              Premia a tus clientes frecuentes automáticamente.
+            </p>
           </div>
           <button
             type="button"
@@ -70,7 +81,12 @@ export function ConfigFidelidad({ estudioId }: PropsConfigFidelidad) {
         {formulario.activo && (
           <div className="space-y-6">
             <div>
-              <label htmlFor="visitasRequeridas" className="block text-sm font-bold text-slate-700 mb-2">Número de visitas requeridas</label>
+              <label
+                htmlFor="visitasRequeridas"
+                className="block text-sm font-bold text-slate-700 mb-2"
+              >
+                Número de visitas requeridas
+              </label>
               <div className="flex items-center gap-4">
                 <input
                   id="visitasRequeridas"
@@ -81,7 +97,9 @@ export function ConfigFidelidad({ estudioId }: PropsConfigFidelidad) {
                   onChange={(e) => actualizar('visitasRequeridas', Number(e.target.value))}
                   className="flex-1"
                 />
-                <span className="min-w-12 text-center font-black text-slate-800">{formulario.visitasRequeridas}</span>
+                <span className="min-w-12 text-center font-black text-slate-800">
+                  {formulario.visitasRequeridas}
+                </span>
               </div>
             </div>
 
@@ -95,7 +113,12 @@ export function ConfigFidelidad({ estudioId }: PropsConfigFidelidad) {
                   <button
                     key={valor}
                     type="button"
-                    onClick={() => actualizar('tipoRecompensa', valor as ConfiguracionFidelidad['tipoRecompensa'])}
+                    onClick={() =>
+                      actualizar(
+                        'tipoRecompensa',
+                        valor as ConfiguracionFidelidad['tipoRecompensa'],
+                      )
+                    }
                     className={`p-5 rounded-2xl border text-left transition-colors ${formulario.tipoRecompensa === valor ? 'border-pink-500 bg-pink-50' : 'border-slate-200 hover:border-slate-300'}`}
                   >
                     <Icono className="w-5 h-5 mb-3 text-slate-700" />
@@ -107,7 +130,12 @@ export function ConfigFidelidad({ estudioId }: PropsConfigFidelidad) {
 
             {formulario.tipoRecompensa === 'descuento' && (
               <div>
-                <label htmlFor="porcentajeDescuento" className="block text-sm font-bold text-slate-700 mb-2">Porcentaje de descuento</label>
+                <label
+                  htmlFor="porcentajeDescuento"
+                  className="block text-sm font-bold text-slate-700 mb-2"
+                >
+                  Porcentaje de descuento
+                </label>
                 <div className="flex items-center gap-4">
                   <input
                     id="porcentajeDescuento"
@@ -119,15 +147,22 @@ export function ConfigFidelidad({ estudioId }: PropsConfigFidelidad) {
                     onChange={(e) => actualizar('porcentajeDescuento', Number(e.target.value))}
                     className="flex-1"
                   />
-                  <span className="min-w-12 text-center font-black text-slate-800">{formulario.porcentajeDescuento ?? 100}%</span>
+                  <span className="min-w-12 text-center font-black text-slate-800">
+                    {formulario.porcentajeDescuento ?? 100}%
+                  </span>
                 </div>
               </div>
             )}
 
             <div>
-              <label htmlFor="descripcionRecompensa" className="block text-sm font-bold text-slate-700 mb-2">
+              <label
+                htmlFor="descripcionRecompensa"
+                className="block text-sm font-bold text-slate-700 mb-2"
+              >
                 Descripción personalizable
-                <span className="text-slate-400 font-normal ml-2">{formulario.descripcionRecompensa.length}/100</span>
+                <span className="text-slate-400 font-normal ml-2">
+                  {formulario.descripcionRecompensa.length}/100
+                </span>
               </label>
               <textarea
                 id="descripcionRecompensa"
@@ -140,8 +175,13 @@ export function ConfigFidelidad({ estudioId }: PropsConfigFidelidad) {
             </div>
 
             <div className="rounded-3xl bg-emerald-50 border border-emerald-200 px-5 py-4">
-              <p className="text-sm font-black text-emerald-800 flex items-center gap-2"><Sparkles className="w-4 h-4" /> Vista previa</p>
-              <p className="text-sm text-emerald-900 mt-2">🎉 ¡Felicidades! Has completado {formulario.visitasRequeridas} visitas. {formulario.descripcionRecompensa}</p>
+              <p className="text-sm font-black text-emerald-800 flex items-center gap-2">
+                <Sparkles className="w-4 h-4" /> Vista previa
+              </p>
+              <p className="text-sm text-emerald-900 mt-2">
+                🎉 ¡Felicidades! Has completado {formulario.visitasRequeridas} visitas.{' '}
+                {formulario.descripcionRecompensa}
+              </p>
             </div>
 
             <button
@@ -157,7 +197,9 @@ export function ConfigFidelidad({ estudioId }: PropsConfigFidelidad) {
       </section>
 
       <section className="bg-white rounded-[2.5rem] p-8 border border-slate-200 shadow-sm max-w-4xl">
-        <h3 className="text-xl font-black uppercase tracking-tight mb-6">Ranking de clientes fieles</h3>
+        <h3 className="text-xl font-black uppercase tracking-tight mb-6">
+          Ranking de clientes fieles
+        </h3>
         <div className="space-y-4">
           {ranking.map((cliente) => (
             <div key={cliente.id} className="rounded-2xl border border-slate-200 p-5">
@@ -167,7 +209,9 @@ export function ConfigFidelidad({ estudioId }: PropsConfigFidelidad) {
                   <p className="text-sm text-slate-500">{cliente.telefono}</p>
                 </div>
                 {cliente.recompensaDisponible && (
-                  <span className="px-3 py-1 rounded-full bg-emerald-100 text-emerald-700 text-xs font-black">🎁 Recompensa disponible</span>
+                  <span className="px-3 py-1 rounded-full bg-emerald-100 text-emerald-700 text-xs font-black">
+                    🎁 Recompensa disponible
+                  </span>
                 )}
               </div>
               <progress
@@ -175,10 +219,15 @@ export function ConfigFidelidad({ estudioId }: PropsConfigFidelidad) {
                 max={cliente.visitasRequeridas}
                 value={Math.min(cliente.visitasAcumuladas, cliente.visitasRequeridas)}
               />
-              <p className="text-xs text-slate-500 mt-2">{cliente.visitasAcumuladas} visitas acumuladas de {cliente.visitasRequeridas} requeridas</p>
+              <p className="text-xs text-slate-500 mt-2">
+                {cliente.visitasAcumuladas} visitas acumuladas de {cliente.visitasRequeridas}{' '}
+                requeridas
+              </p>
             </div>
           ))}
-          {ranking.length === 0 && <p className="text-sm text-slate-400">Aún no hay clientes con progreso de fidelidad.</p>}
+          {ranking.length === 0 && (
+            <p className="text-sm text-slate-400">Aún no hay clientes con progreso de fidelidad.</p>
+          )}
         </div>
       </section>
     </div>

@@ -21,9 +21,30 @@ export async function actualizarPerfilEstudio(
   estudioId: string,
   datos: Partial<Omit<PerfilEstudio, 'id' | 'logoUrl'>>,
 ): Promise<PerfilEstudio> {
+  const cuerpo: Record<string, unknown> = {};
+
+  if (datos.nombre !== undefined) cuerpo['nombre'] = datos.nombre.trim();
+  if (datos.descripcion !== undefined) {
+    const descripcion = typeof datos.descripcion === 'string' ? datos.descripcion.trim() : '';
+    cuerpo['descripcion'] = descripcion === '' ? null : descripcion;
+  }
+  if (datos.direccion !== undefined) {
+    const direccion = typeof datos.direccion === 'string' ? datos.direccion.trim() : '';
+    cuerpo['direccion'] = direccion === '' ? null : direccion;
+  }
+  if (datos.telefono !== undefined) {
+    const telefono = datos.telefono.trim();
+    cuerpo['telefono'] = telefono === '' ? '' : telefono;
+  }
+  if (datos.emailContacto !== undefined) {
+    const emailContacto = typeof datos.emailContacto === 'string' ? datos.emailContacto.trim() : '';
+    cuerpo['emailContacto'] = emailContacto === '' ? null : emailContacto;
+  }
+  if (datos.colorPrimario !== undefined) cuerpo['colorPrimario'] = datos.colorPrimario;
+
   const res = await peticion<{ datos: PerfilEstudio }>(`/estudio/${estudioId}/perfil`, {
     method: 'PUT',
-    body: JSON.stringify(datos),
+    body: JSON.stringify(cuerpo),
   });
   return res.datos;
 }
@@ -40,7 +61,7 @@ export async function subirLogo(estudioId: string, archivo: File): Promise<{ log
     credentials: 'include',
   });
 
-  const json = await res.json() as { datos?: { logoUrl: string }; error?: string };
+  const json = (await res.json()) as { datos?: { logoUrl: string }; error?: string };
   if (!res.ok) throw new Error(json.error ?? 'Error al subir logo');
   return json.datos!;
 }

@@ -1,9 +1,12 @@
 import { env } from '../lib/env.js';
 import { enviarEmail } from '../lib/email.js';
+import { crearTemplateBienvenidaSalon } from '../lib/templates/bienvenidaSalon.js';
 import { obtenerConfigFidelidad } from '../lib/fidelidad.js';
 import { crearTemplateConfirmacionReserva } from '../lib/templates/confirmacionReserva.js';
+import { crearTemplateRechazoSalon } from '../lib/templates/rechazoSalon.js';
 import { crearTemplateRecordatorioReserva } from '../lib/templates/recordatorioReserva.js';
 import { crearTemplateResetContrasena } from '../lib/templates/resetContrasena.js';
+import { crearTemplateVerificacionCliente } from '../lib/templates/verificacionCliente.js';
 import { prisma } from '../prismaCliente.js';
 
 function obtenerOrigenBackend(): string {
@@ -47,9 +50,9 @@ function obtenerServicios(servicios: unknown): string[] {
 export async function enviarEmailConfirmacion(
   reservaId: string,
   opciones?: { recompensaAplicada?: boolean; descripcionRecompensa?: string | null },
-): Promise<void> {
+) : Promise<boolean> {
   const reserva = await obtenerReservaCompleta(reservaId);
-  if (!reserva?.cliente.email) return;
+  if (!reserva?.cliente.email) return false;
 
   const html = crearTemplateConfirmacionReserva({
     reservaId: reserva.id,
@@ -72,12 +75,12 @@ export async function enviarEmailConfirmacion(
     recompensaAplicada: opciones?.recompensaAplicada ? (opciones.descripcionRecompensa ?? undefined) : undefined,
   });
 
-  await enviarEmail(reserva.cliente.email, `Confirmación de cita — ${reserva.estudio.nombre}`, html);
+  return enviarEmail(reserva.cliente.email, `Confirmación de cita — ${reserva.estudio.nombre}`, html);
 }
 
-export async function enviarEmailRecordatorio(reservaId: string): Promise<void> {
+export async function enviarEmailRecordatorio(reservaId: string): Promise<boolean> {
   const reserva = await obtenerReservaCompleta(reservaId);
-  if (!reserva?.cliente.email) return;
+  if (!reserva?.cliente.email) return false;
 
   const html = crearTemplateRecordatorioReserva({
     reservaId: reserva.id,
@@ -95,12 +98,41 @@ export async function enviarEmailRecordatorio(reservaId: string): Promise<void> 
     hora: reserva.horaInicio,
   });
 
-  await enviarEmail(reserva.cliente.email, '⏰ Recordatorio: tu cita es mañana', html);
+  return enviarEmail(reserva.cliente.email, '⏰ Recordatorio: tu cita es mañana', html);
 }
 
 export async function enviarEmailResetContrasena(emailDestino: string, token: string): Promise<void> {
   const html = crearTemplateResetContrasena({ token });
   await enviarEmail(emailDestino, 'Restablece tu contraseña — Beauty Time Pro', html);
+}
+
+export async function enviarEmailVerificacionCliente(datos: {
+  emailDestino: string;
+  nombreCliente: string;
+  enlaceVerificacion: string;
+}): Promise<void> {
+  const html = crearTemplateVerificacionCliente(datos);
+  await enviarEmail(datos.emailDestino, 'Verifica tu correo — Beauty Time Pro', html);
+}
+
+export async function enviarEmailBienvenidaSalon(datos: {
+  emailDestino: string;
+  nombreDueno: string;
+  nombreSalon: string;
+  fechaVencimiento: string;
+}): Promise<void> {
+  const html = crearTemplateBienvenidaSalon(datos);
+  await enviarEmail(datos.emailDestino, `Tu salón ${datos.nombreSalon} fue aprobado`, html);
+}
+
+export async function enviarEmailRechazoSalon(datos: {
+  emailDestino: string;
+  nombreDueno: string;
+  nombreSalon: string;
+  motivo: string;
+}): Promise<void> {
+  const html = crearTemplateRechazoSalon(datos);
+  await enviarEmail(datos.emailDestino, `Actualización sobre ${datos.nombreSalon}`, html);
 }
 
 export async function obtenerDescripcionRecompensa(estudioId: string): Promise<string> {

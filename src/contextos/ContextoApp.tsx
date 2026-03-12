@@ -1,6 +1,6 @@
 import { createContext, useContext, useEffect, useState, useCallback } from 'react';
 import type { PropsWithChildren } from 'react';
-import { peticion } from '../lib/clienteHTTP';
+import { ErrorAPI, peticion } from '../lib/clienteHTTP';
 import { usarTiendaAuth } from '../tienda/tiendaAuth';
 import type { Estudio, Reserva, Pago, Personal } from '../tipos';
 
@@ -19,6 +19,7 @@ export function ProveedorContextoApp({ children }: PropsWithChildren) {
   const rol = usarTiendaAuth((s) => s.rol);
   const estudioActual = usarTiendaAuth((s) => s.estudioActual);
   const inicializarAutenticacion = usarTiendaAuth((s) => s.inicializarAutenticacion);
+  const cerrarSesion = usarTiendaAuth((s) => s.cerrarSesion);
   const [estudios, setEstudios] = useState<Estudio[]>([]);
   const [reservas, setReservas] = useState<Reserva[]>([]);
   const [pagos, setPagos] = useState<Pago[]>([]);
@@ -33,7 +34,31 @@ export function ProveedorContextoApp({ children }: PropsWithChildren) {
   const recargar = useCallback(() => setContador((c) => c + 1), []);
 
   useEffect(() => {
+    if (!usuario || rol !== 'maestro') return;
+
+    const refrescarAlEnfocar = () => setContador((valor) => valor + 1);
+    const refrescarAlVisibilizar = () => {
+      if (document.visibilityState === 'visible') {
+        refrescarAlEnfocar();
+      }
+    };
+    const refrescoPeriodico = window.setInterval(refrescarAlEnfocar, 15000);
+
+    window.addEventListener('focus', refrescarAlEnfocar);
+    document.addEventListener('visibilitychange', refrescarAlVisibilizar);
+
+    return () => {
+      window.clearInterval(refrescoPeriodico);
+      window.removeEventListener('focus', refrescarAlEnfocar);
+      document.removeEventListener('visibilitychange', refrescarAlVisibilizar);
+    };
+  }, [usuario, rol]);
+
+  useEffect(() => {
     if (!usuario) {
+      setEstudios([]);
+      setReservas([]);
+      setPagos([]);
       setCargando(false);
       return;
     }
@@ -44,8 +69,12 @@ export function ProveedorContextoApp({ children }: PropsWithChildren) {
         if (rol === 'maestro') {
           const [resEstudios, resReservas, resPagos] = await Promise.all([
             peticion<{ datos: Estudio[] }>('/estudios'),
-            peticion<{ datos: unknown[] }>('/reservas/todas').catch(() => ({ datos: [] as unknown[] })),
-            peticion<{ datos: unknown[] }>('/pagos/todos').catch(() => ({ datos: [] as unknown[] })),
+            peticion<{ datos: unknown[] }>('/reservas/todas').catch(() => ({
+              datos: [] as unknown[],
+            })),
+            peticion<{ datos: unknown[] }>('/pagos/todos').catch(() => ({
+              datos: [] as unknown[],
+            })),
           ]);
           const estudiosMapeados = mapearEstudios(resEstudios.datos);
           const estudiosMap = new Map(estudiosMapeados.map((e) => [e.id, e]));
@@ -56,7 +85,9 @@ export function ProveedorContextoApp({ children }: PropsWithChildren) {
           const [resEstudio, resReservas, resPagos] = await Promise.all([
             peticion<{ datos: Estudio }>(`/estudios/${estudioActual}`),
             peticion<{ datos: unknown[] }>(`/estudios/${estudioActual}/reservas`),
-            peticion<{ datos: unknown[] }>(`/estudios/${estudioActual}/pagos`).catch(() => ({ datos: [] as unknown[] })),
+            peticion<{ datos: unknown[] }>(`/estudios/${estudioActual}/pagos`).catch(() => ({
+              datos: [] as unknown[],
+            })),
           ]);
           const estudiosMapeados = mapearEstudios([resEstudio.datos]);
           const estudiosMap = new Map(estudiosMapeados.map((e) => [e.id, e]));
@@ -65,13 +96,28 @@ export function ProveedorContextoApp({ children }: PropsWithChildren) {
           setPagos(mapearPagos(resPagos.datos, estudiosMap));
         }
       } catch (error) {
+        const estudioEliminado =
+          error instanceof ErrorAPI &&
+          error.estado === 404 &&
+          Boolean(estudioActual) &&
+          (rol === 'dueno' || rol === 'cliente');
+
+        const sesionInvalida = error instanceof ErrorAPI && error.estado === 401;
+
+        if (estudioEliminado || sesionInvalida) {
+          setEstudios([]);
+          setReservas([]);
+          setPagos([]);
+          await cerrarSesion();
+          return;
+        }
+
         console.error('Error cargando datos:', error);
       } finally {
         setCargando(false);
       }
     })();
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [usuario, rol, estudioActual, contador]);
+  }, [usuario, rol, estudioActual, contador, cerrarSesion]);
 
   return (
     <ContextoApp.Provider value={{ estudios, reservas, pagos, cargando, recargar }}>
@@ -95,13 +141,14 @@ export function usarContextoApp(): ValorContextoApp {
 function mapearPersonal(datos: Record<string, unknown>[]): Personal[] {
   return datos.map((p) => ({
     id: p['id'] as string,
-    name: p['nombre'] as string ?? '',
+    name: (p['nombre'] as string) ?? '',
     specialties: (p['especialidades'] as string[]) ?? [],
     active: (p['activo'] as boolean) ?? true,
     shiftStart: (p['horaInicio'] as string | null) ?? null,
     shiftEnd: (p['horaFin'] as string | null) ?? null,
     breakStart: (p['descansoInicio'] as string | null) ?? null,
     breakEnd: (p['descansoFin'] as string | null) ?? null,
+    workingDays: (p['diasTrabajo'] as number[] | null | undefined) ?? null,
   }));
 }
 
@@ -135,6 +182,7 @@ function mapearEstudios(datos: Estudio[]): Estudio[] {
       descripcion: (d['descripcion'] as string | null) ?? null,
       direccion: (d['direccion'] as string | null) ?? null,
       emailContacto: (d['emailContacto'] as string | null) ?? null,
+      primeraVez: (d['primeraVez'] as boolean | undefined) ?? true,
     } as Estudio;
   });
 }
@@ -153,7 +201,7 @@ function mapearReservas(datos: unknown[], estudiosMap: Map<string, Estudio>): Re
       services: (d['servicios'] as import('../tipos').Servicio[]) ?? [],
       totalDuration: (d['duracion'] as number) ?? 0,
       totalPrice: (d['precioTotal'] as number) ?? 0,
-      status: ((d['estado'] as import('../tipos').EstadoReserva) ?? 'pending'),
+      status: (d['estado'] as import('../tipos').EstadoReserva) ?? 'pending',
       branch: (d['sucursal'] as string) ?? '',
       staffId: (d['personalId'] as string) ?? '',
       staffName: empleado?.name ?? '',
@@ -173,11 +221,20 @@ function mapearPagos(datos: unknown[], estudiosMap: Map<string, Estudio>): Pago[
     return {
       id: d['id'] as string,
       studioId: (d['estudioId'] as string) ?? '',
-      studioName: estudio?.name ?? '',
+      studioName: (d['estudioNombre'] as string) ?? estudio?.name ?? '',
       amount: (d['monto'] as number) ?? 0,
-      currency: ((d['moneda'] as import('../tipos').Moneda) ?? 'MXN'),
+      currency: (d['moneda'] as import('../tipos').Moneda) ?? 'MXN',
+      country: (d['pais'] as import('../tipos').Pais) ?? estudio?.country ?? 'Mexico',
       date: (d['fecha'] as string) ?? '',
       createdAt: (d['creadoEn'] as string) ?? '',
+      concepto: (d['concepto'] as string | undefined) ?? undefined,
+      referencia: (d['referencia'] as string | null | undefined) ?? null,
+      registradoPorNombre: (d['registradoPorNombre'] as string | null | undefined) ?? null,
+      registradoPorEmail: (d['registradoPorEmail'] as string | null | undefined) ?? null,
+      fechaBaseRenovacion: (d['fechaBaseRenovacion'] as string | null | undefined) ?? null,
+      nuevaFechaVencimiento: (d['nuevaFechaVencimiento'] as string | null | undefined) ?? null,
+      estrategiaRenovacion:
+        (d['estrategiaRenovacion'] as import('../tipos').Pago['estrategiaRenovacion']) ?? null,
     };
   });
 }

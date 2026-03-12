@@ -1,10 +1,13 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useMutation, useQuery } from '@tanstack/react-query';
-import { Link, useParams } from 'react-router-dom';
+import { Link, useNavigate, useParams } from 'react-router-dom';
 import { AlertTriangle, CalendarX2, CheckCircle2 } from 'lucide-react';
 import { Spinner } from '../../componentes/ui/Spinner';
 import { usarTituloPagina } from '../../hooks/usarTituloPagina';
-import { cancelarReservaPorToken, obtenerReservaCancelable } from '../../servicios/servicioReservas';
+import {
+  cancelarReservaPorToken,
+  obtenerReservaCancelable,
+} from '../../servicios/servicioReservas';
 
 function obtenerNombreServicio(servicio: { name?: string } | string): string {
   if (typeof servicio === 'string') return servicio;
@@ -15,11 +18,13 @@ export function PaginaCancelarReserva() {
   usarTituloPagina('Cancelar reserva');
   const { reservaId, token } = useParams<{ reservaId: string; token: string }>();
   const [cancelada, setCancelada] = useState(false);
+  const navegar = useNavigate();
 
   const consulta = useQuery({
     queryKey: ['reserva-cancelable', token],
     enabled: Boolean(token),
     queryFn: () => obtenerReservaCancelable(token!),
+    staleTime: 60 * 1000,
   });
 
   const mutacion = useMutation({
@@ -27,16 +32,32 @@ export function PaginaCancelarReserva() {
     onSuccess: () => setCancelada(true),
   });
 
+  useEffect(() => {
+    if (!cancelada) return;
+
+    const temporizador = window.setTimeout(() => {
+      navegar('/inicio', { replace: true });
+    }, 2000);
+
+    return () => window.clearTimeout(temporizador);
+  }, [cancelada, navegar]);
+
   if (!token) {
     return <EstadoError mensaje="El enlace de cancelación es inválido." />;
   }
 
   if (consulta.isLoading) {
-    return <div className="min-h-screen flex items-center justify-center bg-slate-50"><Spinner tamaño="lg" /></div>;
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-slate-50">
+        <Spinner tamaño="lg" />
+      </div>
+    );
   }
 
   if (consulta.isError || !consulta.data || consulta.data.id !== reservaId) {
-    return <EstadoError mensaje="No pudimos encontrar la cita. El enlace puede haber expirado o ser inválido." />;
+    return (
+      <EstadoError mensaje="No pudimos encontrar la cita. El enlace puede haber expirado o ser inválido." />
+    );
   }
 
   if (cancelada) {
@@ -45,7 +66,15 @@ export function PaginaCancelarReserva() {
         <div className="max-w-lg w-full bg-white border border-slate-200 rounded-4xl p-8 text-center shadow-sm">
           <CheckCircle2 className="w-14 h-14 text-emerald-500 mx-auto mb-4" />
           <h1 className="text-2xl font-black text-slate-900 mb-2">Tu cita fue cancelada</h1>
-          <p className="text-slate-500">La cancelación se registró correctamente. Si deseas reagendar, contacta al salón o vuelve a reservar desde su enlace.</p>
+          <p className="text-slate-500">
+            La cancelación se registró correctamente. En un momento te llevaremos de regreso a tu
+            panel para que puedas seguir navegando o hacer una nueva reserva.
+          </p>
+          <div className="mt-5">
+            <Link to="/inicio" className="text-sm font-bold text-pink-600 hover:text-pink-700">
+              Ir ahora al panel de usuario
+            </Link>
+          </div>
         </div>
       </div>
     );
@@ -60,16 +89,29 @@ export function PaginaCancelarReserva() {
         </div>
 
         <div className="rounded-2xl bg-slate-50 border border-slate-200 p-5 space-y-2 mb-6">
-          <p className="text-sm"><strong>Salón:</strong> {consulta.data.salon}</p>
-          <p className="text-sm"><strong>Especialista:</strong> {consulta.data.especialista}</p>
-          <p className="text-sm"><strong>Fecha:</strong> {consulta.data.fecha}</p>
-          <p className="text-sm"><strong>Hora:</strong> {consulta.data.horaInicio}</p>
-          <p className="text-sm"><strong>Servicio(s):</strong> {consulta.data.servicios.map(obtenerNombreServicio).join(', ')}</p>
+          <p className="text-sm">
+            <strong>Salón:</strong> {consulta.data.salon}
+          </p>
+          <p className="text-sm">
+            <strong>Especialista:</strong> {consulta.data.especialista}
+          </p>
+          <p className="text-sm">
+            <strong>Fecha:</strong> {consulta.data.fecha}
+          </p>
+          <p className="text-sm">
+            <strong>Hora:</strong> {consulta.data.horaInicio}
+          </p>
+          <p className="text-sm">
+            <strong>Servicio(s):</strong>{' '}
+            {consulta.data.servicios.map(obtenerNombreServicio).join(', ')}
+          </p>
         </div>
 
         {mutacion.isError && (
           <div className="mb-4 rounded-2xl border border-amber-200 bg-amber-50 p-4 text-amber-800 text-sm">
-            {mutacion.error instanceof Error ? mutacion.error.message : 'No fue posible cancelar la cita.'}
+            {mutacion.error instanceof Error
+              ? mutacion.error.message
+              : 'No fue posible cancelar la cita.'}
           </div>
         )}
 
@@ -83,7 +125,9 @@ export function PaginaCancelarReserva() {
         </button>
 
         <div className="text-center mt-4">
-          <Link to="/iniciar-sesion" className="text-sm text-slate-400 hover:text-slate-600">Volver</Link>
+          <Link to="/inicio" className="text-sm text-slate-400 hover:text-slate-600">
+            Volver al panel
+          </Link>
         </div>
       </div>
     </div>
@@ -95,7 +139,9 @@ function EstadoError({ mensaje }: { mensaje: string }) {
     <div className="min-h-screen bg-slate-50 flex items-center justify-center p-6">
       <div className="max-w-lg w-full bg-white border border-slate-200 rounded-4xl p-8 text-center shadow-sm">
         <AlertTriangle className="w-14 h-14 text-amber-500 mx-auto mb-4" />
-        <h1 className="text-2xl font-black text-slate-900 mb-2">No es posible cancelar esta cita</h1>
+        <h1 className="text-2xl font-black text-slate-900 mb-2">
+          No es posible cancelar esta cita
+        </h1>
         <p className="text-slate-500">{mensaje}</p>
       </div>
     </div>

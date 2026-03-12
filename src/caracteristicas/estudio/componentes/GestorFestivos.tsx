@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Calendar, XCircle } from 'lucide-react';
 import { useMutation } from '@tanstack/react-query';
+import { SelectorFecha } from '../../../componentes/ui/SelectorFecha';
 import { actualizarFestivos } from '../../../servicios/servicioEstudios';
 import { usarContextoApp } from '../../../contextos/ContextoApp';
 import type { Estudio } from '../../../tipos';
@@ -35,31 +36,45 @@ export function GestorFestivos({ estudio }: PropsGestorFestivos) {
       <h3 className="text-sm font-black text-slate-900 uppercase tracking-widest mb-2 flex items-center gap-2">
         <Calendar className="w-4 h-4 text-pink-600" /> Días Inhábiles
       </h3>
-      <p className="text-[10px] text-slate-400 font-bold mb-6">Bloquea fechas (festivos, descanso) para que no haya reservas.</p>
+      <p className="text-[10px] text-slate-400 font-bold mb-6">
+        Bloquea fechas (festivos, descanso) para que no haya reservas.
+      </p>
 
       <div className="flex flex-col sm:flex-row gap-2 mb-6">
-        <input
-          type="date"
-          value={nuevaFecha}
-          onChange={(e) => setNuevaFecha(e.target.value)}
-          className="flex-1 bg-slate-50 px-4 py-3 rounded-xl text-xs font-black text-slate-700 outline-none border border-slate-200 focus:border-pink-400"
-          aria-label="Fecha a bloquear"
-        />
-        <button onClick={agregarFestivo} disabled={isPending} className="bg-slate-900 text-white px-6 py-3 rounded-xl text-xs font-black uppercase hover:bg-black transition-all disabled:opacity-60">
+        <div className="flex-1">
+          <SelectorFecha
+            etiqueta="Fecha a bloquear"
+            valor={nuevaFecha}
+            min={new Date().toISOString().split('T')[0]}
+            alCambiar={setNuevaFecha}
+          />
+        </div>
+        <button
+          onClick={agregarFestivo}
+          disabled={isPending}
+          className="bg-slate-900 text-white px-6 py-3 rounded-xl text-xs font-black uppercase hover:bg-black transition-all disabled:opacity-60"
+        >
           {isPending ? 'Guardando...' : 'Bloquear'}
         </button>
       </div>
 
       <div className="flex flex-wrap gap-2">
         {(estudio.holidays ?? []).sort().map((h) => (
-          <div key={h} className="bg-red-50 border border-red-200 text-red-700 px-3 py-2 rounded-xl text-[10px] font-black flex items-center gap-2">
+          <div
+            key={h}
+            className="bg-red-50 border border-red-200 text-red-700 px-3 py-2 rounded-xl text-[10px] font-black flex items-center gap-2"
+          >
             {h}
-            <button onClick={() => eliminarFestivo(h)} aria-label={`Eliminar ${h}`} className="hover:text-red-900">
+            <button
+              onClick={() => eliminarFestivo(h)}
+              aria-label={`Eliminar ${h}`}
+              className="hover:text-red-900"
+            >
               <XCircle className="w-3 h-3" />
             </button>
           </div>
         ))}
-        {!(estudio.holidays?.length) && (
+        {!estudio.holidays?.length && (
           <p className="text-xs text-slate-400 italic font-bold">No hay días bloqueados.</p>
         )}
       </div>

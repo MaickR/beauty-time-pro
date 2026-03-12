@@ -7,6 +7,20 @@
  */
 import { env } from './env';
 
+/** Error enriquecido con código de estado y campos adicionales del servidor. */
+export class ErrorAPI extends Error {
+  readonly codigo: string;
+  readonly motivo?: string;
+  readonly estado: number;
+  constructor(mensaje: string, estado: number, codigo = '', motivo?: string) {
+    super(mensaje);
+    this.name = 'ErrorAPI';
+    this.estado = estado;
+    this.codigo = codigo;
+    this.motivo = motivo;
+  }
+}
+
 export const URL_BASE = env.VITE_URL_API;
 const CLAVE_TOKEN = 'btp_access_token';
 
@@ -42,15 +56,12 @@ async function intentarRefrescar(): Promise<string | null> {
 }
 
 /** Realiza una petición HTTP al backend con JWT adjunto. */
-export async function peticion<T>(
-  ruta: string,
-  opciones: RequestInit = {},
-): Promise<T> {
+export async function peticion<T>(ruta: string, opciones: RequestInit = {}): Promise<T> {
   const cabeceras = new Headers(opciones.headers);
 
   const token = leerToken();
   if (token) cabeceras.set('Authorization', `Bearer ${token}`);
-  if (!cabeceras.has('Content-Type') && opciones.body) {
+  if (!cabeceras.has('Content-Type') && opciones.body && !(opciones.body instanceof FormData)) {
     cabeceras.set('Content-Type', 'application/json');
   }
 
@@ -71,18 +82,36 @@ export async function peticion<T>(
         credentials: 'include',
       });
       if (!reintento.ok) {
-        const cuerpo = (await reintento.json().catch(() => ({}))) as { error?: string };
-        throw new Error(cuerpo.error ?? `Error ${reintento.status}`);
+        const cuerpo = (await reintento.json().catch(() => ({}))) as {
+          error?: string;
+          codigo?: string;
+          motivo?: string;
+        };
+        throw new ErrorAPI(
+          cuerpo.error ?? `Error ${reintento.status}`,
+          reintento.status,
+          cuerpo.codigo,
+          cuerpo.motivo,
+        );
       }
       return (await reintento.json()) as T;
     }
     limpiarToken();
-    throw new Error('Sesión expirada. Inicia sesión nuevamente.');
+    throw new ErrorAPI('Sesión expirada. Inicia sesión nuevamente.', 401);
   }
 
   if (!respuesta.ok) {
-    const cuerpo = (await respuesta.json().catch(() => ({}))) as { error?: string };
-    throw new Error(cuerpo.error ?? `Error ${respuesta.status}`);
+    const cuerpo = (await respuesta.json().catch(() => ({}))) as {
+      error?: string;
+      codigo?: string;
+      motivo?: string;
+    };
+    throw new ErrorAPI(
+      cuerpo.error ?? `Error ${respuesta.status}`,
+      respuesta.status,
+      cuerpo.codigo,
+      cuerpo.motivo,
+    );
   }
 
   return (await respuesta.json()) as T;

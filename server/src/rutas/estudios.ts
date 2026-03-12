@@ -1,6 +1,82 @@
 import type { FastifyInstance } from 'fastify';
+import type { Prisma } from '../generated/prisma/index.js';
+import { z } from 'zod';
+import { resolverCategoriasSalon } from '../lib/categoriasSalon.js';
+import { env } from '../lib/env.js';
+import { obtenerSlotsDisponiblesBackend } from '../lib/programacion.js';
 import { prisma } from '../prismaCliente.js';
 import { verificarJWT } from '../middleware/autenticacion.js';
+import { colorHexSchema, emailOpcionalONuloSchema, fechaIsoSchema, horaOpcionalONulaSchema, horaSchema, obtenerMensajeValidacion, telefonoSchema, textoOpcionalONuloSchema, textoSchema, urlOpcionalSchema } from '../lib/validacion.js';
+
+const esquemaHorario = z.record(
+  z.string(),
+  z.object({
+    isOpen: z.boolean(),
+    openTime: horaSchema,
+    closeTime: horaSchema,
+  }),
+);
+
+const esquemaEmailContactoOpcional = emailOpcionalONuloSchema('emailContacto');
+
+const esquemaCamposEstudio = {
+  nombre: textoSchema('nombre', 120).optional(),
+  propietario: textoSchema('propietario', 120).optional(),
+  telefono: telefonoSchema.optional(),
+  sitioWeb: urlOpcionalSchema,
+  pais: textoSchema('pais', 50).optional(),
+  sucursales: z.array(textoSchema('sucursal', 80)).max(20, 'No puedes registrar más de 20 sucursales').optional(),
+  horario: esquemaHorario.optional(),
+  servicios: z.array(z.unknown()).max(100, 'No puedes registrar más de 100 servicios').optional(),
+  serviciosCustom: z.array(z.unknown()).max(100, 'No puedes registrar más de 100 servicios personalizados').optional(),
+  festivos: z.array(fechaIsoSchema).max(366, 'No puedes registrar más de 366 festivos').optional(),
+  colorPrimario: colorHexSchema.optional(),
+  descripcion: textoOpcionalONuloSchema('descripcion', 500),
+  direccion: textoOpcionalONuloSchema('direccion', 180),
+  emailContacto: esquemaEmailContactoOpcional,
+  horarioApertura: horaOpcionalONulaSchema,
+  horarioCierre: horaOpcionalONulaSchema,
+  diasAtencion: textoOpcionalONuloSchema('diasAtencion', 120),
+  categorias: textoOpcionalONuloSchema('categorias', 160),
+  primeraVez: z.boolean().optional(),
+};
+
+const esquemaCrearEstudio = z.object({
+  nombre: textoSchema('nombre', 120),
+  propietario: textoSchema('propietario', 120).optional(),
+  telefono: telefonoSchema,
+  sitioWeb: urlOpcionalSchema,
+  pais: textoSchema('pais', 50).optional(),
+  sucursales: z.array(textoSchema('sucursal', 80)).max(20).optional(),
+  claveDueno: textoSchema('claveDueno', 32),
+  claveCliente: textoSchema('claveCliente', 32),
+  suscripcion: textoSchema('suscripcion', 30).optional(),
+  inicioSuscripcion: fechaIsoSchema.optional(),
+  fechaVencimiento: fechaIsoSchema.optional(),
+  horario: esquemaHorario.optional(),
+  servicios: z.array(z.unknown()).max(100).optional(),
+  serviciosCustom: z.array(z.unknown()).max(100).optional(),
+  festivos: z.array(fechaIsoSchema).max(366).optional(),
+  colorPrimario: colorHexSchema.optional(),
+  descripcion: textoOpcionalONuloSchema('descripcion', 500),
+  direccion: textoOpcionalONuloSchema('direccion', 180),
+  emailContacto: esquemaEmailContactoOpcional,
+  horarioApertura: horaOpcionalONulaSchema,
+  horarioCierre: horaOpcionalONulaSchema,
+  diasAtencion: textoOpcionalONuloSchema('diasAtencion', 120),
+  categorias: textoOpcionalONuloSchema('categorias', 160),
+  primeraVez: z.boolean().optional(),
+}).strict();
+
+const esquemaActualizarEstudio = z.object(esquemaCamposEstudio).strict().refine((datos) => Object.keys(datos).length > 0, {
+  message: 'Debes enviar al menos un campo para actualizar',
+});
+
+function obtenerFiltroDemo() {
+  return env.ENTORNO === 'development' || !env.DEMO_CLAVE_DUENO
+    ? {}
+    : { claveDueno: { not: env.DEMO_CLAVE_DUENO } };
+}
 
 export async function rutasEstudios(servidor: FastifyInstance): Promise<void> {
   // GET /estudios — solo rol maestro
@@ -9,7 +85,9 @@ export async function rutasEstudios(servidor: FastifyInstance): Promise<void> {
     if (payload.rol !== 'maestro') {
       return respuesta.code(403).send({ error: 'Sin permisos para esta acción' });
     }
+    const filtroDemo = obtenerFiltroDemo();
     const estudios = await prisma.estudio.findMany({
+      where: filtroDemo,
       orderBy: { creadoEn: 'desc' },
       include: { personal: { orderBy: { creadoEn: 'asc' } } },
     });
@@ -26,8 +104,9 @@ export async function rutasEstudios(servidor: FastifyInstance): Promise<void> {
       if (payload.rol !== 'maestro' && payload.estudioId !== id) {
         return respuesta.code(403).send({ error: 'Sin permisos para esta acción' });
       }
-      const estudio = await prisma.estudio.findUnique({
-        where: { id },
+      const filtroDemo = obtenerFiltroDemo();
+      const estudio = await prisma.estudio.findFirst({
+        where: { id, ...filtroDemo },
         include: { personal: { orderBy: { creadoEn: 'asc' } } },
       });
       if (!estudio) return respuesta.code(404).send({ error: 'Estudio no encontrado' });
@@ -44,34 +123,44 @@ export async function rutasEstudios(servidor: FastifyInstance): Promise<void> {
       if (payload.rol !== 'maestro') {
         return respuesta.code(403).send({ error: 'Sin permisos para esta acción' });
       }
-      const {
-        nombre, propietario, telefono, sitioWeb, pais,
-        sucursales, claveDueno, claveCliente, suscripcion,
-        inicioSuscripcion, fechaVencimiento, horario,
-        servicios, serviciosCustom, festivos,
-      } = solicitud.body;
-
-      if (!nombre || !claveDueno || !claveCliente) {
-        return respuesta.code(400).send({ error: 'nombre, claveDueno y claveCliente son requeridos' });
+      const resultado = esquemaCrearEstudio.safeParse(solicitud.body);
+      if (!resultado.success) {
+        return respuesta.code(400).send({ error: obtenerMensajeValidacion(resultado.error) });
       }
+
+      const datos = resultado.data;
+      const categorias = resolverCategoriasSalon({
+        categorias: datos.categorias,
+        servicios: datos.servicios,
+        serviciosCustom: datos.serviciosCustom,
+      });
 
       const estudio = await prisma.estudio.create({
         data: {
-          nombre: nombre as string,
-          propietario: (propietario as string) ?? '',
-          telefono: (telefono as string) ?? '',
-          sitioWeb: sitioWeb as string | undefined,
-          pais: (pais as string) ?? 'Mexico',
-          sucursales: (sucursales as object) ?? [],
-          claveDueno: (claveDueno as string).toUpperCase(),
-          claveCliente: (claveCliente as string).toUpperCase(),
-          suscripcion: (suscripcion as string) ?? 'mensual',
-          inicioSuscripcion: (inicioSuscripcion as string) ?? new Date().toISOString().split('T')[0],
-          fechaVencimiento: (fechaVencimiento as string) ?? '',
-          horario: (horario as object) ?? {},
-          servicios: (servicios as object) ?? [],
-          serviciosCustom: (serviciosCustom as object) ?? [],
-          festivos: (festivos as object) ?? [],
+          nombre: datos.nombre,
+          propietario: datos.propietario ?? '',
+          telefono: datos.telefono,
+          sitioWeb: datos.sitioWeb,
+          pais: datos.pais ?? 'Mexico',
+          sucursales: datos.sucursales ?? [],
+          claveDueno: datos.claveDueno.toUpperCase(),
+          claveCliente: datos.claveCliente.toUpperCase(),
+          suscripcion: datos.suscripcion ?? 'mensual',
+          inicioSuscripcion: datos.inicioSuscripcion ?? new Date().toISOString().split('T')[0]!,
+          fechaVencimiento: datos.fechaVencimiento ?? '',
+          horario: datos.horario ?? {},
+          servicios: (datos.servicios ?? []) as Prisma.InputJsonValue,
+          serviciosCustom: (datos.serviciosCustom ?? []) as Prisma.InputJsonValue,
+          festivos: datos.festivos ?? [],
+          ...(datos.colorPrimario !== undefined && { colorPrimario: datos.colorPrimario }),
+          ...(datos.descripcion !== undefined && { descripcion: datos.descripcion }),
+          ...(datos.direccion !== undefined && { direccion: datos.direccion }),
+          ...(datos.emailContacto !== undefined && { emailContacto: datos.emailContacto }),
+          ...(datos.horarioApertura !== undefined && { horarioApertura: datos.horarioApertura }),
+          ...(datos.horarioCierre !== undefined && { horarioCierre: datos.horarioCierre }),
+          ...(datos.diasAtencion !== undefined && { diasAtencion: datos.diasAtencion }),
+          ...(datos.primeraVez !== undefined && { primeraVez: datos.primeraVez }),
+          categorias,
         },
       });
       return respuesta.code(201).send({ datos: estudio });
@@ -88,11 +177,118 @@ export async function rutasEstudios(servidor: FastifyInstance): Promise<void> {
       if (payload.rol !== 'maestro' && payload.estudioId !== id) {
         return respuesta.code(403).send({ error: 'Sin permisos para esta acción' });
       }
+      const resultado = esquemaActualizarEstudio.safeParse(solicitud.body);
+      if (!resultado.success) {
+        return respuesta.code(400).send({ error: obtenerMensajeValidacion(resultado.error) });
+      }
+
+      const datos = resultado.data;
+      const estudioExistente = await prisma.estudio.findUnique({
+        where: { id },
+        select: { categorias: true, servicios: true, serviciosCustom: true },
+      });
+      const categorias = resolverCategoriasSalon({
+        categorias: datos.categorias ?? estudioExistente?.categorias,
+        servicios: datos.servicios ?? estudioExistente?.servicios,
+        serviciosCustom: datos.serviciosCustom ?? estudioExistente?.serviciosCustom,
+      });
+
       const estudio = await prisma.estudio.update({
         where: { id },
-        data: solicitud.body as Parameters<typeof prisma.estudio.update>[0]['data'],
+        data: {
+          ...(datos.nombre !== undefined && { nombre: datos.nombre }),
+          ...(datos.propietario !== undefined && { propietario: datos.propietario }),
+          ...(datos.telefono !== undefined && { telefono: datos.telefono }),
+          ...(datos.sitioWeb !== undefined && { sitioWeb: datos.sitioWeb }),
+          ...(datos.pais !== undefined && { pais: datos.pais }),
+          ...(datos.sucursales !== undefined && { sucursales: datos.sucursales }),
+          ...(datos.horario !== undefined && { horario: datos.horario }),
+          ...(datos.servicios !== undefined && { servicios: datos.servicios as Prisma.InputJsonValue }),
+          ...(datos.serviciosCustom !== undefined && { serviciosCustom: datos.serviciosCustom as Prisma.InputJsonValue }),
+          ...(datos.festivos !== undefined && { festivos: datos.festivos }),
+          ...(datos.colorPrimario !== undefined && { colorPrimario: datos.colorPrimario }),
+          ...(datos.descripcion !== undefined && { descripcion: datos.descripcion }),
+          ...(datos.direccion !== undefined && { direccion: datos.direccion }),
+          ...(datos.emailContacto !== undefined && { emailContacto: datos.emailContacto }),
+          ...(datos.horarioApertura !== undefined && { horarioApertura: datos.horarioApertura }),
+          ...(datos.horarioCierre !== undefined && { horarioCierre: datos.horarioCierre }),
+          ...(datos.diasAtencion !== undefined && { diasAtencion: datos.diasAtencion }),
+          categorias,
+        },
       });
       return respuesta.send({ datos: estudio });
+    },
+  );
+
+  servidor.get<{
+    Params: { id: string };
+    Querystring: { personalId: string; fecha: string; duracion: string };
+  }>(
+    '/estudios/:id/disponibilidad',
+    { preHandler: verificarJWT },
+    async (solicitud, respuesta) => {
+      const payload = solicitud.user as { rol: string; estudioId: string | null };
+      const { id } = solicitud.params;
+      const { personalId, fecha, duracion } = solicitud.query;
+
+      if (payload.rol !== 'maestro' && payload.estudioId !== id) {
+        return respuesta.code(403).send({ error: 'Sin permisos para esta acción' });
+      }
+
+      if (!personalId || !fecha || !duracion) {
+        return respuesta.code(400).send({ error: 'personalId, fecha y duracion son requeridos' });
+      }
+
+      const duracionMin = Number(duracion);
+      if (isNaN(duracionMin) || duracionMin <= 0) {
+        return respuesta.code(400).send({ error: 'duracion debe ser un número positivo' });
+      }
+
+      const [salon, miembro, reservasExistentes] = await Promise.all([
+        prisma.estudio.findUnique({
+          where: { id },
+          select: { horario: true, festivos: true },
+        }),
+        prisma.personal.findFirst({
+          where: { id: personalId, estudioId: id, activo: true },
+          select: {
+            id: true,
+            horaInicio: true,
+            horaFin: true,
+            descansoInicio: true,
+            descansoFin: true,
+            diasTrabajo: true,
+          },
+        }),
+        prisma.reserva.findMany({
+          where: {
+            estudioId: id,
+            personalId,
+            fecha,
+            estado: { not: 'cancelled' },
+          },
+          select: { horaInicio: true, duracion: true },
+        }),
+      ]);
+
+      if (!salon || !miembro) {
+        return respuesta.code(404).send({ error: 'Salón o especialista no encontrado' });
+      }
+
+      const festivos = salon.festivos as string[];
+      if (festivos.includes(fecha)) {
+        return respuesta.send({ datos: [] });
+      }
+
+      const slots = obtenerSlotsDisponiblesBackend({
+        horario: salon.horario as Record<string, { isOpen: boolean; openTime: string; closeTime: string }>,
+        miembro,
+        fecha,
+        duracionMin,
+        reservas: reservasExistentes,
+      });
+
+      return respuesta.send({ datos: slots });
     },
   );
 
@@ -105,7 +301,45 @@ export async function rutasEstudios(servidor: FastifyInstance): Promise<void> {
       if (payload.rol !== 'maestro') {
         return respuesta.code(403).send({ error: 'Sin permisos para esta acción' });
       }
-      await prisma.estudio.delete({ where: { id: solicitud.params.id } });
+
+      const estudio = await prisma.estudio.findUnique({
+        where: { id: solicitud.params.id },
+        include: {
+          usuarios: {
+            where: { rol: 'dueno' },
+            select: { id: true, email: true, estudioId: true },
+          },
+        },
+      });
+
+      if (!estudio) {
+        return respuesta.code(404).send({ error: 'Estudio no encontrado' });
+      }
+
+      await prisma.$transaction(async (tx) => {
+        const duenosAsociados = estudio.usuarios;
+        const duenoPorCorreo = estudio.emailContacto
+          ? await tx.usuario.findMany({
+              where: { rol: 'dueno', email: estudio.emailContacto },
+              select: { id: true, email: true, estudioId: true },
+            })
+          : [];
+
+        const duenosAEliminar = Array.from(
+          new Map(
+            [...duenosAsociados, ...duenoPorCorreo]
+              .filter((usuario) => !usuario.estudioId || usuario.estudioId === estudio.id)
+              .map((usuario) => [usuario.id, usuario]),
+          ).values(),
+        );
+
+        for (const dueno of duenosAEliminar) {
+          await tx.usuario.delete({ where: { id: dueno.id } });
+        }
+
+        await tx.estudio.delete({ where: { id: estudio.id } });
+      });
+
       return respuesta.code(200).send({ datos: { eliminado: true } });
     },
   );

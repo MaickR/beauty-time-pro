@@ -23,11 +23,13 @@ async function ejecutarRecordatorios(): Promise<void> {
   });
 
   for (const reserva of reservas) {
-    await enviarEmailRecordatorio(reserva.id);
-    await prisma.reserva.update({
-      where: { id: reserva.id },
-      data: { recordatorioEnviado: true },
-    });
+    const enviado = await enviarEmailRecordatorio(reserva.id);
+    if (enviado) {
+      await prisma.reserva.update({
+        where: { id: reserva.id },
+        data: { recordatorioEnviado: true },
+      });
+    }
   }
 }
 

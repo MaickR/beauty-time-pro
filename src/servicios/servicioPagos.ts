@@ -20,6 +20,17 @@ export async function registrarPago(datos: DatosPago): Promise<void> {
   });
 }
 
+export interface ResumenPagoSuscripcion {
+  id: string;
+  moneda: 'MXN' | 'COP';
+  pais: 'Mexico' | 'Colombia';
+  fechaBaseRenovacion: string | null;
+  nuevaFechaVencimiento: string | null;
+  estrategiaRenovacion: 'desde_vencimiento_actual' | 'desde_hoy' | null;
+  registradoPorNombre: string | null;
+  registradoPorEmail: string | null;
+}
+
 /**
  * Registra un pago y extiende la suscripción del estudio un mes.
  * Devuelve la nueva fecha de vencimiento en formato "YYYY-MM-DD".
@@ -28,9 +39,9 @@ export async function confirmarPago(
   estudio: Estudio,
   monto: number,
   moneda: 'MXN' | 'COP',
-): Promise<string> {
-  type RespuestaPago = { datos: { id: string } };
-  await peticion<RespuestaPago>('/pagos', {
+): Promise<ResumenPagoSuscripcion> {
+  type RespuestaPago = { datos: ResumenPagoSuscripcion };
+  const respuesta = await peticion<RespuestaPago>('/pagos', {
     method: 'POST',
     body: JSON.stringify({
       estudioId: estudio.id,
@@ -38,12 +49,8 @@ export async function confirmarPago(
       moneda,
       fecha: obtenerFechaLocalISO(new Date()),
       extenderSuscripcion: true,
+      meses: 1,
     }),
   });
-  // Calcular la nueva fecha localmente (el backend la calcula igual: +1 mes)
-  const baseStr = estudio.paidUntil || estudio.subscriptionStart || obtenerFechaLocalISO(new Date());
-  const partes = baseStr.split('-').map(Number);
-  const fechaBase = new Date(partes[0]!, partes[1]! - 1, partes[2]!);
-  fechaBase.setMonth(fechaBase.getMonth() + 1);
-  return obtenerFechaLocalISO(fechaBase);
+  return respuesta.datos;
 }

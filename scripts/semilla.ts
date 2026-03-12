@@ -7,14 +7,49 @@
  * Solo ejecutar en desarrollo local. Prohibido en producción.
  */
 
-import 'dotenv/config';
+import { config } from 'dotenv';
 import bcrypt from 'bcrypt';
-import { PrismaClient } from '../server/src/generated/prisma/index.js';
+import { PrismaMariaDb } from '@prisma/adapter-mariadb';
+import clientePrisma from '../server/src/generated/prisma/client.js';
 
-const prisma = new PrismaClient({
-  datasources: { db: { url: process.env['DATABASE_URL'] } },
+config({ path: 'server/.env' });
+
+const { PrismaClient } = clientePrisma;
+
+const urlBaseDatos = new URL(process.env.DATABASE_URL ?? 'mysql://root:1234@localhost:3306/beauty_time_pro');
+
+const adaptador = new PrismaMariaDb({
+  host: urlBaseDatos.hostname,
+  port: Number(urlBaseDatos.port || '3306'),
+  user: decodeURIComponent(urlBaseDatos.username),
+  password: decodeURIComponent(urlBaseDatos.password),
+  database: urlBaseDatos.pathname.replace(/^\//, ''),
 });
 
+const prisma = new PrismaClient({ adapter: adaptador });
+
+const ARGUMENTOS = new Set(process.argv.slice(2));
+const ADMINS_SEMILLA = [
+  {
+    email: 'miguel@beautytimepro.com',
+    nombre: 'Miguel',
+    apellido: 'Baigts',
+    alias: 'Miguel Baigts',
+    contrasena: process.env.ADMIN_PRINCIPAL_CONTRASENA ?? 'Admin1234!',
+  },
+  {
+    email: 'msrl.dev420@gmail.com',
+    nombre: 'Mike',
+    apellido: 'Admin',
+    alias: 'Mike Admin',
+    contrasena: process.env.ADMIN_SECUNDARIO_CONTRASENA ?? 'MikeVergas95*',
+  },
+];
+const ADMINS_PROTEGIDOS = (process.env.ADMINS_PROTEGIDOS ?? ADMINS_SEMILLA.map((admin) => admin.email).join(','))
+  .split(',')
+  .map((email) => email.trim().toLowerCase())
+  .filter(Boolean);
+const ENTORNO_ACTUAL = process.env.ENTORNO ?? 'development';
 function obtenerFechaLocalISO(fecha: Date): string {
   const compensacion = fecha.getTimezoneOffset();
   const fechaLocal = new Date(fecha.getTime() - compensacion * 60 * 1000);
@@ -26,10 +61,34 @@ const DIAS = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', '
 async function sembrarMikelovStudio(): Promise<void> {
   const existe = await prisma.estudio.findFirst({
     where: { claveDueno: 'MIKELOV123' },
-    select: { id: true },
+    select: { id: true, emailContacto: true },
   });
 
   if (existe) {
+    const usuarioDueno = await prisma.usuario.findUnique({
+      where: { email: 'hola@mikelovstudio.com' },
+      select: { id: true },
+    });
+
+    if (usuarioDueno) {
+      await prisma.usuario.update({
+        where: { id: usuarioDueno.id },
+        data: { estudioId: existe.id, rol: 'dueno', activo: true, emailVerificado: true },
+      });
+    } else {
+      await prisma.usuario.create({
+        data: {
+          email: 'hola@mikelovstudio.com',
+          hashContrasena: await bcrypt.hash('Salon1234!', 12),
+          nombre: 'Miguel Ángel Lovato',
+          rol: 'dueno',
+          activo: true,
+          emailVerificado: true,
+          estudioId: existe.id,
+        },
+      });
+    }
+
     console.log('ℹ️  MIKELOV STUDIO ya existe. No se insertaron datos duplicados.');
     return;
   }
@@ -64,6 +123,8 @@ async function sembrarMikelovStudio(): Promise<void> {
       ],
       claveDueno: 'MIKELOV123',
       claveCliente: 'MIKELOVSTUDIO',
+      estado: 'aprobado',
+      fechaAprobacion: new Date(),
       inicioSuscripcion: '2026-02-15',
       fechaVencimiento: obtenerFechaLocalISO(due),
       festivos: [],
@@ -83,6 +144,26 @@ async function sembrarMikelovStudio(): Promise<void> {
         { name: 'Gel Semi Permanente', duration: 60, price: 500 },
       ],
       serviciosCustom: [],
+    },
+  });
+
+  await prisma.usuario.upsert({
+    where: { email: 'hola@mikelovstudio.com' },
+    update: {
+      nombre: 'Miguel Ángel Lovato',
+      rol: 'dueno',
+      activo: true,
+      emailVerificado: true,
+      estudioId: estudio.id,
+    },
+    create: {
+      email: 'hola@mikelovstudio.com',
+      hashContrasena: await bcrypt.hash('Salon1234!', 12),
+      nombre: 'Miguel Ángel Lovato',
+      rol: 'dueno',
+      activo: true,
+      emailVerificado: true,
+      estudioId: estudio.id,
     },
   });
 
@@ -263,30 +344,111 @@ async function sembrarMikelovStudio(): Promise<void> {
 }
 
 async function crearUsuarioMaestro(): Promise<void> {
-  const existente = await prisma.usuario.findUnique({
-    where: { email: 'miguel@beautytimepro.com' },
-  });
-
-  if (existente) {
-    console.log('ℹ️  Usuario maestro ya existe. No se creó duplicado.');
-    return;
-  }
-
-  const hashContrasena = await bcrypt.hash('Admin1234!', 12);
-  await prisma.usuario.create({
-    data: {
-      email: 'miguel@beautytimepro.com',
-      hashContrasena,
-      nombre: 'Miguel Ángel',
+  await prisma.usuario.deleteMany({
+    where: {
       rol: 'maestro',
-      estudioId: null,
+      email: { notIn: ADMINS_SEMILLA.map((admin) => admin.email) },
     },
   });
 
-  console.log('✅ Usuario maestro creado: miguel@beautytimepro.com / Admin1234!');
+  for (const admin of ADMINS_SEMILLA) {
+    const usuario = await prisma.usuario.upsert({
+      where: { email: admin.email },
+      update: {
+        nombre: admin.alias,
+        hashContrasena: await bcrypt.hash(admin.contrasena, 12),
+        rol: 'maestro',
+        activo: true,
+        emailVerificado: true,
+        estudioId: null,
+      },
+      create: {
+        email: admin.email,
+        hashContrasena: await bcrypt.hash(admin.contrasena, 12),
+        nombre: admin.alias,
+        rol: 'maestro',
+        activo: true,
+        emailVerificado: true,
+        estudioId: null,
+      },
+    });
+
+    await prisma.permisosMaestro.upsert({
+      where: { usuarioId: usuario.id },
+      update: {
+        aprobarSalones: true,
+        gestionarPagos: true,
+        crearAdmins: true,
+        verAuditLog: true,
+        verMetricas: true,
+        suspenderSalones: true,
+        esMaestroTotal: true,
+      },
+      create: {
+        usuarioId: usuario.id,
+        aprobarSalones: true,
+        gestionarPagos: true,
+        crearAdmins: true,
+        verAuditLog: true,
+        verMetricas: true,
+        suspenderSalones: true,
+        esMaestroTotal: true,
+      },
+    });
+
+    console.log(`✅ Admin protegido listo: ${admin.alias} <${admin.email}>`);
+  }
 }
 
-Promise.all([sembrarMikelovStudio(), crearUsuarioMaestro()])
+async function limpiarPruebas(): Promise<void> {
+  const estudiosNoAprobados = await prisma.estudio.findMany({
+    where: { estado: { not: 'aprobado' } },
+    select: { id: true },
+  });
+
+  const idsEstudiosNoAprobados = estudiosNoAprobados.map((estudio) => estudio.id);
+
+  await prisma.tokenVerificacionApp.deleteMany({});
+  await prisma.tokenReset.deleteMany({});
+  await prisma.clienteApp.deleteMany({});
+
+  if (idsEstudiosNoAprobados.length > 0) {
+    await prisma.reserva.deleteMany({ where: { estudioId: { in: idsEstudiosNoAprobados } } });
+    await prisma.personal.deleteMany({ where: { estudioId: { in: idsEstudiosNoAprobados } } });
+    await prisma.diaFestivo.deleteMany({ where: { estudioId: { in: idsEstudiosNoAprobados } } });
+    await prisma.configFidelidad.deleteMany({ where: { estudioId: { in: idsEstudiosNoAprobados } } });
+    await prisma.puntosFidelidad.deleteMany({ where: { estudioId: { in: idsEstudiosNoAprobados } } });
+    await prisma.pago.deleteMany({ where: { estudioId: { in: idsEstudiosNoAprobados } } });
+    await prisma.usuario.updateMany({
+      where: { rol: 'dueno', estudioId: { in: idsEstudiosNoAprobados } },
+      data: { estudioId: null },
+    });
+    await prisma.estudio.deleteMany({ where: { id: { in: idsEstudiosNoAprobados } } });
+  }
+
+  await prisma.usuario.deleteMany({
+    where: { rol: 'dueno', estudioId: null },
+  });
+
+  console.log('✅ Registros de prueba eliminados');
+}
+
+async function main() {
+  if (ARGUMENTOS.has('--limpiar')) {
+    await limpiarPruebas();
+    process.exit(0);
+  }
+
+  await crearUsuarioMaestro();
+
+  if (ENTORNO_ACTUAL === 'development') {
+    await sembrarMikelovStudio();
+  } else {
+    console.log(`ℹ️  Demo de salón omitida en entorno ${ENTORNO_ACTUAL}.`);
+  }
+}
+
+main()
   .catch((err) => {
     console.error('❌ Error al ejecutar la semilla:', err);
     process.exit(1);

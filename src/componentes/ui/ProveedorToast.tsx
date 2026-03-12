@@ -3,10 +3,19 @@ import { createContext, useContext, useState, type PropsWithChildren } from 'rea
 interface ToastActivo {
   id: number;
   mensaje: string;
+  variante: 'exito' | 'error' | 'info';
+  icono: string;
+}
+
+interface OpcionesToast {
+  mensaje: string;
+  variante?: 'exito' | 'error' | 'info';
+  icono?: string;
+  duracionMs?: number;
 }
 
 interface ContextoToast {
-  mostrarToast: (mensaje: string) => void;
+  mostrarToast: (mensaje: string | OpcionesToast) => void;
 }
 
 const ContextoToastInterno = createContext<ContextoToast | null>(null);
@@ -14,22 +23,54 @@ const ContextoToastInterno = createContext<ContextoToast | null>(null);
 export function ProveedorToast({ children }: PropsWithChildren) {
   const [toasts, setToasts] = useState<ToastActivo[]>([]);
 
-  const mostrarToast = (mensaje: string) => {
+  const mostrarToast = (entrada: string | OpcionesToast) => {
+    const opciones =
+      typeof entrada === 'string'
+        ? { mensaje: entrada, variante: 'info' as const, icono: '•', duracionMs: 4000 }
+        : {
+            mensaje: entrada.mensaje,
+            variante: entrada.variante ?? 'info',
+            icono:
+              entrada.icono ??
+              (entrada.variante === 'exito' ? '✓' : entrada.variante === 'error' ? '✗' : '•'),
+            duracionMs: entrada.duracionMs ?? 4000,
+          };
     const id = Date.now() + Math.floor(Math.random() * 1000);
-    setToasts((actuales) => [...actuales, { id, mensaje }]);
+    setToasts((actuales) => [
+      ...actuales,
+      { id, mensaje: opciones.mensaje, variante: opciones.variante, icono: opciones.icono },
+    ]);
 
     window.setTimeout(() => {
       setToasts((actuales) => actuales.filter((toast) => toast.id !== id));
-    }, 3500);
+    }, opciones.duracionMs);
   };
 
   return (
     <ContextoToastInterno.Provider value={{ mostrarToast }}>
       {children}
-      <div className="pointer-events-none fixed right-4 top-4 z-[120] flex w-full max-w-sm flex-col gap-3" aria-live="polite" aria-atomic="true">
+      <div
+        className="pointer-events-none fixed right-4 top-4 z-[120] flex w-full max-w-sm flex-col gap-3"
+        aria-live="polite"
+        aria-atomic="true"
+      >
         {toasts.map((toast) => (
-          <div key={toast.id} className="rounded-2xl border border-slate-200 bg-slate-950 px-5 py-4 text-sm font-bold text-white shadow-2xl shadow-slate-950/20">
-            {toast.mensaje}
+          <div
+            key={toast.id}
+            className={`rounded-2xl border px-5 py-4 text-sm font-bold shadow-2xl ${
+              toast.variante === 'exito'
+                ? 'border-green-200 bg-green-600 text-white shadow-green-600/20'
+                : toast.variante === 'error'
+                  ? 'border-red-200 bg-red-600 text-white shadow-red-600/20'
+                  : 'border-slate-200 bg-slate-950 text-white shadow-slate-950/20'
+            }`}
+          >
+            <div className="flex items-center gap-3">
+              <span className="inline-flex h-7 w-7 items-center justify-center rounded-full bg-white/15 text-base font-black">
+                {toast.icono}
+              </span>
+              <span>{toast.mensaje}</span>
+            </div>
           </div>
         ))}
       </div>

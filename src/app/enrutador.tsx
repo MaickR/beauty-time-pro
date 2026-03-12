@@ -3,9 +3,12 @@ import { Navigate, Route, Routes } from 'react-router-dom';
 import { GuardiaRuta } from '../caracteristicas/autenticacion/GuardiaRuta';
 import { obtenerRutaPorRol, usarTiendaAuth } from '../tienda/tiendaAuth';
 import { LimiteError } from '../componentes/ui/LimiteError';
+import { Pagina404 } from '../componentes/ui/Pagina404';
 
 const PaginaInicioSesion = lazy(() =>
-  import('../caracteristicas/autenticacion/PaginaInicioSesion').then((m) => ({ default: m.PaginaInicioSesion })),
+  import('../caracteristicas/autenticacion/PaginaInicioSesion').then((m) => ({
+    default: m.PaginaInicioSesion,
+  })),
 );
 const PaginaRecuperarContrasena = lazy(() =>
   import('../caracteristicas/autenticacion/PaginaRecuperarContrasena').then((m) => ({
@@ -17,14 +20,43 @@ const PaginaResetContrasena = lazy(() =>
     default: m.PaginaResetContrasena,
   })),
 );
+const PaginaBienvenida = lazy(() =>
+  import('../caracteristicas/autenticacion/PaginaBienvenida').then((m) => ({
+    default: m.PaginaBienvenida,
+  })),
+);
+const PaginaRegistroCliente = lazy(() =>
+  import('../caracteristicas/autenticacion/PaginaRegistroCliente').then((m) => ({
+    default: m.PaginaRegistroCliente,
+  })),
+);
+const PaginaRegistroSalon = lazy(() =>
+  import('../caracteristicas/autenticacion/PaginaRegistroSalon').then((m) => ({
+    default: m.PaginaRegistroSalon,
+  })),
+);
+const PaginaEsperaAprobacion = lazy(() =>
+  import('../caracteristicas/autenticacion/PaginaEsperaAprobacion').then((m) => ({
+    default: m.PaginaEsperaAprobacion,
+  })),
+);
+const PaginaEmailEnviado = lazy(() =>
+  import('../caracteristicas/autenticacion/PaginaEmailEnviado').then((m) => ({
+    default: m.PaginaEmailEnviado,
+  })),
+);
+const PaginaVerificarEmail = lazy(() =>
+  import('../caracteristicas/autenticacion/PaginaVerificarEmail').then((m) => ({
+    default: m.PaginaVerificarEmail,
+  })),
+);
 const PaginaAgenda = lazy(() =>
   import('../caracteristicas/estudio/PaginaAgenda').then((m) => ({ default: m.PaginaAgenda })),
 );
 const PaginaAdminEstudio = lazy(() =>
-  import('../caracteristicas/estudio/PaginaAdminEstudio').then((m) => ({ default: m.PaginaAdminEstudio })),
-);
-const PaginaFinanzasMaestro = lazy(() =>
-  import('../caracteristicas/maestro/PaginaFinanzasMaestro').then((m) => ({ default: m.PaginaFinanzasMaestro })),
+  import('../caracteristicas/estudio/PaginaAdminEstudio').then((m) => ({
+    default: m.PaginaAdminEstudio,
+  })),
 );
 const PaginaMaestro = lazy(() =>
   import('../caracteristicas/maestro/PaginaMaestro').then((m) => ({ default: m.PaginaMaestro })),
@@ -33,7 +65,29 @@ const PaginaReserva = lazy(() =>
   import('../caracteristicas/reserva/PaginaReserva').then((m) => ({ default: m.PaginaReserva })),
 );
 const PaginaCancelarReserva = lazy(() =>
-  import('../caracteristicas/reserva/PaginaCancelarReserva').then((m) => ({ default: m.PaginaCancelarReserva })),
+  import('../caracteristicas/reserva/PaginaCancelarReserva').then((m) => ({
+    default: m.PaginaCancelarReserva,
+  })),
+);
+const PaginaInicioCliente = lazy(() =>
+  import('../caracteristicas/cliente/PaginaInicioCliente').then((m) => ({
+    default: m.PaginaInicioCliente,
+  })),
+);
+const PaginaDetalleSalon = lazy(() =>
+  import('../caracteristicas/cliente/PaginaDetalleSalon').then((m) => ({
+    default: m.PaginaDetalleSalon,
+  })),
+);
+const PaginaReservaCliente = lazy(() =>
+  import('../caracteristicas/cliente/PaginaReservaCliente').then((m) => ({
+    default: m.PaginaReservaCliente,
+  })),
+);
+const PaginaPerfilCliente = lazy(() =>
+  import('../caracteristicas/cliente/PaginaPerfilCliente').then((m) => ({
+    default: m.PaginaPerfilCliente,
+  })),
 );
 
 function PantallaCargaRuta() {
@@ -51,35 +105,113 @@ function RedireccionRaiz() {
     return <PantallaCargaRuta />;
   }
 
+  if (!rol) {
+    return <PaginaBienvenida />;
+  }
+
   return <Navigate to={obtenerRutaPorRol(rol, estudioActual, claveClienteActual)} replace />;
 }
 
 export function Enrutador() {
   return (
     <Suspense fallback={<PantallaCargaRuta />}>
-    <Routes>
-      <Route path="/" element={<RedireccionRaiz />} />
-      <Route path="/iniciar-sesion" element={<PaginaInicioSesion />} />
-      <Route path="/recuperar-contrasena" element={<PaginaRecuperarContrasena />} />
-      <Route path="/reset-contrasena" element={<PaginaResetContrasena />} />
-      <Route path="/cancelar-reserva/:reservaId/:token" element={<PaginaCancelarReserva />} />
+      <Routes>
+        <Route path="/" element={<RedireccionRaiz />} />
+        <Route path="/iniciar-sesion" element={<PaginaInicioSesion />} />
+        <Route path="/recuperar-contrasena" element={<PaginaRecuperarContrasena />} />
+        <Route path="/reset-contrasena" element={<PaginaResetContrasena />} />
+        <Route path="/cancelar-reserva/:reservaId/:token" element={<PaginaCancelarReserva />} />
+        <Route path="/registro/cliente" element={<PaginaRegistroCliente />} />
+        <Route path="/registro/salon" element={<PaginaRegistroSalon />} />
+        <Route path="/espera-aprobacion" element={<PaginaEsperaAprobacion />} />
+        <Route path="/email-enviado" element={<PaginaEmailEnviado />} />
+        <Route path="/verificar-email" element={<PaginaVerificarEmail />} />
 
-      <Route element={<GuardiaRuta rolesPermitidos={['maestro']} />}>
-        <Route path="/maestro" element={<LimiteError><PaginaMaestro /></LimiteError>} />
-        <Route path="/maestro/finanzas" element={<LimiteError><PaginaFinanzasMaestro /></LimiteError>} />
-      </Route>
+        <Route element={<GuardiaRuta rolesPermitidos={['maestro']} />}>
+          <Route
+            path="/maestro"
+            element={
+              <LimiteError>
+                <PaginaMaestro />
+              </LimiteError>
+            }
+          />
+          <Route
+            path="/maestro/finanzas"
+            element={
+              <LimiteError>
+                <PaginaMaestro />
+              </LimiteError>
+            }
+          />
+        </Route>
 
-      <Route element={<GuardiaRuta rolesPermitidos={['dueno']} />}>
-        <Route path="/estudio/:estudioId/agenda" element={<LimiteError><PaginaAgenda /></LimiteError>} />
-        <Route path="/estudio/:estudioId/admin" element={<LimiteError><PaginaAdminEstudio /></LimiteError>} />
-      </Route>
+        <Route element={<GuardiaRuta rolesPermitidos={['dueno']} />}>
+          <Route
+            path="/estudio/:estudioId/agenda"
+            element={
+              <LimiteError>
+                <PaginaAgenda />
+              </LimiteError>
+            }
+          />
+          <Route
+            path="/estudio/:estudioId/admin"
+            element={
+              <LimiteError>
+                <PaginaAdminEstudio />
+              </LimiteError>
+            }
+          />
+        </Route>
 
-      <Route element={<GuardiaRuta rolesPermitidos={['cliente']} />}>
-        <Route path="/reserva/:claveCliente" element={<LimiteError><PaginaReserva /></LimiteError>} />
-      </Route>
+        {/* Rutas públicas del directorio de salones */}
+        <Route
+          path="/salones/:id"
+          element={
+            <LimiteError>
+              <PaginaDetalleSalon />
+            </LimiteError>
+          }
+        />
 
-      <Route path="*" element={<RedireccionRaiz />} />
-    </Routes>
+        <Route element={<GuardiaRuta rolesPermitidos={['cliente']} />}>
+          <Route
+            path="/reserva/:claveCliente"
+            element={
+              <LimiteError>
+                <PaginaReserva />
+              </LimiteError>
+            }
+          />
+          <Route
+            path="/inicio"
+            element={
+              <LimiteError>
+                <PaginaInicioCliente />
+              </LimiteError>
+            }
+          />
+          <Route
+            path="/salones/:id/reservar"
+            element={
+              <LimiteError>
+                <PaginaReservaCliente />
+              </LimiteError>
+            }
+          />
+          <Route
+            path="/mi-perfil"
+            element={
+              <LimiteError>
+                <PaginaPerfilCliente />
+              </LimiteError>
+            }
+          />
+        </Route>
+
+        <Route path="*" element={<Pagina404 />} />
+      </Routes>
     </Suspense>
   );
 }

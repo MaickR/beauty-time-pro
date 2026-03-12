@@ -19,7 +19,17 @@ import { Spinner } from '../../componentes/ui/Spinner';
 import { URL_BASE } from '../../lib/clienteHTTP';
 import type { Moneda } from '../../tipos';
 
-const PALABRAS_COLOR = ['tinte', 'color', 'balayage', 'babylights', 'canas', 'ombré', 'decoloración', 'rayitos', 'mechas'];
+const PALABRAS_COLOR = [
+  'tinte',
+  'color',
+  'balayage',
+  'babylights',
+  'canas',
+  'ombré',
+  'decoloración',
+  'rayitos',
+  'mechas',
+];
 
 export function PaginaReserva() {
   const { claveCliente } = useParams<{ claveCliente: string }>();
@@ -36,7 +46,9 @@ export function PaginaReserva() {
   // Actualizar título con el nombre del salón
   useEffect(() => {
     if (estudio?.name) document.title = `${estudio.name} — Reservar cita`;
-    return () => { document.title = 'Beauty Time Pro'; };
+    return () => {
+      document.title = 'Beauty Time Pro';
+    };
   }, [estudio?.name]);
 
   useEffect(() => {
@@ -45,13 +57,25 @@ export function PaginaReserva() {
     }
   }, [estudio?.id]); // intencionalmente limitado: solo al cambio de studio
 
-  if (cargando) return <div className="h-screen bg-white flex items-center justify-center"><Spinner tamaño="lg" /></div>;
-  if (!estudio) return <div className="h-screen bg-white flex items-center justify-center"><p className="text-slate-400 font-bold">Studio no encontrado o clave inválida.</p></div>;
+  if (cargando)
+    return (
+      <div className="h-screen bg-white flex items-center justify-center">
+        <Spinner tamaño="lg" />
+      </div>
+    );
+  if (!estudio)
+    return (
+      <div className="h-screen bg-white flex items-center justify-center">
+        <p className="text-slate-400 font-bold">Studio no encontrado o clave inválida.</p>
+      </div>
+    );
 
   const moneda: Moneda = estudio.country === 'Colombia' ? 'COP' : 'MXN';
   const reservasEstudio = reservas.filter((r) => r.studioId === estudio.id);
   const totalDuracion = flujo.serviciosSeleccionados.reduce((acc, s) => acc + s.duration, 0);
-  const requiereColor = flujo.serviciosSeleccionados.some((s) => PALABRAS_COLOR.some((kw) => s.name.toLowerCase().includes(kw)));
+  const requiereColor = flujo.serviciosSeleccionados.some((s) =>
+    PALABRAS_COLOR.some((kw) => s.name.toLowerCase().includes(kw)),
+  );
 
   const fechaStr = obtenerFechaLocalISO(flujo.fechaSeleccionada);
   const nombreDia = DIAS_SEMANA[flujo.fechaSeleccionada.getDay()];
@@ -60,10 +84,27 @@ export function PaginaReserva() {
   const estaCerrado = !horarioDia?.isOpen;
 
   const slots = (() => {
-    if (!flujo.personalSeleccionado || flujo.serviciosSeleccionados.length === 0 || esFestivo || estaCerrado) return [];
+    if (
+      !flujo.personalSeleccionado ||
+      flujo.serviciosSeleccionados.length === 0 ||
+      esFestivo ||
+      estaCerrado
+    )
+      return [];
     const miembro = estudio.staff.find((s) => s.id === flujo.personalSeleccionado);
-    const reservasDia = reservasEstudio.filter((b) => b.staffId === flujo.personalSeleccionado && b.date === fechaStr && b.status !== 'cancelled');
-    return obtenerSlotsDisponibles({ horarioDia, miembro: miembro ?? { id: '', name: '', specialties: [], active: true, shiftStart: null, shiftEnd: null, breakStart: null, breakEnd: null }, reservasExistentes: reservasDia, duracionSlot: totalDuracion, fechaStr, filtrarPasados: true, filtrarDemasiadoCortos: true });
+    const reservasDia = reservasEstudio.filter(
+      (b) =>
+        b.staffId === flujo.personalSeleccionado && b.date === fechaStr && b.status !== 'cancelled',
+    );
+    return obtenerSlotsDisponibles({
+      horarioDia,
+      miembro: miembro ?? { shiftStart: null, shiftEnd: null, breakStart: null, breakEnd: null },
+      reservasExistentes: reservasDia,
+      duracionSlot: totalDuracion,
+      fechaStr,
+      filtrarPasados: true,
+      filtrarDemasiadoCortos: true,
+    });
   })();
 
   return (
@@ -85,16 +126,29 @@ export function PaginaReserva() {
               className="w-12 h-12 rounded-2xl object-cover"
             />
           ) : (
-            <div className="w-12 h-12 rounded-2xl flex items-center justify-center text-white font-black text-sm" style={{ backgroundColor: estudio.colorPrimario ?? '#C2185B' }}>
+            <div
+              className="w-12 h-12 rounded-2xl flex items-center justify-center text-white font-black text-sm"
+              style={{ backgroundColor: estudio.colorPrimario ?? '#C2185B' }}
+            >
               {estudio.name.slice(0, 2).toUpperCase()}
             </div>
           )}
           <div>
-            <h1 className="text-xl md:text-2xl font-black italic tracking-tighter uppercase leading-none">{estudio.name}</h1>
-            <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mt-1">Reserva de Citas en Línea</p>
+            <h1 className="text-xl md:text-2xl font-black italic tracking-tighter uppercase leading-none">
+              {estudio.name}
+            </h1>
+            <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mt-1">
+              Reserva de Citas en Línea
+            </p>
           </div>
         </div>
-        <button onClick={cerrarSesion} aria-label="Cerrar sesión" className="p-3 bg-slate-50 rounded-full hover:bg-slate-100 text-slate-400"><LogOut /></button>
+        <button
+          onClick={cerrarSesion}
+          aria-label="Cerrar sesión"
+          className="p-3 bg-slate-50 rounded-full hover:bg-slate-100 text-slate-400"
+        >
+          <LogOut />
+        </button>
       </header>
 
       {(estudio.descripcion || estudio.direccion) && (
@@ -107,16 +161,39 @@ export function PaginaReserva() {
       )}
 
       <main className="max-w-4xl mx-auto w-full p-4 md:p-8 space-y-8 pb-32">
-        <SelectorPersonal estudio={estudio} personalSeleccionado={flujo.personalSeleccionado} onSeleccionar={flujo.seleccionarPersonal} />
+        <SelectorPersonal
+          estudio={estudio}
+          personalSeleccionado={flujo.personalSeleccionado}
+          onSeleccionar={flujo.seleccionarPersonal}
+        />
 
         {flujo.personalSeleccionado && (
-          <SelectorServicio estudio={estudio} personalSeleccionado={flujo.personalSeleccionado} serviciosSeleccionados={flujo.serviciosSeleccionados} moneda={moneda} onAlternar={flujo.alternarServicio} />
+          <SelectorServicio
+            estudio={estudio}
+            personalSeleccionado={flujo.personalSeleccionado}
+            serviciosSeleccionados={flujo.serviciosSeleccionados}
+            moneda={moneda}
+            onAlternar={flujo.alternarServicio}
+          />
         )}
 
         {flujo.serviciosSeleccionados.length > 0 && (
           <>
-            <SelectorCalendario estudio={estudio} fechaSeleccionada={flujo.fechaSeleccionada} totalDuracion={totalDuracion} onCambiarFecha={flujo.seleccionarFecha} />
-            <GrillaSlots slots={slots} horaSeleccionada={flujo.horaSeleccionada} esFestivo={esFestivo} estaCerrado={estaCerrado} nombreDia={nombreDia} totalDuracion={totalDuracion} onSeleccionar={flujo.seleccionarHora} />
+            <SelectorCalendario
+              estudio={estudio}
+              fechaSeleccionada={flujo.fechaSeleccionada}
+              totalDuracion={totalDuracion}
+              onCambiarFecha={flujo.seleccionarFecha}
+            />
+            <GrillaSlots
+              slots={slots}
+              horaSeleccionada={flujo.horaSeleccionada}
+              esFestivo={esFestivo}
+              estaCerrado={estaCerrado}
+              nombreDia={nombreDia}
+              totalDuracion={totalDuracion}
+              onSeleccionar={flujo.seleccionarHora}
+            />
           </>
         )}
 

@@ -55,8 +55,10 @@ export function crearTemplateConfirmacionReserva(datos: DatosTemplateConfirmacio
             <tr><td style="padding:10px 0; border-bottom:1px solid #e2e8f0; font-weight:700;">Fecha</td><td style="padding:10px 0; border-bottom:1px solid #e2e8f0;">${escaparHtml(datos.fecha)}</td></tr>
             <tr><td style="padding:10px 0; border-bottom:1px solid #e2e8f0; font-weight:700;">Hora</td><td style="padding:10px 0; border-bottom:1px solid #e2e8f0;">${escaparHtml(datos.hora)}</td></tr>
             <tr><td style="padding:10px 0; border-bottom:1px solid #e2e8f0; font-weight:700;">Duración total</td><td style="padding:10px 0; border-bottom:1px solid #e2e8f0;">${datos.duracionTotal} min</td></tr>
-            <tr><td style="padding:10px 0; font-weight:700;">Precio total</td><td style="padding:10px 0;">$${datos.precioTotal.toFixed(2)}</td></tr>
+            <tr><td style="padding:10px 0; border-bottom:1px solid #e2e8f0; font-weight:700;">Precio total</td><td style="padding:10px 0; border-bottom:1px solid #e2e8f0;">$${datos.precioTotal.toFixed(2)}</td></tr>
+            <tr><td style="padding:10px 0; font-weight:700;">Forma de pago</td><td style="padding:10px 0;">Pago en el salón al llegar a tu cita</td></tr>
           </table>
+          <div style="margin-bottom:16px; padding:16px; border-radius:16px; background:#e0f2fe; color:#0c4a6e;"><strong>Pago en el salón:</strong> esta confirmación no realiza ningún cobro en línea. El total se liquida directamente en la sucursal el día de tu cita.</div>
           ${datos.esMenorDeEdad ? `<div style="margin-bottom:16px; padding:16px; border-radius:16px; background:#fef3c7; color:#92400e;"><strong>Recuerda venir acompañado de un adulto</strong></div>` : ''}
           ${datos.recompensaAplicada ? `<div style="margin-bottom:16px; padding:16px; border-radius:16px; background:#dcfce7; color:#166534;"><strong>🎁 Recompensa aplicada:</strong> ${escaparHtml(datos.recompensaAplicada)}</div>` : ''}
           <div style="text-align:center; margin:28px 0;">

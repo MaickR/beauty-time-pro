@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { useNavigate, Link } from 'react-router-dom';
+import { useNavigate, Link, useSearchParams } from 'react-router-dom';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
@@ -19,7 +19,14 @@ const STORAGE_EMAIL = 'beauty_email_recordado';
 
 export function PaginaInicioSesion() {
   usarTituloPagina('Iniciar sesión');
+  const [parametros] = useSearchParams();
   const [mostrarContrasena, setMostrarContrasena] = useState(false);
+  const [codigoBloqueo, setCodigoBloqueo] = useState<string | null>(null);
+  const [motivoRechazo, setMotivoRechazo] = useState<string | null>(null);
+  const mensajeRegistro =
+    parametros.get('registro') === 'ok'
+      ? (parametros.get('mensaje') ?? 'Cuenta creada correctamente. Ya puedes iniciar sesión.')
+      : '';
   const { iniciarSesion } = usarTiendaAuth();
   const navegar = useNavigate();
 
@@ -48,10 +55,19 @@ export function PaginaInicioSesion() {
     } else {
       localStorage.removeItem(STORAGE_EMAIL);
     }
+    setCodigoBloqueo(null);
+    setMotivoRechazo(null);
 
     const resultado = await iniciarSesion(datos.email, datos.contrasena);
     if (!resultado.exito) {
-      setError('root', { message: resultado.mensaje ?? 'Credenciales incorrectas. Verifica tus datos.' });
+      if (resultado.codigo) {
+        setCodigoBloqueo(resultado.codigo);
+        setMotivoRechazo(resultado.motivo ?? null);
+      } else {
+        setError('root', {
+          message: resultado.mensaje ?? 'Credenciales incorrectas. Verifica tus datos.',
+        });
+      }
       return;
     }
     navegar(resultado.ruta ?? '/');
@@ -70,13 +86,24 @@ export function PaginaInicioSesion() {
 
         <div className="text-white">
           <h1 className="text-5xl font-black leading-tight mb-6">
-            Gestiona tu salón<br />con precisión.
+            Gestiona tu salón
+            <br />
+            con precisión.
           </h1>
           <ul className="space-y-4" aria-label="Características de la plataforma">
             {[
-              { titulo: 'Agenda inteligente', desc: 'Reservas en tiempo real con recordatorios automáticos.' },
-              { titulo: 'Panel financiero', desc: 'Visualiza ingresos, servicios populares y tendencias.' },
-              { titulo: 'Multi-sucursal', desc: 'Administra todos tus salones desde un solo lugar.' },
+              {
+                titulo: 'Agenda inteligente',
+                desc: 'Reservas en tiempo real con recordatorios automáticos.',
+              },
+              {
+                titulo: 'Panel financiero',
+                desc: 'Visualiza ingresos, servicios populares y tendencias.',
+              },
+              {
+                titulo: 'Multi-sucursal',
+                desc: 'Administra todos tus salones desde un solo lugar.',
+              },
             ].map(({ titulo, desc }) => (
               <li key={titulo} className="flex items-start gap-3">
                 <span className="mt-1 shrink-0 w-5 h-5 rounded-full bg-white/30 flex items-center justify-center">
@@ -91,7 +118,9 @@ export function PaginaInicioSesion() {
           </ul>
         </div>
 
-        <p className="text-white/50 text-sm">© {new Date().getFullYear()} Beauty Time Pro · Hecho para México y Colombia</p>
+        <p className="text-white/50 text-sm">
+          © {new Date().getFullYear()} Beauty Time Pro · Hecho para México y Colombia
+        </p>
       </div>
 
       {/* Panel derecho — formulario */}
@@ -138,7 +167,10 @@ export function PaginaInicioSesion() {
 
             {/* Contraseña */}
             <div>
-              <label htmlFor="contrasena" className="block text-sm font-semibold text-slate-700 mb-1.5">
+              <label
+                htmlFor="contrasena"
+                className="block text-sm font-semibold text-slate-700 mb-1.5"
+              >
                 Contraseña
               </label>
               <div className="relative">
@@ -165,7 +197,11 @@ export function PaginaInicioSesion() {
                 </button>
               </div>
               {errors.contrasena && (
-                <p id="error-contrasena" role="alert" className="mt-1 text-xs text-red-500 font-medium">
+                <p
+                  id="error-contrasena"
+                  role="alert"
+                  className="mt-1 text-xs text-red-500 font-medium"
+                >
                   {errors.contrasena.message}
                 </p>
               )}
@@ -196,6 +232,41 @@ export function PaginaInicioSesion() {
               </div>
             )}
 
+            {/* Banners de bloqueo por código 403 */}
+            {mensajeRegistro && (
+              <div
+                role="status"
+                className="bg-green-50 border border-green-200 rounded-xl p-4 space-y-1"
+              >
+                <p className="text-sm font-semibold text-green-800">Registro completado</p>
+                <p className="text-xs text-green-700">{mensajeRegistro}</p>
+              </div>
+            )}
+            {codigoBloqueo === 'PENDIENTE_APROBACION' && (
+              <div
+                role="alert"
+                className="bg-blue-50 border border-blue-200 rounded-xl p-4 space-y-1"
+              >
+                <p className="text-sm font-semibold text-blue-800">Solicitud en revisión</p>
+                <p className="text-xs text-blue-700">
+                  Tu salón está siendo evaluado por nuestro equipo. Te avisaremos por correo en un
+                  plazo de 24 a 48 horas.
+                </p>
+              </div>
+            )}
+            {codigoBloqueo === 'SOLICITUD_RECHAZADA' && (
+              <div
+                role="alert"
+                className="bg-red-50 border border-red-200 rounded-xl p-4 space-y-1"
+              >
+                <p className="text-sm font-semibold text-red-800">Solicitud rechazada</p>
+                {motivoRechazo && <p className="text-xs text-red-700">Motivo: {motivoRechazo}</p>}
+                <p className="text-xs text-red-600">
+                  Si crees que es un error, contáctanos a soporte.
+                </p>
+              </div>
+            )}
+
             {/* Botón submit */}
             <button
               type="submit"
@@ -216,6 +287,27 @@ export function PaginaInicioSesion() {
               )}
             </button>
           </form>
+
+          <div className="text-center mt-6 space-y-2">
+            <p className="text-sm text-gray-500">¿No tienes cuenta?</p>
+            <div className="flex gap-4 justify-center">
+              <Link
+                to="/registro/cliente"
+                className="text-sm font-medium text-pink-600 hover:underline"
+              >
+                Soy cliente
+              </Link>
+              <span className="text-gray-300" aria-hidden="true">
+                |
+              </span>
+              <Link
+                to="/registro/salon"
+                className="text-sm font-medium text-pink-600 hover:underline"
+              >
+                Tengo un salón
+              </Link>
+            </div>
+          </div>
         </div>
       </div>
     </div>

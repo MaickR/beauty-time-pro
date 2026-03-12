@@ -1,5 +1,8 @@
 import { useReducer } from 'react';
+import { useMutation } from '@tanstack/react-query';
 import { UserPlus, Clock, Coffee } from 'lucide-react';
+import { SelectorHora } from '../../../componentes/ui/SelectorHora';
+import { usarToast } from '../../../componentes/ui/ProveedorToast';
 import type { Personal, Servicio } from '../../../tipos';
 
 interface PropsSeccionPersonalFormulario {
@@ -64,10 +67,42 @@ export function SeccionPersonalFormulario({
   onAgregarPersonal,
 }: PropsSeccionPersonalFormulario) {
   const [form, dispatch] = useReducer(reducer, estadoInicial);
+  const { mostrarToast } = usarToast();
+
+  const { mutate: crearPersonal, isPending } = useMutation({
+    mutationFn: async (nuevoPersonal: Personal) => nuevoPersonal,
+    onSuccess: (nuevoPersonal) => {
+      onAgregarPersonal(nuevoPersonal);
+      dispatch({ tipo: 'RESET' });
+      mostrarToast({
+        mensaje: `Personal creado exitosamente. ${nuevoPersonal.name} ya aparece en tu equipo.`,
+        variante: 'exito',
+        icono: '✓',
+        duracionMs: 4000,
+      });
+    },
+    onError: () => {
+      mostrarToast({
+        mensaje: 'No se pudo crear el personal. Verifica los datos e intenta de nuevo.',
+        variante: 'error',
+        icono: '✗',
+        duracionMs: 4000,
+      });
+    },
+  });
 
   const manejarAgregar = () => {
-    if (!form.nombre.trim()) return;
-    onAgregarPersonal({
+    if (!form.nombre.trim()) {
+      mostrarToast({
+        mensaje: 'No se pudo crear el personal. Verifica los datos e intenta de nuevo.',
+        variante: 'error',
+        icono: '✗',
+        duracionMs: 4000,
+      });
+      return;
+    }
+
+    crearPersonal({
       id: `staff_${Date.now()}`,
       name: form.nombre.trim(),
       specialties: form.especialidades,
@@ -76,17 +111,20 @@ export function SeccionPersonalFormulario({
       shiftEnd: form.turnoFin || '19:00',
       breakStart: form.descansoInicio || null,
       breakEnd: form.descansoFin || null,
+      workingDays: null,
     });
-    dispatch({ tipo: 'RESET' });
   };
 
   return (
-    <div className="bg-slate-50 p-6 rounded-[2rem] border border-slate-100 space-y-4">
+    <div className="bg-slate-50 p-6 rounded-4xl border border-slate-100 space-y-4">
       <div className="font-black text-xs text-pink-600 uppercase tracking-widest flex items-center gap-2">
         <UserPlus className="w-4 h-4" /> Personal
       </div>
       <input
+        id="nombre-personal"
+        name="nombrePersonal"
         type="text"
+        autoComplete="off"
         placeholder="Nombre completo"
         value={form.nombre}
         onChange={(e) => dispatch({ tipo: 'NOMBRE', valor: e.target.value })}
@@ -96,41 +134,51 @@ export function SeccionPersonalFormulario({
         <div className="flex items-center gap-3">
           <Clock className="w-3 h-3 text-blue-600 shrink-0" />
           <span className="text-[9px] font-black text-slate-600 uppercase">Turno:</span>
-          <input
-            type="time"
-            value={form.turnoInicio}
-            onChange={(e) => dispatch({ tipo: 'TURNO_INICIO', valor: e.target.value })}
-            className="bg-slate-50 border border-slate-200 rounded-lg p-2 text-xs font-bold text-slate-700 outline-none"
+          <SelectorHora
+            etiqueta="Inicio turno"
+            valor={form.turnoInicio}
+            alCambiar={(valor) => dispatch({ tipo: 'TURNO_INICIO', valor })}
+            ocultarEtiqueta
+            claseContenedor="w-[104px]"
+            claseSelect="w-full rounded-lg border border-slate-200 bg-slate-50 p-2 text-xs font-bold text-slate-700 outline-none focus:ring-2 focus:ring-pink-500"
           />
           <span className="text-slate-400 text-xs font-bold">a</span>
-          <input
-            type="time"
-            value={form.turnoFin}
-            onChange={(e) => dispatch({ tipo: 'TURNO_FIN', valor: e.target.value })}
-            className="bg-slate-50 border border-slate-200 rounded-lg p-2 text-xs font-bold text-slate-700 outline-none"
+          <SelectorHora
+            etiqueta="Fin turno"
+            valor={form.turnoFin}
+            alCambiar={(valor) => dispatch({ tipo: 'TURNO_FIN', valor })}
+            ocultarEtiqueta
+            claseContenedor="w-[104px]"
+            claseSelect="w-full rounded-lg border border-slate-200 bg-slate-50 p-2 text-xs font-bold text-slate-700 outline-none focus:ring-2 focus:ring-pink-500"
           />
         </div>
         <div className="flex items-center gap-3">
           <Coffee className="w-3 h-3 text-yellow-600 shrink-0" />
           <span className="text-[9px] font-black text-slate-600 uppercase">Comida:</span>
-          <input
-            type="time"
-            value={form.descansoInicio}
-            onChange={(e) => dispatch({ tipo: 'DESCANSO_INICIO', valor: e.target.value })}
-            className="bg-slate-50 border border-slate-200 rounded-lg p-2 text-xs font-bold text-slate-700 outline-none"
+          <SelectorHora
+            etiqueta="Inicio descanso"
+            valor={form.descansoInicio}
+            alCambiar={(valor) => dispatch({ tipo: 'DESCANSO_INICIO', valor })}
+            ocultarEtiqueta
+            claseContenedor="w-[104px]"
+            claseSelect="w-full rounded-lg border border-slate-200 bg-slate-50 p-2 text-xs font-bold text-slate-700 outline-none focus:ring-2 focus:ring-pink-500"
           />
           <span className="text-slate-400 text-xs font-bold">a</span>
-          <input
-            type="time"
-            value={form.descansoFin}
-            onChange={(e) => dispatch({ tipo: 'DESCANSO_FIN', valor: e.target.value })}
-            className="bg-slate-50 border border-slate-200 rounded-lg p-2 text-xs font-bold text-slate-700 outline-none"
+          <SelectorHora
+            etiqueta="Fin descanso"
+            valor={form.descansoFin}
+            alCambiar={(valor) => dispatch({ tipo: 'DESCANSO_FIN', valor })}
+            ocultarEtiqueta
+            claseContenedor="w-[104px]"
+            claseSelect="w-full rounded-lg border border-slate-200 bg-slate-50 p-2 text-xs font-bold text-slate-700 outline-none focus:ring-2 focus:ring-pink-500"
           />
         </div>
       </div>
       {serviciosDisponibles.length > 0 && (
         <div>
-          <p className="text-[10px] font-black text-slate-400 uppercase mb-2">¿Qué servicios realiza?</p>
+          <p className="text-[10px] font-black text-slate-400 uppercase mb-2">
+            ¿Qué servicios realiza?
+          </p>
           <div className="flex flex-wrap gap-2">
             {serviciosDisponibles.map((s) => (
               <button
@@ -152,9 +200,10 @@ export function SeccionPersonalFormulario({
       <button
         type="button"
         onClick={manejarAgregar}
+        aria-busy={isPending}
         className="w-full py-3 bg-pink-100 text-pink-700 font-black rounded-xl text-xs uppercase flex items-center justify-center gap-2 hover:bg-pink-200"
       >
-        <UserPlus className="w-4 h-4" /> Guardar Empleado
+        <UserPlus className="w-4 h-4" /> {isPending ? 'Guardando...' : 'Guardar Empleado'}
       </button>
     </div>
   );

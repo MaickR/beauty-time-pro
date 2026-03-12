@@ -1,6 +1,12 @@
 import type { FastifyInstance } from 'fastify';
+import { z } from 'zod';
 import { prisma } from '../prismaCliente.js';
 import { verificarJWT } from '../middleware/autenticacion.js';
+import { fechaIsoSchema, obtenerMensajeValidacion } from '../lib/validacion.js';
+
+const esquemaFestivos = z.object({
+  festivos: z.array(fechaIsoSchema).max(366, 'No puedes registrar más de 366 festivos'),
+});
 
 export async function rutasFestivos(servidor: FastifyInstance): Promise<void> {
   // GET /estudios/:id/festivos
@@ -32,10 +38,12 @@ export async function rutasFestivos(servidor: FastifyInstance): Promise<void> {
       if (payload.rol !== 'maestro' && payload.estudioId !== id) {
         return respuesta.code(403).send({ error: 'Sin permisos para esta acción' });
       }
-      const { festivos } = solicitud.body;
-      if (!Array.isArray(festivos)) {
-        return respuesta.code(400).send({ error: 'festivos debe ser un arreglo de fechas' });
+      const resultado = esquemaFestivos.safeParse(solicitud.body);
+      if (!resultado.success) {
+        return respuesta.code(400).send({ error: obtenerMensajeValidacion(resultado.error) });
       }
+
+      const { festivos } = resultado.data;
 
       // Transacción: borrar todos, reinsertar
       await prisma.$transaction([

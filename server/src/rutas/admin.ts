@@ -1,13 +1,39 @@
 import type { FastifyInstance } from 'fastify';
 import bcrypt from 'bcrypt';
 import crypto from 'crypto';
+import { z } from 'zod';
 import { prisma } from '../prismaCliente.js';
 import { verificarJWT } from '../middleware/autenticacion.js';
+import { requierePermiso } from '../middleware/verificarPermiso.js';
+import { resolverCategoriasSalon } from '../lib/categoriasSalon.js';
+import { enviarEmailBienvenidaSalon, enviarEmailRechazoSalon } from '../servicios/servicioEmail.js';
+import { registrarAuditoria } from '../utils/auditoria.js';
+import { emailSchema, obtenerMensajeValidacion, telefonoSchema, textoSchema } from '../lib/validacion.js';
+
+const esquemaRechazoSolicitud = z.object({
+  motivo: textoSchema('motivo', 500, 10),
+});
+
+const esquemaCrearSalonAdmin = z.object({
+  nombreSalon: textoSchema('nombreSalon', 120, 2),
+  nombreAdmin: textoSchema('nombreAdmin', 120, 2),
+  email: emailSchema,
+  contrasena: z.string().min(8, 'La contraseña debe tener al menos 8 caracteres'),
+  telefono: telefonoSchema,
+  pais: z.enum(['Mexico', 'Colombia']).optional().default('Mexico'),
+  personal: z.array(z.object({
+    nombre: textoSchema('nombre', 120, 2),
+    especialidades: z.array(z.string().trim()).default([]),
+    horaInicio: z.string().optional(),
+    horaFin: z.string().optional(),
+    descansoInicio: z.string().optional(),
+    descansoFin: z.string().optional(),
+  })).optional().default([]),
+});
 
 function generarContrasenaAleatoria(): string {
   const chars = 'abcdefghijkmnpqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXYZ23456789';
   let result = '';
-  // Garantizar al menos una mayúscula y un número
   result += 'ABCDEFGH'[Math.floor(Math.random() * 8)];
   result += '23456789'[Math.floor(Math.random() * 8)];
   for (let i = 0; i < 8; i++) {
@@ -16,11 +42,69 @@ function generarContrasenaAleatoria(): string {
   return result;
 }
 
+function diasDesde(fecha: Date): number {
+  return Math.floor((Date.now() - fecha.getTime()) / (1000 * 60 * 60 * 24));
+}
+
+function obtenerFechaISOActual(): string {
+  const hoy = new Date();
+  hoy.setHours(0, 0, 0, 0);
+  return hoy.toISOString().split('T')[0]!;
+}
+
+function crearFechaDesdeISO(fechaISO: string): Date {
+  const [anio, mes, dia] = fechaISO.split('-').map(Number);
+  return new Date(anio!, (mes! - 1), dia!);
+}
+
+function formatearFechaISO(fecha: Date): string {
+  return fecha.toISOString().split('T')[0]!;
+}
+
+function calcularNuevaFechaVencimiento(params: {
+  fechaVencimiento?: string | null;
+  inicioSuscripcion?: string | null;
+  meses: number;
+}): {
+  fechaBase: string;
+  nuevaFechaVencimiento: string;
+  estrategia: 'desde_vencimiento_actual' | 'desde_hoy';
+} {
+  const hoy = obtenerFechaISOActual();
+  const fechaReferencia = params.fechaVencimiento || params.inicioSuscripcion || hoy;
+  const fechaBase = fechaReferencia >= hoy ? fechaReferencia : hoy;
+  const fechaCalculada = crearFechaDesdeISO(fechaBase);
+  fechaCalculada.setMonth(fechaCalculada.getMonth() + params.meses);
+
+  return {
+    fechaBase,
+    nuevaFechaVencimiento: formatearFechaISO(fechaCalculada),
+    estrategia: fechaReferencia >= hoy ? 'desde_vencimiento_actual' : 'desde_hoy',
+  };
+}
+
+function clasificarEstadoSalon(params: {
+  estado: 'pendiente' | 'aprobado' | 'rechazado' | 'suspendido';
+  activo: boolean;
+  duenoActivo?: boolean;
+}): 'pendiente' | 'aprobado' | 'rechazado' | 'suspendido' {
+  if (params.estado === 'rechazado' || params.estado === 'pendiente') {
+    return params.estado;
+  }
+
+  if (params.estado === 'suspendido' || !params.activo || params.duenoActivo === false) {
+    return 'suspendido';
+  }
+
+  return 'aprobado';
+}
+
 export async function rutasAdmin(servidor: FastifyInstance): Promise<void> {
   /**
    * GET /admin/salones — lista todos los estudios con su usuario y último acceso
+   * Soporta ?estado=pendiente|aprobado|rechazado|suspendido
    */
-  servidor.get(
+  servidor.get<{ Querystring: { estado?: string } }>(
     '/admin/salones',
     { preHandler: verificarJWT },
     async (solicitud, respuesta) => {
@@ -28,6 +112,13 @@ export async function rutasAdmin(servidor: FastifyInstance): Promise<void> {
       if (payload.rol !== 'maestro') {
         return respuesta.code(403).send({ error: 'Sin permisos para esta acción' });
       }
+
+      const { estado } = solicitud.query;
+      const estadosValidos = ['pendiente', 'aprobado', 'rechazado', 'suspendido'];
+      const estadoSolicitado =
+        estado && estadosValidos.includes(estado)
+          ? (estado as 'pendiente' | 'aprobado' | 'rechazado' | 'suspendido')
+          : null;
 
       const estudios = await prisma.estudio.findMany({
         include: {
@@ -40,12 +131,309 @@ export async function rutasAdmin(servidor: FastifyInstance): Promise<void> {
         orderBy: { creadoEn: 'asc' },
       });
 
-      return respuesta.send({ datos: estudios });
+      const auditorias = await prisma.auditLog.findMany({
+        where: {
+          entidadTipo: 'estudio',
+          entidadId: { in: estudios.map((estudio) => estudio.id) },
+          accion: { in: ['aprobar_salon', 'renovar_suscripcion'] },
+        },
+        include: {
+          usuario: { select: { nombre: true, email: true } },
+        },
+        orderBy: { creadoEn: 'desc' },
+      });
+
+      const aprobacionesPorEstudio = new Map<string, (typeof auditorias)[number]>();
+      const renovacionesPorEstudio = new Map<string, (typeof auditorias)[number]>();
+
+      auditorias.forEach((auditoria) => {
+        if (auditoria.accion === 'aprobar_salon' && !aprobacionesPorEstudio.has(auditoria.entidadId)) {
+          aprobacionesPorEstudio.set(auditoria.entidadId, auditoria);
+        }
+
+        if (auditoria.accion === 'renovar_suscripcion' && !renovacionesPorEstudio.has(auditoria.entidadId)) {
+          renovacionesPorEstudio.set(auditoria.entidadId, auditoria);
+        }
+      });
+
+      const estudiosNormalizados = estudios
+        .map((estudio) => {
+          const dueno = estudio.usuarios[0];
+          const estadoNormalizado = clasificarEstadoSalon({
+            estado: estudio.estado,
+            activo: estudio.activo,
+            duenoActivo: dueno?.activo,
+          });
+          const aprobacion = aprobacionesPorEstudio.get(estudio.id);
+          const renovacion = renovacionesPorEstudio.get(estudio.id);
+
+          return {
+            ...estudio,
+            estado: estadoNormalizado,
+            aprobadoPorNombre: aprobacion?.usuario.nombre ?? null,
+            aprobadoPorEmail: aprobacion?.usuario.email ?? null,
+            renovadoPorNombre: renovacion?.usuario.nombre ?? null,
+            renovadoPorEmail: renovacion?.usuario.email ?? null,
+          };
+        })
+        .filter((estudio) => (estadoSolicitado ? estudio.estado === estadoSolicitado : true));
+
+      return respuesta.send({ datos: estudiosNormalizados });
     },
   );
 
   /**
-   * POST /admin/salones — crea estudio + usuario dueño en transacción
+   * GET /admin/solicitudes — estudios con estado pendiente ordenados por fechaSolicitud
+   */
+  servidor.get(
+    '/admin/solicitudes',
+    { preHandler: verificarJWT },
+    async (solicitud, respuesta) => {
+      const payload = solicitud.user as { rol: string };
+      if (payload.rol !== 'maestro') {
+        return respuesta.code(403).send({ error: 'Sin permisos para esta acción' });
+      }
+
+      const solicitudes = await prisma.estudio.findMany({
+        where: { estado: 'pendiente' },
+        include: {
+          usuarios: {
+            where: { rol: 'dueno' },
+            select: { id: true, email: true, nombre: true },
+            take: 1,
+          },
+        },
+        orderBy: { fechaSolicitud: 'asc' },
+      });
+
+      const datos = solicitudes.map((s) => ({
+        ...s,
+        diasDesdeRegistro: diasDesde(s.fechaSolicitud),
+        dueno: s.usuarios[0] ?? null,
+      }));
+
+      return respuesta.send({ datos });
+    },
+  );
+
+  /**
+   * GET /admin/solicitudes/:id — detalle completo de una solicitud
+   */
+  servidor.get<{ Params: { id: string } }>(
+    '/admin/solicitudes/:id',
+    { preHandler: verificarJWT },
+    async (solicitud, respuesta) => {
+      const payload = solicitud.user as { rol: string };
+      if (payload.rol !== 'maestro') {
+        return respuesta.code(403).send({ error: 'Sin permisos para esta acción' });
+      }
+
+      const { id } = solicitud.params;
+      const estudio = await prisma.estudio.findUnique({
+        where: { id },
+        include: {
+          usuarios: {
+            where: { rol: 'dueno' },
+            select: { id: true, email: true, nombre: true, activo: true },
+            take: 1,
+          },
+        },
+      });
+
+      if (!estudio) {
+        return respuesta.code(404).send({ error: 'Solicitud no encontrada' });
+      }
+
+      const categoriasFormateadas = estudio.categorias
+        ? estudio.categorias.split(',').map((c) => c.trim()).filter(Boolean)
+        : [];
+
+      return respuesta.send({
+        datos: {
+          ...estudio,
+          categoriasFormateadas,
+          dueno: estudio.usuarios[0] ?? null,
+          diasDesdeRegistro: diasDesde(estudio.fechaSolicitud),
+        },
+      });
+    },
+  );
+
+  /**
+   * POST /admin/solicitudes/:id/aprobar — aprueba un salón
+   */
+  servidor.post<{ Params: { id: string }; Body?: { fechaVencimiento?: string } }>(
+    '/admin/solicitudes/:id/aprobar',
+    { preHandler: [verificarJWT, requierePermiso('aprobarSalones')] },
+    async (solicitud, respuesta) => {
+      const payload = solicitud.user as { rol: string; sub: string };
+      if (payload.rol !== 'maestro') {
+        return respuesta.code(403).send({ error: 'Sin permisos para esta acción' });
+      }
+
+      const { id } = solicitud.params;
+      const fechaVencimiento = solicitud.body?.fechaVencimiento ?? (() => {
+        const porDefecto = new Date();
+        porDefecto.setDate(porDefecto.getDate() + 30);
+        return porDefecto.toISOString().split('T')[0]!;
+      })();
+
+      const estudio = await prisma.estudio.findUnique({
+        where: { id },
+        include: { usuarios: { where: { rol: 'dueno' }, take: 1 } },
+      });
+
+      if (!estudio) {
+        return respuesta.code(404).send({ error: 'Salón no encontrado' });
+      }
+
+      let usuario = estudio.usuarios[0] ?? null;
+      if (!usuario && estudio.emailContacto) {
+        usuario = await prisma.usuario.findFirst({
+          where: { rol: 'dueno', email: estudio.emailContacto },
+        });
+      }
+
+      if (!usuario) {
+        return respuesta.code(400).send({ error: 'El salón no tiene usuario dueño' });
+      }
+
+      const [estudioActualizado] = await prisma.$transaction([
+        prisma.estudio.update({
+          where: { id },
+          data: {
+            estado: 'aprobado',
+            activo: true,
+            fechaAprobacion: new Date(),
+            fechaVencimiento,
+            categorias: resolverCategoriasSalon({
+              categorias: estudio.categorias,
+              servicios: estudio.servicios,
+              serviciosCustom: estudio.serviciosCustom,
+            }),
+          },
+        }),
+        prisma.usuario.update({
+          where: { id: usuario.id },
+          data: { activo: true, estudioId: id },
+        }),
+      ]);
+
+      console.log('[Admin] Salón aprobado:', estudio.nombre);
+
+      await registrarAuditoria({
+        usuarioId: payload.sub,
+        accion: 'aprobar_salon',
+        entidadTipo: 'estudio',
+        entidadId: id,
+        detalles: { nombre: estudio.nombre, fechaVencimiento },
+        ip: solicitud.ip,
+      });
+
+      void enviarEmailBienvenidaSalon({
+        emailDestino: usuario.email,
+        nombreDueno: usuario.nombre || estudio.propietario,
+        nombreSalon: estudio.nombre,
+        fechaVencimiento,
+      });
+
+      return respuesta.send({
+        datos: {
+          ...estudioActualizado,
+          mensaje: 'Salón aprobado correctamente',
+        },
+      });
+    },
+  );
+
+  /**
+   * POST /admin/solicitudes/:id/rechazar — rechaza un salón con motivo
+   */
+  servidor.post<{ Params: { id: string }; Body: { motivo: string } }>(
+    '/admin/solicitudes/:id/rechazar',
+    { preHandler: [verificarJWT, requierePermiso('aprobarSalones')] },
+    async (solicitud, respuesta) => {
+      const payload = solicitud.user as { rol: string; sub: string };
+      if (payload.rol !== 'maestro') {
+        return respuesta.code(403).send({ error: 'Sin permisos para esta acción' });
+      }
+
+      const { id } = solicitud.params;
+      const resultado = esquemaRechazoSolicitud.safeParse(solicitud.body);
+      if (!resultado.success) {
+        return respuesta.code(400).send({ error: obtenerMensajeValidacion(resultado.error) });
+      }
+
+      const { motivo } = resultado.data;
+
+      const estudio = await prisma.estudio.findUnique({
+        where: { id },
+        include: { usuarios: { where: { rol: 'dueno' }, take: 1 } },
+      });
+
+      if (!estudio) {
+        return respuesta.code(404).send({ error: 'Salón no encontrado' });
+      }
+
+      await prisma.estudio.update({
+        where: { id },
+        data: { estado: 'rechazado', motivoRechazo: motivo.trim() },
+      });
+
+      console.log('[Admin] Salón rechazado:', estudio.nombre);
+
+      await registrarAuditoria({
+        usuarioId: payload.sub,
+        accion: 'rechazar_salon',
+        entidadTipo: 'estudio',
+        entidadId: id,
+        detalles: { nombre: estudio.nombre, motivo: motivo.trim() },
+        ip: solicitud.ip,
+      });
+
+      const dueno = estudio.usuarios[0] ?? null;
+      if (dueno?.email) {
+        void enviarEmailRechazoSalon({
+          emailDestino: dueno.email,
+          nombreDueno: dueno.nombre || estudio.propietario,
+          nombreSalon: estudio.nombre,
+          motivo: motivo.trim(),
+        });
+      }
+
+      return respuesta.send({ datos: { mensaje: 'Solicitud rechazada' } });
+    },
+  );
+
+  /**
+   * POST /admin/solicitudes/:id/reactivar — vuelve un salón rechazado a pendiente
+   */
+  servidor.post<{ Params: { id: string } }>(
+    '/admin/solicitudes/:id/reactivar',
+    { preHandler: [verificarJWT, requierePermiso('aprobarSalones')] },
+    async (solicitud, respuesta) => {
+      const payload = solicitud.user as { rol: string };
+      if (payload.rol !== 'maestro') {
+        return respuesta.code(403).send({ error: 'Sin permisos para esta acción' });
+      }
+
+      const { id } = solicitud.params;
+      const estudio = await prisma.estudio.findUnique({ where: { id } });
+      if (!estudio) {
+        return respuesta.code(404).send({ error: 'Salón no encontrado' });
+      }
+
+      await prisma.estudio.update({
+        where: { id },
+        data: { estado: 'pendiente', motivoRechazo: null, fechaSolicitud: new Date() },
+      });
+
+      return respuesta.send({ datos: { mensaje: 'Solicitud reactivada' } });
+    },
+  );
+
+  /**
+   * POST /admin/salones — crea estudio + usuario dueño + personal inicial en transacción
    */
   servidor.post<{
     Body: {
@@ -55,6 +443,14 @@ export async function rutasAdmin(servidor: FastifyInstance): Promise<void> {
       contrasena: string;
       telefono?: string;
       pais?: string;
+      personal?: Array<{
+        nombre: string;
+        especialidades: string[];
+        horaInicio?: string;
+        horaFin?: string;
+        descansoInicio?: string;
+        descansoFin?: string;
+      }>;
     };
   }>(
     '/admin/salones',
@@ -65,14 +461,20 @@ export async function rutasAdmin(servidor: FastifyInstance): Promise<void> {
         return respuesta.code(403).send({ error: 'Sin permisos para esta acción' });
       }
 
-      const { nombreSalon, nombreAdmin, email, contrasena, telefono = '', pais = 'Mexico' } =
-        solicitud.body;
-
-      if (!nombreSalon || !nombreAdmin || !email || !contrasena) {
-        return respuesta.code(400).send({
-          error: 'Campos requeridos: nombreSalon, nombreAdmin, email, contrasena',
-        });
+      const resultado = esquemaCrearSalonAdmin.safeParse(solicitud.body);
+      if (!resultado.success) {
+        return respuesta.code(400).send({ error: obtenerMensajeValidacion(resultado.error) });
       }
+
+      const {
+        nombreSalon,
+        nombreAdmin,
+        email,
+        contrasena,
+        telefono,
+        pais,
+        personal,
+      } = resultado.data;
 
       const emailNorm = email.trim().toLowerCase();
       const existente = await prisma.usuario.findUnique({ where: { email: emailNorm } });
@@ -128,6 +530,20 @@ export async function rutasAdmin(servidor: FastifyInstance): Promise<void> {
           },
         });
 
+        if (personal.length > 0) {
+          await tx.personal.createMany({
+            data: personal.map((p) => ({
+              estudioId: nuevoEstudio.id,
+              nombre: p.nombre,
+              especialidades: p.especialidades,
+              horaInicio: p.horaInicio ?? null,
+              horaFin: p.horaFin ?? null,
+              descansoInicio: p.descansoInicio ?? null,
+              descansoFin: p.descansoFin ?? null,
+            })),
+          });
+        }
+
         return [nuevoEstudio, nuevoUsuario];
       });
 
@@ -140,30 +556,59 @@ export async function rutasAdmin(servidor: FastifyInstance): Promise<void> {
    */
   servidor.put<{ Params: { id: string } }>(
     '/admin/salones/:id/suspender',
-    { preHandler: verificarJWT },
+    { preHandler: [verificarJWT, requierePermiso('suspenderSalones')] },
     async (solicitud, respuesta) => {
-      const payload = solicitud.user as { rol: string };
+      const payload = solicitud.user as { rol: string; sub: string };
       if (payload.rol !== 'maestro') {
         return respuesta.code(403).send({ error: 'Sin permisos para esta acción' });
       }
 
       const { id } = solicitud.params;
 
-      const usuario = await prisma.usuario.findFirst({
-        where: { estudioId: id, rol: 'dueno' },
+      const estudio = await prisma.estudio.findUnique({
+        where: { id },
+        include: { usuarios: { where: { rol: 'dueno' }, take: 1 } },
       });
 
-      if (!usuario) {
-        return respuesta.code(404).send({ error: 'Usuario dueño no encontrado para este salón' });
+      if (!estudio) {
+        return respuesta.code(404).send({ error: 'Salón no encontrado' });
       }
 
-      const actualizado = await prisma.usuario.update({
-        where: { id: usuario.id },
-        data: { activo: !usuario.activo },
+      let usuario = estudio.usuarios[0] ?? null;
+      if (!usuario && estudio.emailContacto) {
+        usuario = await prisma.usuario.findFirst({
+          where: { rol: 'dueno', email: estudio.emailContacto },
+        });
+      }
+
+      const estaActivo = usuario?.activo ?? estudio.activo;
+      const nuevoActivo = !estaActivo;
+      const nuevoEstado = nuevoActivo ? 'aprobado' : 'suspendido';
+
+      await prisma.$transaction(async (tx) => {
+        await tx.estudio.update({
+          where: { id },
+          data: { activo: nuevoActivo, estado: nuevoEstado },
+        });
+
+        if (usuario) {
+          await tx.usuario.update({
+            where: { id: usuario.id },
+            data: { activo: nuevoActivo, estudioId: id },
+          });
+        }
+      });
+
+      await registrarAuditoria({
+        usuarioId: payload.sub,
+        accion: nuevoActivo ? 'activar_salon' : 'suspender_salon',
+        entidadTipo: 'estudio',
+        entidadId: id,
+        ip: solicitud.ip,
       });
 
       return respuesta.send({
-        datos: { activo: actualizado.activo, mensaje: actualizado.activo ? 'Cuenta activada' : 'Cuenta suspendida' },
+        datos: { activo: nuevoActivo, mensaje: nuevoActivo ? 'Cuenta activada' : 'Cuenta suspendida' },
       });
     },
   );
@@ -201,6 +646,133 @@ export async function rutasAdmin(servidor: FastifyInstance): Promise<void> {
       // Se devuelve la contraseña en texto plano UNA sola vez — el frontend la muestra y no la almacena
       return respuesta.send({
         datos: { contrasenaTemporal, email: usuario.email },
+      });
+    },
+  );
+
+  servidor.put<{
+    Params: { id: string };
+    Body: { fechaVencimiento?: string; meses?: number };
+  }>(
+    '/admin/salones/:id',
+    { preHandler: [verificarJWT, requierePermiso('gestionarPagos')] },
+    async (solicitud, respuesta) => {
+      const payload = solicitud.user as { rol: string; sub: string };
+      if (payload.rol !== 'maestro') {
+        return respuesta.code(403).send({ error: 'Sin permisos para esta acción' });
+      }
+
+      const { id } = solicitud.params;
+      const { fechaVencimiento, meses } = solicitud.body;
+
+      if (!fechaVencimiento && !meses) {
+        return respuesta.code(400).send({ error: 'fechaVencimiento o meses es requerido' });
+      }
+
+      const estudio = await prisma.estudio.findUnique({ where: { id } });
+      if (!estudio) {
+        return respuesta.code(404).send({ error: 'Salón no encontrado' });
+      }
+
+      const renovacion = meses && meses > 0
+        ? calcularNuevaFechaVencimiento({
+            fechaVencimiento: estudio.fechaVencimiento,
+            inicioSuscripcion: estudio.inicioSuscripcion,
+            meses,
+          })
+        : null;
+
+      const fechaFinal = renovacion?.nuevaFechaVencimiento ?? fechaVencimiento!;
+
+      const actualizado = await prisma.estudio.update({
+        where: { id },
+        data: { fechaVencimiento: fechaFinal },
+      });
+
+      await registrarAuditoria({
+        usuarioId: payload.sub,
+        accion: 'renovar_suscripcion',
+        entidadTipo: 'estudio',
+        entidadId: id,
+        detalles: {
+          nombre: estudio.nombre,
+          fechaBase: renovacion?.fechaBase ?? estudio.fechaVencimiento,
+          fechaVencimientoAnterior: estudio.fechaVencimiento,
+          fechaVencimientoNueva: fechaFinal,
+          estrategia: renovacion?.estrategia ?? 'manual',
+          meses: meses ?? null,
+        },
+        ip: solicitud.ip,
+      });
+
+      return respuesta.send({
+        datos: {
+          fechaVencimiento: actualizado.fechaVencimiento,
+          fechaBaseRenovacion: renovacion?.fechaBase ?? estudio.fechaVencimiento,
+          estrategiaRenovacion: renovacion?.estrategia ?? 'manual',
+          mensaje: renovacion
+            ? 'Suscripción extendida correctamente'
+            : 'Suscripción renovada correctamente',
+        },
+      });
+    },
+  );
+
+  /**
+   * GET /admin/metricas — estadísticas globales de la plataforma
+   */
+  servidor.get(
+    '/admin/metricas',
+    { preHandler: [verificarJWT, requierePermiso('verMetricas')] },
+    async (solicitud, respuesta) => {
+      const payload = solicitud.user as { rol: string };
+      if (payload.rol !== 'maestro') {
+        return respuesta.code(403).send({ error: 'Sin permisos para esta acción' });
+      }
+
+      const hace30Dias = new Date();
+      hace30Dias.setDate(hace30Dias.getDate() - 30);
+      const hace30DiasStr = hace30Dias.toISOString().split('T')[0]!;
+
+      const hoy = new Date().toISOString().split('T')[0]!;
+
+      const [
+        totalSalones,
+        salonesActivos,
+        salonesPendientes,
+        salonesVencidos,
+        totalAdmins,
+        totalAuditLogs,
+        reservasUltimos30Dias,
+        salonesNuevosUltimos30Dias,
+      ] = await Promise.all([
+        prisma.estudio.count(),
+        prisma.estudio.count({ where: { estado: 'aprobado' } }),
+        prisma.estudio.count({ where: { estado: 'pendiente' } }),
+        prisma.estudio.count({
+          where: { estado: 'aprobado', fechaVencimiento: { lt: hoy } },
+        }),
+        prisma.usuario.count({ where: { rol: 'maestro', activo: true } }),
+        prisma.auditLog.count(),
+        prisma.reserva.count({
+          where: { fecha: { gte: hace30DiasStr } },
+        }),
+        prisma.estudio.count({
+          where: { creadoEn: { gte: hace30Dias } },
+        }),
+      ]);
+
+      return respuesta.send({
+        datos: {
+          totalSalones,
+          salonesActivos,
+          salonesPendientes,
+          salonesVencidos,
+          totalAdmins,
+          totalAuditLogs,
+          reservasUltimos30Dias,
+          salonesNuevosUltimos30Dias,
+        },
       });
     },
   );

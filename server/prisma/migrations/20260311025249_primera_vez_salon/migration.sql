@@ -1,0 +1,2 @@
+-- AlterTable
+ALTER TABLE `estudios` ADD COLUMN `primeraVez` BOOLEAN NOT NULL DEFAULT true;

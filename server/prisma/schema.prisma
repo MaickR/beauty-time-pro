@@ -2,13 +2,19 @@
 // learn more about it in the docs: https://pris.ly/d/prisma-schema
 
 generator client {
-  provider = "prisma-client-js"
+  provider = "prisma-client"
   output   = "../src/generated/prisma"
 }
 
 datasource db {
   provider = "mysql"
-  url      = env("DATABASE_URL")
+}
+
+enum EstadoSalon {
+  pendiente
+  aprobado
+  rechazado
+  suspendido
 }
 
 // ─────────────────────────────────────────
@@ -26,6 +32,10 @@ model Estudio {
   claveDueno        String       @unique
   claveCliente      String       @unique
   activo            Boolean      @default(true)
+  estado            EstadoSalon  @default(pendiente)
+  motivoRechazo     String?
+  fechaSolicitud    DateTime     @default(now())
+  fechaAprobacion   DateTime?
   suscripcion       String       @default("mensual")
   inicioSuscripcion String       // "YYYY-MM-DD"
   fechaVencimiento  String       // "YYYY-MM-DD"
@@ -38,6 +48,12 @@ model Estudio {
   descripcion       String?
   direccion         String?
   emailContacto     String?
+  horarioApertura   String?      @default("09:00")
+  horarioCierre     String?      @default("18:00")
+  diasAtencion      String?      @default("lunes,martes,miercoles,jueves,viernes")
+  numeroEspecialistas Int?       @default(1)
+  categorias        String?
+  primeraVez        Boolean      @default(true)
   creadoEn          DateTime     @default(now())
   actualizadoEn     DateTime     @updatedAt
 
@@ -51,6 +67,41 @@ model Estudio {
   puntosFidelidad   PuntosFidelidad[]
 
   @@map("estudios")
+}
+
+model ClienteApp {
+  id                String      @id @default(uuid())
+  email             String      @unique
+  hashContrasena    String
+  nombre            String
+  apellido          String
+  fechaNacimiento   DateTime
+  telefono          String?
+  avatarUrl         String?
+  emailVerificado   Boolean     @default(false)
+  activo            Boolean     @default(true)
+  ultimoAcceso      DateTime?
+  creadoEn          DateTime    @default(now())
+  actualizadoEn     DateTime    @updatedAt
+
+  tokens            TokenVerificacionApp[]
+  reservas          Reserva[]
+
+  @@map("clientes_app")
+}
+
+model TokenVerificacionApp {
+  id          String      @id @default(uuid())
+  token       String      @unique @default(uuid())
+  tipo        String      // "verificacion_email" | "reset_contrasena"
+  usuarioId   String?
+  clienteId   String?
+  clienteApp  ClienteApp? @relation(fields: [clienteId], references: [id])
+  expiraEn    DateTime
+  usado       Boolean     @default(false)
+  creadoEn    DateTime    @default(now())
+
+  @@map("tokens_verificacion_app")
 }
 
 model Personal {
@@ -142,13 +193,15 @@ model Reserva {
   marcaTinte      String?
   tonalidad       String?
   notasMenorEdad  String?
+  clienteAppId    String?
   recordatorioEnviado Boolean @default(false)
   tokenCancelacion String @unique @default(uuid())
   creadoEn        DateTime @default(now())
 
-  estudio         Estudio  @relation(fields: [estudioId], references: [id], onDelete: Cascade)
-  empleado        Personal @relation(fields: [personalId], references: [id])
-  cliente         Cliente  @relation(fields: [clienteId], references: [id])
+  estudio         Estudio     @relation(fields: [estudioId], references: [id], onDelete: Cascade)
+  empleado        Personal    @relation(fields: [personalId], references: [id])
+  cliente         Cliente     @relation(fields: [clienteId], references: [id])
+  clienteApp      ClienteApp? @relation(fields: [clienteAppId], references: [id])
 
   @@map("reservas")
 }
@@ -189,6 +242,7 @@ model Usuario {
   nombre          String        @default("")
   rol             String        // "maestro" | "dueno"
   activo          Boolean       @default(true)
+  emailVerificado Boolean       @default(false)
   estudioId       String?
   estudio         Estudio?      @relation(fields: [estudioId], references: [id])
   ultimoAcceso    DateTime?
@@ -196,6 +250,8 @@ model Usuario {
   actualizadoEn   DateTime      @updatedAt
 
   tokensReset     TokenReset[]
+  permisos        PermisosMaestro?
+  auditLogs       AuditLog[]
 
   @@map("usuarios")
 }
@@ -211,5 +267,36 @@ model TokenReset {
   usuario   Usuario  @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
 
   @@map("tokens_reset")
+}
+
+model PermisosMaestro {
+  id               String   @id @default(uuid())
+  usuarioId        String   @unique
+  usuario          Usuario  @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
+  aprobarSalones   Boolean  @default(false)
+  gestionarPagos   Boolean  @default(false)
+  crearAdmins      Boolean  @default(false)
+  verAuditLog      Boolean  @default(false)
+  verMetricas      Boolean  @default(false)
+  suspenderSalones Boolean  @default(false)
+  esMaestroTotal   Boolean  @default(false)
+  creadoEn         DateTime @default(now())
+  actualizadoEn    DateTime @updatedAt
+
+  @@map("permisos_maestro")
+}
+
+model AuditLog {
+  id          String   @id @default(uuid())
+  usuarioId   String
+  usuario     Usuario  @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
+  accion      String
+  entidadTipo String
+  entidadId   String
+  detalles    Json?
+  ip          String?
+  creadoEn    DateTime @default(now())
+
+  @@map("audit_log")
 }
 
