@@ -3,12 +3,10 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import { z } from 'zod';
 import { prisma } from '../prismaCliente.js';
-import clientePrisma from '../generated/prisma/client.js';
+import { Prisma } from '../generated/prisma/client.js';
 import { verificarJWT } from '../middleware/autenticacion.js';
 import { horaOpcionalONulaSchema, obtenerMensajeValidacion, textoSchema } from '../lib/validacion.js';
 import { detectarTipoImagen } from '../utils/validarImagen.js';
-
-const { Prisma } = clientePrisma;
 
 const esquemaPersonalBase = {
   nombre: textoSchema('nombre', 80),

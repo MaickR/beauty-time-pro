@@ -1,9 +1,11 @@
-import type clientePrisma from '../generated/prisma/client.js';
+import type { Prisma, PrismaClient } from '../generated/prisma/client.js';
 import { prisma } from '../prismaCliente.js';
 
-type ClientePrismaTransaccional = clientePrisma.Prisma.TransactionClient;
+type ClientePrismaTransaccional = Prisma.TransactionClient;
 
-function obtenerClientePrisma(tx?: ClientePrismaTransaccional) {
+type ClientePrismaDisponible = PrismaClient | ClientePrismaTransaccional;
+
+function obtenerClientePrisma(tx?: ClientePrismaTransaccional): ClientePrismaDisponible {
   return tx ?? prisma;
 }
 

@@ -1,5 +1,5 @@
 import type { FastifyInstance } from 'fastify';
-import type { Prisma } from '../generated/prisma/index.js';
+import type { Prisma } from '../generated/prisma/client.js';
 import { z } from 'zod';
 import { resolverCategoriasSalon } from '../lib/categoriasSalon.js';
 import { env } from '../lib/env.js';

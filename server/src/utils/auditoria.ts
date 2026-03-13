@@ -1,5 +1,5 @@
 import { prisma } from '../prismaCliente.js';
-import type { Prisma } from '../generated/prisma/index.js';
+import type { Prisma } from '../generated/prisma/client.js';
 
 interface RegistrarAuditoriaParams {
   usuarioId: string;
