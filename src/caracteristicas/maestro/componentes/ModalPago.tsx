@@ -36,7 +36,7 @@ export function ModalPago({ estudio, onConfirmar, onCerrar }: PropsModalPago) {
           Abonar Pago
         </h2>
         <p className="text-slate-500 font-bold mb-8">
-          Studio: <span className="text-pink-600 uppercase">{estudio.name}</span>
+          Salón: <span className="text-pink-600 uppercase">{estudio.name}</span>
         </p>
         <div className="rounded-4xl border border-slate-200 bg-slate-50 p-5 text-left mb-6">
           <p className="text-[10px] uppercase font-black text-slate-400 tracking-widest">
@@ -69,7 +69,8 @@ export function ModalPago({ estudio, onConfirmar, onCerrar }: PropsModalPago) {
           Registrar {formatearDinero(monto, moneda)} y sumar 1 mes
         </button>
         <p className="text-xs text-slate-500 mb-8">
-          Vigencia actual: {formatearFechaHumana(estudio.paidUntil)}
+          Vigencia actual:{' '}
+          {estudio.paidUntil ? formatearFechaHumana(estudio.paidUntil) : 'Sin vigencia registrada'}
         </p>
         <button
           onClick={onCerrar}

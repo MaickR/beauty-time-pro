@@ -8,6 +8,7 @@ import {
   obtenerMisReservas,
   obtenerReservasProximas,
   actualizarMiPerfil,
+  actualizarMiEmail,
   subirAvatar,
   cambiarContrasena,
 } from '../../../servicios/servicioClienteApp';
@@ -185,6 +186,21 @@ export function usarPerfilCliente() {
     },
   });
 
+  const mutarEmail = useMutation({
+    mutationFn: (email: string) => actualizarMiEmail(email),
+    onSuccess: async (resultado) => {
+      queryClient.setQueryData(['mi-perfil'], (prev: PerfilClienteApp | undefined) =>
+        prev ? { ...prev, emailPendiente: resultado.emailPendiente } : prev,
+      );
+      mostrarNotificacion({ mensaje: resultado.mensaje, variante: 'info' });
+      await queryClient.invalidateQueries({ queryKey: ['mi-perfil'] });
+    },
+    onError: (err: unknown) => {
+      const msg = err instanceof Error ? err.message : 'No se pudo actualizar el correo';
+      mostrarNotificacion({ mensaje: msg, variante: 'error' });
+    },
+  });
+
   async function guardarPerfil(datos: DatosPerfil) {
     await mutarPerfil.mutateAsync(datos);
   }
@@ -226,6 +242,7 @@ export function usarPerfilCliente() {
     formPerfil,
     formContrasena,
     mutarPerfil,
+    mutarEmail,
     mutarContrasena,
     cambiarAvatar,
     guardarPerfil,

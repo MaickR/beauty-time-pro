@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { prisma } from '../prismaCliente.js';
 import { verificarJWT } from '../middleware/autenticacion.js';
 import { emailSchema, obtenerMensajeValidacion, textoSchema } from '../lib/validacion.js';
+import { sanitizarTexto } from '../utils/sanitizar.js';
 
 const esquemaBusquedaClientes = z.object({
   buscar: textoSchema('buscar', 80).optional(),
@@ -20,15 +21,27 @@ export async function rutasClientes(servidor: FastifyInstance): Promise<void> {
   // GET /estudios/:id/clientes — lista clientes del estudio
   servidor.get<{
     Params: { id: string };
-    Querystring: { buscar?: string };
+    Querystring: { buscar?: string; pagina?: string; limite?: string };
   }>(
     '/estudios/:id/clientes',
     { preHandler: verificarJWT },
     async (solicitud, respuesta) => {
-      const payload = solicitud.user as { rol: string; estudioId: string | null };
+      const payload = solicitud.user as { sub: string; rol: string; estudioId: string | null };
       const { id } = solicitud.params;
       if (payload.rol !== 'maestro' && payload.estudioId !== id) {
         return respuesta.code(403).send({ error: 'Sin permisos para esta acción' });
+      }
+      if (payload.rol === 'dueno') {
+        const estudio = await prisma.estudio.findFirst({
+          where: {
+            id,
+            usuarios: { some: { id: payload.sub, rol: 'dueno' } },
+          },
+          select: { id: true },
+        });
+        if (!estudio) {
+          return respuesta.code(403).send({ error: 'Sin acceso a este recurso' });
+        }
       }
 
       const consulta = esquemaBusquedaClientes.safeParse(solicitud.query);
@@ -37,6 +50,11 @@ export async function rutasClientes(servidor: FastifyInstance): Promise<void> {
       }
 
       const { buscar } = consulta.data;
+      const { pagina: paginaStr, limite: limiteStr } = solicitud.query;
+      const pagina = Math.max(1, parseInt(paginaStr ?? '1', 10));
+      const limite = Math.min(200, Math.max(1, parseInt(limiteStr ?? '100', 10)));
+      const saltar = (pagina - 1) * limite;
+
       const where: Record<string, unknown> = { estudioId: id, activo: true };
       if (buscar) {
         where['OR'] = [
@@ -45,16 +63,21 @@ export async function rutasClientes(servidor: FastifyInstance): Promise<void> {
         ];
       }
 
-      const clientes = await prisma.cliente.findMany({
-        where,
-        orderBy: { nombre: 'asc' },
-        include: {
-          reservas: {
-            select: { fecha: true, estado: true },
-            orderBy: { fecha: 'desc' },
+      const [total, clientes] = await Promise.all([
+        prisma.cliente.count({ where }),
+        prisma.cliente.findMany({
+          where,
+          orderBy: { nombre: 'asc' },
+          skip: saltar,
+          take: limite,
+          include: {
+            reservas: {
+              select: { fecha: true, estado: true },
+              orderBy: { fecha: 'desc' },
+            },
           },
-        },
-      });
+        }),
+      ]);
 
       const resultado = clientes.map((c) => {
         const total = c.reservas.length;
@@ -79,7 +102,7 @@ export async function rutasClientes(servidor: FastifyInstance): Promise<void> {
         };
       });
 
-      return respuesta.send({ datos: resultado });
+      return respuesta.send({ datos: resultado, total, pagina, totalPaginas: Math.ceil(total / limite) });
     },
   );
 
@@ -147,7 +170,7 @@ export async function rutasClientes(servidor: FastifyInstance): Promise<void> {
         data: {
           ...(nombre !== undefined && { nombre }),
           ...(email !== undefined && { email }),
-          ...(notas !== undefined && { notas }),
+          ...(notas !== undefined && { notas: notas !== null ? sanitizarTexto(notas) : null }),
         },
       });
 

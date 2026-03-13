@@ -1,12 +1,14 @@
 import { useEffect, useRef, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
-import { Camera, Lock, Star, Calendar, ChevronRight, Loader2 } from 'lucide-react';
+import { Camera, Lock, Star, Calendar, ChevronRight, Loader2, Mail, Palette } from 'lucide-react';
 import { NavegacionCliente } from '../../componentes/diseno/NavegacionCliente';
 import { DialogoConfirmacion } from '../../componentes/ui/DialogoConfirmacion';
 import { Spinner } from '../../componentes/ui/Spinner';
 import { SelectorFecha } from '../../componentes/ui/SelectorFecha';
+import { usarTemaSalon } from '../../hooks/usarTemaSalon';
+import { usarNotificacionesPush } from '../../hooks/usarNotificacionesPush';
 import { usarPerfilCliente } from './hooks/usarPerfilCliente';
-import type { ReservaCliente, FidelidadSalon } from '../../tipos';
+import type { Pais, ReservaCliente, FidelidadSalon } from '../../tipos';
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 function inicialesDesdeNombre(n: string, a: string) {
@@ -15,9 +17,9 @@ function inicialesDesdeNombre(n: string, a: string) {
 
 function badgeEstado(estado: string) {
   const clases: Record<string, string> = {
-    pending: 'bg-yellow-50 text-yellow-700 border-yellow-200',
-    confirmed: 'bg-blue-50 text-blue-700 border-blue-200',
-    completed: 'bg-green-50 text-green-700 border-green-200',
+    pending: 'bg-amber-50 text-amber-700 border-amber-200',
+    confirmed: 'bg-emerald-50 text-emerald-700 border-emerald-200',
+    completed: 'bg-slate-100 text-slate-700 border-slate-200',
     cancelled: 'bg-red-50 text-red-700 border-red-200',
   };
   const etiquetas: Record<string, string> = {
@@ -32,46 +34,91 @@ function badgeEstado(estado: string) {
   };
 }
 
+const COLORES_CLIENTE = [
+  '#F48FB1',
+  '#CE93D8',
+  '#80DEEA',
+  '#A5D6A7',
+  '#FFF176',
+  '#FFCC80',
+  '#EF9A9A',
+  '#90CAF9',
+  '#B2DFDB',
+  '#E1BEE7',
+];
+
+function formatearPais(pais: Pais): string {
+  return pais === 'Mexico' ? 'México' : 'Colombia';
+}
+
+function formatearFechaReservaNatural(fecha: string, horaInicio: string): string {
+  const fechaHora = new Date(`${fecha}T${horaInicio}:00`);
+  return new Intl.DateTimeFormat('es-MX', {
+    weekday: 'long',
+    day: 'numeric',
+    month: 'long',
+    hour: 'numeric',
+    minute: '2-digit',
+    hour12: true,
+  })
+    .format(fechaHora)
+    .replace(',', ' ·')
+    .replace(/^./, (texto) => texto.toUpperCase());
+}
+
+function puedeCancelarReserva(reserva: ReservaCliente): boolean {
+  if (!['pending', 'confirmed'].includes(reserva.estado)) {
+    return false;
+  }
+
+  const fechaHora = new Date(`${reserva.fecha}T${reserva.horaInicio}:00`).getTime();
+  return fechaHora - Date.now() > 2 * 60 * 60 * 1000;
+}
+
 // ── Sección Avatar ───────────────────────────────────────────────────────────
 function SeccionAvatar({
   avatarUrl,
   nombre,
   apellido,
   email,
+  pais,
   onCambiar,
 }: {
   avatarUrl: string | null;
   nombre: string;
   apellido: string;
   email: string;
+  pais: Pais;
   onCambiar: (f: File) => void;
 }) {
   const refInput = useRef<HTMLInputElement>(null);
   const inics = inicialesDesdeNombre(nombre, apellido).toUpperCase();
 
   return (
-    <div className="bg-white rounded-3xl p-6 border border-slate-100 shadow-sm flex items-center gap-5">
+    <div className="bg-white rounded-3xl p-8 border border-slate-100 shadow-sm flex flex-col items-center text-center gap-4">
       <div className="relative shrink-0">
         {avatarUrl ? (
           <img
             src={avatarUrl}
             alt="Foto de perfil"
-            className="w-20 h-20 rounded-full object-cover"
+            loading="lazy"
+            className="w-24 h-24 rounded-full object-cover"
           />
         ) : (
           <div
-            className="w-20 h-20 rounded-full bg-pink-100 text-pink-700 font-black text-2xl flex items-center justify-center"
+            className="w-24 h-24 rounded-full bg-pink-100 text-pink-700 font-black text-3xl flex items-center justify-center"
             aria-hidden="true"
           >
             {inics}
           </div>
         )}
         <button
+          type="button"
           onClick={() => refInput.current?.click()}
           aria-label="Cambiar foto de perfil"
-          className="absolute bottom-0 right-0 w-7 h-7 rounded-full bg-pink-600 text-white flex items-center justify-center shadow-md hover:bg-pink-700 transition-colors"
+          className="mt-3 inline-flex items-center gap-1 rounded-full border border-pink-200 bg-pink-50 px-3 py-1.5 text-xs font-bold text-pink-700 hover:bg-pink-100 transition-colors"
         >
-          <Camera className="w-3.5 h-3.5" aria-hidden="true" />
+          <Camera className="w-3.5 h-3.5" aria-hidden="true" /> Editar foto
         </button>
         <input
           ref={refInput}
@@ -85,11 +132,14 @@ function SeccionAvatar({
           }}
         />
       </div>
-      <div>
-        <p className="font-black text-slate-900 text-lg">
+      <div className="space-y-1">
+        <p className="text-lg font-semibold text-slate-900">
           {nombre} {apellido}
         </p>
         <p className="text-sm text-slate-500">{email}</p>
+        <p className="text-xs font-bold uppercase tracking-[0.18em] text-slate-400">
+          Cliente en {formatearPais(pais)}
+        </p>
       </div>
     </div>
   );
@@ -230,47 +280,117 @@ function SeccionReservas({
         <div className="space-y-3">
           {lista.map((r) => {
             const { clase, etiqueta } = badgeEstado(r.estado);
+            const cancelable = puedeCancelarReserva(r);
             return (
               <div
                 key={r.id}
-                className="bg-white border border-slate-100 rounded-2xl p-4 shadow-sm flex items-center gap-4"
+                className="bg-white border border-slate-100 rounded-3xl p-5 shadow-sm"
               >
-                <div
-                  className="w-10 h-10 rounded-full text-white font-black text-sm flex items-center justify-center shrink-0"
-                  style={{ backgroundColor: r.salon.colorPrimario ?? '#C2185B' }}
-                  aria-hidden="true"
-                >
-                  {(r.salon.nombre[0] ?? '').toUpperCase()}
-                </div>
-                <div className="flex-1 min-w-0">
-                  <p className="font-bold text-sm text-slate-900 truncate">{r.salon.nombre}</p>
-                  <p className="text-xs text-slate-500">
-                    {r.especialista.nombre} · {r.fecha} {r.horaInicio}
-                  </p>
-                  <p className="text-xs text-slate-400 truncate">
-                    {r.servicios.map((s) => s.name).join(', ')}
-                  </p>
-                </div>
-                <div className="flex flex-col items-end gap-1 shrink-0">
-                  <span
-                    className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${clase}`}
-                  >
-                    {etiqueta}
-                  </span>
-                  {pestana === 'proximas' && r.estado !== 'cancelled' && (
-                    <Link
-                      to={`/cancelar-reserva/${r.id}/${r.tokenCancelacion}`}
-                      className="text-[10px] font-bold text-red-500 hover:text-red-700 flex items-center gap-0.5"
-                    >
-                      Cancelar <ChevronRight className="w-3 h-3" aria-hidden="true" />
-                    </Link>
+                <div className="space-y-4">
+                  {/* Fila principal: info + precio */}
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0 flex-1 space-y-3">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <p className="text-lg font-black text-slate-900">{r.salon.nombre}</p>
+                        <span
+                          className={`inline-flex items-center rounded-full border px-3 py-1.5 text-sm font-black ${clase}`}
+                        >
+                          {etiqueta}
+                        </span>
+                      </div>
+                      <p className="text-sm font-medium text-slate-600">
+                        {formatearFechaReservaNatural(r.fecha, r.horaInicio)}
+                      </p>
+                      <p className="text-sm text-slate-500">
+                        Especialista: {r.especialista.nombre}
+                      </p>
+                      <ul className="space-y-1 text-sm text-slate-500">
+                        {r.servicios.map((servicio) => (
+                          <li key={`${r.id}-${servicio.name}`} className="flex items-start gap-2">
+                            <span className="mt-1 h-1.5 w-1.5 rounded-full bg-slate-300 shrink-0" />
+                            <span>{servicio.name}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                    <p className="shrink-0 text-sm font-black text-slate-900">
+                      ${r.precioTotal.toFixed(2)}
+                    </p>
+                  </div>
+                  {/* Fila footer: botón cancelar o aviso */}
+                  {cancelable && (
+                    <div className="border-t border-slate-100 pt-3">
+                      <Link
+                        to={`/cancelar-reserva/${r.id}/${r.tokenCancelacion}`}
+                        className="inline-flex w-full items-center justify-center rounded-2xl border border-red-200 bg-red-50 px-4 py-2.5 text-sm font-black text-red-700 hover:bg-red-100 transition-colors sm:w-auto"
+                      >
+                        Cancelar cita
+                      </Link>
+                    </div>
                   )}
+                  {pestana === 'proximas' &&
+                    !cancelable &&
+                    ['pending', 'confirmed'].includes(r.estado) && (
+                      <div className="border-t border-slate-100 pt-3">
+                        <p className="text-xs text-slate-400">
+                          La cancelación solo está disponible con más de 2 horas de anticipación.
+                        </p>
+                      </div>
+                    )}
                 </div>
               </div>
             );
           })}
         </div>
       )}
+    </section>
+  );
+}
+
+function SeccionApariencia({
+  clienteId,
+  colorSeleccionado,
+  onSeleccionar,
+}: {
+  clienteId: string;
+  colorSeleccionado: string;
+  onSeleccionar: (color: string) => void;
+}) {
+  return (
+    <section
+      className="bg-white border border-slate-100 rounded-3xl p-6 shadow-sm"
+      aria-labelledby="titulo-apariencia"
+    >
+      <div className="flex items-center gap-2 mb-4">
+        <Palette className="w-5 h-5 text-pink-600" aria-hidden="true" />
+        <h2 id="titulo-apariencia" className="font-black text-slate-900">
+          Apariencia
+        </h2>
+      </div>
+      <p className="text-sm text-slate-500 mb-4">
+        Elige un color para personalizar la interfaz del cliente en este dispositivo.
+      </p>
+      <div className="flex flex-wrap gap-2">
+        {COLORES_CLIENTE.map((color) => (
+          <button
+            key={color}
+            type="button"
+            aria-label={`Seleccionar color ${color} para tu perfil`}
+            aria-pressed={colorSeleccionado === color}
+            onClick={() => {
+              localStorage.setItem(`color_cliente_${clienteId}`, color);
+              onSeleccionar(color);
+            }}
+            className="h-10 w-10 rounded-full border-2 transition-transform hover:scale-105"
+            style={{
+              backgroundColor: color,
+              borderColor: colorSeleccionado === color ? '#1e293b' : 'transparent',
+              outline: colorSeleccionado === color ? '2px solid #1e293b' : '2px solid transparent',
+              outlineOffset: '2px',
+            }}
+          />
+        ))}
+      </div>
     </section>
   );
 }
@@ -350,6 +470,53 @@ function SeccionContrasena({
   );
 }
 
+function SeccionNotificaciones() {
+  const [procesando, setProcesando] = useState(false);
+  const push = usarNotificacionesPush();
+
+  return (
+    <section
+      aria-labelledby="titulo-notificaciones"
+      className="bg-white border border-slate-100 rounded-3xl p-6 shadow-sm"
+    >
+      <div className="flex items-center justify-between gap-4">
+        <div>
+          <h2 id="titulo-notificaciones" className="font-black text-slate-900">
+            Notificaciones
+          </h2>
+          <p className="text-sm text-slate-500 mt-1">
+            Recibe recordatorios y cambios de tus citas directamente en el navegador.
+          </p>
+        </div>
+        <button
+          type="button"
+          disabled={!push.soportado || procesando}
+          onClick={async () => {
+            setProcesando(true);
+            try {
+              if (push.notificacionesActivas) {
+                await push.desactivar();
+              } else {
+                await push.activar();
+              }
+            } finally {
+              setProcesando(false);
+            }
+          }}
+          className={`min-w-28 rounded-xl px-4 py-2 text-sm font-black transition-colors disabled:opacity-60 ${push.notificacionesActivas ? 'bg-slate-900 text-white' : 'bg-pink-600 text-white'}`}
+        >
+          {procesando ? 'Procesando...' : push.notificacionesActivas ? 'Desactivar' : 'Activar'}
+        </button>
+      </div>
+      {!push.soportado && (
+        <p className="text-xs text-amber-600 mt-3 font-bold">
+          Este navegador no soporta notificaciones push web.
+        </p>
+      )}
+    </section>
+  );
+}
+
 // ── Página principal ─────────────────────────────────────────────────────────
 export function PaginaPerfilCliente() {
   const navegar = useNavigate();
@@ -360,6 +527,7 @@ export function PaginaPerfilCliente() {
     formPerfil,
     formContrasena,
     mutarPerfil,
+    mutarEmail,
     mutarContrasena,
     cambiarAvatar,
     guardarPerfil,
@@ -370,8 +538,22 @@ export function PaginaPerfilCliente() {
   const fechaNacimiento = formPerfil.watch('fechaNacimiento') ?? '';
   const [dialogoSalidaAbierto, setDialogoSalidaAbierto] = useState(false);
   const [confirmacionGuardadoVisible, setConfirmacionGuardadoVisible] = useState(false);
+  const [emailNuevo, setEmailNuevo] = useState('');
+  const [colorCliente, setColorCliente] = useState('#F48FB1');
   const vistaActiva = ubicacion.hash === '#reservas' ? 'reservas' : 'perfil';
   const pestanaReservasInicial = ubicacion.hash === '#reservas' ? 'proximas' : 'historial';
+
+  useEffect(() => {
+    if (!perfil) {
+      return;
+    }
+
+    setEmailNuevo(perfil.emailPendiente ?? perfil.email);
+    const colorGuardado = localStorage.getItem(`color_cliente_${perfil.id}`);
+    setColorCliente(colorGuardado ?? '#F48FB1');
+  }, [perfil]);
+
+  usarTemaSalon(colorCliente);
 
   useEffect(() => {
     if (!confirmacionGuardadoVisible) {
@@ -468,6 +650,7 @@ export function PaginaPerfilCliente() {
             nombre={perfil.nombre}
             apellido={perfil.apellido}
             email={perfil.email}
+            pais={perfil.pais}
             onCambiar={cambiarAvatar}
           />
         )}
@@ -543,6 +726,46 @@ export function PaginaPerfilCliente() {
                   }
                 />
               </div>
+              <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4 space-y-3">
+                <div className="flex items-center gap-2">
+                  <Mail className="w-4 h-4 text-pink-600" aria-hidden="true" />
+                  <p className="text-sm font-black text-slate-800">Correo de acceso</p>
+                </div>
+                <label
+                  htmlFor="email-actualizacion"
+                  className="block text-xs font-bold text-slate-600"
+                >
+                  Nuevo correo electrónico
+                </label>
+                <input
+                  id="email-actualizacion"
+                  type="email"
+                  value={emailNuevo}
+                  onChange={(evento) => setEmailNuevo(evento.target.value)}
+                  className="w-full border border-slate-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-pink-400"
+                />
+                <p className="text-xs text-slate-500">
+                  Tu correo actual seguirá funcionando hasta que confirmes el nuevo enlace enviado.
+                </p>
+                {perfil.emailPendiente && (
+                  <p className="text-xs font-bold text-amber-700 bg-amber-50 border border-amber-200 rounded-xl px-3 py-2">
+                    Cambio pendiente: {perfil.emailPendiente}
+                  </p>
+                )}
+                <button
+                  type="button"
+                  onClick={() => mutarEmail.mutate(emailNuevo)}
+                  disabled={
+                    mutarEmail.isPending ||
+                    !emailNuevo.trim() ||
+                    emailNuevo.trim() === perfil.emailPendiente ||
+                    emailNuevo.trim() === perfil.email
+                  }
+                  className="w-full rounded-xl border border-pink-200 bg-pink-50 px-4 py-3 text-sm font-black text-pink-700 transition-colors hover:bg-pink-100 disabled:opacity-60"
+                >
+                  {mutarEmail.isPending ? 'Enviando verificación...' : 'Actualizar email'}
+                </button>
+              </div>
               <button
                 type="submit"
                 disabled={mutarPerfil.isPending}
@@ -560,6 +783,16 @@ export function PaginaPerfilCliente() {
           </section>
         )}
 
+        {vistaActiva === 'perfil' && <SeccionNotificaciones />}
+
+        {vistaActiva === 'perfil' && (
+          <SeccionApariencia
+            clienteId={perfil.id}
+            colorSeleccionado={colorCliente}
+            onSeleccionar={setColorCliente}
+          />
+        )}
+
         {vistaActiva === 'perfil' && (
           <SeccionContrasena
             form={formContrasena}
@@ -570,9 +803,6 @@ export function PaginaPerfilCliente() {
 
         {vistaActiva === 'perfil' && (
           <SeccionFidelidad fidelidad={perfil.fidelidad} mensajeVacio={perfil.mensajeFidelidad} />
-        )}
-        {vistaActiva === 'perfil' && (
-          <SeccionReservas reservas={reservas} pestanaInicial={pestanaReservasInicial} />
         )}
       </main>
 

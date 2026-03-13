@@ -6,7 +6,8 @@ import { prisma } from '../prismaCliente.js';
 import { verificarJWT } from '../middleware/autenticacion.js';
 import { requierePermiso } from '../middleware/verificarPermiso.js';
 import { resolverCategoriasSalon } from '../lib/categoriasSalon.js';
-import { enviarEmailBienvenidaSalon, enviarEmailRechazoSalon } from '../servicios/servicioEmail.js';
+import { cacheSalonesPublicos } from '../lib/cache.js';
+import { enviarEmailBienvenidaSalon, enviarEmailRechazoSalon, enviarEmailCancelacionProcesada, enviarEmailRecordatorioPagoSalon } from '../servicios/servicioEmail.js';
 import { registrarAuditoria } from '../utils/auditoria.js';
 import { emailSchema, obtenerMensajeValidacion, telefonoSchema, textoSchema } from '../lib/validacion.js';
 
@@ -102,9 +103,9 @@ function clasificarEstadoSalon(params: {
 export async function rutasAdmin(servidor: FastifyInstance): Promise<void> {
   /**
    * GET /admin/salones — lista todos los estudios con su usuario y último acceso
-   * Soporta ?estado=pendiente|aprobado|rechazado|suspendido
+   * Soporta ?estado=pendiente|aprobado|rechazado|suspendido&pagina=1&limite=20
    */
-  servidor.get<{ Querystring: { estado?: string } }>(
+  servidor.get<{ Querystring: { estado?: string; pagina?: string; limite?: string } }>(
     '/admin/salones',
     { preHandler: verificarJWT },
     async (solicitud, respuesta) => {
@@ -113,7 +114,11 @@ export async function rutasAdmin(servidor: FastifyInstance): Promise<void> {
         return respuesta.code(403).send({ error: 'Sin permisos para esta acción' });
       }
 
-      const { estado } = solicitud.query;
+      const { estado, pagina: paginaStr, limite: limiteStr } = solicitud.query;
+      const pagina = Math.max(1, parseInt(paginaStr ?? '1', 10));
+      const limite = Math.min(100, Math.max(1, parseInt(limiteStr ?? '50', 10)));
+      const saltar = (pagina - 1) * limite;
+
       const estadosValidos = ['pendiente', 'aprobado', 'rechazado', 'suspendido'];
       const estadoSolicitado =
         estado && estadosValidos.includes(estado)
@@ -178,14 +183,17 @@ export async function rutasAdmin(servidor: FastifyInstance): Promise<void> {
         })
         .filter((estudio) => (estadoSolicitado ? estudio.estado === estadoSolicitado : true));
 
-      return respuesta.send({ datos: estudiosNormalizados });
+      const total = estudiosNormalizados.length;
+      const items = estudiosNormalizados.slice(saltar, saltar + limite);
+      return respuesta.send({ datos: items, total, pagina, totalPaginas: Math.ceil(total / limite) });
     },
   );
 
   /**
    * GET /admin/solicitudes — estudios con estado pendiente ordenados por fechaSolicitud
+   * Soporta ?pagina=1&limite=20
    */
-  servidor.get(
+  servidor.get<{ Querystring: { pagina?: string; limite?: string } }>(
     '/admin/solicitudes',
     { preHandler: verificarJWT },
     async (solicitud, respuesta) => {
@@ -194,17 +202,26 @@ export async function rutasAdmin(servidor: FastifyInstance): Promise<void> {
         return respuesta.code(403).send({ error: 'Sin permisos para esta acción' });
       }
 
-      const solicitudes = await prisma.estudio.findMany({
-        where: { estado: 'pendiente' },
-        include: {
-          usuarios: {
-            where: { rol: 'dueno' },
-            select: { id: true, email: true, nombre: true },
-            take: 1,
+      const pagina = Math.max(1, parseInt(solicitud.query.pagina ?? '1', 10));
+      const limite = Math.min(100, Math.max(1, parseInt(solicitud.query.limite ?? '50', 10)));
+      const saltar = (pagina - 1) * limite;
+
+      const [total, solicitudes] = await Promise.all([
+        prisma.estudio.count({ where: { estado: 'pendiente' } }),
+        prisma.estudio.findMany({
+          where: { estado: 'pendiente' },
+          include: {
+            usuarios: {
+              where: { rol: 'dueno' },
+              select: { id: true, email: true, nombre: true },
+              take: 1,
+            },
           },
-        },
-        orderBy: { fechaSolicitud: 'asc' },
-      });
+          orderBy: { fechaSolicitud: 'asc' },
+          skip: saltar,
+          take: limite,
+        }),
+      ]);
 
       const datos = solicitudes.map((s) => ({
         ...s,
@@ -212,7 +229,7 @@ export async function rutasAdmin(servidor: FastifyInstance): Promise<void> {
         dueno: s.usuarios[0] ?? null,
       }));
 
-      return respuesta.send({ datos });
+      return respuesta.send({ datos, total, pagina, totalPaginas: Math.ceil(total / limite) });
     },
   );
 
@@ -320,6 +337,7 @@ export async function rutasAdmin(servidor: FastifyInstance): Promise<void> {
       ]);
 
       console.log('[Admin] Salón aprobado:', estudio.nombre);
+      cacheSalonesPublicos.flushAll(); // invalidar caché de salones públicos
 
       await registrarAuditoria({
         usuarioId: payload.sub,
@@ -381,6 +399,7 @@ export async function rutasAdmin(servidor: FastifyInstance): Promise<void> {
       });
 
       console.log('[Admin] Salón rechazado:', estudio.nombre);
+      cacheSalonesPublicos.flushAll(); // invalidar caché de salones públicos
 
       await registrarAuditoria({
         usuarioId: payload.sub,
@@ -718,6 +737,59 @@ export async function rutasAdmin(servidor: FastifyInstance): Promise<void> {
     },
   );
 
+  servidor.post<{ Params: { id: string } }>(
+    '/admin/salones/:id/recordatorio-pago',
+    { preHandler: [verificarJWT, requierePermiso('gestionarPagos')] },
+    async (solicitud, respuesta) => {
+      const payload = solicitud.user as { rol: string; sub: string };
+      if (payload.rol !== 'maestro') {
+        return respuesta.code(403).send({ error: 'Sin permisos para esta acción' });
+      }
+
+      const estudio = await prisma.estudio.findUnique({
+        where: { id: solicitud.params.id },
+        include: {
+          usuarios: {
+            where: { rol: 'dueno' },
+            take: 1,
+            select: { email: true, nombre: true },
+          },
+        },
+      });
+
+      if (!estudio) {
+        return respuesta.code(404).send({ error: 'Salón no encontrado' });
+      }
+
+      const dueno = estudio.usuarios[0];
+      if (!dueno?.email) {
+        return respuesta.code(400).send({ error: 'El salón no tiene correo de contacto del dueño' });
+      }
+
+      await enviarEmailRecordatorioPagoSalon({
+        email: dueno.email,
+        nombreDueno: dueno.nombre || 'equipo del salón',
+        nombreSalon: estudio.nombre,
+        fechaVencimiento: estudio.fechaVencimiento,
+      });
+
+      await registrarAuditoria({
+        usuarioId: payload.sub,
+        accion: 'recordatorio_pago_salon',
+        entidadTipo: 'estudio',
+        entidadId: estudio.id,
+        detalles: {
+          nombre: estudio.nombre,
+          fechaVencimiento: estudio.fechaVencimiento,
+          emailDestino: dueno.email,
+        },
+        ip: solicitud.ip,
+      });
+
+      return respuesta.send({ datos: { mensaje: 'Recordatorio enviado correctamente' } });
+    },
+  );
+
   /**
    * GET /admin/metricas — estadísticas globales de la plataforma
    */
@@ -745,6 +817,7 @@ export async function rutasAdmin(servidor: FastifyInstance): Promise<void> {
         totalAuditLogs,
         reservasUltimos30Dias,
         salonesNuevosUltimos30Dias,
+        cancelacionesPendientes,
       ] = await Promise.all([
         prisma.estudio.count(),
         prisma.estudio.count({ where: { estado: 'aprobado' } }),
@@ -760,6 +833,7 @@ export async function rutasAdmin(servidor: FastifyInstance): Promise<void> {
         prisma.estudio.count({
           where: { creadoEn: { gte: hace30Dias } },
         }),
+        prisma.estudio.count({ where: { cancelacionSolicitada: true } }),
       ]);
 
       return respuesta.send({
@@ -772,6 +846,142 @@ export async function rutasAdmin(servidor: FastifyInstance): Promise<void> {
           totalAuditLogs,
           reservasUltimos30Dias,
           salonesNuevosUltimos30Dias,
+          cancelacionesPendientes,
+        },
+      });
+    },
+  );
+
+  /**
+   * GET /admin/cancelaciones — salones con solicitud de cancelación pendiente
+   */
+  servidor.get(
+    '/admin/cancelaciones',
+    { preHandler: [verificarJWT, requierePermiso('gestionarPagos')] },
+    async (solicitud, respuesta) => {
+      const payload = solicitud.user as { rol: string };
+      if (payload.rol !== 'maestro') {
+        return respuesta.code(403).send({ error: 'Sin permisos para esta acción' });
+      }
+
+      const salones = await prisma.estudio.findMany({
+        where: { cancelacionSolicitada: true },
+        select: {
+          id: true,
+          nombre: true,
+          fechaVencimiento: true,
+          cancelacionSolicitada: true,
+          fechaSolicitudCancelacion: true,
+          motivoCancelacion: true,
+          usuarios: {
+            where: { rol: 'dueno' },
+            take: 1,
+            select: { id: true, email: true, nombre: true },
+          },
+        },
+        orderBy: { fechaSolicitudCancelacion: 'asc' },
+      });
+
+      const datos = salones.map((s) => ({
+        id: s.id,
+        nombre: s.nombre,
+        fechaVencimiento: s.fechaVencimiento,
+        cancelacionSolicitada: s.cancelacionSolicitada,
+        fechaSolicitudCancelacion: s.fechaSolicitudCancelacion?.toISOString() ?? null,
+        motivoCancelacion: s.motivoCancelacion,
+        dueno: s.usuarios[0] ?? null,
+      }));
+
+      return respuesta.send({ datos });
+    },
+  );
+
+  /**
+   * POST /admin/salones/:id/procesar-cancelacion — aprueba o rechaza la solicitud
+   */
+  servidor.post<{ Params: { id: string }; Body: { accion: 'aprobar' | 'rechazar'; respuesta?: string } }>(
+    '/admin/salones/:id/procesar-cancelacion',
+    { preHandler: [verificarJWT, requierePermiso('gestionarPagos')] },
+    async (solicitud, respuesta) => {
+      const payload = solicitud.user as { rol: string; sub: string };
+      if (payload.rol !== 'maestro') {
+        return respuesta.code(403).send({ error: 'Sin permisos para esta acción' });
+      }
+
+      const { id } = solicitud.params;
+      const { accion, respuesta: respuestaMaestro } = solicitud.body;
+
+      if (accion !== 'aprobar' && accion !== 'rechazar') {
+        return respuesta.code(400).send({ error: 'accion debe ser "aprobar" o "rechazar"' });
+      }
+
+      const estudio = await prisma.estudio.findUnique({
+        where: { id },
+        include: { usuarios: { where: { rol: 'dueno' }, take: 1 } },
+      });
+
+      if (!estudio) {
+        return respuesta.code(404).send({ error: 'Salón no encontrado' });
+      }
+
+      if (!estudio.cancelacionSolicitada) {
+        return respuesta.code(400).send({ error: 'Este salón no tiene una solicitud de cancelación pendiente' });
+      }
+
+      if (accion === 'aprobar') {
+        await prisma.$transaction(async (tx) => {
+          await tx.estudio.update({
+            where: { id },
+            data: {
+              activo: false,
+              estado: 'suspendido',
+              cancelacionSolicitada: false,
+              fechaSolicitudCancelacion: null,
+              motivoCancelacion: null,
+            },
+          });
+
+          const dueno = estudio.usuarios[0];
+          if (dueno) {
+            await tx.usuario.update({
+              where: { id: dueno.id },
+              data: { activo: false },
+            });
+          }
+        });
+      } else {
+        await prisma.estudio.update({
+          where: { id },
+          data: {
+            cancelacionSolicitada: false,
+            fechaSolicitudCancelacion: null,
+            motivoCancelacion: null,
+          },
+        });
+      }
+
+      await registrarAuditoria({
+        usuarioId: payload.sub,
+        accion: accion === 'aprobar' ? 'aprobar_cancelacion' : 'rechazar_cancelacion',
+        entidadTipo: 'estudio',
+        entidadId: id,
+        detalles: { nombre: estudio.nombre, accion, respuesta: respuestaMaestro ?? null },
+        ip: solicitud.ip,
+      });
+
+      const dueno = estudio.usuarios[0];
+      if (dueno?.email) {
+        void enviarEmailCancelacionProcesada({
+          email: dueno.email,
+          nombreSalon: estudio.nombre,
+          aprobada: accion === 'aprobar',
+          respuesta: respuestaMaestro,
+        });
+      }
+
+      return respuesta.send({
+        datos: {
+          mensaje: accion === 'aprobar' ? 'Cancelación aprobada. El salón ha sido suspendido.' : 'Solicitud rechazada.',
         },
       });
     },

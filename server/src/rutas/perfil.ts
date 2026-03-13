@@ -1,9 +1,11 @@
 import type { FastifyInstance } from 'fastify';
 import fs from 'fs';
 import path from 'path';
+import sharp from 'sharp';
 import { z } from 'zod';
 import { prisma } from '../prismaCliente.js';
 import { verificarJWT } from '../middleware/autenticacion.js';
+import { detectarTipoImagen } from '../utils/validarImagen.js';
 import { colorHexSchema, emailOpcionalONuloSchema, obtenerMensajeValidacion, telefonoSchema, textoOpcionalONuloSchema, textoSchema } from '../lib/validacion.js';
 
 const MIME_PERMITIDOS: Record<string, string> = {
@@ -145,6 +147,11 @@ export async function rutasPerfil(servidor: FastifyInstance): Promise<void> {
         return respuesta.code(400).send({ error: 'El archivo supera el límite de 2 MB' });
       }
 
+      const extensionSegura = detectarTipoImagen(buffer);
+      if (!extensionSegura) {
+        return respuesta.code(400).send({ error: 'El archivo no contiene una imagen válida' });
+      }
+
       const dir = dirLogos();
       fs.mkdirSync(dir, { recursive: true });
 
@@ -158,8 +165,12 @@ export async function rutasPerfil(servidor: FastifyInstance): Promise<void> {
         fs.rmSync(rutaAnterior, { force: true });
       }
 
-      const nombreArchivo = `estudio-${id}.${extension}`;
-      fs.writeFileSync(path.join(dir, nombreArchivo), buffer);
+      const nombreArchivo = `estudio-${id}.jpg`;
+      const imagenOptimizada = await sharp(buffer)
+        .resize(800, 800, { fit: 'inside', withoutEnlargement: true })
+        .jpeg({ quality: 85, progressive: true })
+        .toBuffer();
+      fs.writeFileSync(path.join(dir, nombreArchivo), imagenOptimizada);
 
       const logoUrl = `/uploads/logos/${nombreArchivo}`;
       await prisma.estudio.update({ where: { id }, data: { logoUrl } });

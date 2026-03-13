@@ -9,6 +9,7 @@ import { registrarCliente } from '../../servicios/servicioRegistro';
 import { usarTituloPagina } from '../../hooks/usarTituloPagina';
 import { ModalTerminos } from './componentes/ModalTerminos';
 import { ModalPrivacidad } from './componentes/ModalPrivacidad';
+import type { Pais } from '../../tipos';
 
 const DOMINIOS_MSG = 'Solo aceptamos correos de Gmail, Hotmail, Outlook, Yahoo o iCloud';
 const DOMINIOS = [
@@ -44,11 +45,13 @@ const esquema = z
     nombre: z.string().min(2, 'Mínimo 2 caracteres'),
     apellido: z.string().min(2, 'Mínimo 2 caracteres'),
     email: z.string().email('Correo inválido').refine(esDominioPermitido, DOMINIOS_MSG),
+    pais: z.enum(['Mexico', 'Colombia']),
     contrasena: z
       .string()
       .min(8, 'Mínimo 8 caracteres')
       .regex(/[A-Z]/, 'Necesita al menos una mayúscula')
-      .regex(/[0-9]/, 'Necesita al menos un número'),
+      .regex(/[0-9]/, 'Necesita al menos un número')
+      .regex(/[^A-Za-z0-9]/, 'Necesita al menos un carácter especial'),
     confirmarContrasena: z.string(),
     telefono: z
       .string()
@@ -91,15 +94,27 @@ const esquema = z
 
 type CamposFormulario = z.infer<typeof esquema>;
 
+function calcularRequisitosContrasena(contrasena: string) {
+  return {
+    longitudMinima: contrasena.length >= 8,
+    tieneMayuscula: /[A-Z]/.test(contrasena),
+    tieneNumero: /[0-9]/.test(contrasena),
+    tieneEspecial: /[^A-Za-z0-9]/.test(contrasena),
+  };
+}
+
 function calcularFortaleza(contrasena: string): { nivel: number; etiqueta: string; color: string } {
-  let puntos = 0;
-  if (contrasena.length >= 8) puntos++;
-  if (/[A-Z]/.test(contrasena)) puntos++;
-  if (/[0-9]/.test(contrasena)) puntos++;
-  if (/[^A-Za-z0-9]/.test(contrasena)) puntos++;
-  if (puntos <= 1) return { nivel: 1, etiqueta: 'Débil', color: 'bg-red-400' };
-  if (puntos === 2) return { nivel: 2, etiqueta: 'Media', color: 'bg-yellow-400' };
-  return { nivel: 3, etiqueta: 'Fuerte', color: 'bg-green-500' };
+  const r = calcularRequisitosContrasena(contrasena);
+  const nivel = [r.longitudMinima, r.tieneMayuscula, r.tieneNumero, r.tieneEspecial].filter(
+    Boolean,
+  ).length;
+  const colores = ['bg-red-400', 'bg-orange-400', 'bg-yellow-400', 'bg-green-500'];
+  const etiquetas = ['Débil', 'Regular', 'Buena', 'Fuerte'];
+  return {
+    nivel,
+    etiqueta: etiquetas[nivel - 1] ?? 'Débil',
+    color: colores[nivel - 1] ?? 'bg-red-400',
+  };
 }
 
 export function PaginaRegistroCliente() {
@@ -123,6 +138,7 @@ export function PaginaRegistroCliente() {
   } = useForm<CamposFormulario>({
     resolver: zodResolver(esquema),
     defaultValues: {
+      pais: 'Mexico',
       telefono: '',
       fechaNacimiento: '',
     },
@@ -140,6 +156,7 @@ export function PaginaRegistroCliente() {
         contrasena: datos.contrasena,
         nombre: datos.nombre,
         apellido: datos.apellido,
+        pais: datos.pais,
         fechaNacimiento: datos.fechaNacimiento,
         telefono: datos.telefono || undefined,
       });
@@ -296,6 +313,29 @@ export function PaginaRegistroCliente() {
               )}
             </div>
 
+            <div>
+              <label htmlFor="pais" className="block text-sm font-semibold text-slate-700 mb-1">
+                ¿En qué país estás?
+              </label>
+              <select
+                id="pais"
+                className="w-full px-3.5 py-3 bg-white border border-slate-200 rounded-xl text-sm outline-none focus:ring-2 focus:ring-pink-500 focus:border-transparent"
+                aria-invalid={!!errors.pais}
+                {...register('pais')}
+              >
+                {(['Mexico', 'Colombia'] as Pais[]).map((pais) => (
+                  <option key={pais} value={pais}>
+                    {pais === 'Mexico' ? 'México' : 'Colombia'}
+                  </option>
+                ))}
+              </select>
+              {errors.pais && (
+                <p role="alert" className="mt-1 text-xs text-red-500">
+                  {errors.pais.message}
+                </p>
+              )}
+            </div>
+
             {/* Contraseña */}
             <div>
               <label
@@ -321,11 +361,11 @@ export function PaginaRegistroCliente() {
                   {mostrarPass ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                 </button>
               </div>
-              {/* Medidor de fortaleza */}
+              {/* Medidor de fortaleza y requisitos */}
               {contrasenaActual.length > 0 && (
-                <div className="mt-2">
-                  <div className="flex gap-1 mb-1">
-                    {[1, 2, 3].map((n) => (
+                <div className="mt-2 space-y-2">
+                  <div className="flex gap-1">
+                    {[1, 2, 3, 4].map((n) => (
                       <div
                         key={n}
                         className={`h-1.5 flex-1 rounded-full transition-colors ${n <= fortaleza.nivel ? fortaleza.color : 'bg-slate-200'}`}
@@ -335,6 +375,33 @@ export function PaginaRegistroCliente() {
                   <p className="text-xs text-slate-500">
                     Fortaleza: <span className="font-semibold">{fortaleza.etiqueta}</span>
                   </p>
+                  <ul className="grid grid-cols-2 gap-x-3 gap-y-0.5 text-xs">
+                    {[
+                      {
+                        ok: calcularRequisitosContrasena(contrasenaActual).longitudMinima,
+                        texto: '8 caracteres',
+                      },
+                      {
+                        ok: calcularRequisitosContrasena(contrasenaActual).tieneMayuscula,
+                        texto: 'Una mayúscula',
+                      },
+                      {
+                        ok: calcularRequisitosContrasena(contrasenaActual).tieneNumero,
+                        texto: 'Un número',
+                      },
+                      {
+                        ok: calcularRequisitosContrasena(contrasenaActual).tieneEspecial,
+                        texto: 'Un carácter especial',
+                      },
+                    ].map(({ ok, texto }) => (
+                      <li
+                        key={texto}
+                        className={`flex items-center gap-1 ${ok ? 'text-green-600' : 'text-slate-400'}`}
+                      >
+                        <span aria-hidden="true">{ok ? '✓' : '○'}</span> {texto}
+                      </li>
+                    ))}
+                  </ul>
                 </div>
               )}
               {errors.contrasena && (

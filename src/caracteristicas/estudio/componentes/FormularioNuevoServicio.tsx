@@ -57,6 +57,7 @@ export function FormularioNuevoServicio({ moneda, onAgregar }: PropsFormularioNu
             id="duracion-servicio"
             type="number"
             min="5"
+            max="480"
             step="5"
             value={duracion}
             onChange={(evento) => setDuracion(evento.target.value)}

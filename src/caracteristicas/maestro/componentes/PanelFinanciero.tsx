@@ -1,4 +1,7 @@
+import { useMutation } from '@tanstack/react-query';
 import { CheckCircle2, AlertTriangle, DollarSign, WalletCards, CalendarClock } from 'lucide-react';
+import { peticion } from '../../../lib/clienteHTTP';
+import { usarToast } from '../../../componentes/ui/ProveedorToast';
 import {
   formatearDinero,
   formatearFechaHumana,
@@ -14,6 +17,19 @@ interface PropsPanelFinanciero {
 }
 
 export function PanelFinanciero({ estudios, pagos, onAbrirPago }: PropsPanelFinanciero) {
+  const { mostrarToast } = usarToast();
+  const mutacionRecordatorio = useMutation({
+    mutationFn: (estudioId: string) =>
+      peticion<{ datos: { mensaje: string } }>(`/admin/salones/${estudioId}/recordatorio-pago`, {
+        method: 'POST',
+      }),
+    onSuccess: (respuesta) => {
+      mostrarToast({ mensaje: respuesta.datos.mensaje, variante: 'exito' });
+    },
+    onError: (error: Error) => {
+      mostrarToast({ mensaje: error.message, variante: 'error' });
+    },
+  });
   let pagados = 0;
   let porVencer = 0;
   let pendientes = 0;
@@ -43,35 +59,43 @@ export function PanelFinanciero({ estudios, pagos, onAbrirPago }: PropsPanelFina
   return (
     <div className="space-y-8">
       <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-5 gap-6">
-        <div className="bg-slate-900 p-8 rounded-4xl text-white">
-          <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-2 mb-2">
-            <CheckCircle2 className="w-4 h-4 text-green-500" /> Studios Pagados
+        <div className="bg-slate-900 p-6 rounded-4xl text-white flex flex-col justify-between min-h-[120px]">
+          <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-2 mb-3">
+            <CheckCircle2 className="w-4 h-4 shrink-0 text-green-500" /> Studios Pagados
           </p>
-          <p className="text-4xl font-black">{pagados}</p>
+          <p className="text-[clamp(2rem,5vw,3.5rem)] font-black leading-none">{pagados}</p>
         </div>
-        <div className="bg-white border border-slate-200 p-8 rounded-4xl">
-          <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-2 mb-2">
-            <AlertTriangle className="w-4 h-4 text-red-500" /> Studios Pendientes
+        <div className="bg-white border border-slate-200 p-6 rounded-4xl flex flex-col justify-between min-h-[120px]">
+          <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-2 mb-3">
+            <AlertTriangle className="w-4 h-4 shrink-0 text-red-500" /> Studios Pendientes
           </p>
-          <p className="text-4xl font-black text-red-600">{pendientes}</p>
-        </div>
-        <div className="bg-amber-50 border border-amber-200 p-8 rounded-4xl">
-          <p className="text-[10px] font-black text-amber-600 uppercase tracking-widest mb-2 flex items-center gap-2">
-            <CalendarClock className="w-4 h-4" /> Por vencer
+          <p className="text-[clamp(2rem,5vw,3.5rem)] font-black leading-none text-red-600">
+            {pendientes}
           </p>
-          <p className="text-3xl font-black text-amber-700">{porVencer}</p>
         </div>
-        <div className="bg-green-50 border border-green-200 p-8 rounded-4xl">
-          <p className="text-[10px] font-black text-green-600 uppercase tracking-widest mb-2">
+        <div className="bg-amber-50 border border-amber-200 p-6 rounded-4xl flex flex-col justify-between min-h-[120px]">
+          <p className="text-[10px] font-black text-amber-600 uppercase tracking-widest mb-3 flex items-center gap-2">
+            <CalendarClock className="w-4 h-4 shrink-0" /> Por vencer
+          </p>
+          <p className="text-[clamp(2rem,5vw,3.5rem)] font-black leading-none text-amber-700">
+            {porVencer}
+          </p>
+        </div>
+        <div className="bg-green-50 border border-green-200 p-6 rounded-4xl flex flex-col justify-between min-h-[120px]">
+          <p className="text-[10px] font-black text-green-600 uppercase tracking-widest mb-3">
             Ingresos México
           </p>
-          <p className="text-3xl font-black text-green-700">{formatearDinero(totalMXN, 'MXN')}</p>
+          <p className="text-[clamp(1.25rem,3.5vw,2rem)] font-black leading-tight text-green-700 break-all">
+            {formatearDinero(totalMXN, 'MXN')}
+          </p>
         </div>
-        <div className="bg-blue-50 border border-blue-200 p-8 rounded-4xl">
-          <p className="text-[10px] font-black text-blue-600 uppercase tracking-widest mb-2">
+        <div className="bg-blue-50 border border-blue-200 p-6 rounded-4xl flex flex-col justify-between min-h-[120px]">
+          <p className="text-[10px] font-black text-blue-600 uppercase tracking-widest mb-3">
             Ingresos Colombia
           </p>
-          <p className="text-3xl font-black text-blue-700">{formatearDinero(totalCOP, 'COP')}</p>
+          <p className="text-[clamp(1.25rem,3.5vw,2rem)] font-black leading-tight text-blue-700 break-all">
+            {formatearDinero(totalCOP, 'COP')}
+          </p>
         </div>
       </div>
 
@@ -154,7 +178,116 @@ export function PanelFinanciero({ estudios, pagos, onAbrirPago }: PropsPanelFina
       </div>
 
       <div className="bg-white rounded-[3rem] border border-slate-200 shadow-sm overflow-hidden">
-        <table className="w-full text-left">
+        {/* Vista móvil: tarjetas apiladas */}
+        <div className="divide-y divide-slate-100 lg:hidden">
+          {estudios.length === 0 && (
+            <p className="py-10 text-center text-sm font-bold italic text-slate-400">
+              No hay studios registrados.
+            </p>
+          )}
+          {estudios.map((s) => {
+            const sub = obtenerEstadoSuscripcion(s);
+            const ultimoPago = ultimoPagoPorSalon.get(s.id);
+            const reglaCobro =
+              sub?.status === 'OVERDUE'
+                ? 'El próximo pago reactivará 1 mes desde hoy.'
+                : 'El próximo pago sumará 1 mes sobre la vigencia actual.';
+
+            return (
+              <div key={s.id} className="flex flex-col gap-4 px-5 py-5">
+                {/* Cabecera de la tarjeta */}
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <p className="font-black uppercase text-slate-900">{s.name}</p>
+                    <p className="mt-0.5 text-[10px] font-bold uppercase text-slate-500">
+                      {formatearPaisMoneda(s.country)}
+                    </p>
+                  </div>
+                  {sub && (
+                    <span
+                      className={`shrink-0 rounded-lg px-2.5 py-1 text-[9px] font-black uppercase tracking-widest ${
+                        sub.status === 'ACTIVE'
+                          ? 'bg-green-100 text-green-700'
+                          : sub.status === 'WARNING'
+                            ? 'bg-yellow-100 text-yellow-700'
+                            : 'bg-red-100 text-red-700'
+                      }`}
+                    >
+                      {sub.status === 'OVERDUE'
+                        ? 'VENCIDO'
+                        : sub.status === 'WARNING'
+                          ? 'PRÓXIMO A VENCER'
+                          : 'AL CORRIENTE'}
+                    </span>
+                  )}
+                </div>
+
+                {/* Estado y vigencia */}
+                {sub ? (
+                  <div className="rounded-xl bg-slate-50 px-4 py-3 text-sm">
+                    <p
+                      className={`font-black ${sub.daysRemaining < 0 ? 'text-red-600' : sub.daysRemaining <= 5 ? 'text-yellow-600' : 'text-green-600'}`}
+                    >
+                      {sub.daysRemaining < 0
+                        ? `Vencido hace ${Math.abs(sub.daysRemaining)} día${Math.abs(sub.daysRemaining) !== 1 ? 's' : ''}`
+                        : `${sub.daysRemaining} día${sub.daysRemaining !== 1 ? 's' : ''} restantes`}
+                    </p>
+                    <p className="mt-1 text-[10px] font-bold text-slate-500">
+                      Próx. Corte: {sub.dueDateStr}
+                    </p>
+                    <p className="mt-1 text-xs text-slate-500">{reglaCobro}</p>
+                  </div>
+                ) : (
+                  <p className="text-xs italic text-slate-400">Sin configuración de suscripción</p>
+                )}
+
+                {/* Último pago */}
+                {ultimoPago ? (
+                  <div className="text-sm">
+                    <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">
+                      Último pago
+                    </p>
+                    <p className="mt-1 font-black text-slate-900">
+                      {formatearDinero(ultimoPago.amount, ultimoPago.currency)}
+                    </p>
+                    <p className="text-xs text-slate-500">
+                      {formatearFechaHumana(ultimoPago.date)}
+                    </p>
+                    <p className="text-xs text-slate-500">
+                      {ultimoPago.registradoPorNombre ??
+                        ultimoPago.registradoPorEmail ??
+                        'Administrador maestro'}
+                    </p>
+                  </div>
+                ) : (
+                  <p className="text-xs italic text-slate-400">Sin pagos todavía</p>
+                )}
+
+                {/* Acciones */}
+                <div className="flex flex-col gap-2">
+                  {sub?.status === 'OVERDUE' && (
+                    <button
+                      onClick={() => mutacionRecordatorio.mutate(s.id)}
+                      disabled={mutacionRecordatorio.isPending}
+                      className="w-full rounded-xl border border-amber-200 bg-amber-50 px-4 py-2.5 text-[10px] font-black uppercase text-amber-800 transition-colors hover:bg-amber-100 disabled:opacity-60"
+                    >
+                      {mutacionRecordatorio.isPending ? 'Enviando...' : 'Enviar recordatorio'}
+                    </button>
+                  )}
+                  <button
+                    onClick={() => onAbrirPago(s)}
+                    className="flex w-full items-center justify-center gap-2 rounded-xl bg-slate-900 px-4 py-3 text-[10px] font-black uppercase text-white shadow-md transition-all hover:bg-black active:scale-95"
+                  >
+                    <DollarSign className="w-3 h-3" /> Registrar pago y sumar 1 mes
+                  </button>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+
+        {/* Vista desktop: tabla */}
+        <table className="hidden w-full text-left lg:table">
           <thead className="bg-slate-50">
             <tr>
               <th className="px-8 py-5 text-[10px] font-black text-slate-500 uppercase">Studio</th>
@@ -204,7 +337,14 @@ export function PanelFinanciero({ estudios, pagos, onAbrirPago }: PropsPanelFina
                               ? 'PRÓXIMO A VENCER'
                               : 'AL CORRIENTE'}
                         </span>
-                        <p className="text-[10px] font-bold text-slate-500 mt-2">
+                        <p
+                          className={`mt-2 text-sm font-black ${sub.daysRemaining < 0 ? 'text-red-600' : sub.daysRemaining <= 5 ? 'text-yellow-600' : 'text-green-600'}`}
+                        >
+                          {sub.daysRemaining < 0
+                            ? `Vencido hace ${Math.abs(sub.daysRemaining)} día${Math.abs(sub.daysRemaining) !== 1 ? 's' : ''}`
+                            : `${sub.daysRemaining} día${sub.daysRemaining !== 1 ? 's' : ''} restantes`}
+                        </p>
+                        <p className="text-[10px] font-bold text-slate-500 mt-1">
                           Próx. Corte: {sub.dueDateStr}
                         </p>
                         <p className="text-xs text-slate-500 mt-2">{reglaCobro}</p>
@@ -233,12 +373,25 @@ export function PanelFinanciero({ estudios, pagos, onAbrirPago }: PropsPanelFina
                     )}
                   </td>
                   <td className="px-8 py-6 text-right">
-                    <button
-                      onClick={() => onAbrirPago(s)}
-                      className="bg-slate-900 text-white px-6 py-3 rounded-xl text-[10px] font-black uppercase hover:bg-black transition-all shadow-md active:scale-95 flex items-center gap-2 ml-auto"
-                    >
-                      <DollarSign className="w-3 h-3" /> Registrar pago y sumar 1 mes
-                    </button>
+                    <div className="ml-auto flex flex-col items-end gap-2">
+                      {sub?.status === 'OVERDUE' && (
+                        <button
+                          onClick={() => mutacionRecordatorio.mutate(s.id)}
+                          disabled={mutacionRecordatorio.isPending}
+                          className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-2 text-[10px] font-black uppercase text-amber-800 transition-colors hover:bg-amber-100 disabled:opacity-60"
+                        >
+                          {mutacionRecordatorio.isPending
+                            ? 'Enviando recordatorio...'
+                            : 'Enviar recordatorio'}
+                        </button>
+                      )}
+                      <button
+                        onClick={() => onAbrirPago(s)}
+                        className="bg-slate-900 text-white px-6 py-3 rounded-xl text-[10px] font-black uppercase hover:bg-black transition-all shadow-md active:scale-95 flex items-center gap-2"
+                      >
+                        <DollarSign className="w-3 h-3" /> Registrar pago y sumar 1 mes
+                      </button>
+                    </div>
                   </td>
                 </tr>
               );
@@ -246,7 +399,7 @@ export function PanelFinanciero({ estudios, pagos, onAbrirPago }: PropsPanelFina
           </tbody>
         </table>
         {estudios.length === 0 && (
-          <p className="text-center py-10 text-slate-400 font-bold italic">
+          <p className="hidden text-center py-10 text-slate-400 font-bold italic lg:block">
             No hay studios registrados.
           </p>
         )}

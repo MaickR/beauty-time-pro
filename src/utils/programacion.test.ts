@@ -88,4 +88,53 @@ describe('obtenerSlotsDisponibles', () => {
     // El slot a las 10:30 debe estar disponible
     expect(slots.find((s) => s.time === '10:30')).toBeDefined();
   });
+
+  it('retorna array vacío cuando el día está cerrado', () => {
+    const slots = obtenerSlotsDisponibles({
+      horarioDia: { isOpen: false, openTime: '09:00', closeTime: '17:00' },
+      miembro: sinTurnoNiDescanso,
+      reservasExistentes: [],
+      duracionSlot: 60,
+      fechaStr: '2026-03-15',
+    });
+
+    expect(slots).toHaveLength(0);
+  });
+
+  it('no genera slots fuera del turno del empleado aunque el salón esté abierto', () => {
+    const slots = obtenerSlotsDisponibles({
+      horarioDia: { isOpen: true, openTime: '08:00', closeTime: '20:00' },
+      miembro: { shiftStart: '12:00', shiftEnd: '18:00' },
+      reservasExistentes: [],
+      duracionSlot: 60,
+      fechaStr: '2026-03-15',
+    });
+
+    // Sin slots antes del turno
+    expect(slots.find((s) => s.time === '08:00')).toBeUndefined();
+    expect(slots.find((s) => s.time === '11:30')).toBeUndefined();
+    // Con slots dentro del turno
+    expect(slots.find((s) => s.time === '12:00')).toBeDefined();
+    expect(slots.find((s) => s.time === '17:00')).toBeDefined();
+    // Sin slots a partir del fin de turno
+    expect(slots.find((s) => s.time === '18:00')).toBeUndefined();
+    expect(slots.find((s) => s.time === '19:00')).toBeUndefined();
+  });
+
+  it('marca como TOO_SHORT el slot que solapa el inicio del descanso', () => {
+    // Slot a las 12:30 con duración 60 min llega hasta 13:30 — cruza el descanso 13:00-14:00
+    const slots = obtenerSlotsDisponibles({
+      horarioDia: horarioBase,
+      miembro: conDescansoMediodia,
+      reservasExistentes: [],
+      duracionSlot: 60,
+      fechaStr: '2026-03-15',
+      filtrarDemasiadoCortos: false,
+    });
+
+    const slotSolapa = slots.find((s) => s.time === '12:30');
+    expect(slotSolapa).toBeDefined();
+    // Un servicio de 60 min desde 12:30 cruza el descanso (13:00), no puede realizarse
+    expect(slotSolapa?.status).not.toBe('AVAILABLE');
+  });
 });

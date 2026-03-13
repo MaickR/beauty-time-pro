@@ -125,6 +125,89 @@ export async function enviarEmailBienvenidaSalon(datos: {
   await enviarEmail(datos.emailDestino, `Tu salón ${datos.nombreSalon} fue aprobado`, html);
 }
 
+export async function enviarEmailBienvenidaEmpleado(params: {
+  email: string;
+  nombreEmpleado: string;
+  nombreSalon: string;
+  contrasenaTemp: string;
+  urlLogin: string;
+  forzarCambioContrasena?: boolean;
+}): Promise<boolean> {
+  const html = `
+    <!DOCTYPE html>
+    <html lang="es">
+    <head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"></head>
+    <body style="margin:0;padding:0;background:#f8fafc;font-family:system-ui,sans-serif;">
+      <div style="max-width:560px;margin:40px auto;background:#fff;border-radius:16px;overflow:hidden;box-shadow:0 2px 8px rgba(0,0,0,.08);">
+        <div style="background:#C2185B;padding:32px 40px;">
+          <h1 style="margin:0;color:#fff;font-size:22px;font-weight:800;">Beauty Time Pro</h1>
+          <p style="margin:8px 0 0;color:rgba(255,255,255,.8);font-size:14px;">Panel de empleados</p>
+        </div>
+        <div style="padding:40px;">
+          <h2 style="margin:0 0 8px;font-size:20px;color:#0f172a;">¡Hola, ${params.nombreEmpleado}!</h2>
+          <p style="color:#475569;font-size:15px;line-height:1.6;margin:0 0 24px;">
+            El salón <strong>${params.nombreSalon}</strong> te ha dado acceso a tu panel de empleado en Beauty Time Pro.
+            Desde aquí podrás ver tu agenda del día y gestionar tus citas.
+          </p>
+          <div style="background:#f8fafc;border-radius:12px;padding:24px;margin-bottom:24px;">
+            <p style="margin:0 0 8px;font-size:13px;color:#64748b;text-transform:uppercase;letter-spacing:.05em;font-weight:700;">Tus credenciales de acceso</p>
+            <p style="margin:0 0 4px;font-size:14px;color:#0f172a;"><strong>Usuario (email):</strong> ${params.email}</p>
+            <p style="margin:0;font-size:14px;color:#0f172a;"><strong>Contraseña temporal:</strong> <code style="background:#e2e8f0;padding:2px 8px;border-radius:4px;font-family:monospace;">${params.contrasenaTemp}</code></p>
+          </div>
+          <p style="color:#94a3b8;font-size:13px;margin:0 0 24px;">
+            ${params.forzarCambioContrasena
+              ? 'Tu acceso está configurado para pedir cambio de contraseña en el primer ingreso.'
+              : 'Te recomendamos cambiar tu contraseña en cuanto entres al sistema por primera vez.'}
+          </p>
+          <a href="${params.urlLogin}" style="display:inline-block;background:#C2185B;color:#fff;text-decoration:none;padding:14px 32px;border-radius:10px;font-weight:700;font-size:15px;">Entrar a mi panel</a>
+        </div>
+        <div style="padding:24px 40px;border-top:1px solid #f1f5f9;">
+          <p style="margin:0;font-size:12px;color:#94a3b8;">Beauty Time Pro — Panel de empleados</p>
+        </div>
+      </div>
+    </body>
+    </html>
+  `;
+  return enviarEmail(params.email, `Acceso a Beauty Time Pro — ${params.nombreSalon}`, html);
+}
+
+export async function enviarEmailRecordatorioPagoSalon(params: {
+  email: string;
+  nombreDueno: string;
+  nombreSalon: string;
+  fechaVencimiento: string;
+}): Promise<void> {
+  const html = `
+    <!DOCTYPE html>
+    <html lang="es">
+    <head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"></head>
+    <body style="margin:0;padding:0;background:#f8fafc;font-family:system-ui,sans-serif;">
+      <div style="max-width:560px;margin:40px auto;background:#fff;border-radius:16px;overflow:hidden;box-shadow:0 2px 8px rgba(0,0,0,.08);">
+        <div style="background:#f59e0b;padding:32px 40px;">
+          <h1 style="margin:0;color:#fff;font-size:22px;font-weight:800;">Beauty Time Pro</h1>
+          <p style="margin:8px 0 0;color:rgba(255,255,255,.85);font-size:14px;">Recordatorio de pago</p>
+        </div>
+        <div style="padding:40px;">
+          <h2 style="margin:0 0 12px;font-size:22px;color:#0f172a;">Hola, ${params.nombreDueno}</h2>
+          <p style="color:#475569;font-size:15px;line-height:1.6;margin:0 0 20px;">
+            Te recordamos que la suscripción de <strong>${params.nombreSalon}</strong> requiere revisión de pago.
+          </p>
+          <div style="background:#fff7ed;border:1px solid #fdba74;border-radius:14px;padding:20px;margin-bottom:24px;">
+            <p style="margin:0 0 8px;font-size:13px;color:#9a3412;font-weight:700;">Resumen de vigencia</p>
+            <p style="margin:0;font-size:15px;color:#0f172a;"><strong>Fecha registrada:</strong> ${params.fechaVencimiento}</p>
+          </div>
+          <p style="color:#64748b;font-size:14px;line-height:1.6;margin:0;">
+            Si ya realizaste el pago puedes ignorar este correo. Si todavía está pendiente, responde este mensaje o contacta al equipo administrador para mantener el salón activo.
+          </p>
+        </div>
+      </div>
+    </body>
+    </html>
+  `;
+
+  await enviarEmail(params.email, `Recordatorio de pago — ${params.nombreSalon}`, html);
+}
+
 export async function enviarEmailRechazoSalon(datos: {
   emailDestino: string;
   nombreDueno: string;
@@ -138,4 +221,97 @@ export async function enviarEmailRechazoSalon(datos: {
 export async function obtenerDescripcionRecompensa(estudioId: string): Promise<string> {
   const config = await obtenerConfigFidelidad(estudioId);
   return config.descripcionRecompensa;
+}
+
+export async function enviarEmailSolicitudCancelacion(params: {
+  nombreSalon: string;
+  motivo?: string;
+  fechaSolicitud: string;
+}): Promise<void> {
+  const emailAdmin = env.EMAIL_REMITENTE;
+  if (!emailAdmin) return;
+
+  const html = `
+    <!DOCTYPE html>
+    <html lang="es">
+    <head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"></head>
+    <body style="margin:0;padding:0;background:#f8fafc;font-family:system-ui,sans-serif;">
+      <div style="max-width:560px;margin:40px auto;background:#fff;border-radius:16px;overflow:hidden;box-shadow:0 2px 8px rgba(0,0,0,.08);">
+        <div style="background:#ef4444;padding:32px 40px;">
+          <h1 style="margin:0;color:#fff;font-size:22px;font-weight:800;">Beauty Time Pro</h1>
+          <p style="margin:8px 0 0;color:rgba(255,255,255,.8);font-size:14px;">Solicitud de cancelación</p>
+        </div>
+        <div style="padding:40px;">
+          <h2 style="margin:0 0 8px;font-size:20px;color:#0f172a;">Nueva solicitud de cancelación</h2>
+          <p style="color:#475569;font-size:15px;line-height:1.6;margin:0 0 24px;">
+            El salón <strong>${params.nombreSalon}</strong> ha solicitado la cancelación de su suscripción.
+          </p>
+          <div style="background:#fef2f2;border:1px solid #fecaca;border-radius:12px;padding:20px;margin-bottom:24px;">
+            <p style="margin:0 0 8px;font-size:13px;color:#991b1b;font-weight:700;">Detalles</p>
+            <p style="margin:0 0 4px;font-size:14px;color:#0f172a;"><strong>Salón:</strong> ${params.nombreSalon}</p>
+            <p style="margin:0 0 4px;font-size:14px;color:#0f172a;"><strong>Fecha de solicitud:</strong> ${params.fechaSolicitud}</p>
+            ${params.motivo ? `<p style="margin:0;font-size:14px;color:#0f172a;"><strong>Motivo:</strong> ${params.motivo}</p>` : '<p style="margin:0;font-size:14px;color:#64748b;font-style:italic;">Sin motivo especificado</p>'}
+          </div>
+          <p style="color:#64748b;font-size:14px;">
+            Accede al panel de administración para aprobar o rechazar esta solicitud.
+          </p>
+        </div>
+      </div>
+    </body>
+    </html>
+  `;
+  await enviarEmail(emailAdmin, `Solicitud de cancelación — ${params.nombreSalon}`, html);
+}
+
+export async function enviarEmailCancelacionProcesada(params: {
+  email: string;
+  nombreSalon: string;
+  aprobada: boolean;
+  respuesta?: string;
+}): Promise<void> {
+  const asunto = params.aprobada
+    ? `Cancelación de suscripción confirmada — ${params.nombreSalon}`
+    : `Tu solicitud de cancelación fue rechazada — ${params.nombreSalon}`;
+
+  const html = `
+    <!DOCTYPE html>
+    <html lang="es">
+    <head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"></head>
+    <body style="margin:0;padding:0;background:#f8fafc;font-family:system-ui,sans-serif;">
+      <div style="max-width:560px;margin:40px auto;background:#fff;border-radius:16px;overflow:hidden;box-shadow:0 2px 8px rgba(0,0,0,.08);">
+        <div style="background:${params.aprobada ? '#16a34a' : '#2563eb'};padding:32px 40px;">
+          <h1 style="margin:0;color:#fff;font-size:22px;font-weight:800;">Beauty Time Pro</h1>
+          <p style="margin:8px 0 0;color:rgba(255,255,255,.8);font-size:14px;">
+            ${params.aprobada ? 'Cancelación procesada' : 'Solicitud revisada'}
+          </p>
+        </div>
+        <div style="padding:40px;">
+          <h2 style="margin:0 0 16px;font-size:20px;color:#0f172a;">
+            ${params.aprobada ? 'Tu suscripción fue cancelada' : 'Tu solicitud fue rechazada'}
+          </h2>
+          ${params.aprobada
+            ? `<p style="color:#475569;font-size:15px;line-height:1.6;margin:0 0 24px;">
+                Tu salón <strong>${params.nombreSalon}</strong> ha sido dado de baja del sistema.
+                Si tienes preguntas, responde a este correo.
+              </p>`
+            : `<p style="color:#475569;font-size:15px;line-height:1.6;margin:0 0 24px;">
+                Revisamos tu solicitud de cancelación para <strong>${params.nombreSalon}</strong> y decidimos no procesarla.
+                Tu suscripción sigue activa.
+              </p>`
+          }
+          ${params.respuesta
+            ? `<div style="background:#f8fafc;border-radius:12px;padding:20px;margin-bottom:24px;">
+                <p style="margin:0 0 8px;font-size:13px;color:#64748b;font-weight:700;">Respuesta del equipo</p>
+                <p style="margin:0;font-size:14px;color:#0f172a;">${params.respuesta}</p>
+              </div>`
+            : ''}
+        </div>
+        <div style="padding:24px 40px;border-top:1px solid #f1f5f9;">
+          <p style="margin:0;font-size:12px;color:#94a3b8;">Beauty Time Pro — Equipo de soporte</p>
+        </div>
+      </div>
+    </body>
+    </html>
+  `;
+  await enviarEmail(params.email, asunto, html);
 }

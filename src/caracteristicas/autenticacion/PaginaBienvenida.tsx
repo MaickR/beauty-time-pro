@@ -95,16 +95,18 @@ export function PaginaBienvenida() {
         style={{ animation: 'entradaSuave 0.6s ease-out 0.3s both' }}
       >
         <div className="group flex flex-col rounded-3xl border border-slate-200 bg-white p-8 shadow-sm transition-all duration-300 hover:-translate-y-1 hover:shadow-xl">
-          <div className="mb-5 flex h-16 w-16 items-center justify-center rounded-2xl bg-pink-50 transition-colors group-hover:bg-pink-100">
+          <div className="mb-5 mx-auto flex h-16 w-16 items-center justify-center rounded-2xl bg-pink-50 transition-colors group-hover:bg-pink-100">
             <User className="h-8 w-8 text-pink-600" aria-hidden="true" />
           </div>
-          <h2 className="mb-2 text-2xl font-black text-slate-900">Quiero reservar citas</h2>
-          <p className="mb-6 flex-1 text-slate-500">
+          <h2 className="mb-2 text-center text-2xl font-black text-slate-900">
+            Quiero reservar citas
+          </h2>
+          <p className="mb-6 text-slate-500">
             Encuentra el salón ideal, compara opciones y agenda sin fricción.
           </p>
           <Link
             to="/registro/cliente"
-            className="mb-3 block w-full rounded-2xl bg-linear-to-r from-[#C2185B] to-[#E91E8C] px-6 py-3.5 text-center font-bold text-white transition-all duration-200 hover:scale-[1.02] hover:shadow-lg"
+            className="mt-auto mb-3 block w-full rounded-2xl bg-linear-to-r from-[#C2185B] to-[#E91E8C] px-6 py-3.5 text-center font-bold text-white transition-all duration-200 hover:scale-[1.02] hover:shadow-lg"
           >
             Crear cuenta
           </Link>
@@ -122,16 +124,18 @@ export function PaginaBienvenida() {
         </div>
 
         <div className="group flex flex-col rounded-3xl border border-slate-200 bg-white p-8 shadow-sm transition-all duration-300 hover:-translate-y-1 hover:shadow-xl">
-          <div className="mb-5 flex h-16 w-16 items-center justify-center rounded-2xl bg-pink-50 transition-colors group-hover:bg-pink-100">
+          <div className="mb-5 mx-auto flex h-16 w-16 items-center justify-center rounded-2xl bg-pink-50 transition-colors group-hover:bg-pink-100">
             <Scissors className="h-8 w-8 text-pink-600" aria-hidden="true" />
           </div>
-          <h2 className="mb-2 text-2xl font-black text-slate-900">Quiero administrar mi salón</h2>
-          <p className="mb-6 flex-1 text-slate-500">
+          <h2 className="mb-2 text-center text-2xl font-black text-slate-900">
+            Quiero administrar mi salón
+          </h2>
+          <p className="mb-6 text-slate-500">
             Ordena tu operación diaria y profesionaliza la experiencia de tu salón.
           </p>
           <Link
             to="/registro/salon"
-            className="mb-3 block w-full rounded-2xl bg-linear-to-r from-[#C2185B] to-[#E91E8C] px-6 py-3.5 text-center font-bold text-white transition-all duration-200 hover:scale-[1.02] hover:shadow-lg"
+            className="mt-auto mb-3 block w-full rounded-2xl bg-linear-to-r from-[#C2185B] to-[#E91E8C] px-6 py-3.5 text-center font-bold text-white transition-all duration-200 hover:scale-[1.02] hover:shadow-lg"
           >
             Registrar mi salón
           </Link>

@@ -3,6 +3,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Upload } from 'lucide-react';
 import { usarToast } from '../../../componentes/ui/ProveedorToast';
 import { usarTemaSalon } from '../../../hooks/usarTemaSalon';
+import { usarContextoApp } from '../../../contextos/ContextoApp';
 import { URL_BASE } from '../../../lib/clienteHTTP';
 import {
   obtenerPerfilEstudio,
@@ -95,7 +96,9 @@ function AreaLogo({
 
 export function PerfilSalon({ estudioId }: PropsPerfilSalon) {
   const { mostrarToast } = usarToast();
+  const { recargar } = usarContextoApp();
   const clienteConsulta = useQueryClient();
+  const refBorradorRestaurado = useRef(false);
 
   const { data: perfil, isLoading } = useQuery({
     queryKey: ['perfil-estudio', estudioId],
@@ -109,19 +112,51 @@ export function PerfilSalon({ estudioId }: PropsPerfilSalon) {
   const [telefono, setTelefono] = useState('');
   const [emailContacto, setEmailContacto] = useState('');
   const [colorPrimario, setColorPrimario] = useState('#C2185B');
+  const CLAVE_ALMACEN = `perfil_salon_${estudioId}`;
+
+  // Hook de tema aplicado siempre, incondicionalmente, antes de cualquier early return
+  usarTemaSalon(colorPrimario);
 
   // Inicializar formulario cuando llegan los datos del servidor
   useEffect(() => {
     if (!perfil) return;
+    if (!refBorradorRestaurado.current) {
+      try {
+        const borrador = localStorage.getItem(CLAVE_ALMACEN);
+        if (borrador) {
+          const datos = JSON.parse(borrador) as Record<string, string>;
+          setNombre(datos.nombre ?? perfil.nombre);
+          setDescripcion(datos.descripcion ?? perfil.descripcion ?? '');
+          setDireccion(datos.direccion ?? perfil.direccion ?? '');
+          setTelefono(datos.telefono ?? perfil.telefono ?? '');
+          setEmailContacto(datos.emailContacto ?? perfil.emailContacto ?? '');
+          setColorPrimario(datos.colorPrimario ?? perfil.colorPrimario ?? '#C2185B');
+          refBorradorRestaurado.current = true;
+          return;
+        }
+      } catch {
+        localStorage.removeItem(CLAVE_ALMACEN);
+      }
+      refBorradorRestaurado.current = true;
+    }
     setNombre(perfil.nombre);
     setDescripcion(perfil.descripcion ?? '');
     setDireccion(perfil.direccion ?? '');
     setTelefono(perfil.telefono ?? '');
     setEmailContacto(perfil.emailContacto ?? '');
     setColorPrimario(perfil.colorPrimario ?? '#C2185B');
-  }, [perfil?.id]);
+  }, [CLAVE_ALMACEN, perfil]);
 
-  usarTemaSalon(colorPrimario);
+  useEffect(() => {
+    if (!refBorradorRestaurado.current) {
+      return;
+    }
+
+    localStorage.setItem(
+      CLAVE_ALMACEN,
+      JSON.stringify({ nombre, descripcion, direccion, telefono, emailContacto, colorPrimario }),
+    );
+  }, [CLAVE_ALMACEN, colorPrimario, descripcion, direccion, emailContacto, nombre, telefono]);
 
   const mutacion = useMutation({
     mutationFn: () =>
@@ -134,7 +169,9 @@ export function PerfilSalon({ estudioId }: PropsPerfilSalon) {
         colorPrimario,
       }),
     onSuccess: () => {
+      localStorage.removeItem(CLAVE_ALMACEN);
       void clienteConsulta.invalidateQueries({ queryKey: ['perfil-estudio', estudioId] });
+      recargar();
       mostrarToast('Cambios guardados correctamente');
     },
     onError: () => mostrarToast('Error al guardar los cambios'),
@@ -180,6 +217,34 @@ export function PerfilSalon({ estudioId }: PropsPerfilSalon) {
             >
               Así se verá tu color en la app
             </button>
+          </div>
+          <div className="flex flex-wrap gap-2 mt-3">
+            {[
+              '#F48FB1',
+              '#CE93D8',
+              '#80DEEA',
+              '#A5D6A7',
+              '#FFF176',
+              '#FFCC80',
+              '#EF9A9A',
+              '#90CAF9',
+              '#B2DFDB',
+              '#E1BEE7',
+            ].map((c) => (
+              <button
+                key={c}
+                type="button"
+                aria-label={`Seleccionar color ${c}`}
+                onClick={() => setColorPrimario(c)}
+                className="w-8 h-8 rounded-full border-2 transition-transform hover:scale-110"
+                style={{
+                  backgroundColor: c,
+                  borderColor: colorPrimario === c ? '#1e293b' : 'transparent',
+                  outline: colorPrimario === c ? '2px solid #1e293b' : '2px solid transparent',
+                  outlineOffset: '2px',
+                }}
+              />
+            ))}
           </div>
         </div>
       </section>

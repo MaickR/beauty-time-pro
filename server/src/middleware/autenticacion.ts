@@ -8,6 +8,8 @@ export interface PayloadJWT {
   estudioId: string | null;
   nombre?: string;
   email?: string;
+  personalId?: string;
+  forzarCambioContrasena?: boolean;
   esMaestroTotal?: boolean;
   permisos?: {
     aprobarSalones: boolean;
@@ -38,14 +40,80 @@ export async function verificarJWT(
 
     const payload = solicitud.user as PayloadJWT;
 
+    if (payload.rol === 'empleado') {
+      const acceso = await prisma.empleadoAcceso.findUnique({
+        where: { id: payload.sub },
+        select: { activo: true },
+      });
+      if (!acceso) {
+        await respuesta.code(401).send({ error: 'No autenticado' });
+        return;
+      }
+      if (!acceso.activo) {
+        await respuesta.code(403).send({
+          error: 'Tu acceso ha sido revocado',
+          codigo: 'ACCESO_REVOCADO',
+        });
+        return;
+      }
+      return;
+    }
+
     if (payload.rol === 'cliente') {
       const cliente = await prisma.clienteApp.findUnique({
         where: { id: payload.sub },
         select: { activo: true },
       });
 
-      if (cliente && !cliente.activo) {
-        await respuesta.code(403).send({ error: 'Tu cuenta ha sido desactivada. Contacta al administrador principal.' });
+      if (!cliente) {
+        await respuesta.code(401).send({ error: 'No autenticado' });
+        return;
+      }
+
+      if (!cliente.activo) {
+        await respuesta.code(403).send({
+          error: 'Tu cuenta ha sido desactivada',
+          codigo: 'CUENTA_DESACTIVADA',
+        });
+        return;
+      }
+
+      return;
+    }
+
+    if (payload.rol === 'dueno') {
+      const usuario = await prisma.usuario.findUnique({
+        where: { id: payload.sub },
+        select: {
+          activo: true,
+          estudio: {
+            select: {
+              estado: true,
+              fechaVencimiento: true,
+            },
+          },
+        },
+      });
+
+      if (!usuario) {
+        await respuesta.code(401).send({ error: 'No autenticado' });
+        return;
+      }
+
+      if (!usuario.activo) {
+        await respuesta.code(403).send({
+          error: 'Tu cuenta ha sido suspendida',
+          codigo: 'CUENTA_SUSPENDIDA',
+        });
+        return;
+      }
+
+      if (usuario.estudio?.estado === 'suspendido') {
+        await respuesta.code(403).send({
+          error: 'Tu salón está suspendido',
+          codigo: 'SALON_SUSPENDIDO',
+        });
+        return;
       }
 
       return;
@@ -56,8 +124,17 @@ export async function verificarJWT(
       select: { activo: true },
     });
 
-    if (usuario && !usuario.activo) {
-      await respuesta.code(403).send({ error: 'Tu cuenta ha sido desactivada. Contacta al administrador principal.' });
+    if (!usuario) {
+      await respuesta.code(401).send({ error: 'No autenticado' });
+      return;
+    }
+
+    if (!usuario.activo) {
+      await respuesta.code(403).send({
+        error: 'Tu cuenta ha sido desactivada',
+        codigo: 'CUENTA_DESACTIVADA',
+      });
+      return;
     }
   } catch {
     await respuesta.code(401).send({ error: 'No autenticado' });

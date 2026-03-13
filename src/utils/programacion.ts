@@ -9,7 +9,9 @@ export function tiempoAMinutos(tiempo: string): number | null {
 
 /** Convierte minutos desde medianoche a cadena "HH:mm". */
 export function minutosATiempo(minutos: number): string {
-  const h = Math.floor(minutos / 60).toString().padStart(2, '0');
+  const h = Math.floor(minutos / 60)
+    .toString()
+    .padStart(2, '0');
   const m = (minutos % 60).toString().padStart(2, '0');
   return `${h}:${m}`;
 }
@@ -59,14 +61,15 @@ export function obtenerSlotsDisponibles({
   filtrarPasados = false,
   filtrarDemasiadoCortos = false,
 }: ParametrosSlots): SlotTiempo[] {
+  // Día marcado como cerrado — sin slots disponibles
+  if (!horarioDia.isOpen) return [];
+
   const inicioEstudio = tiempoAMinutos(horarioDia.openTime) ?? 0;
   const finEstudio = tiempoAMinutos(horarioDia.closeTime) ?? 0;
   const inicioTurno = miembro.shiftStart
     ? (tiempoAMinutos(miembro.shiftStart) ?? inicioEstudio)
     : inicioEstudio;
-  const finTurno = miembro.shiftEnd
-    ? (tiempoAMinutos(miembro.shiftEnd) ?? finEstudio)
-    : finEstudio;
+  const finTurno = miembro.shiftEnd ? (tiempoAMinutos(miembro.shiftEnd) ?? finEstudio) : finEstudio;
 
   const inicioEfectivo = Math.max(inicioEstudio, inicioTurno);
   const finEfectivo = Math.min(finEstudio, finTurno);

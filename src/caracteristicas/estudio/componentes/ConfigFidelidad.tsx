@@ -60,8 +60,8 @@ export function ConfigFidelidad({ estudioId }: PropsConfigFidelidad) {
   };
 
   return (
-    <div className="space-y-8">
-      <section className="bg-white rounded-[2.5rem] p-8 border border-slate-200 shadow-sm space-y-6 max-w-4xl">
+    <div className="space-y-8 overflow-x-hidden">
+      <section className="bg-white rounded-[2.5rem] p-8 border border-slate-200 shadow-sm space-y-6 max-w-4xl overflow-x-hidden">
         <div className="flex items-start justify-between gap-4 flex-wrap">
           <div>
             <h3 className="text-xl font-black uppercase tracking-tight">Programa de Fidelidad</h3>
@@ -69,13 +69,29 @@ export function ConfigFidelidad({ estudioId }: PropsConfigFidelidad) {
               Premia a tus clientes frecuentes automáticamente.
             </p>
           </div>
-          <button
-            type="button"
-            onClick={() => actualizar('activo', !formulario.activo)}
-            className={`px-5 py-3 rounded-2xl text-sm font-black uppercase tracking-widest transition-colors ${formulario.activo ? 'bg-emerald-500 text-white' : 'bg-slate-200 text-slate-700'}`}
-          >
-            {formulario.activo ? 'Activado' : 'Desactivado'}
-          </button>
+          {formulario.activo ? (
+            <div className="flex items-center gap-3">
+              <span className="flex items-center gap-1.5 px-4 py-2 rounded-2xl bg-emerald-50 border border-emerald-200 text-emerald-700 text-sm font-black">
+                <span className="w-2 h-2 rounded-full bg-emerald-500 inline-block" />
+                Activo
+              </span>
+              <button
+                type="button"
+                onClick={() => actualizar('activo', false)}
+                className="text-xs text-slate-400 hover:text-slate-600 underline"
+              >
+                Desactivar
+              </button>
+            </div>
+          ) : (
+            <button
+              type="button"
+              onClick={() => actualizar('activo', true)}
+              className="px-6 py-3 rounded-2xl bg-pink-600 hover:bg-pink-700 text-white text-sm font-black uppercase tracking-widest transition-colors shadow-sm"
+            >
+              Activar programa de fidelidad
+            </button>
+          )}
         </div>
 
         {formulario.activo && (
@@ -170,6 +186,11 @@ export function ConfigFidelidad({ estudioId }: PropsConfigFidelidad) {
                 maxLength={100}
                 value={formulario.descripcionRecompensa}
                 onChange={(e) => actualizar('descripcionRecompensa', e.target.value)}
+                placeholder={
+                  formulario.tipoRecompensa === 'descuento'
+                    ? 'Ej: 20% de descuento en tu próxima visita'
+                    : 'Ej: Corte de cabello gratis'
+                }
                 className="w-full border border-slate-200 rounded-2xl px-4 py-3 resize-none"
               />
             </div>
@@ -196,7 +217,7 @@ export function ConfigFidelidad({ estudioId }: PropsConfigFidelidad) {
         )}
       </section>
 
-      <section className="bg-white rounded-[2.5rem] p-8 border border-slate-200 shadow-sm max-w-4xl">
+      <section className="bg-white rounded-[2.5rem] p-8 border border-slate-200 shadow-sm max-w-4xl overflow-x-hidden">
         <h3 className="text-xl font-black uppercase tracking-tight mb-6">
           Ranking de clientes fieles
         </h3>
@@ -204,15 +225,35 @@ export function ConfigFidelidad({ estudioId }: PropsConfigFidelidad) {
           {ranking.map((cliente) => (
             <div key={cliente.id} className="rounded-2xl border border-slate-200 p-5">
               <div className="flex items-start justify-between gap-4 mb-3 flex-wrap">
-                <div>
-                  <p className="font-black text-slate-900">{cliente.nombre}</p>
-                  <p className="text-sm text-slate-500">{cliente.telefono}</p>
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-full bg-pink-100 text-pink-700 flex items-center justify-center font-black text-sm shrink-0">
+                    {cliente.nombre.charAt(0).toUpperCase()}
+                  </div>
+                  <div>
+                    <p className="font-black text-slate-900">{cliente.nombre}</p>
+                    <p className="text-sm text-slate-500">{cliente.telefono}</p>
+                    {cliente.ultimaVisita && (
+                      <p className="text-xs text-slate-400 mt-0.5">
+                        Última visita:{' '}
+                        {new Date(cliente.ultimaVisita).toLocaleDateString('es-MX', {
+                          day: 'numeric',
+                          month: 'short',
+                          year: 'numeric',
+                        })}
+                      </p>
+                    )}
+                  </div>
                 </div>
-                {cliente.recompensaDisponible && (
-                  <span className="px-3 py-1 rounded-full bg-emerald-100 text-emerald-700 text-xs font-black">
-                    🎁 Recompensa disponible
-                  </span>
-                )}
+                <div className="flex items-center gap-2 flex-wrap">
+                  {cliente.recompensasDisponibles > 0 && (
+                    <span className="px-3 py-1 rounded-full bg-emerald-100 text-emerald-700 text-xs font-black">
+                      🎁{' '}
+                      {cliente.recompensasDisponibles === 1
+                        ? '1 recompensa disponible'
+                        : `${cliente.recompensasDisponibles} recompensas disponibles`}
+                    </span>
+                  )}
+                </div>
               </div>
               <progress
                 className="w-full h-3 [&::-webkit-progress-bar]:rounded-full [&::-webkit-progress-bar]:bg-slate-100 [&::-webkit-progress-value]:rounded-full [&::-webkit-progress-value]:bg-(--color-primario)"

@@ -3,8 +3,9 @@ import { useParams, useNavigate } from 'react-router-dom';
 import {
   Store,
   LogOut,
-  Key,
   Copy,
+  Link2,
+  MessageCircle,
   ChevronLeft,
   ChevronRight,
   Wallet,
@@ -12,6 +13,7 @@ import {
   AlertTriangle,
   Calendar,
 } from 'lucide-react';
+import { formatearDinero } from '../../utils/formato';
 import { usarContextoApp } from '../../contextos/ContextoApp';
 import { usarTituloPagina } from '../../hooks/usarTituloPagina';
 import { usarTiendaAuth } from '../../tienda/tiendaAuth';
@@ -21,9 +23,10 @@ import { AgendaDiaria } from './componentes/AgendaDiaria';
 import { ModalCrearReservaManual } from './componentes/ModalCrearReservaManual';
 import { PanelPersonal } from './componentes/PanelPersonal';
 import { GestorFestivos } from './componentes/GestorFestivos';
-import { ProximasReservas } from './componentes/ProximasReservas';
 import { ModalBienvenidaSalon } from './componentes/ModalBienvenidaSalon';
 import { Spinner } from '../../componentes/ui/Spinner';
+import { BannerNotificacionesPush } from '../../componentes/ui/BannerNotificacionesPush';
+import { usarNotificacionesPush } from '../../hooks/usarNotificacionesPush';
 import type { Moneda } from '../../tipos';
 
 export function PaginaAgenda() {
@@ -34,8 +37,13 @@ export function PaginaAgenda() {
   const { cerrarSesion } = usarTiendaAuth();
   const { mostrarToast } = usarToast();
   const [fechaVista, setFechaVista] = useState(new Date());
-  const [mostrarBienvenida, setMostrarBienvenida] = useState(true);
+  const [mostrarBienvenida, setMostrarBienvenida] = useState(() => {
+    if (!estudioId) return true;
+    return localStorage.getItem(`bienvenida_salon_${estudioId}`) !== 'visto';
+  });
   const [mostrarModalCrearCita, setMostrarModalCrearCita] = useState(false);
+  const [activandoPush, setActivandoPush] = useState(false);
+  const push = usarNotificacionesPush();
 
   const estudio = estudios.find((s) => s.id === estudioId);
 
@@ -54,6 +62,27 @@ export function PaginaAgenda() {
 
   const moneda: Moneda = estudio.country === 'Colombia' ? 'COP' : 'MXN';
   const reservasEstudio = reservas.filter((r) => r.studioId === estudio.id);
+
+  const ahora = new Date();
+  const horaActual = ahora.getHours();
+  const saludoTiempo =
+    horaActual < 12 ? 'Buenos días' : horaActual < 18 ? 'Buenas tardes' : 'Buenas noches';
+  const hoyStr = obtenerFechaLocalISO(ahora);
+  const citasHoy = reservasEstudio.filter((r) => r.date === hoyStr && r.status !== 'cancelled');
+  const totalEstimadoHoy = citasHoy.reduce((sum, r) => sum + r.totalPrice, 0);
+  const especialistasActivos = estudio.staff.filter((s) => s.active).length;
+  const linkReservas = `${window.location.origin}/salones/${estudio.id}/reservar`;
+
+  const copiarLink = () => {
+    navigator.clipboard
+      .writeText(linkReservas)
+      .then(() => mostrarToast({ mensaje: 'Enlace copiado al portapapeles', variante: 'exito' }));
+  };
+
+  const compartirWhatsApp = () => {
+    const texto = encodeURIComponent(`¡Reserva tu cita en ${estudio.name}! ${linkReservas}`);
+    window.open(`https://wa.me/?text=${texto}`, '_blank', 'noopener,noreferrer');
+  };
   const subStatus = obtenerEstadoSuscripcion(estudio);
   const subPrecio = moneda === 'COP' ? '$200,000 COP' : '$1,000 MXN';
 
@@ -70,6 +99,20 @@ export function PaginaAgenda() {
 
   return (
     <div className="min-h-screen bg-slate-50 font-sans pb-20">
+      <BannerNotificacionesPush
+        visible={push.bannerVisible}
+        activando={activandoPush}
+        mensaje="Activa las notificaciones para recibir avisos de nuevas citas y cancelaciones"
+        onActivar={async () => {
+          setActivandoPush(true);
+          try {
+            await push.activar();
+          } finally {
+            setActivandoPush(false);
+          }
+        }}
+        onDescartar={push.descartar}
+      />
       <header className="no-imprimir bg-white p-6 md:p-8 border-b border-slate-200 flex justify-between items-center sticky top-0 z-40 shadow-sm">
         <div className="flex items-center gap-4">
           <div className="bg-pink-600 p-3 rounded-2xl text-white">
@@ -94,6 +137,43 @@ export function PaginaAgenda() {
       </header>
 
       <main className="max-w-7xl mx-auto p-4 md:p-8 space-y-8">
+        {/* Saludo y resumen del día */}
+        <div className="bg-linear-to-br from-pink-600 to-rose-500 rounded-[2.5rem] p-6 md:p-8 text-white shadow-lg">
+          <div>
+            <p className="text-sm font-bold opacity-80">{saludoTiempo},</p>
+            <h2 className="text-2xl md:text-3xl font-black uppercase leading-tight mt-1">
+              {estudio.name}
+            </h2>
+            <p className="mt-2 text-sm opacity-70 capitalize">
+              {ahora.toLocaleDateString('es-ES', {
+                weekday: 'long',
+                day: 'numeric',
+                month: 'long',
+              })}
+            </p>
+          </div>
+          <div className="mt-5 flex flex-wrap gap-3">
+            <div className="bg-white/20 rounded-2xl px-5 py-3 min-w-27.5 backdrop-blur-sm">
+              <p className="text-[10px] font-bold opacity-80 uppercase tracking-widest">
+                Citas hoy
+              </p>
+              <p className="text-2xl font-black">{citasHoy.length}</p>
+            </div>
+            <div className="bg-white/20 rounded-2xl px-5 py-3 min-w-32.5 backdrop-blur-sm">
+              <p className="text-[10px] font-bold opacity-80 uppercase tracking-widest">
+                Total estimado
+              </p>
+              <p className="text-xl font-black">{formatearDinero(totalEstimadoHoy, moneda)}</p>
+            </div>
+            <div className="bg-white/20 rounded-2xl px-5 py-3 min-w-27.5 backdrop-blur-sm">
+              <p className="text-[10px] font-bold opacity-80 uppercase tracking-widest">
+                Especialistas
+              </p>
+              <p className="text-2xl font-black">{especialistasActivos}</p>
+            </div>
+          </div>
+        </div>
+
         <div className="no-imprimir flex bg-slate-200/50 p-1 rounded-2xl w-fit border border-slate-200 mx-auto md:mx-0">
           <button
             onClick={() => navegar(`/estudio/${estudio.id}/agenda`)}
@@ -144,30 +224,48 @@ export function PaginaAgenda() {
           </div>
         )}
 
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
-          <div className="lg:col-span-5 space-y-8">
-            <div className="bg-slate-900 rounded-[2.5rem] p-6 text-white shadow-xl flex items-center justify-between gap-4 border border-slate-800">
-              <div>
-                <h2 className="text-sm font-black italic uppercase flex items-center gap-2">
-                  <Key className="text-pink-500 w-4 h-4" /> Clave Clientes
+        {/*
+          Grid aplanado: cada sección es un item directo del grid.
+          - Móvil (1 col): order-N controla el orden visual.
+          - Desktop (12 cols): col-span + posición explícita para la agenda.
+          Orden móvil: 1=link, 2=calendario, 3=agenda, 4=festivos, 5=personal.
+        */}
+        <div className="grid grid-cols-1 lg:grid-cols-12 lg:items-start gap-8">
+          {/* 1 — Link de reservas */}
+          <div className="order-1 lg:col-span-5">
+            <div className="bg-white rounded-[2.5rem] p-5 border border-slate-200 shadow-sm">
+              <div className="flex items-center gap-2 mb-3">
+                <Link2 className="w-4 h-4 text-pink-500" aria-hidden="true" />
+                <h2 className="text-sm font-black uppercase text-slate-700 tracking-wide">
+                  Link de reservas de tu salón
                 </h2>
               </div>
-              <div className="bg-slate-800 px-4 py-2 rounded-xl font-mono font-black text-sm text-purple-400 border border-slate-700 flex items-center gap-3">
-                {estudio.clientKey}
+              <div className="bg-slate-50 rounded-xl px-4 py-2.5 flex items-center border border-slate-100 overflow-hidden">
+                <span className="text-xs font-mono text-slate-600 truncate flex-1">
+                  {linkReservas}
+                </span>
+              </div>
+              <div className="flex gap-2 mt-3">
                 <button
-                  onClick={() => {
-                    navigator.clipboard
-                      .writeText(estudio.clientKey)
-                      .then(() => mostrarToast('Clave copiada al portapapeles'));
-                  }}
-                  aria-label="Copiar clave de clientes"
-                  className="text-slate-400 hover:text-white"
+                  type="button"
+                  onClick={copiarLink}
+                  className="flex-1 flex items-center justify-center gap-2 rounded-xl bg-slate-100 py-2.5 text-xs font-black text-slate-700 hover:bg-slate-200 transition-colors"
                 >
-                  <Copy className="w-4 h-4" />
+                  <Copy className="w-3.5 h-3.5" aria-hidden="true" /> Copiar enlace
+                </button>
+                <button
+                  type="button"
+                  onClick={compartirWhatsApp}
+                  className="flex-1 flex items-center justify-center gap-2 rounded-xl bg-green-500 py-2.5 text-xs font-black text-white hover:bg-green-600 transition-colors"
+                >
+                  <MessageCircle className="w-3.5 h-3.5" aria-hidden="true" /> WhatsApp
                 </button>
               </div>
             </div>
+          </div>
 
+          {/* 2 — Calendario */}
+          <div className="order-2 lg:col-span-5">
             <div className="bg-white rounded-[3rem] p-6 md:p-8 border border-slate-200 shadow-sm">
               <div className="flex items-center justify-between mb-8">
                 <button
@@ -221,22 +319,26 @@ export function PaginaAgenda() {
                 })}
               </div>
             </div>
-
-            <GestorFestivos estudio={estudio} />
-            <PanelPersonal estudio={estudio} reservas={reservasEstudio} fechaVista={fechaVista} />
           </div>
 
-          <div className="lg:col-span-7 space-y-8">
+          {/* 3 — Agenda: 3ª en móvil; columna derecha (filas 1-4) en desktop */}
+          <div className="order-3 lg:col-span-7 lg:col-start-6 lg:row-start-1 lg:row-end-5">
             <AgendaDiaria
               estudio={estudio}
               reservas={reservasEstudio}
               fechaVista={fechaVista}
               onCrearCitaManual={() => setMostrarModalCrearCita(true)}
             />
-            <ProximasReservas
-              reservas={reservasEstudio.filter((b) => b.date >= obtenerFechaLocalISO(new Date()))}
-              moneda={moneda}
-            />
+          </div>
+
+          {/* 4 — Festivos */}
+          <div className="order-4 lg:col-span-5">
+            <GestorFestivos estudio={estudio} />
+          </div>
+
+          {/* 5 — Personal */}
+          <div className="order-5 lg:col-span-5">
+            <PanelPersonal estudio={estudio} reservas={reservasEstudio} fechaVista={fechaVista} />
           </div>
         </div>
       </main>
@@ -253,7 +355,10 @@ export function PaginaAgenda() {
         <ModalBienvenidaSalon
           nombreSalon={estudio.name}
           estudioId={estudio.id}
-          onCerrar={() => setMostrarBienvenida(false)}
+          onCerrar={() => {
+            if (estudioId) localStorage.setItem(`bienvenida_salon_${estudioId}`, 'visto');
+            setMostrarBienvenida(false);
+          }}
         />
       )}
     </div>

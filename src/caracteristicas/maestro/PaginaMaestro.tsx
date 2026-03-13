@@ -8,6 +8,7 @@ import { usarToast } from '../../componentes/ui/ProveedorToast';
 import { usarFormularioEstudio, confirmarPago } from './hooks/usarFormularioEstudio';
 import { DirectorioEstudios } from './componentes/DirectorioEstudios';
 import { SolicitudesPendientes } from './componentes/SolicitudesPendientes';
+import { SolicitudesCancelacion } from './componentes/SolicitudesCancelacion';
 import { HistorialSalones } from './componentes/HistorialSalones';
 import { VisorReservas } from './componentes/VisorReservas';
 import { ModalPago } from './componentes/ModalPago';
@@ -148,13 +149,14 @@ export function PaginaMaestro() {
                   onClick={hook.abrirModalAlta}
                   className="no-imprimir bg-pink-600 text-white px-8 py-4 rounded-2xl font-black shadow-xl flex items-center gap-2 hover:bg-pink-700 transition-all"
                 >
-                  <PlusCircle /> DAR DE ALTA STUDIO
+                  <PlusCircle /> Registrar nuevo salón
                 </button>
               )}
             </div>
 
             <div className="space-y-12">
               {puedeAprobarSalones && <SolicitudesPendientes />}
+              {puedeGestionarPagos && <SolicitudesCancelacion />}
               {puedeSuspenderSalones && <HistorialSalones />}
 
               {puedeSuspenderSalones && (

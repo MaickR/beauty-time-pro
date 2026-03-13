@@ -47,7 +47,7 @@ export function ModalEstudio({
       role="dialog"
       aria-modal="true"
       aria-labelledby="modal-estudio-titulo"
-      className="fixed inset-0 bg-black/80 backdrop-blur-xl z-[60] flex items-center justify-center p-4"
+      className="fixed inset-0 bg-black/80 backdrop-blur-xl z-60 flex items-center justify-center p-4"
     >
       <div className="bg-white w-full max-w-5xl max-h-[90vh] rounded-[3rem] overflow-hidden flex flex-col shadow-2xl">
         <div className="p-8 border-b flex justify-between items-center bg-slate-50">
@@ -111,35 +111,22 @@ export function ModalEstudio({
               >
                 Teléfono del salón
               </label>
-              <input
-                id="telefono-estudio"
-                name="telefonoSalon"
-                type="tel"
-                autoComplete="tel"
-                className="w-full p-4 bg-slate-50 border border-slate-100 rounded-2xl font-bold outline-none focus:ring-2 focus:ring-pink-500"
-                placeholder="Ej. 5512345678"
-                value={formulario.phone}
-                onChange={(e) => setFormulario((p) => ({ ...p, phone: e.target.value }))}
-                required
-              />
-            </div>
-            <div>
-              <label
-                htmlFor="sitio-web-estudio"
-                className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 ml-1"
-              >
-                Sitio web
-              </label>
-              <input
-                id="sitio-web-estudio"
-                name="sitioWebSalon"
-                type="url"
-                autoComplete="url"
-                className="w-full p-4 bg-slate-50 border border-slate-100 rounded-2xl font-bold outline-none focus:ring-2 focus:ring-pink-500"
-                placeholder="https://tusalon.com"
-                value={formulario.website ?? ''}
-                onChange={(e) => setFormulario((p) => ({ ...p, website: e.target.value }))}
-              />
+              <div className="flex">
+                <span className="flex items-center px-4 bg-slate-100 border border-r-0 border-slate-100 rounded-l-2xl text-sm font-bold text-slate-600">
+                  {formulario.country === 'Colombia' ? '+57' : '+52'}
+                </span>
+                <input
+                  id="telefono-estudio"
+                  name="telefonoSalon"
+                  type="tel"
+                  autoComplete="tel"
+                  className="w-full p-4 bg-slate-50 border border-slate-100 rounded-r-2xl font-bold outline-none focus:ring-2 focus:ring-pink-500"
+                  placeholder="Ej. 5512345678"
+                  value={formulario.phone}
+                  onChange={(e) => setFormulario((p) => ({ ...p, phone: e.target.value }))}
+                  required
+                />
+              </div>
             </div>
             <div>
               <label
@@ -191,7 +178,7 @@ export function ModalEstudio({
               <button
                 type="button"
                 onClick={() => setFormulario((p) => ({ ...p, branches: [...p.branches, ''] }))}
-                className="col-span-full group cursor-pointer overflow-hidden rounded-2xl bg-linear-to-r from-[var(--color-primario)] to-[var(--color-primario-oscuro)] px-5 py-4 text-xs font-black uppercase text-white shadow-lg shadow-[color:rgb(194_24_91_/_0.18)] transition-all duration-200 hover:scale-105 hover:brightness-110 hover:shadow-lg hover:shadow-[color:rgb(194_24_91_/_0.40)]"
+                className="col-span-full group cursor-pointer overflow-hidden rounded-2xl bg-linear-to-r from-(--color-primario) to-(--color-primario-oscuro) px-5 py-4 text-xs font-black uppercase text-white shadow-lg shadow-[rgb(194_24_91/0.18)] transition-all duration-200 hover:scale-105 hover:brightness-110 hover:shadow-lg hover:shadow-[rgb(194_24_91/0.40)]"
               >
                 <span className="flex items-center justify-center gap-2">
                   <span className="text-lg leading-none transition-transform duration-200 group-hover:rotate-90">
@@ -216,7 +203,7 @@ export function ModalEstudio({
               return (
                 <div
                   key={cat}
-                  className="space-y-3 bg-slate-50/50 p-6 rounded-[2rem] border border-slate-100"
+                  className="space-y-3 bg-slate-50/50 p-6 rounded-4xl border border-slate-100"
                 >
                   <h4 className="text-[10px] font-black bg-slate-900 text-white px-3 py-1 rounded-md inline-block uppercase">
                     {cat}
@@ -385,7 +372,7 @@ export function ModalEstudio({
           </section>
 
           {modo === 'ADD' && (
-            <section className="bg-slate-900 p-8 rounded-[2rem] text-white">
+            <section className="bg-slate-900 p-8 rounded-4xl text-white">
               <div className="font-black text-xs text-pink-400 uppercase tracking-widest mb-6">
                 Claves de acceso
               </div>
@@ -430,13 +417,13 @@ export function ModalEstudio({
             <button
               type="button"
               onClick={onCerrar}
-              className="flex-1 py-5 bg-slate-100 text-slate-500 font-black rounded-[2rem] uppercase text-xs"
+              className="flex-1 py-5 bg-slate-100 text-slate-500 font-black rounded-4xl uppercase text-xs"
             >
               Cancelar
             </button>
             <button
               type="submit"
-              className="flex-1 py-5 bg-pink-600 text-white font-black rounded-[2rem] uppercase text-xs shadow-2xl hover:bg-pink-700 transition-colors"
+              className="flex-1 py-5 bg-pink-600 text-white font-black rounded-4xl uppercase text-xs shadow-2xl hover:bg-pink-700 transition-colors"
             >
               {modo === 'EDIT' ? 'Guardar cambios' : 'Crear salón'}
             </button>

@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { useNavigate, Link, useSearchParams } from 'react-router-dom';
+import { useNavigate, Link, useSearchParams, useLocation } from 'react-router-dom';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
@@ -23,12 +23,22 @@ export function PaginaInicioSesion() {
   const [mostrarContrasena, setMostrarContrasena] = useState(false);
   const [codigoBloqueo, setCodigoBloqueo] = useState<string | null>(null);
   const [motivoRechazo, setMotivoRechazo] = useState<string | null>(null);
+  const codigoBloqueoUrl = parametros.get('codigo');
+  const mensajeBloqueoUrl =
+    parametros.get('registro') === 'ok' ? '' : (parametros.get('mensaje') ?? '');
+  const mensajeInfo =
+    !parametros.get('codigo') && !parametros.get('registro')
+      ? (parametros.get('mensaje') ?? '')
+      : '';
+  const codigoBloqueoActivo = codigoBloqueo ?? codigoBloqueoUrl;
   const mensajeRegistro =
     parametros.get('registro') === 'ok'
       ? (parametros.get('mensaje') ?? 'Cuenta creada correctamente. Ya puedes iniciar sesión.')
       : '';
   const { iniciarSesion } = usarTiendaAuth();
   const navegar = useNavigate();
+  const ubicacion = useLocation();
+  const rutaDesde = (ubicacion.state as { desde?: string } | null)?.desde;
 
   const {
     register,
@@ -70,7 +80,7 @@ export function PaginaInicioSesion() {
       }
       return;
     }
-    navegar(resultado.ruta ?? '/');
+    navegar(rutaDesde ?? resultado.ruta ?? '/');
   };
 
   return (
@@ -242,7 +252,16 @@ export function PaginaInicioSesion() {
                 <p className="text-xs text-green-700">{mensajeRegistro}</p>
               </div>
             )}
-            {codigoBloqueo === 'PENDIENTE_APROBACION' && (
+            {mensajeInfo && (
+              <div
+                role="status"
+                className="bg-blue-50 border border-blue-200 rounded-xl p-4 space-y-1"
+              >
+                <p className="text-sm font-semibold text-blue-800">Información</p>
+                <p className="text-xs text-blue-700">{mensajeInfo}</p>
+              </div>
+            )}
+            {codigoBloqueoActivo === 'PENDIENTE_APROBACION' && (
               <div
                 role="alert"
                 className="bg-blue-50 border border-blue-200 rounded-xl p-4 space-y-1"
@@ -254,7 +273,7 @@ export function PaginaInicioSesion() {
                 </p>
               </div>
             )}
-            {codigoBloqueo === 'SOLICITUD_RECHAZADA' && (
+            {codigoBloqueoActivo === 'SOLICITUD_RECHAZADA' && (
               <div
                 role="alert"
                 className="bg-red-50 border border-red-200 rounded-xl p-4 space-y-1"
@@ -263,6 +282,50 @@ export function PaginaInicioSesion() {
                 {motivoRechazo && <p className="text-xs text-red-700">Motivo: {motivoRechazo}</p>}
                 <p className="text-xs text-red-600">
                   Si crees que es un error, contáctanos a soporte.
+                </p>
+              </div>
+            )}
+            {codigoBloqueoActivo === 'CUENTA_SUSPENDIDA' && (
+              <div
+                role="alert"
+                className="bg-red-50 border border-red-200 rounded-xl p-4 space-y-1"
+              >
+                <p className="text-sm font-semibold text-red-800">Cuenta suspendida</p>
+                <p className="text-xs text-red-700">
+                  {mensajeBloqueoUrl || 'Tu cuenta ha sido suspendida.'}
+                </p>
+              </div>
+            )}
+            {codigoBloqueoActivo === 'SALON_SUSPENDIDO' && (
+              <div
+                role="alert"
+                className="bg-amber-50 border border-amber-200 rounded-xl p-4 space-y-1"
+              >
+                <p className="text-sm font-semibold text-amber-800">Salón suspendido</p>
+                <p className="text-xs text-amber-700">
+                  {mensajeBloqueoUrl || 'Tu salón está suspendido.'}
+                </p>
+              </div>
+            )}
+            {codigoBloqueoActivo === 'ACCESO_REVOCADO' && (
+              <div
+                role="alert"
+                className="bg-amber-50 border border-amber-200 rounded-xl p-4 space-y-1"
+              >
+                <p className="text-sm font-semibold text-amber-800">Acceso revocado</p>
+                <p className="text-xs text-amber-700">
+                  {mensajeBloqueoUrl || 'Tu acceso fue revocado por el dueño del salón.'}
+                </p>
+              </div>
+            )}
+            {codigoBloqueoActivo === 'CUENTA_DESACTIVADA' && (
+              <div
+                role="alert"
+                className="bg-red-50 border border-red-200 rounded-xl p-4 space-y-1"
+              >
+                <p className="text-sm font-semibold text-red-800">Cuenta desactivada</p>
+                <p className="text-xs text-red-700">
+                  {mensajeBloqueoUrl || 'Tu cuenta ha sido desactivada.'}
                 </p>
               </div>
             )}

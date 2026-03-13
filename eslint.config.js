@@ -8,10 +8,6 @@ export default tseslint.config(
     ignores: [
       'dist/**',
       'node_modules/**',
-      // Archivos legacy en la raíz — se migran progresivamente
-      'app.tsx',
-      'main.tsx',
-      'firebaseClient.ts',
       '*.config.js',
       '*.config.ts',
     ],

@@ -1,9 +1,12 @@
 import type { FastifyInstance } from 'fastify';
+import fs from 'node:fs/promises';
+import path from 'node:path';
 import { z } from 'zod';
 import { prisma } from '../prismaCliente.js';
 import clientePrisma from '../generated/prisma/client.js';
 import { verificarJWT } from '../middleware/autenticacion.js';
 import { horaOpcionalONulaSchema, obtenerMensajeValidacion, textoSchema } from '../lib/validacion.js';
+import { detectarTipoImagen } from '../utils/validarImagen.js';
 
 const { Prisma } = clientePrisma;
 
@@ -73,14 +76,36 @@ export async function rutasPersonal(servidor: FastifyInstance): Promise<void> {
     '/estudios/:id/personal',
     { preHandler: verificarJWT },
     async (solicitud, respuesta) => {
-      const payload = solicitud.user as { rol: string; estudioId: string | null };
+      const payload = solicitud.user as { sub: string; rol: string; estudioId: string | null };
       const { id } = solicitud.params;
       if (payload.rol !== 'maestro' && payload.estudioId !== id) {
         return respuesta.code(403).send({ error: 'Sin permisos para esta acción' });
       }
+      if (payload.rol === 'dueno') {
+        const estudio = await prisma.estudio.findFirst({
+          where: {
+            id,
+            usuarios: { some: { id: payload.sub, rol: 'dueno' } },
+          },
+          select: { id: true },
+        });
+        if (!estudio) {
+          return respuesta.code(403).send({ error: 'Sin acceso a este recurso' });
+        }
+      }
       const resultado = esquemaCrearPersonal.safeParse(solicitud.body);
       if (!resultado.success) {
         return respuesta.code(400).send({ error: obtenerMensajeValidacion(resultado.error) });
+      }
+
+      // Verificar límite de especialistas activos (50 por estudio)
+      const totalPersonalActivo = await prisma.personal.count({
+        where: { estudioId: id, activo: true },
+      });
+      if (totalPersonalActivo >= 50) {
+        return respuesta.code(400).send({
+          error: 'Límite de especialistas alcanzado. Contacta a soporte para ampliarlo.',
+        });
       }
 
       const { nombre, especialidades, activo, horaInicio, horaFin, descansoInicio, descansoFin, diasTrabajo } = resultado.data;
@@ -89,6 +114,7 @@ export async function rutasPersonal(servidor: FastifyInstance): Promise<void> {
         data: {
           estudioId: id,
           nombre,
+          avatarUrl: null,
           especialidades: especialidades ?? [],
           activo: activo ?? true,
           horaInicio: horaInicio ?? null,
@@ -108,7 +134,7 @@ export async function rutasPersonal(servidor: FastifyInstance): Promise<void> {
     '/personal/:id',
     { preHandler: verificarJWT },
     async (solicitud, respuesta) => {
-      const payload = solicitud.user as { rol: string; estudioId: string | null };
+      const payload = solicitud.user as { sub: string; rol: string; estudioId: string | null };
       const empleadoExistente = await prisma.personal.findUnique({
         where: { id: solicitud.params.id },
         select: { estudioId: true },
@@ -116,6 +142,20 @@ export async function rutasPersonal(servidor: FastifyInstance): Promise<void> {
       if (!empleadoExistente) return respuesta.code(404).send({ error: 'Personal no encontrado' });
       if (payload.rol !== 'maestro' && payload.estudioId !== empleadoExistente.estudioId) {
         return respuesta.code(403).send({ error: 'Sin permisos para esta acción' });
+      }
+      if (payload.rol === 'dueno') {
+        const personal = await prisma.personal.findFirst({
+          where: {
+            id: solicitud.params.id,
+            estudio: {
+              usuarios: { some: { id: payload.sub, rol: 'dueno' } },
+            },
+          },
+          select: { id: true },
+        });
+        if (!personal) {
+          return respuesta.code(403).send({ error: 'Sin acceso a este recurso' });
+        }
       }
 
       const resultado = esquemaActualizarPersonal.safeParse(solicitud.body);
@@ -140,6 +180,75 @@ export async function rutasPersonal(servidor: FastifyInstance): Promise<void> {
       });
       await sincronizarNumeroEspecialistas(empleadoExistente.estudioId);
       return respuesta.send({ datos: actualizado });
+    },
+  );
+
+  servidor.post<{ Params: { id: string; personalId: string } }>(
+    '/estudio/:id/personal/:personalId/avatar',
+    { preHandler: verificarJWT },
+    async (solicitud, respuesta) => {
+      const payload = solicitud.user as { sub: string; rol: string; estudioId: string | null };
+      const { id, personalId } = solicitud.params;
+
+      if (payload.rol !== 'maestro' && payload.estudioId !== id) {
+        return respuesta.code(403).send({ error: 'Sin permisos para esta acción' });
+      }
+
+      if (payload.rol === 'dueno') {
+        const estudio = await prisma.estudio.findFirst({
+          where: {
+            id,
+            usuarios: { some: { id: payload.sub, rol: 'dueno' } },
+          },
+          select: { id: true },
+        });
+        if (!estudio) {
+          return respuesta.code(403).send({ error: 'Sin acceso a este recurso' });
+        }
+      }
+
+      const personal = await prisma.personal.findFirst({
+        where: { id: personalId, estudioId: id },
+        select: { id: true, avatarUrl: true },
+      });
+      if (!personal) {
+        return respuesta.code(404).send({ error: 'Especialista no encontrado' });
+      }
+
+      const archivo = await solicitud.file();
+      if (!archivo) {
+        return respuesta.code(400).send({ error: 'Debes enviar una imagen' });
+      }
+
+      const buffer = await archivo.toBuffer();
+      if (buffer.length > 2 * 1024 * 1024) {
+        return respuesta.code(400).send({ error: 'La imagen no puede superar 2 MB' });
+      }
+
+      const extensionSegura = detectarTipoImagen(buffer);
+      if (!extensionSegura) {
+        return respuesta.code(400).send({ error: 'El archivo no contiene una imagen válida' });
+      }
+
+      const carpetaUploads = path.resolve(process.cwd(), '../uploads/avatares');
+      await fs.mkdir(carpetaUploads, { recursive: true });
+
+      if (personal.avatarUrl) {
+        const rutaAnterior = path.resolve(
+          process.cwd(),
+          '../uploads',
+          personal.avatarUrl.replace('/uploads/', ''),
+        );
+        await fs.unlink(rutaAnterior).catch(() => {});
+      }
+
+      const nombreArchivo = `personal-${personalId}-${Date.now()}.${extensionSegura}`;
+      await fs.writeFile(path.join(carpetaUploads, nombreArchivo), buffer);
+
+      const avatarUrl = `/uploads/avatares/${nombreArchivo}`;
+      await prisma.personal.update({ where: { id: personalId }, data: { avatarUrl } });
+
+      return respuesta.send({ datos: { avatarUrl } });
     },
   );
 }

@@ -6,6 +6,7 @@ import { env } from '../lib/env.js';
 import { prisma } from '../prismaCliente.js';
 import { enviarEmailVerificacionCliente } from '../servicios/servicioEmail.js';
 import { esEmailValido } from '../utils/validarEmail.js';
+import { sanitizarTexto } from '../utils/sanitizar.js';
 import { colorHexSchema, fechaIsoSchema, horaSchema, obtenerMensajeValidacion, telefonoSchema, textoSchema, urlOpcionalSchema } from '../lib/validacion.js';
 
 const REGEX_CONTRASENA = /^(?=.*[A-Z])(?=.*[0-9]).{8,}$/;
@@ -32,7 +33,7 @@ const esquemaHorarioRegistro = z.record(
 const esquemaServicioRegistro = z.object({
 	name: textoSchema('servicio', 80),
 	duration: z.number().int().min(5, 'La duración mínima es 5 minutos').max(720, 'La duración máxima es 720 minutos'),
-	price: z.number().min(0, 'El precio no puede ser negativo').max(1000000, 'El precio excede el máximo permitido'),
+	price: z.number().min(0, 'El precio no puede ser negativo').max(10000000, 'El precio excede el máximo permitido'),
 	category: textoSchema('categoria', 80).optional(),
 });
 
@@ -84,6 +85,7 @@ const esquemaRegistroCliente = z.object({
 	nombre: textoSchema('nombre', 80),
 	apellido: textoSchema('apellido', 80),
 	fechaNacimiento: fechaIsoSchema,
+	pais: z.enum(['Mexico', 'Colombia']),
 	telefono: z.union([z.literal(''), telefonoSchema]).optional().transform((valor) => (valor === '' ? null : valor)),
 });
 
@@ -213,6 +215,7 @@ export async function rutasRegistro(servidor: FastifyInstance): Promise<void> {
 			nombre: string;
 			apellido: string;
 			fechaNacimiento: string;
+			pais: 'Mexico' | 'Colombia';
 			telefono?: string;
 		};
 	}>(  '/registro/cliente',
@@ -233,7 +236,7 @@ export async function rutasRegistro(servidor: FastifyInstance): Promise<void> {
 			return respuesta.code(400).send({ error: obtenerMensajeValidacion(resultado.error) });
 		}
 
-		const { email, contrasena, nombre, apellido, fechaNacimiento, telefono } = resultado.data;
+		const { email, contrasena, nombre, apellido, fechaNacimiento, pais, telefono } = resultado.data;
 
 		const emailNorm = email.trim().toLowerCase();
 
@@ -263,6 +266,7 @@ export async function rutasRegistro(servidor: FastifyInstance): Promise<void> {
 				nombre: nombre.trim(),
 				apellido: apellido.trim(),
 				fechaNacimiento: new Date(fechaNacimiento),
+				pais,
 				telefono: telefono?.trim() ?? null,
 				emailVerificado: false,
 			},
@@ -296,6 +300,17 @@ export async function rutasRegistro(servidor: FastifyInstance): Promise<void> {
 
 	servidor.post<{ Body: { token: string } }>(
 	  '/registro/verificar-email',
+	  {
+	    config: {
+	      rateLimit: {
+	        max: 10,
+	        timeWindow: '15 minutes',
+	        errorResponseBuilder: () => ({
+	          error: 'Demasiados intentos. Espera 15 minutos.',
+	        }),
+	      },
+	    },
+	  },
 	  async (solicitud, respuesta) => {
 		const resultado = esquemaVerificarEmailCliente.safeParse(solicitud.body);
 		if (!resultado.success) {
@@ -307,16 +322,58 @@ export async function rutasRegistro(servidor: FastifyInstance): Promise<void> {
 			include: { clienteApp: true },
 		});
 
-		if (!registro || registro.tipo !== 'verificacion_email' || registro.usado || registro.expiraEn < new Date() || !registro.clienteId || !registro.clienteApp) {
+		if (!registro || registro.usado || registro.expiraEn < new Date() || !registro.clienteId || !registro.clienteApp) {
 			return respuesta.code(400).send({ error: 'El enlace de verificación es inválido o expiró.' });
 		}
 
-		await prisma.$transaction([
-			prisma.clienteApp.update({ where: { id: registro.clienteId }, data: { emailVerificado: true } }),
-			prisma.tokenVerificacionApp.update({ where: { id: registro.id }, data: { usado: true } }),
-		]);
+		if (registro.tipo === 'verificacion_email') {
+			await prisma.$transaction([
+				prisma.clienteApp.update({ where: { id: registro.clienteId }, data: { emailVerificado: true } }),
+				prisma.tokenVerificacionApp.update({ where: { id: registro.id }, data: { usado: true } }),
+			]);
 
-		return respuesta.send({ datos: { mensaje: 'Correo verificado. Ya puedes iniciar sesión.' } });
+			return respuesta.send({ datos: { mensaje: 'Correo verificado. Ya puedes iniciar sesión.' } });
+		}
+
+		if (registro.tipo === 'cambio_email_cliente') {
+			if (!registro.clienteApp.emailPendiente) {
+				return respuesta.code(400).send({ error: 'No hay un cambio de correo pendiente para este enlace.' });
+			}
+
+			const emailPendienteNorm = registro.clienteApp.emailPendiente.trim().toLowerCase();
+			const [existeCliente, existeUsuario] = await Promise.all([
+				prisma.clienteApp.findFirst({
+					where: { email: emailPendienteNorm, id: { not: registro.clienteId } },
+					select: { id: true },
+				}),
+				obtenerUsuarioBloqueante(emailPendienteNorm),
+			]);
+
+			if (existeCliente ?? existeUsuario) {
+				return respuesta.code(409).send({ error: 'Ese correo ya fue usado por otra cuenta.' });
+			}
+
+			await prisma.$transaction([
+				prisma.clienteApp.update({
+					where: { id: registro.clienteId },
+					data: { email: emailPendienteNorm, emailPendiente: null, emailVerificado: true },
+				}),
+				prisma.tokenVerificacionApp.update({ where: { id: registro.id }, data: { usado: true } }),
+				prisma.tokenVerificacionApp.updateMany({
+					where: {
+						clienteId: registro.clienteId,
+						tipo: 'cambio_email_cliente',
+						usado: false,
+						id: { not: registro.id },
+					},
+					data: { usado: true },
+				}),
+			]);
+
+			return respuesta.send({ datos: { mensaje: 'Tu nuevo correo fue confirmado correctamente.' } });
+		}
+
+		return respuesta.code(400).send({ error: 'El enlace de verificación es inválido o expiró.' });
 	  },
 	);
 
@@ -344,7 +401,7 @@ export async function rutasRegistro(servidor: FastifyInstance): Promise<void> {
 	  {
 	    config: {
 	      rateLimit: {
-	        max: 5,
+	        max: 3,
 	        timeWindow: '1 hour',
 	        errorResponseBuilder: () => ({
 	          error: 'Demasiados registros. Espera 1 hora.',
@@ -429,7 +486,7 @@ export async function rutasRegistro(servidor: FastifyInstance): Promise<void> {
 
 			const nuevoEstudio = await tx.estudio.create({
 				data: {
-					nombre: nombreSalon.trim(),
+				nombre: sanitizarTexto(nombreSalon.trim()),
 					propietario: `${nombre.trim()} ${apellido.trim()}`,
 					telefono: telefono.trim(),
 					sitioWeb: sitioWeb ?? null,
@@ -444,8 +501,8 @@ export async function rutasRegistro(servidor: FastifyInstance): Promise<void> {
 					servicios,
 					serviciosCustom: serviciosCustom ?? [],
 					festivos: [],
-					descripcion: descripcion?.trim() ?? null,
-					direccion: direccion.trim(),
+				descripcion: descripcion !== undefined && descripcion !== null ? sanitizarTexto(descripcion.trim()) : null,
+				direccion: sanitizarTexto(direccion.trim()),
 					emailContacto: emailNorm,
 					horarioApertura: horarioApertura ?? '09:00',
 					horarioCierre: horarioCierre ?? '18:00',

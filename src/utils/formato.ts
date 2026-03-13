@@ -25,7 +25,13 @@ export function formatearFechaHumana(fechaISO: string | null | undefined): strin
 /** Formatea un número como moneda. Por defecto usa MXN y locale es-MX. */
 export function formatearDinero(monto: number, moneda: string = 'MXN'): string {
   const locale = moneda === 'COP' ? 'es-CO' : 'es-MX';
-  return new Intl.NumberFormat(locale, { style: 'currency', currency: moneda }).format(monto || 0);
+  const decimales = moneda === 'COP' ? 0 : 2;
+  return new Intl.NumberFormat(locale, {
+    style: 'currency',
+    currency: moneda,
+    minimumFractionDigits: decimales,
+    maximumFractionDigits: decimales,
+  }).format(monto || 0);
 }
 
 /** Convierte un objeto Date a cadena "YYYY-MM-DD" usando la zona horaria local del dispositivo. */

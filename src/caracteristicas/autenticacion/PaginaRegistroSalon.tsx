@@ -68,7 +68,8 @@ const esquemaPaso1 = z
       .string()
       .min(8, 'Mínimo 8 caracteres')
       .regex(/[A-Z]/, 'Necesita una mayúscula')
-      .regex(/[0-9]/, 'Necesita un número'),
+      .regex(/[0-9]/, 'Necesita un número')
+      .regex(/[^A-Za-z0-9]/, 'Necesita un carácter especial'),
     confirmarContrasena: z.string(),
   })
   .refine((datos) => datos.contrasena === datos.confirmarContrasena, {
@@ -81,7 +82,7 @@ const esquemaPaso2 = z.object({
   direccion: z.string().min(5, 'Ingresa una dirección válida'),
   telefono: z.string().regex(/^[0-9+\s\-()]{7,15}$/, 'Teléfono inválido'),
   pais: z.enum(['Mexico', 'Colombia']),
-  numeroEspecialistas: z.string().regex(/^\d+$/, 'Ingresa un número válido'),
+  numeroEspecialistas: z.string().regex(/^[1-9]\d*$/, 'Mínimo 1 especialista'),
 });
 
 type Paso1 = z.infer<typeof esquemaPaso1>;
@@ -130,16 +131,31 @@ function sincronizarEspecialistas(
   return nuevos;
 }
 
-function calcularFortaleza(contrasena: string) {
-  let nivel = 0;
-  if (contrasena.length >= 8) nivel += 1;
-  if (/[A-Z]/.test(contrasena)) nivel += 1;
-  if (/[0-9]/.test(contrasena)) nivel += 1;
-  if (/[^A-Za-z0-9]/.test(contrasena)) nivel += 1;
+function calcularRequisitosContrasena(contrasena: string) {
+  return {
+    longitudMinima: contrasena.length >= 8,
+    tieneMayuscula: /[A-Z]/.test(contrasena),
+    tieneNumero: /[0-9]/.test(contrasena),
+    tieneEspecial: /[^A-Za-z0-9]/.test(contrasena),
+  };
+}
 
-  if (nivel <= 1) return { nivel: 1, etiqueta: 'Débil', color: 'bg-red-400' };
-  if (nivel === 2) return { nivel: 2, etiqueta: 'Media', color: 'bg-yellow-400' };
-  return { nivel: 3, etiqueta: 'Fuerte', color: 'bg-green-500' };
+function calcularFortaleza(contrasena: string) {
+  const requisitos = calcularRequisitosContrasena(contrasena);
+  const nivel = [
+    requisitos.longitudMinima,
+    requisitos.tieneMayuscula,
+    requisitos.tieneNumero,
+    requisitos.tieneEspecial,
+  ].filter(Boolean).length;
+
+  const colores = ['bg-red-400', 'bg-orange-400', 'bg-yellow-400', 'bg-green-500'];
+  const etiquetas = ['Débil', 'Regular', 'Buena', 'Fuerte'];
+  return {
+    nivel,
+    etiqueta: etiquetas[nivel - 1] ?? 'Débil',
+    color: colores[nivel - 1] ?? 'bg-red-400',
+  };
 }
 
 function normalizarDiaAtencion(dia: string): string {
@@ -147,6 +163,18 @@ function normalizarDiaAtencion(dia: string): string {
     .normalize('NFD')
     .replace(/[\u0300-\u036f]/g, '')
     .toLowerCase();
+}
+
+function formatearPrecioInput(valor: string, paisActual: Pais): string {
+  const limpio = valor.replace(/[^\d]/g, '');
+  if (!limpio) return '';
+  if (limpio.length > 8) return formatearPrecioInput(limpio.slice(0, 8), paisActual);
+  const numero = Number(limpio);
+  return numero.toLocaleString(paisActual === 'Colombia' ? 'es-CO' : 'es-MX');
+}
+
+function limpiarPrecio(valor: string): number {
+  return Math.max(0, Number(valor.replace(/[^\d]/g, '')) || 0);
 }
 
 function obtenerResumenHorario(horario: HorarioLocal) {
@@ -298,7 +326,20 @@ export function PaginaRegistroSalon() {
   const [mostrarConfirm, setMostrarConfirm] = useState(false);
   const [verificandoDisponibilidad, setVerificandoDisponibilidad] = useState(false);
   const [errorServidor, setErrorServidor] = useState('');
-  const [sucursales, setSucursales] = useState<string[]>(['']);
+  const [sucursales, setSucursales] = useState<string[]>(() => {
+    try {
+      const guardado = localStorage.getItem('formulario_registro_salon');
+      if (guardado) {
+        const datos = JSON.parse(guardado) as Record<string, unknown>;
+        if (Array.isArray(datos.sucursales) && (datos.sucursales as unknown[]).length > 0) {
+          return datos.sucursales as string[];
+        }
+      }
+    } catch {
+      /* ignorar datos corruptos */
+    }
+    return [''];
+  });
   const [horarioLocal, setHorarioLocal] = useState<HorarioLocal>(crearHorarioInicial());
   const [serviciosSeleccionados, setServiciosSeleccionados] = useState<Servicio[]>([]);
   const [serviciosPersonalizados, setServiciosPersonalizados] = useState<ServicioPersonalizado[]>(
@@ -308,6 +349,9 @@ export function PaginaRegistroSalon() {
     Record<string, string>
   >({});
   const [personal, setPersonal] = useState<PersonalRegistro[]>([crearEspecialistaVacio(0)]);
+  const [preciosFormateados, setPreciosFormateados] = useState<Record<string, string>>({});
+
+  const CLAVE_ALMACEN = 'formulario_registro_salon';
 
   const formPaso1 = useForm<Paso1>({
     resolver: zodResolver(esquemaPaso1),
@@ -324,6 +368,107 @@ export function PaginaRegistroSalon() {
       numeroEspecialistas: '1',
     },
   });
+
+  // Restaurar datos de localStorage al montar
+  useEffect(() => {
+    try {
+      const guardado = localStorage.getItem(CLAVE_ALMACEN);
+      if (!guardado) return;
+      const datos = JSON.parse(guardado) as Record<string, unknown>;
+      if (datos.paso1) {
+        const p1 = datos.paso1 as Record<string, string>;
+        formPaso1.reset({
+          nombre: p1.nombre ?? '',
+          apellido: p1.apellido ?? '',
+          email: p1.email ?? '',
+          contrasena: '',
+          confirmarContrasena: '',
+        });
+      }
+      if (datos.paso2) {
+        const p2 = datos.paso2 as Record<string, string>;
+        formPaso2.reset({
+          nombreSalon: p2.nombreSalon ?? '',
+          direccion: p2.direccion ?? '',
+          telefono: p2.telefono ?? '',
+          pais: (p2.pais as Pais) ?? 'Mexico',
+          numeroEspecialistas: p2.numeroEspecialistas ?? '1',
+        });
+      }
+      if (datos.sucursales && Array.isArray(datos.sucursales))
+        setSucursales(datos.sucursales as string[]);
+      if (datos.paso && (datos.paso === 1 || datos.paso === 2)) setPaso(datos.paso as 1 | 2);
+    } catch {
+      /* ignorar datos corruptos */
+    }
+  }, []);
+
+  // Guardar en localStorage cuando cambian los datos
+  useEffect(() => {
+    const sub1 = formPaso1.watch((vals) => {
+      try {
+        const actual = JSON.parse(localStorage.getItem(CLAVE_ALMACEN) ?? '{}');
+        actual.paso1 = { nombre: vals.nombre, apellido: vals.apellido, email: vals.email };
+        actual.paso = paso;
+        localStorage.setItem(CLAVE_ALMACEN, JSON.stringify(actual));
+      } catch {
+        /* ignorar */
+      }
+    });
+    return () => sub1.unsubscribe();
+  }, [formPaso1, paso]);
+
+  useEffect(() => {
+    const sub2 = formPaso2.watch((vals) => {
+      try {
+        const actual = JSON.parse(localStorage.getItem(CLAVE_ALMACEN) ?? '{}');
+        actual.paso2 = vals;
+        actual.paso = paso;
+        localStorage.setItem(CLAVE_ALMACEN, JSON.stringify(actual));
+      } catch {
+        /* ignorar */
+      }
+    });
+    return () => sub2.unsubscribe();
+  }, [formPaso2, paso]);
+
+  useEffect(() => {
+    try {
+      const actual = JSON.parse(localStorage.getItem(CLAVE_ALMACEN) ?? '{}');
+      actual.sucursales = sucursales;
+      localStorage.setItem(CLAVE_ALMACEN, JSON.stringify(actual));
+    } catch {
+      /* ignorar */
+    }
+  }, [sucursales]);
+
+  const limpiarFormulario = () => {
+    localStorage.removeItem(CLAVE_ALMACEN);
+    formPaso1.reset({
+      nombre: '',
+      apellido: '',
+      email: '',
+      contrasena: '',
+      confirmarContrasena: '',
+    });
+    formPaso2.reset({
+      nombreSalon: '',
+      direccion: '',
+      telefono: '',
+      pais: 'Mexico',
+      numeroEspecialistas: '1',
+    });
+    setSucursales(['']);
+    setHorarioLocal(crearHorarioInicial());
+    setServiciosSeleccionados([]);
+    setServiciosPersonalizados([]);
+    setPersonal([crearEspecialistaVacio(0)]);
+    setPreciosFormateados({});
+    setPaso(1);
+    setDatosPaso1(null);
+    setEtapaOperacionActiva('basico');
+    setErrorServidor('');
+  };
 
   const contrasena = formPaso1.watch('contrasena') ?? '';
   const numeroEspecialistas = formPaso2.watch('numeroEspecialistas') ?? '1';
@@ -354,6 +499,16 @@ export function PaginaRegistroSalon() {
     [serviciosSeleccionados],
   );
   const errorPersonal = useMemo(() => validarEquipoSalon(personal), [personal]);
+
+  const porcentajeProgreso = useMemo(() => {
+    let completados = 0;
+    const total = 4;
+    if (errorInformacionBase === null) completados++;
+    if (errorHorario === null) completados++;
+    if (errorServicios === null) completados++;
+    if (errorPersonal === null) completados++;
+    return Math.round((completados / total) * 100);
+  }, [errorInformacionBase, errorHorario, errorServicios, errorPersonal]);
   const informacionBaseLista = errorInformacionBase === null;
   const horarioListo = errorHorario === null;
   const serviciosListos = errorServicios === null;
@@ -569,7 +724,13 @@ export function PaginaRegistroSalon() {
   };
 
   const alEnviarPaso2 = async (datos: Paso2) => {
-    if (!datosPaso1) return;
+    if (!datosPaso1) {
+      setErrorServidor(
+        'La sesión del formulario se ha perdido. Por favor completa los datos de la cuenta nuevamente.',
+      );
+      setPaso(1);
+      return;
+    }
 
     const errorConfiguracion = validarConfiguracionSalon();
     if (errorConfiguracion) {
@@ -599,6 +760,7 @@ export function PaginaRegistroSalon() {
         colorPrimario: COLOR_PRIMARIO_PREDETERMINADO,
       });
 
+      localStorage.removeItem(CLAVE_ALMACEN);
       navegar('/espera-aprobacion');
     } catch (error) {
       setErrorServidor(
@@ -608,9 +770,9 @@ export function PaginaRegistroSalon() {
   };
 
   return (
-    <div className="min-h-screen bg-[#fffafc] lg:grid lg:grid-cols-[minmax(320px,420px)_1fr]">
-      <div className="hidden lg:block lg:sticky lg:top-0 lg:h-screen lg:p-6">
-        <div className="flex h-[calc(100vh-3rem)] flex-col justify-between overflow-hidden rounded-[36px] bg-linear-to-br from-[#880E4F] via-[#C2185B] to-[#F06292] p-10 shadow-2xl shadow-pink-900/20">
+    <div className="min-h-screen overflow-x-hidden bg-[#fffafc] lg:grid lg:grid-cols-[minmax(320px,420px)_1fr]">
+      <div className="hidden lg:block lg:p-6">
+        <div className="flex min-h-[calc(100vh-3rem)] flex-col justify-between overflow-hidden rounded-[36px] bg-linear-to-br from-[#880E4F] via-[#C2185B] to-[#F06292] p-10 shadow-2xl shadow-pink-900/20">
           <div className="flex items-center gap-3">
             <div className="rounded-2xl bg-white/20 p-3 backdrop-blur-sm">
               <Scissors className="text-white w-7 h-7" aria-hidden="true" />
@@ -661,23 +823,25 @@ export function PaginaRegistroSalon() {
             <span className="font-black text-lg text-slate-900">Beauty Time Pro</span>
           </div>
 
-          <div className="mb-8">
-            <div className="flex items-center gap-2 mb-2">
+          <div className="mb-8 w-full max-w-sm mx-auto">
+            <div className="flex items-center gap-0 mb-2">
               {[1, 2].map((numero) => (
-                <div key={numero} className="flex items-center gap-2 flex-1">
-                  <div
-                    className={`flex h-8 w-8 items-center justify-center rounded-full text-sm font-bold transition-colors ${numero <= paso ? 'bg-pink-600 text-white' : 'bg-slate-200 text-slate-400'}`}
-                  >
-                    {numero}
+                <div key={numero} className={`flex items-center ${numero < 2 ? 'flex-1' : ''}`}>
+                  <div className="flex items-center gap-1.5 shrink-0">
+                    <div
+                      className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-xs font-bold transition-colors ${numero <= paso ? 'bg-pink-600 text-white' : 'bg-slate-200 text-slate-400'}`}
+                    >
+                      {numero}
+                    </div>
+                    <span
+                      className={`text-xs font-medium whitespace-nowrap ${numero <= paso ? 'text-pink-700' : 'text-slate-400'}`}
+                    >
+                      {numero === 1 ? 'Cuenta dueña' : 'Operación del salón'}
+                    </span>
                   </div>
-                  <span
-                    className={`text-sm font-medium ${numero <= paso ? 'text-pink-700' : 'text-slate-400'}`}
-                  >
-                    {numero === 1 ? 'Cuenta dueña' : 'Operación del salón'}
-                  </span>
                   {numero < 2 && (
                     <div
-                      className={`flex-1 h-0.5 rounded ${paso >= 2 ? 'bg-pink-400' : 'bg-slate-200'}`}
+                      className={`flex-1 h-0.5 mx-2 rounded ${paso >= 2 ? 'bg-pink-400' : 'bg-slate-200'}`}
                     />
                   )}
                 </div>
@@ -708,8 +872,8 @@ export function PaginaRegistroSalon() {
                 noValidate
                 className="space-y-4"
               >
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
+                <div className="flex flex-col gap-3 sm:flex-row sm:gap-4">
+                  <div className="flex-1">
                     <label
                       htmlFor="nombre"
                       className="block text-sm font-semibold text-slate-700 mb-1"
@@ -730,7 +894,7 @@ export function PaginaRegistroSalon() {
                       </p>
                     )}
                   </div>
-                  <div>
+                  <div className="flex-1">
                     <label
                       htmlFor="apellido"
                       className="block text-sm font-semibold text-slate-700 mb-1"
@@ -799,21 +963,42 @@ export function PaginaRegistroSalon() {
                       {mostrarPass ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                     </button>
                   </div>
-                  {contrasena.length > 0 && (
-                    <div className="mt-2">
-                      <div className="flex gap-1 mb-1">
-                        {[1, 2, 3].map((nivel) => (
-                          <div
-                            key={nivel}
-                            className={`h-1.5 flex-1 rounded-full transition-colors ${nivel <= fortaleza.nivel ? fortaleza.color : 'bg-slate-200'}`}
-                          />
-                        ))}
-                      </div>
-                      <p className="text-xs text-slate-500">
-                        Fortaleza: <span className="font-semibold">{fortaleza.etiqueta}</span>
-                      </p>
-                    </div>
-                  )}
+                  {contrasena.length > 0 &&
+                    (() => {
+                      const req = calcularRequisitosContrasena(contrasena);
+                      const requisitos = [
+                        { cumple: req.longitudMinima, texto: 'Mínimo 8 caracteres' },
+                        { cumple: req.tieneMayuscula, texto: 'Una letra mayúscula' },
+                        { cumple: req.tieneNumero, texto: 'Un número' },
+                        { cumple: req.tieneEspecial, texto: 'Un carácter especial (!@#$...)' },
+                      ];
+                      return (
+                        <div className="mt-2 space-y-2">
+                          <div className="flex gap-1">
+                            {[1, 2, 3, 4].map((nivel) => (
+                              <div
+                                key={nivel}
+                                className={`h-1.5 flex-1 rounded-full transition-colors ${nivel <= fortaleza.nivel ? fortaleza.color : 'bg-slate-200'}`}
+                              />
+                            ))}
+                          </div>
+                          <p className="text-xs text-slate-500">
+                            Fortaleza: <span className="font-semibold">{fortaleza.etiqueta}</span>
+                          </p>
+                          <ul className="space-y-1">
+                            {requisitos.map((r) => (
+                              <li
+                                key={r.texto}
+                                className={`flex items-center gap-1.5 text-xs ${r.cumple ? 'text-green-600' : 'text-slate-400'}`}
+                              >
+                                <span>{r.cumple ? '✓' : '○'}</span>
+                                <span>{r.texto}</span>
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
+                      );
+                    })()}
                   {formPaso1.formState.errors.contrasena && (
                     <p role="alert" className="mt-1 text-xs text-red-500">
                       {formPaso1.formState.errors.contrasena.message}
@@ -881,19 +1066,12 @@ export function PaginaRegistroSalon() {
                 <div className="flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
                   <div>
                     <h1 className="text-3xl font-black text-slate-900 mb-1">
-                      Configura tu salón sin sentir un formulario eterno
+                      Cuéntanos sobre tu negocio
                     </h1>
                     <p className="max-w-2xl text-sm leading-6 text-slate-500">
-                      Completas un bloque a la vez. Cuando el bloque actual queda listo, aparece el
-                      siguiente para mantener el flujo claro y fácil de usar.
+                      Esta información es la que verán tus clientes al reservar. Entre más completa
+                      sea, más confianza genera.
                     </p>
-                  </div>
-                  <div className="rounded-3xl bg-slate-50 px-4 py-3 text-sm text-slate-600">
-                    <span className="font-black text-slate-900">País:</span>{' '}
-                    {pais === 'Mexico' ? 'México' : 'Colombia'}
-                    <span className="mx-2 text-slate-300">•</span>
-                    <span className="font-black text-slate-900">Especialistas:</span>{' '}
-                    {numeroEspecialistas}
                   </div>
                 </div>
               </div>
@@ -901,8 +1079,18 @@ export function PaginaRegistroSalon() {
               <form
                 onSubmit={formPaso2.handleSubmit(alEnviarPaso2)}
                 noValidate
-                className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_300px] xl:items-start"
+                className="space-y-6"
               >
+                <div className="overflow-hidden rounded-full bg-slate-200 h-1.5">
+                  <div
+                    className="h-full rounded-full bg-pink-500 transition-all duration-500"
+                    style={{ width: `${porcentajeProgreso}%` }}
+                  />
+                </div>
+                <p className="text-xs text-slate-400 text-center">
+                  {porcentajeProgreso}% completado
+                </p>
+
                 <div className="space-y-5">
                   <TarjetaEtapaOperacion
                     activa={etapaOperacionActiva === 'basico'}
@@ -1014,14 +1202,26 @@ export function PaginaRegistroSalon() {
                           <Plus className="w-4 h-4" aria-hidden="true" /> Añadir sucursal
                         </button>
                       </div>
+                      <p className="text-xs text-slate-400">
+                        Escribe el nombre de cada sucursal. Si solo tienes una ubicación, deja solo
+                        este campo.
+                      </p>
                       <div className="space-y-2">
                         {sucursales.map((sucursal, indice) => (
                           <div key={`sucursal-${indice}`} className="flex gap-2">
+                            <label htmlFor={`sucursal-${indice}`} className="sr-only">
+                              Sucursal {indice + 1}
+                            </label>
                             <input
+                              id={`sucursal-${indice}`}
                               type="text"
                               value={sucursal}
                               onChange={(evento) => actualizarSucursal(indice, evento.target.value)}
-                              placeholder={`Sucursal ${indice + 1}`}
+                              placeholder={
+                                indice === 0
+                                  ? 'Nombre de la sucursal principal'
+                                  : `Sucursal ${indice + 1}`
+                              }
                               className="flex-1 px-3.5 py-3 bg-white border border-slate-200 rounded-xl text-sm outline-none focus:ring-2 focus:ring-pink-500 focus:border-transparent"
                             />
                             <button
@@ -1195,42 +1395,72 @@ export function PaginaRegistroSalon() {
                                         {nombreServicio}
                                       </button>
                                       {servicio && (
-                                        <div className="mt-3 grid grid-cols-2 gap-2">
+                                        <div className="mt-3 grid grid-cols-2 items-end gap-2">
                                           <div>
-                                            <label className="mb-1 block text-[10px] font-black uppercase text-slate-400">
-                                              Duración
+                                            <label
+                                              htmlFor={`dur-${nombreServicio}`}
+                                              className="mb-1 block text-[10px] font-black uppercase text-slate-400"
+                                            >
+                                              Duración (minutos)
                                             </label>
                                             <input
+                                              id={`dur-${nombreServicio}`}
                                               type="number"
-                                              min="5"
-                                              step="5"
+                                              min={5}
+                                              max={480}
+                                              step={5}
+                                              placeholder="Ej: 60"
                                               value={servicio.duration}
-                                              onChange={(evento) =>
+                                              onChange={(evento) => {
+                                                const val = Math.min(
+                                                  480,
+                                                  Math.max(0, Number(evento.target.value) || 0),
+                                                );
                                                 actualizarCampoServicio(
                                                   nombreServicio,
                                                   'duration',
-                                                  evento.target.value,
-                                                )
-                                              }
+                                                  String(val),
+                                                );
+                                              }}
                                               className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-bold text-slate-700 outline-none focus:ring-2 focus:ring-pink-500"
                                             />
                                           </div>
                                           <div>
-                                            <label className="mb-1 block text-[10px] font-black uppercase text-slate-400">
-                                              Precio
+                                            <label
+                                              htmlFor={`precio-${nombreServicio}`}
+                                              className="mb-1 block text-[10px] font-black uppercase text-slate-400"
+                                            >
+                                              Precio ({pais === 'Colombia' ? 'COP' : 'MXN'})
                                             </label>
                                             <input
-                                              type="number"
-                                              min="0"
-                                              step="50"
-                                              value={servicio.price}
-                                              onChange={(evento) =>
+                                              id={`precio-${nombreServicio}`}
+                                              type="text"
+                                              inputMode="numeric"
+                                              placeholder="Ej: 55,000"
+                                              value={
+                                                preciosFormateados[nombreServicio] ??
+                                                (servicio.price > 0
+                                                  ? formatearPrecioInput(
+                                                      String(servicio.price),
+                                                      pais,
+                                                    )
+                                                  : '')
+                                              }
+                                              onChange={(evento) => {
+                                                const valorFormateado = formatearPrecioInput(
+                                                  evento.target.value,
+                                                  pais,
+                                                );
+                                                setPreciosFormateados((act) => ({
+                                                  ...act,
+                                                  [nombreServicio]: valorFormateado,
+                                                }));
                                                 actualizarCampoServicio(
                                                   nombreServicio,
                                                   'price',
-                                                  evento.target.value,
-                                                )
-                                              }
+                                                  String(limpiarPrecio(evento.target.value)),
+                                                );
+                                              }}
                                               className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-bold text-slate-700 outline-none focus:ring-2 focus:ring-pink-500"
                                             />
                                           </div>
@@ -1241,7 +1471,14 @@ export function PaginaRegistroSalon() {
                                 })}
                               </div>
                               <div className="mt-4 flex flex-col gap-2 md:flex-row">
+                                <label
+                                  htmlFor={`servicio-personalizado-${categoria}`}
+                                  className="sr-only"
+                                >
+                                  Añadir servicio personalizado en {categoria}
+                                </label>
                                 <input
+                                  id={`servicio-personalizado-${categoria}`}
                                   value={entradaServicioPersonalizado[categoria] ?? ''}
                                   onChange={(evento) =>
                                     setEntradaServicioPersonalizado((actual) => ({
@@ -1310,7 +1547,7 @@ export function PaginaRegistroSalon() {
                         </h3>
                       </div>
 
-                      <div className="mb-5 grid gap-4 md:grid-cols-2">
+                      <div className="mb-5">
                         <div>
                           <label
                             htmlFor="numeroEspecialistas"
@@ -1354,10 +1591,14 @@ export function PaginaRegistroSalon() {
 
                             <div className="grid gap-4 md:grid-cols-2">
                               <div className="md:col-span-2">
-                                <label className="block text-sm font-semibold text-slate-700 mb-1">
+                                <label
+                                  htmlFor={`nombre-especialista-${indice}`}
+                                  className="block text-sm font-semibold text-slate-700 mb-1"
+                                >
                                   Nombre completo
                                 </label>
                                 <input
+                                  id={`nombre-especialista-${indice}`}
                                   type="text"
                                   value={persona.name}
                                   onChange={(evento) =>
@@ -1425,6 +1666,14 @@ export function PaginaRegistroSalon() {
                         ))}
                       </div>
 
+                      {errorServidor && (
+                        <div
+                          role="alert"
+                          className="mt-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700"
+                        >
+                          {errorServidor}
+                        </div>
+                      )}
                       <div className="mt-6 flex gap-3 pt-2">
                         <button
                           type="button"
@@ -1438,9 +1687,7 @@ export function PaginaRegistroSalon() {
                           disabled={formPaso2.formState.isSubmitting}
                           className="flex-1 rounded-2xl bg-linear-to-r from-[#C2185B] to-[#E91E8C] py-3.5 font-bold text-white transition-all hover:scale-[1.01] hover:shadow-lg disabled:cursor-not-allowed disabled:opacity-60"
                         >
-                          {formPaso2.formState.isSubmitting
-                            ? 'Enviando...'
-                            : 'Enviar solicitud completa'}
+                          {formPaso2.formState.isSubmitting ? 'Enviando...' : 'Enviar'}
                         </button>
                       </div>
                     </TarjetaEtapaOperacion>
@@ -1456,88 +1703,6 @@ export function PaginaRegistroSalon() {
                     </button>
                   </div>
                 </div>
-
-                <aside className="xl:sticky xl:top-10">
-                  <div className="space-y-4 rounded-[28px] border border-slate-200 bg-white p-5 shadow-sm">
-                    <p className="text-xs font-black uppercase tracking-[0.28em] text-slate-400">
-                      Progreso del formulario
-                    </p>
-                    {[
-                      {
-                        clave: 'basico' as const,
-                        titulo: 'Base del negocio',
-                        listo: informacionBaseLista,
-                        disponible: true,
-                      },
-                      {
-                        clave: 'horario' as const,
-                        titulo: 'Horario',
-                        listo: horarioListo,
-                        disponible: informacionBaseLista,
-                      },
-                      {
-                        clave: 'servicios' as const,
-                        titulo: 'Servicios',
-                        listo: serviciosListos,
-                        disponible: informacionBaseLista && horarioListo,
-                      },
-                      {
-                        clave: 'personal' as const,
-                        titulo: 'Personal',
-                        listo: personalListo,
-                        disponible: informacionBaseLista && horarioListo && serviciosListos,
-                      },
-                    ].map((item, indice) => (
-                      <button
-                        key={item.clave}
-                        type="button"
-                        onClick={() => item.disponible && setEtapaOperacionActiva(item.clave)}
-                        disabled={!item.disponible}
-                        className={`flex w-full items-center justify-between rounded-2xl px-4 py-3 text-left transition-colors ${etapaOperacionActiva === item.clave ? 'bg-pink-50 text-pink-700' : 'bg-slate-50 text-slate-600'} ${!item.disponible ? 'cursor-not-allowed opacity-50' : 'hover:bg-slate-100'}`}
-                      >
-                        <div>
-                          <p className="text-[11px] font-black uppercase tracking-[0.22em] text-slate-400">
-                            Etapa {indice + 1}
-                          </p>
-                          <p className="text-sm font-semibold">{item.titulo}</p>
-                        </div>
-                        {item.listo ? (
-                          <CheckCircle2 className="h-4 w-4 text-emerald-600" aria-hidden="true" />
-                        ) : item.disponible ? (
-                          <ChevronRight className="h-4 w-4" aria-hidden="true" />
-                        ) : (
-                          <Lock className="h-4 w-4" aria-hidden="true" />
-                        )}
-                      </button>
-                    ))}
-
-                    <div className="rounded-3xl bg-slate-950 px-4 py-4 text-white">
-                      <p className="text-xs font-black uppercase tracking-[0.24em] text-white/60">
-                        Resumen rápido
-                      </p>
-                      <div className="mt-3 space-y-2 text-sm text-white/80">
-                        <p>
-                          <span className="font-black text-white">Salón:</span>{' '}
-                          {nombreSalon.trim() || 'Pendiente'}
-                        </p>
-                        <p>
-                          <span className="font-black text-white">Servicios:</span>{' '}
-                          {serviciosSeleccionados.length}
-                        </p>
-                        <p>
-                          <span className="font-black text-white">Especialistas:</span>{' '}
-                          {personal.length}
-                        </p>
-                        <p>
-                          <span className="font-black text-white">Horario:</span>{' '}
-                          {horarioListo
-                            ? `${resumenHorario.horarioApertura} - ${resumenHorario.horarioCierre}`
-                            : 'Pendiente'}
-                        </p>
-                      </div>
-                    </div>
-                  </div>
-                </aside>
               </form>
             </>
           )}
@@ -1548,6 +1713,15 @@ export function PaginaRegistroSalon() {
               Inicia sesión
             </Link>
           </p>
+          <div className="mt-3 text-center">
+            <button
+              type="button"
+              onClick={limpiarFormulario}
+              className="text-xs text-slate-400 hover:text-slate-600 underline"
+            >
+              Limpiar formulario
+            </button>
+          </div>
         </div>
       </div>
     </div>

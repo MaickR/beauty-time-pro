@@ -20,6 +20,8 @@ const esquemaEntorno = z
   .object({
     DATABASE_URL: z.string().min(1, 'DATABASE_URL es requerida'),
     JWT_SECRETO: z.string().min(16, 'JWT_SECRETO debe tener al menos 16 caracteres'),
+    VAPID_PUBLIC_KEY: z.string().min(1, 'VAPID_PUBLIC_KEY es requerida'),
+    VAPID_PRIVATE_KEY: z.string().min(1, 'VAPID_PRIVATE_KEY es requerida'),
     PUERTO: z.coerce.number().int().positive().default(3000),
     ENTORNO: z.enum(['development', 'production', 'test']).default('development'),
     CLAVE_MAESTRO: z.string().trim().min(12, 'CLAVE_MAESTRO debe tener al menos 12 caracteres').optional(),
@@ -54,6 +56,14 @@ const esquemaEntorno = z
           code: z.ZodIssueCode.custom,
           path: ['JWT_SECRETO'],
           message: 'JWT_SECRETO no puede usar un valor placeholder en producción',
+        });
+      }
+
+      if (esPlaceholder(datos.VAPID_PUBLIC_KEY) || esPlaceholder(datos.VAPID_PRIVATE_KEY)) {
+        contexto.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ['VAPID_PUBLIC_KEY'],
+          message: 'Las claves VAPID no pueden usar valores placeholder en producción',
         });
       }
 

@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   Store,
   LogOut,
@@ -11,6 +12,7 @@ import {
   Users,
   Palette,
   Gift,
+  CreditCard,
 } from 'lucide-react';
 import { usarContextoApp } from '../../contextos/ContextoApp';
 import { usarTituloPagina } from '../../hooks/usarTituloPagina';
@@ -21,17 +23,37 @@ import { ConfigFidelidad } from './componentes/ConfigFidelidad';
 import { DirectorioClientes } from './componentes/DirectorioClientes';
 import { PerfilSalon } from './componentes/PerfilSalon';
 import { Spinner } from '../../componentes/ui/Spinner';
+import { BannerNotificacionesPush } from '../../componentes/ui/BannerNotificacionesPush';
+import { usarNotificacionesPush } from '../../hooks/usarNotificacionesPush';
+import { usarToast } from '../../componentes/ui/ProveedorToast';
+import { ModalSolicitudCancelacion } from './componentes/ModalSolicitudCancelacion';
+import { retirarSolicitudCancelacion } from '../../servicios/servicioSuscripcion';
 import type { Moneda } from '../../tipos';
 
 export function PaginaAdminEstudio() {
   usarTituloPagina('Administración');
   const { estudioId } = useParams<{ estudioId: string }>();
   const navegar = useNavigate();
-  const { estudios, reservas, cargando } = usarContextoApp();
+  const { estudios, reservas, cargando, recargar } = usarContextoApp();
   const { cerrarSesion } = usarTiendaAuth();
-  const [seccion, setSeccion] = useState<'ingresos' | 'clientes' | 'fidelidad' | 'salon'>(
-    'ingresos',
-  );
+  const { mostrarToast } = usarToast();
+  const clienteConsulta = useQueryClient();
+  const [seccion, setSeccion] = useState<
+    'ingresos' | 'clientes' | 'fidelidad' | 'salon' | 'suscripcion'
+  >('ingresos');
+  const [activandoPush, setActivandoPush] = useState(false);
+  const [mostrarModalCancelacion, setMostrarModalCancelacion] = useState(false);
+  const push = usarNotificacionesPush();
+
+  const mutRetirar = useMutation({
+    mutationFn: (id: string) => retirarSolicitudCancelacion(id),
+    onSuccess: () => {
+      mostrarToast({ mensaje: 'Solicitud de cancelación retirada', variante: 'exito' });
+      void clienteConsulta.invalidateQueries({ queryKey: ['contexto', 'app'] });
+      recargar();
+    },
+    onError: (err: Error) => mostrarToast({ mensaje: err.message, variante: 'error' }),
+  });
 
   const estudio = estudios.find((s) => s.id === estudioId);
 
@@ -87,6 +109,20 @@ export function PaginaAdminEstudio() {
 
   return (
     <div className="min-h-screen bg-slate-50 font-sans pb-20">
+      <BannerNotificacionesPush
+        visible={push.bannerVisible}
+        activando={activandoPush}
+        mensaje="Activa las notificaciones para recibir avisos de nuevas citas y cambios en tu agenda"
+        onActivar={async () => {
+          setActivandoPush(true);
+          try {
+            await push.activar();
+          } finally {
+            setActivandoPush(false);
+          }
+        }}
+        onDescartar={push.descartar}
+      />
       <header className="no-imprimir bg-white p-6 md:p-8 border-b border-slate-200 flex justify-between items-center sticky top-0 z-40 shadow-sm">
         <div className="flex items-center gap-4">
           <div className="bg-pink-600 p-3 rounded-2xl text-white">
@@ -126,30 +162,36 @@ export function PaginaAdminEstudio() {
           </button>
         </div>
 
-        <div className="no-imprimir flex bg-slate-100 p-1 rounded-2xl w-fit border border-slate-200">
+        <div className="no-imprimir flex flex-wrap gap-1 bg-slate-100 p-1 rounded-2xl w-full sm:w-fit border border-slate-200">
           <button
             onClick={() => setSeccion('ingresos')}
-            className={`px-4 md:px-6 py-2.5 rounded-xl text-[10px] md:text-xs font-black transition-all flex items-center gap-2 ${seccion === 'ingresos' ? 'bg-white shadow-sm text-slate-900' : 'text-slate-500 hover:text-slate-800'}`}
+            className={`flex-1 sm:flex-none px-3 sm:px-4 md:px-6 py-2.5 rounded-xl text-[10px] md:text-xs font-black transition-all flex items-center justify-center gap-1.5 ${seccion === 'ingresos' ? 'bg-white shadow-sm text-slate-900' : 'text-slate-500 hover:text-slate-800'}`}
           >
-            <TrendingUp className="w-4 h-4" /> Ingresos
+            <TrendingUp className="w-4 h-4 shrink-0" /> Ingresos
           </button>
           <button
             onClick={() => setSeccion('clientes')}
-            className={`px-4 md:px-6 py-2.5 rounded-xl text-[10px] md:text-xs font-black transition-all flex items-center gap-2 ${seccion === 'clientes' ? 'bg-white shadow-sm text-slate-900' : 'text-slate-500 hover:text-slate-800'}`}
+            className={`flex-1 sm:flex-none px-3 sm:px-4 md:px-6 py-2.5 rounded-xl text-[10px] md:text-xs font-black transition-all flex items-center justify-center gap-1.5 ${seccion === 'clientes' ? 'bg-white shadow-sm text-slate-900' : 'text-slate-500 hover:text-slate-800'}`}
           >
-            <Users className="w-4 h-4" /> Clientes
+            <Users className="w-4 h-4 shrink-0" /> Clientes
           </button>
           <button
             onClick={() => setSeccion('salon')}
-            className={`px-4 md:px-6 py-2.5 rounded-xl text-[10px] md:text-xs font-black transition-all flex items-center gap-2 ${seccion === 'salon' ? 'bg-white shadow-sm text-slate-900' : 'text-slate-500 hover:text-slate-800'}`}
+            className={`flex-1 sm:flex-none px-3 sm:px-4 md:px-6 py-2.5 rounded-xl text-[10px] md:text-xs font-black transition-all flex items-center justify-center gap-1.5 ${seccion === 'salon' ? 'bg-white shadow-sm text-slate-900' : 'text-slate-500 hover:text-slate-800'}`}
           >
-            <Palette className="w-4 h-4" /> Mi salón
+            <Palette className="w-4 h-4 shrink-0" /> Mi salón
           </button>
           <button
             onClick={() => setSeccion('fidelidad')}
-            className={`px-4 md:px-6 py-2.5 rounded-xl text-[10px] md:text-xs font-black transition-all flex items-center gap-2 ${seccion === 'fidelidad' ? 'bg-white shadow-sm text-slate-900' : 'text-slate-500 hover:text-slate-800'}`}
+            className={`flex-1 sm:flex-none px-3 sm:px-4 md:px-6 py-2.5 rounded-xl text-[10px] md:text-xs font-black transition-all flex items-center justify-center gap-1.5 ${seccion === 'fidelidad' ? 'bg-white shadow-sm text-slate-900' : 'text-slate-500 hover:text-slate-800'}`}
           >
-            <Gift className="w-4 h-4" /> Fidelidad
+            <Gift className="w-4 h-4 shrink-0" /> Fidelidad
+          </button>
+          <button
+            onClick={() => setSeccion('suscripcion')}
+            className={`flex-1 sm:flex-none px-3 sm:px-4 md:px-6 py-2.5 rounded-xl text-[10px] md:text-xs font-black transition-all flex items-center justify-center gap-1.5 ${seccion === 'suscripcion' ? 'bg-white shadow-sm text-slate-900' : 'text-slate-500 hover:text-slate-800'}`}
+          >
+            <CreditCard className="w-4 h-4 shrink-0" /> Suscripción
           </button>
         </div>
 
@@ -206,7 +248,86 @@ export function PaginaAdminEstudio() {
             <PerfilSalon estudioId={estudio.id} />
           </>
         )}
+
+        {seccion === 'suscripcion' && (
+          <>
+            <h2 className="text-3xl font-black italic uppercase tracking-tighter">Suscripción</h2>
+
+            <div className="bg-white rounded-[2.5rem] border border-slate-200 shadow-sm p-8 max-w-lg">
+              <div className="flex items-center gap-4 mb-6">
+                <div className="bg-pink-100 p-3 rounded-2xl text-pink-600">
+                  <CreditCard className="w-6 h-6" />
+                </div>
+                <div>
+                  <p className="text-xs font-black text-slate-400 uppercase tracking-widest">
+                    Plan activo
+                  </p>
+                  <p className="text-xl font-black text-slate-900">
+                    Vence el <span className="text-pink-600">{estudio.paidUntil}</span>
+                  </p>
+                </div>
+              </div>
+
+              {estudio.cancelacionSolicitada ? (
+                <div className="space-y-4">
+                  <div className="bg-amber-50 border border-amber-200 rounded-2xl p-4">
+                    <p className="text-sm font-black text-amber-800 uppercase tracking-wide mb-1">
+                      Solicitud de cancelación pendiente
+                    </p>
+                    {estudio.fechaSolicitudCancelacion && (
+                      <p className="text-xs text-amber-700">
+                        Enviada el{' '}
+                        {new Date(estudio.fechaSolicitudCancelacion).toLocaleDateString('es-MX', {
+                          day: 'numeric',
+                          month: 'long',
+                          year: 'numeric',
+                        })}
+                      </p>
+                    )}
+                    {estudio.motivoCancelacion && (
+                      <p className="text-xs text-amber-700 mt-1">
+                        Motivo: {estudio.motivoCancelacion}
+                      </p>
+                    )}
+                  </div>
+                  <button
+                    onClick={() => mutRetirar.mutate(estudio.id)}
+                    disabled={mutRetirar.isPending}
+                    aria-busy={mutRetirar.isPending}
+                    className="w-full py-3 bg-slate-100 text-slate-700 font-black rounded-2xl uppercase text-xs hover:bg-slate-200 transition-colors disabled:opacity-60"
+                  >
+                    {mutRetirar.isPending ? 'Procesando...' : 'Retirar solicitud de cancelación'}
+                  </button>
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  <p className="text-sm text-slate-500 leading-relaxed">
+                    Si deseas dar de baja tu salón, puedes enviar una solicitud de cancelación.
+                    Permanecerá activo hasta la fecha de vencimiento.
+                  </p>
+                  <button
+                    onClick={() => setMostrarModalCancelacion(true)}
+                    className="w-full py-3 bg-red-50 text-red-700 border border-red-200 font-black rounded-2xl uppercase text-xs hover:bg-red-100 transition-colors"
+                  >
+                    Solicitar cancelación de suscripción
+                  </button>
+                </div>
+              )}
+            </div>
+          </>
+        )}
       </main>
+
+      <ModalSolicitudCancelacion
+        abierto={mostrarModalCancelacion}
+        estudioId={estudio.id}
+        fechaVencimiento={estudio.paidUntil}
+        alCerrar={() => setMostrarModalCancelacion(false)}
+        alConfirmar={() => {
+          setMostrarModalCancelacion(false);
+          recargar();
+        }}
+      />
     </div>
   );
 }

@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { XCircle, Download, ChevronLeft, ChevronRight } from 'lucide-react';
+import { XCircle, Download, FileDown, ChevronLeft, ChevronRight } from 'lucide-react';
 import { formatearDinero } from '../../../utils/formato';
 import type { Estudio, Reserva, Moneda } from '../../../tipos';
 
@@ -22,102 +22,141 @@ export function VisorReservas({ estudio, reservas, onCerrar }: PropsVisorReserva
   const inicio = (paginaActual - 1) * RESERVAS_POR_PAGINA;
   const reservasPagina = reservasEstudio.slice(inicio, inicio + RESERVAS_POR_PAGINA);
 
-  const exportarCSV = () => {
-    let csv =
-      'Fecha,Hora,Estatus,Cliente,Telefono,Especialista,Servicios,Duracion(min),Monto,Marca Tinte,Tono Tinte\n';
-    reservasEstudio.forEach((b) => {
-      const serviciosStr = b.services.map((s) => s.name).join(' + ');
-      csv += `${b.date},${b.time},${b.status ?? 'Pendiente'},"${b.clientName}","${b.clientPhone}",${b.staffName},"${serviciosStr}",${b.totalDuration},${b.totalPrice ?? 0},"${b.colorBrand ?? ''}","${b.colorNumber ?? ''}"\n`;
-    });
-    const blob = new Blob(['\ufeff', csv], { type: 'text/csv;charset=utf-8;' });
-    const enlace = document.createElement('a');
-    enlace.href = URL.createObjectURL(blob);
-    enlace.download = `Reservas_${estudio.name.replace(/\s+/g, '_')}.csv`;
-    enlace.style.visibility = 'hidden';
-    document.body.appendChild(enlace);
-    enlace.click();
-    document.body.removeChild(enlace);
+  const exportarExcel = async () => {
+    const { utils, writeFile } = await import('xlsx');
+
+    const etiquetaEstado = (status: string | undefined) => {
+      if (status === 'completed') return 'Pagado';
+      if (status === 'cancelled') return 'Cancelado';
+      return 'Pendiente';
+    };
+
+    const totalMonto = reservasEstudio.reduce((acc, b) => acc + (b.totalPrice ?? 0), 0);
+
+    // Fila de título del reporte
+    const tituloReporte = [
+      [`Historial de Reservaciones — ${estudio.name}`],
+      [
+        `Generado: ${new Date().toLocaleDateString('es-MX', { year: 'numeric', month: 'long', day: 'numeric' })}`,
+      ],
+      [],
+    ];
+
+    // Cabeceras de columnas
+    const cabeceras = [
+      'Fecha',
+      'Hora',
+      'Estatus',
+      'Cliente',
+      'Teléfono',
+      'Especialista',
+      'Servicios',
+      'Duración (min)',
+      `Monto (${moneda})`,
+      'Marca Tinte',
+      'Tono Tinte',
+    ];
+
+    // Filas de datos
+    const filas = reservasEstudio.map((b) => [
+      b.date,
+      b.time,
+      etiquetaEstado(b.status),
+      b.clientName,
+      b.clientPhone,
+      b.staffName,
+      b.services.map((s) => s.name).join(' + '),
+      b.totalDuration,
+      b.totalPrice ?? 0,
+      b.colorBrand ?? '',
+      b.colorNumber ?? '',
+    ]);
+
+    // Fila de total
+    const filaTotalEtiqueta = ['', '', '', '', '', '', '', 'TOTAL', totalMonto, '', ''];
+
+    const datos = [...tituloReporte, cabeceras, ...filas, [], filaTotalEtiqueta];
+
+    const hoja = utils.aoa_to_sheet(datos);
+
+    // Anchos de columna en caracteres
+    hoja['!cols'] = [
+      { wch: 12 }, // Fecha
+      { wch: 8 }, // Hora
+      { wch: 12 }, // Estatus
+      { wch: 26 }, // Cliente
+      { wch: 16 }, // Teléfono
+      { wch: 22 }, // Especialista
+      { wch: 40 }, // Servicios
+      { wch: 14 }, // Duración
+      { wch: 16 }, // Monto
+      { wch: 16 }, // Marca Tinte
+      { wch: 14 }, // Tono Tinte
+    ];
+
+    const libro = utils.book_new();
+    utils.book_append_sheet(libro, hoja, 'Reservaciones');
+    writeFile(
+      libro,
+      `Reservas_${estudio.name.replace(/\s+/g, '_')}_${new Date().toISOString().slice(0, 10)}.xlsx`,
+    );
   };
 
-  const imprimirHistorial = () => {
-    const ventana = window.open('', '_blank', 'noopener,noreferrer,width=1200,height=800');
-    if (!ventana) return;
-
-    const filas =
-      reservasPagina.length === 0
-        ? '<tr><td colspan="5" style="padding: 32px; text-align: center; color: #64748b; font-weight: 700;">No hay citas registradas.</td></tr>'
-        : reservasPagina
-            .map((reserva) => {
-              const estado =
-                reserva.status === 'completed'
-                  ? 'Pagado'
-                  : reserva.status === 'cancelled'
-                    ? 'Cancelado'
-                    : 'Pendiente';
-              const servicios = reserva.services.map((servicio) => servicio.name).join(', ');
-              const tinte =
-                (reserva.colorBrand ?? reserva.colorNumber)
-                  ? `<div style="margin-top: 8px; font-size: 11px; font-weight: 700; color: #be185d;">Tinte: ${reserva.colorBrand ?? ''} ${reserva.colorNumber ?? ''}</div>`
-                  : '';
-
-              return `
-            <tr>
-              <td style="padding: 14px; border-bottom: 1px solid #e2e8f0; font-weight: 700; color: #0f172a;">
-                ${reserva.date}<br />
-                <span style="font-size: 12px; color: #db2777;">${reserva.time} (${reserva.totalDuration}m)</span>
-              </td>
-              <td style="padding: 14px; border-bottom: 1px solid #e2e8f0; color: #334155; font-weight: 700;">${estado}</td>
-              <td style="padding: 14px; border-bottom: 1px solid #e2e8f0;">
-                <div style="font-weight: 700; color: #334155;">${reserva.clientName}</div>
-                <div style="font-size: 12px; color: #64748b; margin-top: 4px;">${reserva.clientPhone}</div>
-              </td>
-              <td style="padding: 14px; border-bottom: 1px solid #e2e8f0; color: #334155; font-weight: 700;">${reserva.staffName}</td>
-              <td style="padding: 14px; border-bottom: 1px solid #e2e8f0;">
-                <div style="color: #334155;">${servicios}</div>
-                <div style="margin-top: 6px; color: #16a34a; font-weight: 700;">${formatearDinero(reserva.totalPrice, moneda)}</div>
-                ${tinte}
-              </td>
-            </tr>`;
-            })
-            .join('');
-
-    ventana.document.write(`
-      <!doctype html>
-      <html lang="es">
-        <head>
-          <meta charset="utf-8" />
-          <title>Historial de reservaciones</title>
-          <style>
-            body { font-family: Arial, sans-serif; margin: 24px; color: #0f172a; }
-            h1 { margin: 0 0 4px; font-size: 24px; }
-            p { margin: 0 0 20px; color: #475569; font-size: 12px; font-weight: 700; text-transform: uppercase; }
-            table { width: 100%; border-collapse: collapse; font-size: 13px; }
-            thead th { text-align: left; padding: 14px; background: #f8fafc; color: #64748b; font-size: 11px; text-transform: uppercase; }
-            @media print { body { margin: 16px; } }
-          </style>
-        </head>
-        <body>
-          <h1>Historial de reservaciones</h1>
-          <p>Salón: ${estudio.name} · Página ${paginaActual} de ${totalPaginas}</p>
-          <table>
-            <thead>
-              <tr>
-                <th>Fecha/Hora</th>
-                <th>Estatus</th>
-                <th>Cliente / Contacto</th>
-                <th>Especialista</th>
-                <th>Servicios &amp; Monto</th>
-              </tr>
-            </thead>
-            <tbody>${filas}</tbody>
-          </table>
-        </body>
-      </html>
-    `);
-    ventana.document.close();
-    ventana.focus();
-    ventana.print();
-    ventana.close();
+  const exportarPDF = async () => {
+    const { default: jsPDF } = await import('jspdf');
+    const { default: autoTable } = await import('jspdf-autotable');
+    const doc = new jsPDF({ orientation: 'landscape' });
+    doc.setFontSize(16);
+    doc.text('Historial de reservaciones', 14, 16);
+    doc.setFontSize(10);
+    doc.text(`Salón: ${estudio.name}`, 14, 24);
+    const totalMonto = reservasEstudio.reduce((acc, b) => acc + (b.totalPrice ?? 0), 0);
+    autoTable(doc, {
+      startY: 30,
+      head: [
+        [
+          'Fecha',
+          'Hora',
+          'Estatus',
+          'Cliente',
+          'Teléfono',
+          'Especialista',
+          'Servicios',
+          'Duración (min)',
+          'Monto',
+        ],
+      ],
+      body: [
+        ...reservasEstudio.map((b) => [
+          b.date,
+          b.time,
+          b.status === 'completed'
+            ? 'Pagado'
+            : b.status === 'cancelled'
+              ? 'Cancelado'
+              : 'Pendiente',
+          b.clientName,
+          b.clientPhone,
+          b.staffName,
+          b.services.map((s) => s.name).join(', '),
+          String(b.totalDuration),
+          formatearDinero(b.totalPrice, moneda),
+        ]),
+        ['', '', '', '', '', '', '', 'TOTAL', formatearDinero(totalMonto, moneda)],
+      ],
+      styles: { fontSize: 8 },
+      headStyles: { fillColor: [194, 24, 91] },
+      bodyStyles: {},
+      didParseCell: (data) => {
+        if (data.row.index === reservasEstudio.length) {
+          data.cell.styles.fontStyle = 'bold';
+          data.cell.styles.fillColor = [248, 250, 252];
+        }
+      },
+    });
+    doc.save(
+      `Reservas_${estudio.name.replace(/\s+/g, '_')}_${new Date().toISOString().slice(0, 10)}.pdf`,
+    );
   };
 
   return (
@@ -142,17 +181,17 @@ export function VisorReservas({ estudio, reservas, onCerrar }: PropsVisorReserva
           </div>
           <div className="flex items-center gap-4">
             <button
-              onClick={exportarCSV}
+              onClick={() => void exportarExcel()}
               className="no-imprimir flex items-center gap-2 bg-green-600 text-white px-4 py-2 rounded-xl text-xs font-black uppercase hover:bg-green-700 transition-all"
             >
               <Download className="w-4 h-4" /> Exportar Excel
             </button>
             <button
-              onClick={imprimirHistorial}
+              onClick={() => void exportarPDF()}
               className="no-imprimir flex items-center gap-2 bg-blue-600 text-white px-4 py-2 rounded-xl text-xs font-black uppercase hover:bg-blue-700 transition-all"
-              aria-label="Imprimir historial"
+              aria-label="Generar PDF"
             >
-              Imprimir
+              <FileDown className="w-4 h-4" /> Generar PDF
             </button>
             <button onClick={onCerrar} className="no-imprimir ml-4" aria-label="Cerrar visor">
               <XCircle className="w-8 h-8 text-slate-300 hover:text-red-500" />

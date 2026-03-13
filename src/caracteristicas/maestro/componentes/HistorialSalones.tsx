@@ -1,6 +1,16 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { CheckCircle2, XCircle, Ban, RotateCcw, CalendarDays, Power, PowerOff } from 'lucide-react';
+import {
+  CheckCircle2,
+  XCircle,
+  Ban,
+  RotateCcw,
+  CalendarDays,
+  Power,
+  PowerOff,
+  FileDown,
+  FileSpreadsheet,
+} from 'lucide-react';
 import { peticion } from '../../../lib/clienteHTTP';
 import { reactivarSolicitud } from '../../../servicios/servicioAdmin';
 import { usarToast } from '../../../componentes/ui/ProveedorToast';
@@ -156,6 +166,87 @@ export function HistorialSalones() {
     { id: 'suspendidos', etiqueta: 'Suspendidos', icono: <Ban className="w-4 h-4" /> },
   ];
 
+  const exportarPDF = async () => {
+    const { default: jsPDF } = await import('jspdf');
+    const { default: autoTable } = await import('jspdf-autotable');
+    const doc = new jsPDF();
+    const fechaGeneracion = new Date().toLocaleDateString('es-MX');
+    doc.setFontSize(16);
+    doc.text(`Salones — ${tabActivo}`, 14, 20);
+    doc.setFontSize(10);
+    doc.text(`Generado: ${fechaGeneracion}`, 14, 28);
+    const cabeceras = [
+      'Salón',
+      'Admin',
+      'Email',
+      'Fecha',
+      ...(tabActivo === 'aprobados' ? ['Vencimiento'] : []),
+      ...(tabActivo === 'rechazados' ? ['Motivo'] : []),
+    ];
+    const filas = salones.map((s) => {
+      const dueno = s.usuarios[0];
+      const fila = [
+        s.nombre,
+        dueno?.nombre ?? '—',
+        dueno?.email ?? '—',
+        tabActivo === 'aprobados' && s.fechaAprobacion
+          ? new Date(s.fechaAprobacion).toLocaleDateString('es-MX')
+          : new Date(s.fechaSolicitud).toLocaleDateString('es-MX'),
+      ];
+      if (tabActivo === 'aprobados') fila.push(s.fechaVencimiento);
+      if (tabActivo === 'rechazados') fila.push(s.motivoRechazo ?? '—');
+      return fila;
+    });
+    autoTable(doc, {
+      head: [cabeceras],
+      body: filas,
+      startY: 34,
+      styles: { fontSize: 9 },
+      headStyles: { fillColor: [194, 24, 91] },
+      didDrawPage: (datos) => {
+        doc.setFontSize(9);
+        doc.text(`Beauty Time Pro · ${tabActivo}`, 14, doc.internal.pageSize.getHeight() - 10);
+        doc.text(
+          `Página ${datos.pageNumber}`,
+          doc.internal.pageSize.getWidth() - 28,
+          doc.internal.pageSize.getHeight() - 10,
+        );
+      },
+    });
+    doc.save(`salones-${tabActivo}-${new Date().toISOString().slice(0, 10)}.pdf`);
+  };
+
+  const exportarExcel = async () => {
+    const XLSX = await import('xlsx');
+    const datos = salones.map((s) => {
+      const dueno = s.usuarios[0];
+      const base: Record<string, string> = {
+        Salón: s.nombre,
+        Admin: dueno?.nombre ?? '—',
+        Email: dueno?.email ?? '—',
+        Fecha:
+          tabActivo === 'aprobados' && s.fechaAprobacion
+            ? new Date(s.fechaAprobacion).toLocaleDateString('es-MX')
+            : new Date(s.fechaSolicitud).toLocaleDateString('es-MX'),
+      };
+      if (tabActivo === 'aprobados') base['Vencimiento'] = s.fechaVencimiento;
+      if (tabActivo === 'rechazados') base['Motivo'] = s.motivoRechazo ?? '—';
+      return base;
+    });
+    const hoja = XLSX.utils.json_to_sheet(datos);
+    hoja['!cols'] = Object.keys(datos[0] ?? { Salón: '', Admin: '', Email: '', Fecha: '' }).map(
+      (clave) => ({
+        wch: Math.max(
+          clave.length + 4,
+          ...datos.map((fila) => String(fila[clave] ?? '').length + 2),
+        ),
+      }),
+    );
+    const libro = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(libro, hoja, tabActivo);
+    XLSX.writeFile(libro, `salones-${tabActivo}-${new Date().toISOString().slice(0, 10)}.xlsx`);
+  };
+
   return (
     <section aria-labelledby="titulo-historial">
       <h2 id="titulo-historial" className="text-2xl font-black text-slate-900 mb-5">
@@ -163,16 +254,36 @@ export function HistorialSalones() {
       </h2>
 
       {/* Tabs */}
-      <div className="flex bg-slate-100 p-1 rounded-2xl w-fit mb-6 gap-1">
-        {TABS.map((tab) => (
-          <button
-            key={tab.id}
-            onClick={() => setTabActivo(tab.id)}
-            className={`flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-bold transition-all ${tabActivo === tab.id ? 'bg-white shadow-sm text-slate-900' : 'text-slate-500 hover:text-slate-700'}`}
-          >
-            {tab.icono} {tab.etiqueta}
-          </button>
-        ))}
+      <div className="flex flex-wrap items-center gap-4 mb-6">
+        <div className="flex bg-slate-100 p-1 rounded-2xl w-fit gap-1">
+          {TABS.map((tab) => (
+            <button
+              key={tab.id}
+              onClick={() => setTabActivo(tab.id)}
+              className={`flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-bold transition-all ${tabActivo === tab.id ? 'bg-white shadow-sm text-slate-900' : 'text-slate-500 hover:text-slate-700'}`}
+            >
+              {tab.icono} {tab.etiqueta}
+            </button>
+          ))}
+        </div>
+        {salones.length > 0 && (
+          <div className="flex gap-2">
+            <button
+              onClick={() => void exportarPDF()}
+              className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-red-50 text-red-700 text-xs font-bold hover:bg-red-100 transition-colors"
+              aria-label="Exportar a PDF"
+            >
+              <FileDown className="w-4 h-4" /> PDF
+            </button>
+            <button
+              onClick={() => void exportarExcel()}
+              className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-green-50 text-green-700 text-xs font-bold hover:bg-green-100 transition-colors"
+              aria-label="Exportar a Excel"
+            >
+              <FileSpreadsheet className="w-4 h-4" /> Excel
+            </button>
+          </div>
+        )}
       </div>
 
       {isLoading && (
@@ -188,8 +299,8 @@ export function HistorialSalones() {
       )}
 
       {!isLoading && salones.length > 0 && (
-        <div className="bg-white rounded-3xl border border-slate-100 overflow-hidden">
-          <table className="w-full text-sm">
+        <div className="bg-white rounded-3xl border border-slate-100 overflow-hidden overflow-x-auto">
+          <table className="w-full min-w-175 text-sm">
             <thead>
               <tr className="border-b border-slate-100 text-left">
                 <th className="p-4 font-semibold text-slate-500">Salón</th>

@@ -297,7 +297,7 @@ function ModalRenovarSuscripcion({
       className="fixed inset-0 z-50 flex items-center justify-center p-4"
     >
       <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={alCerrar} />
-      <div className="relative w-full max-w-lg rounded-[2rem] bg-white p-6 shadow-2xl">
+      <div className="relative w-full max-w-lg rounded-4xl bg-white p-6 shadow-2xl">
         <h2 id="titulo-modal-renovar" className="text-xl font-black text-slate-900">
           Renovar suscripción
         </h2>

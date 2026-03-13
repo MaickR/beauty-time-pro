@@ -1,4 +1,11 @@
+import type clientePrisma from '../generated/prisma/client.js';
 import { prisma } from '../prismaCliente.js';
+
+type ClientePrismaTransaccional = clientePrisma.Prisma.TransactionClient;
+
+function obtenerClientePrisma(tx?: ClientePrismaTransaccional) {
+  return tx ?? prisma;
+}
 
 export interface ConfigFidelidadPorDefecto {
   id: string | null;
@@ -22,8 +29,12 @@ export function configFidelidadPorDefecto(estudioId: string): ConfigFidelidadPor
   };
 }
 
-export async function obtenerConfigFidelidad(estudioId: string): Promise<ConfigFidelidadPorDefecto> {
-  const config = await prisma.configFidelidad.findUnique({ where: { estudioId } });
+export async function obtenerConfigFidelidad(
+  estudioId: string,
+  tx?: ClientePrismaTransaccional,
+): Promise<ConfigFidelidadPorDefecto> {
+  const cliente = obtenerClientePrisma(tx);
+  const config = await cliente.configFidelidad.findUnique({ where: { estudioId } });
   return config ?? configFidelidadPorDefecto(estudioId);
 }
 
@@ -34,16 +45,21 @@ export function calcularRecompensasDisponibles(puntos: {
   return Math.max(0, puntos.recompensasGanadas - puntos.recompensasUsadas);
 }
 
-export async function registrarVisitaFidelidad(clienteId: string, estudioId: string): Promise<{
+export async function registrarVisitaFidelidad(
+  clienteId: string,
+  estudioId: string,
+  tx?: ClientePrismaTransaccional,
+): Promise<{
   recompensaGanada: boolean;
   descripcion: string | null;
 }> {
-  const config = await obtenerConfigFidelidad(estudioId);
+  const cliente = obtenerClientePrisma(tx);
+  const config = await obtenerConfigFidelidad(estudioId, tx);
   if (!config.activo) {
     return { recompensaGanada: false, descripcion: null };
   }
 
-  const puntos = await prisma.puntosFidelidad.upsert({
+  const puntos = await cliente.puntosFidelidad.upsert({
     where: { clienteId_estudioId: { clienteId, estudioId } },
     update: {
       visitasAcumuladas: { increment: 1 },
@@ -62,7 +78,7 @@ export async function registrarVisitaFidelidad(clienteId: string, estudioId: str
     return { recompensaGanada: false, descripcion: null };
   }
 
-  await prisma.puntosFidelidad.update({
+  await cliente.puntosFidelidad.update({
     where: { id: puntos.id },
     data: {
       visitasUsadas: { increment: config.visitasRequeridas },
@@ -76,11 +92,16 @@ export async function registrarVisitaFidelidad(clienteId: string, estudioId: str
   };
 }
 
-export async function canjearRecompensaFidelidad(clienteId: string, estudioId: string): Promise<{
+export async function canjearRecompensaFidelidad(
+  clienteId: string,
+  estudioId: string,
+  tx?: ClientePrismaTransaccional,
+): Promise<{
   descripcion: string;
 }> {
-  const config = await obtenerConfigFidelidad(estudioId);
-  const puntos = await prisma.puntosFidelidad.findUnique({
+  const cliente = obtenerClientePrisma(tx);
+  const config = await obtenerConfigFidelidad(estudioId, tx);
+  const puntos = await cliente.puntosFidelidad.findUnique({
     where: { clienteId_estudioId: { clienteId, estudioId } },
   });
 
@@ -88,10 +109,40 @@ export async function canjearRecompensaFidelidad(clienteId: string, estudioId: s
     throw new Error('El cliente no tiene recompensas disponibles');
   }
 
-  await prisma.puntosFidelidad.update({
+  await cliente.puntosFidelidad.update({
     where: { id: puntos.id },
     data: { recompensasUsadas: { increment: 1 } },
   });
 
   return { descripcion: config.descripcionRecompensa };
+}
+
+/**
+ * Revierte una visita de fidelidad cuando se cancela una reserva 'confirmed'.
+ * Decrementa visitasAcumuladas y ajusta recompensasGanadas si el conteo
+ * de visitas ya no alcanza para sostenerlas.
+ */
+export async function revertirVisitaFidelidad(clienteId: string, estudioId: string): Promise<void> {
+  const config = await obtenerConfigFidelidad(estudioId);
+  if (!config.activo) return;
+
+  const puntos = await prisma.puntosFidelidad.findUnique({
+    where: { clienteId_estudioId: { clienteId, estudioId } },
+  });
+  if (!puntos || puntos.visitasAcumuladas <= 0) return;
+
+  const visitasNuevas = puntos.visitasAcumuladas - 1;
+  // Máximo de recompensas alcanzables con visitasNuevas
+  const maxRecompensas = Math.floor(visitasNuevas / config.visitasRequeridas);
+  const recompensasNuevas = Math.min(puntos.recompensasGanadas, maxRecompensas);
+
+  await prisma.puntosFidelidad.update({
+    where: { id: puntos.id },
+    data: {
+      visitasAcumuladas: visitasNuevas,
+      recompensasGanadas: recompensasNuevas,
+      // visitasUsadas no puede superar las visitas acumuladas nuevas
+      visitasUsadas: Math.min(puntos.visitasUsadas, visitasNuevas),
+    },
+  });
 }

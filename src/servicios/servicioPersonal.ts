@@ -4,6 +4,7 @@ import type { Personal } from '../tipos';
 interface PersonalServidor {
   id: string;
   nombre: string;
+  avatarUrl?: string | null;
   especialidades?: string[];
   activo?: boolean;
   horaInicio?: string | null;
@@ -25,6 +26,7 @@ function mapearPersonal(personal: PersonalServidor): Personal {
   return {
     id: personal.id,
     name: personal.nombre,
+    avatarUrl: personal.avatarUrl ?? null,
     specialties: personal.especialidades ?? [],
     active: personal.activo ?? true,
     shiftStart: personal.horaInicio ?? null,
@@ -73,6 +75,25 @@ export async function actualizarPersonal(
     body: JSON.stringify(serializarPersonal(cambios)),
   });
   return mapearPersonal(respuesta.datos);
+}
+
+export async function subirAvatarPersonal(
+  estudioId: string,
+  personalId: string,
+  archivo: File,
+): Promise<string> {
+  const datos = new FormData();
+  datos.append('archivo', archivo);
+
+  const respuesta = await peticion<{ datos: { avatarUrl: string } }>(
+    `/estudio/${estudioId}/personal/${personalId}/avatar`,
+    {
+      method: 'POST',
+      body: datos,
+    },
+  );
+
+  return respuesta.datos.avatarUrl;
 }
 
 export async function sincronizarPersonalEstudio(

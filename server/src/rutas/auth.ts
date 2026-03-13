@@ -121,18 +121,36 @@ export async function rutasAuth(servidor: FastifyInstance): Promise<void> {
         });
       }
 
+      // ─── Verificar EmpleadoAcceso ─────────────────────────────────────────
+      const empleadoAcceso = await prisma.empleadoAcceso.findUnique({
+        where: { email: emailNorm },
+        include: { personal: { select: { id: true, nombre: true, estudioId: true } } },
+      });
+
+      if (empleadoAcceso) {
+        if (!empleadoAcceso.activo) {
+          return respuesta.code(403).send({ error: 'Tu acceso ha sido desactivado. Contacta al dueño del salón.' });
+        }
+        if (!(await bcrypt.compare(contrasena, empleadoAcceso.hashContrasena))) {
+          return respuesta.code(401).send({ error: 'La contraseña es incorrecta.', codigo: 'CONTRASENA_INCORRECTA' });
+        }
+        void prisma.empleadoAcceso.update({ where: { id: empleadoAcceso.id }, data: { ultimoAcceso: new Date() } });
+        return emitirTokens(servidor, respuesta, {
+          sub: empleadoAcceso.id,
+          rol: 'empleado',
+          estudioId: empleadoAcceso.personal.estudioId,
+          nombre: empleadoAcceso.personal.nombre,
+          email: empleadoAcceso.email,
+          personalId: empleadoAcceso.personalId,
+          forzarCambioContrasena: empleadoAcceso.forzarCambioContrasena,
+        });
+      }
+
       // ─── Verificar Usuario (dueño / maestro) ─────────────────────────────
       const usuario = await prisma.usuario.findUnique({
         where: { email: emailNorm },
         include: { estudio: { select: { id: true, estado: true, motivoRechazo: true } } },
       });
-
-      if (!clienteApp && !usuario) {
-        return respuesta.code(404).send({
-          error: 'No existe ninguna cuenta registrada con ese correo.',
-          codigo: 'CUENTA_NO_EXISTE',
-        });
-      }
 
       if (!usuario) {
         return respuesta.code(404).send({
@@ -339,11 +357,20 @@ export async function rutasAuth(servidor: FastifyInstance): Promise<void> {
 
     try {
       const payload = servidor.jwt.verify<{
-        sub: string; rol: string; estudioId: string | null; nombre: string; email: string;
+        sub: string; rol: string; estudioId: string | null; nombre: string; email: string; personalId?: string; forzarCambioContrasena?: boolean;
       }>(refreshToken);
 
       let esMaestroTotal = false;
       let permisos = crearPermisosVacios();
+
+      if (payload.rol === 'empleado') {
+        const acceso = await prisma.empleadoAcceso.findUnique({
+          where: { id: payload.sub },
+          select: { activo: true },
+        });
+        if (!acceso) return respuesta.code(401).send({ error: 'No autenticado' });
+        if (!acceso.activo) return respuesta.code(403).send({ error: 'Tu acceso ha sido desactivado. Contacta al dueño del salón.' });
+      }
 
       if (payload.rol === 'maestro') {
         const usuario = await prisma.usuario.findUnique({
@@ -393,8 +420,12 @@ export async function rutasAuth(servidor: FastifyInstance): Promise<void> {
         email: payload.email ?? '',
         esMaestroTotal,
         permisos,
+        ...(payload.personalId !== undefined && { personalId: payload.personalId }),
+        ...(payload.forzarCambioContrasena !== undefined && {
+          forzarCambioContrasena: payload.forzarCambioContrasena,
+        }),
       });
-      return respuesta.send({ datos: { token: accessToken, rol: payload.rol, estudioId: payload.estudioId, nombre: payload.nombre ?? '', email: payload.email ?? '', esMaestroTotal, permisos } });
+      return respuesta.send({ datos: { token: accessToken, rol: payload.rol, estudioId: payload.estudioId, nombre: payload.nombre ?? '', email: payload.email ?? '', esMaestroTotal, permisos, personalId: payload.personalId ?? null, forzarCambioContrasena: payload.forzarCambioContrasena ?? false } });
     } catch {
       return respuesta.code(401).send({ error: 'Sesión expirada. Inicia sesión nuevamente.' });
     }
@@ -425,6 +456,8 @@ async function emitirTokens(
     email: string;
     esMaestroTotal?: boolean;
     permisos?: PermisosJWT;
+    personalId?: string;
+    forzarCambioContrasena?: boolean;
   },
 ): Promise<import('fastify').FastifyReply> {
   const accessToken = servidor.jwt.sign(payload);
@@ -447,6 +480,8 @@ async function emitirTokens(
       email: payload.email,
       esMaestroTotal: payload.esMaestroTotal ?? false,
       permisos: payload.permisos ?? crearPermisosVacios(),
+      personalId: payload.personalId ?? null,
+      forzarCambioContrasena: payload.forzarCambioContrasena ?? false,
     },
   });
 }

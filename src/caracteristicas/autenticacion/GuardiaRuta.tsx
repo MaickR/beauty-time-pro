@@ -10,7 +10,7 @@ interface PropsGuardiaRuta {
 export function GuardiaRuta({ rolesPermitidos }: PropsGuardiaRuta) {
   const ubicacion = useLocation();
   const { mostrarToast } = usarToast();
-  const { iniciando, rol, estudioActual, claveClienteActual } = usarTiendaAuth();
+  const { iniciando, rol, estudioActual, claveClienteActual, usuario } = usarTiendaAuth();
   const yaMostroToast = useRef(false);
 
   useEffect(() => {
@@ -33,7 +33,17 @@ export function GuardiaRuta({ rolesPermitidos }: PropsGuardiaRuta) {
   }
 
   if (!rolesPermitidos.includes(rol)) {
-    return <Navigate to={obtenerRutaPorRol(rol, estudioActual, claveClienteActual)} replace />;
+    return (
+      <Navigate
+        to={obtenerRutaPorRol(
+          rol,
+          estudioActual,
+          claveClienteActual,
+          usuario?.forzarCambioContrasena ?? false,
+        )}
+        replace
+      />
+    );
   }
 
   return <Outlet />;

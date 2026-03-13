@@ -6,9 +6,9 @@ import {
   cerrarSesionAPI,
   type PermisosSesionMaestro,
 } from '../servicios/servicioAuth';
-import { ErrorAPI } from '../lib/clienteHTTP';
+import { ErrorAPI, registrarCallbackSesionExpirada } from '../lib/clienteHTTP';
 
-export type RolUsuario = 'maestro' | 'dueno' | 'cliente';
+export type RolUsuario = 'maestro' | 'dueno' | 'cliente' | 'empleado';
 
 interface ResultadoInicioSesion {
   exito: boolean;
@@ -27,6 +27,8 @@ interface EstadoAuth {
     email: string;
     esMaestroTotal: boolean;
     permisos: PermisosSesionMaestro;
+    personalId: string | null;
+    forzarCambioContrasena: boolean;
   } | null;
   rol: RolUsuario | null;
   estudioActual: string | null;
@@ -37,6 +39,7 @@ interface EstadoAuth {
   iniciarSesionConClave: (clave: string) => Promise<ResultadoInicioSesion>;
   cerrarSesion: () => Promise<void>;
   establecerEstudio: (estudioId: string | null) => void;
+  completarCambioContrasenaEmpleado: () => void;
 }
 
 let inicializacionPendiente = false;
@@ -57,10 +60,13 @@ export function obtenerRutaPorRol(
   rol: RolUsuario | null,
   estudioActual: string | null,
   claveClienteActual: string | null,
+  forzarCambioContrasena = false,
 ) {
   if (rol === 'maestro') return '/maestro';
   if (rol === 'dueno' && estudioActual) return `/estudio/${estudioActual}/agenda`;
-  if (rol === 'cliente') return claveClienteActual ? `/reserva/${claveClienteActual}` : '/inicio';
+  if (rol === 'cliente') return claveClienteActual ? `/reservar/${claveClienteActual}` : '/inicio';
+  if (rol === 'empleado')
+    return forzarCambioContrasena ? '/empleado/cambiar-contrasena' : '/empleado/agenda';
   return '/iniciar-sesion';
 }
 
@@ -91,6 +97,8 @@ export const usarTiendaAuth = create<EstadoAuth>((set) => ({
               email: datos.email ?? '',
               esMaestroTotal: datos.esMaestroTotal ?? false,
               permisos: datos.permisos ?? crearPermisosVacios(),
+              personalId: datos.personalId ?? null,
+              forzarCambioContrasena: datos.forzarCambioContrasena ?? false,
             },
             rol,
             estudioActual: datos.estudioId,
@@ -120,6 +128,8 @@ export const usarTiendaAuth = create<EstadoAuth>((set) => ({
           email: datos.email ?? '',
           esMaestroTotal: datos.esMaestroTotal ?? false,
           permisos: datos.permisos ?? crearPermisosVacios(),
+          personalId: datos.personalId ?? null,
+          forzarCambioContrasena: datos.forzarCambioContrasena ?? false,
         },
         rol,
         estudioActual: datos.estudioId,
@@ -129,6 +139,7 @@ export const usarTiendaAuth = create<EstadoAuth>((set) => ({
         rol,
         datos.estudioId,
         rol === 'cliente' ? datos.estudioId : null,
+        datos.forzarCambioContrasena ?? false,
       );
       return { exito: true, ruta, estudioId: datos.estudioId };
     } catch (error) {
@@ -161,6 +172,8 @@ export const usarTiendaAuth = create<EstadoAuth>((set) => ({
           email: datos.email ?? '',
           esMaestroTotal: datos.esMaestroTotal ?? false,
           permisos: datos.permisos ?? crearPermisosVacios(),
+          personalId: datos.personalId ?? null,
+          forzarCambioContrasena: datos.forzarCambioContrasena ?? false,
         },
         rol,
         estudioActual: datos.estudioId,
@@ -170,6 +183,7 @@ export const usarTiendaAuth = create<EstadoAuth>((set) => ({
         rol,
         datos.estudioId,
         rol === 'cliente' ? datos.estudioId : null,
+        datos.forzarCambioContrasena ?? false,
       );
       return { exito: true, ruta, estudioId: datos.estudioId };
     } catch (error) {
@@ -202,4 +216,33 @@ export const usarTiendaAuth = create<EstadoAuth>((set) => ({
   establecerEstudio: (estudioId) => {
     set({ estudioActual: estudioId });
   },
+
+  completarCambioContrasenaEmpleado: () => {
+    set((estado) => ({
+      usuario: estado.usuario ? { ...estado.usuario, forzarCambioContrasena: false } : null,
+    }));
+  },
 }));
+
+// Cuando el backend invalida la sesión por expiración o bloqueo, limpiar estado
+// y redirigir al login mostrando el motivo exacto.
+registrarCallbackSesionExpirada(({ mensaje, codigo }) => {
+  localStorage.removeItem(CLAVE_SESION);
+  inicializacionPendiente = false;
+  usarTiendaAuth.setState({
+    usuario: null,
+    rol: null,
+    estudioActual: null,
+    claveClienteActual: null,
+  });
+  if (typeof window !== 'undefined') {
+    const destino = new URL('/iniciar-sesion', window.location.origin);
+    if (codigo) {
+      destino.searchParams.set('codigo', codigo);
+    }
+    if (mensaje) {
+      destino.searchParams.set('mensaje', mensaje);
+    }
+    window.location.replace(`${destino.pathname}${destino.search}`);
+  }
+});

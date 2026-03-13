@@ -61,6 +61,7 @@ function ModalAprobacion({ solicitud, onCerrar, onConfirmar, cargando }: PropsMo
           <DayPicker
             mode="single"
             selected={fechaSeleccionada}
+            defaultMonth={porDefecto}
             onSelect={(d) => d && setFechaSeleccionada(d)}
             disabled={{ before: addDays(hoy, 1) }}
             locale={es}
@@ -69,6 +70,10 @@ function ModalAprobacion({ solicitud, onCerrar, onConfirmar, cargando }: PropsMo
         <p className="text-xs text-center text-slate-400 mb-6">
           Seleccionado:{' '}
           <strong>{format(fechaSeleccionada, "d 'de' MMMM yyyy", { locale: es })}</strong>
+        </p>
+        <p className="mb-6 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-xs text-amber-900">
+          Si necesitas alinear el corte con otra fecha, puedes aprobar con un periodo inicial corto,
+          incluso de 5 días.
         </p>
 
         <div className="flex gap-3">
@@ -182,6 +187,8 @@ export function SolicitudesPendientes({ onCambio }: PropsSolicitudesPendientes) 
       setIdAprobar(null);
       mostrarToast({ mensaje: 'Salón aprobado correctamente', variante: 'exito' });
       void clienteConsulta.invalidateQueries({ queryKey: ['solicitudes-pendientes'] });
+      void clienteConsulta.invalidateQueries({ queryKey: ['historial-salones'] });
+      void clienteConsulta.invalidateQueries({ queryKey: ['admin', 'metricas'] });
       onCambio?.();
     },
     onError: (err: Error) => mostrarToast({ mensaje: err.message, variante: 'error' }),
@@ -193,6 +200,8 @@ export function SolicitudesPendientes({ onCambio }: PropsSolicitudesPendientes) 
       setIdRechazar(null);
       mostrarToast({ mensaje: 'Solicitud rechazada', variante: 'info' });
       void clienteConsulta.invalidateQueries({ queryKey: ['solicitudes-pendientes'] });
+      void clienteConsulta.invalidateQueries({ queryKey: ['historial-salones'] });
+      void clienteConsulta.invalidateQueries({ queryKey: ['admin', 'metricas'] });
       onCambio?.();
     },
     onError: (err: Error) => mostrarToast({ mensaje: err.message, variante: 'error' }),

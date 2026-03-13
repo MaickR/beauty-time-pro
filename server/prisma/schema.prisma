@@ -54,6 +54,9 @@ model Estudio {
   numeroEspecialistas Int?       @default(1)
   categorias        String?
   primeraVez        Boolean      @default(true)
+  cancelacionSolicitada     Boolean   @default(false)
+  fechaSolicitudCancelacion DateTime?
+  motivoCancelacion         String?
   creadoEn          DateTime     @default(now())
   actualizadoEn     DateTime     @updatedAt
 
@@ -67,15 +70,20 @@ model Estudio {
   puntosFidelidad   PuntosFidelidad[]
 
   @@map("estudios")
+  @@index([estado, activo])
+  @@index([pais, estado])
+  @@index([fechaVencimiento])
 }
 
 model ClienteApp {
   id                String      @id @default(uuid())
   email             String      @unique
+  emailPendiente    String?
   hashContrasena    String
   nombre            String
   apellido          String
   fechaNacimiento   DateTime
+  pais              String      @default("Mexico")
   telefono          String?
   avatarUrl         String?
   emailVerificado   Boolean     @default(false)
@@ -86,8 +94,10 @@ model ClienteApp {
 
   tokens            TokenVerificacionApp[]
   reservas          Reserva[]
+  suscripcionesPush SuscripcionPush[]
 
   @@map("clientes_app")
+  @@index([pais])
 }
 
 model TokenVerificacionApp {
@@ -108,6 +118,7 @@ model Personal {
   id             String    @id @default(cuid())
   estudioId      String
   nombre         String
+  avatarUrl      String?
   especialidades Json      // string[]
   activo         Boolean   @default(true)
   horaInicio     String?   // "HH:mm"
@@ -117,10 +128,27 @@ model Personal {
   diasTrabajo    Json?     // number[] (0=Dom…6=Sab) | null usa horario del estudio
   creadoEn       DateTime  @default(now())
 
-  estudio        Estudio   @relation(fields: [estudioId], references: [id], onDelete: Cascade)
+  estudio        Estudio        @relation(fields: [estudioId], references: [id], onDelete: Cascade)
   reservas       Reserva[]
+  acceso         EmpleadoAcceso?
 
   @@map("personal")
+  @@index([estudioId, activo])
+}
+
+model EmpleadoAcceso {
+  id             String    @id @default(uuid())
+  personalId     String    @unique
+  personal       Personal  @relation(fields: [personalId], references: [id], onDelete: Cascade)
+  email          String    @unique
+  hashContrasena String
+  forzarCambioContrasena Boolean @default(false)
+  activo         Boolean   @default(true)
+  ultimoAcceso   DateTime?
+  creadoEn       DateTime  @default(now())
+  actualizadoEn  DateTime  @updatedAt
+
+  @@map("empleados_acceso")
 }
 
 model Cliente {
@@ -203,6 +231,9 @@ model Reserva {
   cliente         Cliente     @relation(fields: [clienteId], references: [id])
   clienteApp      ClienteApp? @relation(fields: [clienteAppId], references: [id])
 
+  @@index([personalId, fecha])
+  @@index([estudioId, fecha])
+  @@index([clienteAppId])
   @@map("reservas")
 }
 
@@ -252,8 +283,28 @@ model Usuario {
   tokensReset     TokenReset[]
   permisos        PermisosMaestro?
   auditLogs       AuditLog[]
+  suscripcionesPush SuscripcionPush[]
 
   @@map("usuarios")
+}
+
+model SuscripcionPush {
+  id         String     @id @default(uuid())
+  endpoint   String     @unique
+  p256dh     String
+  auth       String
+  tipo       String     // "cliente" | "dueno"
+  usuarioId  String?
+  clienteId  String?
+  activa     Boolean    @default(true)
+  creadoEn   DateTime   @default(now())
+
+  usuario    Usuario?   @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
+  clienteApp ClienteApp? @relation(fields: [clienteId], references: [id], onDelete: Cascade)
+
+  @@map("suscripciones_push")
+  @@index([usuarioId])
+  @@index([clienteId])
 }
 
 model TokenReset {
@@ -298,5 +349,7 @@ model AuditLog {
   creadoEn    DateTime @default(now())
 
   @@map("audit_log")
+  @@index([entidadId, creadoEn])
+  @@index([usuarioId])
 }
 

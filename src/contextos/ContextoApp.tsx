@@ -142,6 +142,7 @@ function mapearPersonal(datos: Record<string, unknown>[]): Personal[] {
   return datos.map((p) => ({
     id: p['id'] as string,
     name: (p['nombre'] as string) ?? '',
+    avatarUrl: (p['avatarUrl'] as string | null | undefined) ?? null,
     specialties: (p['especialidades'] as string[]) ?? [],
     active: (p['activo'] as boolean) ?? true,
     shiftStart: (p['horaInicio'] as string | null) ?? null,
@@ -183,6 +184,9 @@ function mapearEstudios(datos: Estudio[]): Estudio[] {
       direccion: (d['direccion'] as string | null) ?? null,
       emailContacto: (d['emailContacto'] as string | null) ?? null,
       primeraVez: (d['primeraVez'] as boolean | undefined) ?? true,
+      cancelacionSolicitada: (d['cancelacionSolicitada'] as boolean) ?? false,
+      fechaSolicitudCancelacion: (d['fechaSolicitudCancelacion'] as string | null) ?? null,
+      motivoCancelacion: (d['motivoCancelacion'] as string | null) ?? null,
     } as Estudio;
   });
 }

@@ -67,6 +67,10 @@ export function ModalTerminos({ abierto, alAceptar, alCerrar }: PropsModalTermin
               Cerrar
             </button>
           </div>
+          <div className="border-b border-yellow-200 bg-yellow-100 px-6 py-3 text-sm font-bold text-yellow-900">
+            ⚠️ Este documento está en revisión legal. Versión preliminar sujeta a cambios — Marzo
+            2026
+          </div>
           <div className="flex-1 overflow-y-auto px-6 py-4 space-y-5">
             {SECCIONES.map((seccion, indice) => (
               <section

@@ -231,7 +231,7 @@ export function GestionAdmins() {
 
   return (
     <section aria-labelledby="titulo-admins" className="space-y-6">
-      <div className="flex justify-between items-center">
+      <div className="flex flex-wrap items-center justify-between gap-3">
         <h2 id="titulo-admins" className="text-2xl font-black text-slate-900">
           Administradores
         </h2>
@@ -241,7 +241,7 @@ export function GestionAdmins() {
             reset();
             setPermisosEditando(PERMISOS_VACIOS);
           }}
-          className="flex items-center gap-2 bg-pink-600 text-white px-5 py-3 rounded-xl font-bold shadow hover:bg-pink-700 transition-all"
+          className="flex items-center justify-center gap-2 bg-pink-600 text-white px-5 py-3 rounded-xl font-bold shadow hover:bg-pink-700 transition-all shrink-0 w-full sm:w-auto"
         >
           <Plus className="w-4 h-4" /> Nuevo admin
         </button>
@@ -259,24 +259,26 @@ export function GestionAdmins() {
                 key={admin.id}
                 className="bg-white border border-slate-200 rounded-2xl p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4"
               >
-                <div>
-                  <p className="font-bold text-slate-900">{admin.nombre}</p>
-                  <p className="text-sm text-slate-500">{admin.email}</p>
-                  <span
-                    className={`text-xs font-semibold px-2 py-0.5 rounded-full ${admin.activo ? 'bg-green-100 text-green-700' : 'bg-slate-200 text-slate-600'}`}
-                  >
-                    {admin.activo ? 'Activo' : 'Inactivo'}
-                  </span>
-                  {admin.permisos?.esMaestroTotal && (
-                    <span className="ml-2 text-xs font-semibold px-2 py-0.5 rounded-full bg-yellow-100 text-yellow-700">
-                      Maestro total
+                <div className="min-w-0">
+                  <p className="font-bold text-slate-900 truncate">{admin.nombre}</p>
+                  <p className="text-sm text-slate-500 truncate">{admin.email}</p>
+                  <div className="flex flex-wrap gap-1 mt-1">
+                    <span
+                      className={`text-xs font-semibold px-2 py-0.5 rounded-full ${admin.activo ? 'bg-green-100 text-green-700' : 'bg-slate-200 text-slate-600'}`}
+                    >
+                      {admin.activo ? 'Activo' : 'Inactivo'}
                     </span>
-                  )}
-                  {protegido && (
-                    <span className="ml-2 inline-flex items-center gap-1 text-xs font-semibold px-2 py-0.5 rounded-full bg-slate-900 text-white">
-                      <ShieldCheck className="w-3 h-3" /> Cuenta protegida
-                    </span>
-                  )}
+                    {admin.permisos?.esMaestroTotal && (
+                      <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-yellow-100 text-yellow-700">
+                        Maestro total
+                      </span>
+                    )}
+                    {protegido && (
+                      <span className="inline-flex items-center gap-1 text-xs font-semibold px-2 py-0.5 rounded-full bg-slate-900 text-white">
+                        <ShieldCheck className="w-3 h-3" /> Cuenta protegida
+                      </span>
+                    )}
+                  </div>
                 </div>
 
                 <div className="flex gap-2 items-center">

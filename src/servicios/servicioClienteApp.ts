@@ -90,11 +90,15 @@ function normalizarPerfilCliente(perfil: PerfilClienteApp): PerfilClienteApp {
 
 export async function obtenerSalonesPublicos(params?: {
   buscar?: string;
-  categoria?: string;
+  categorias?: string[];
+  pais?: 'Mexico' | 'Colombia';
 }): Promise<SalonPublico[]> {
   const query = new URLSearchParams();
   if (params?.buscar) query.set('buscar', params.buscar);
-  if (params?.categoria) query.set('categoria', params.categoria);
+  if (params?.categorias && params.categorias.length > 0) {
+    query.set('categorias', params.categorias.join(','));
+  }
+  if (params?.pais) query.set('pais', params.pais);
   const qs = query.toString() ? `?${query.toString()}` : '';
   const res = await peticion<RespuestaSalones>(`/salones/publicos${qs}`);
   return res.datos.map(normalizarSalonPublico);
@@ -166,4 +170,17 @@ export async function cambiarContrasena(
     method: 'POST',
     body: JSON.stringify({ contrasenaActual, contrasenaNueva }),
   });
+}
+
+export async function actualizarMiEmail(
+  email: string,
+): Promise<{ mensaje: string; emailPendiente: string }> {
+  const res = await peticion<{ datos: { mensaje: string; emailPendiente: string } }>(
+    '/perfil/email',
+    {
+      method: 'PUT',
+      body: JSON.stringify({ email }),
+    },
+  );
+  return res.datos;
 }

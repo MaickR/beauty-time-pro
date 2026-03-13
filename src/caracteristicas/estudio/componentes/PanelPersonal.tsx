@@ -1,4 +1,4 @@
-import { Clock, Coffee, Users, CheckCircle2, XCircle } from 'lucide-react';
+import { Clock, Coffee, Pencil, Users, CheckCircle2, XCircle } from 'lucide-react';
 import { useMutation } from '@tanstack/react-query';
 import { useEffect, useState } from 'react';
 import { SelectorHora } from '../../../componentes/ui/SelectorHora';
@@ -6,6 +6,8 @@ import { obtenerSlotsDisponibles } from '../../../utils/programacion';
 import { actualizarPersonal } from '../../../servicios/servicioPersonal';
 import { usarContextoApp } from '../../../contextos/ContextoApp';
 import { FormularioNuevoPersonal } from './FormularioNuevoPersonal';
+import { ModalEditarPersonal } from './ModalEditarPersonal';
+import { SeccionAccesoEmpleado } from '../../empleado/componentes/SeccionAccesoEmpleado';
 import type { Estudio, Reserva } from '../../../tipos';
 
 interface PropsPanelPersonal {
@@ -22,6 +24,7 @@ export function PanelPersonal({ estudio, reservas, fechaVista }: PropsPanelPerso
   const { recargar } = usarContextoApp();
   const [personalVisual, setPersonalVisual] = useState(estudio.staff);
   const [personalPendiente, setPersonalPendiente] = useState<string[]>([]);
+  const [personalModal, setPersonalModal] = useState<(typeof estudio.staff)[number] | null>(null);
   const fechaStr = obtenerFechaLocalISO(fechaVista);
   const diaSemana = fechaVista.toLocaleString('es-ES', { weekday: 'long' });
   const diaNombre = diaSemana.charAt(0).toUpperCase() + diaSemana.slice(1);
@@ -150,7 +153,31 @@ export function PanelPersonal({ estudio, reservas, fechaVista }: PropsPanelPerso
               className={`rounded-4xl border p-5 transition-all duration-300 ${st.active ? 'bg-white border-slate-200' : 'bg-slate-50 border-slate-100 opacity-80'} ${estaGuardando ? 'scale-[0.99] shadow-lg shadow-emerald-100' : ''}`}
             >
               <div className="flex justify-between items-center mb-4">
-                <p className="font-black text-sm uppercase text-slate-900">{st.name}</p>
+                <div className="flex items-center gap-3">
+                  {st.avatarUrl ? (
+                    <img
+                      src={st.avatarUrl}
+                      alt={`Foto de ${st.name}`}
+                      loading="lazy"
+                      className="h-11 w-11 rounded-full border border-slate-200 object-cover"
+                    />
+                  ) : (
+                    <div className="flex h-11 w-11 items-center justify-center rounded-full bg-slate-100 text-xs font-black text-slate-500">
+                      {st.name.slice(0, 1).toUpperCase()}
+                    </div>
+                  )}
+                  <div className="flex items-center gap-2">
+                    <p className="font-black text-sm uppercase text-slate-900">{st.name}</p>
+                    <button
+                      type="button"
+                      aria-label={`Editar perfil de ${st.name}`}
+                      onClick={() => setPersonalModal(st)}
+                      className="p-1 rounded-lg hover:bg-slate-100 text-slate-400 hover:text-slate-600 transition-colors"
+                    >
+                      <Pencil className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                </div>
                 <div className="flex items-center gap-3">
                   <span
                     className={`text-[10px] font-black uppercase tracking-widest transition-colors ${st.active ? 'text-emerald-600' : 'text-slate-400'}`}
@@ -307,6 +334,12 @@ export function PanelPersonal({ estudio, reservas, fechaVista }: PropsPanelPerso
                   <p className="text-[9px] text-slate-400 font-bold italic">Sin citas hoy.</p>
                 )}
               </div>
+
+              <SeccionAccesoEmpleado
+                estudioId={estudio.id}
+                personalId={st.id}
+                nombreEmpleado={st.name}
+              />
             </div>
           );
         })}
@@ -318,6 +351,22 @@ export function PanelPersonal({ estudio, reservas, fechaVista }: PropsPanelPerso
           <span className="text-[10px] text-green-700 font-black">= Ocupado</span>
         </div>
       </div>
+
+      <ModalEditarPersonal
+        abierto={personalModal !== null}
+        estudioId={estudio.id}
+        personal={personalModal}
+        serviciosDisponibles={estudio.selectedServices.map((servicio) => servicio.name)}
+        onCerrar={() => setPersonalModal(null)}
+        onGuardado={(personalActualizado) => {
+          setPersonalVisual((actual) =>
+            actual.map((item) =>
+              item.id === personalActualizado.id ? { ...item, ...personalActualizado } : item,
+            ),
+          );
+          recargar();
+        }}
+      />
     </div>
   );
 }

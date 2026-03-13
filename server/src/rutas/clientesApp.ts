@@ -2,13 +2,22 @@ import type { FastifyInstance } from 'fastify';
 import bcrypt from 'bcryptjs';
 import fs from 'fs';
 import path from 'path';
+import sharp from 'sharp';
 import { z } from 'zod';
+import NodeCache from 'node-cache';
 import { env } from '../lib/env.js';
+import { detectarTipoImagen } from '../utils/validarImagen.js';
 import { resolverCategoriasSalon } from '../lib/categoriasSalon.js';
+import { cacheSalonesPublicos } from '../lib/cache.js';
 import { prisma } from '../prismaCliente.js';
 import { verificarJWT } from '../middleware/autenticacion.js';
 import { obtenerSlotsDisponiblesBackend } from '../lib/programacion.js';
+import { enviarEmailVerificacionCliente } from '../servicios/servicioEmail.js';
+import { esEmailValido } from '../utils/validarEmail.js';
 import { fechaIsoSchema, obtenerMensajeValidacion, telefonoSchema, textoSchema } from '../lib/validacion.js';
+
+// Caché en memoria para listados de salones públicos — gestionado en lib/cache.ts
+// (importado arriba)
 
 const MIME_PERMITIDOS: Record<string, string> = {
   'image/jpg': 'jpg',
@@ -20,6 +29,8 @@ const LIMITE_BYTES = 2 * 1024 * 1024; // 2 MB
 const esquemaBusquedaSalones = z.object({
   buscar: textoSchema('buscar', 80).optional(),
   categoria: textoSchema('categoria', 80).optional(),
+  categorias: z.union([textoSchema('categorias', 240), z.array(textoSchema('categorias', 80))]).optional(),
+  pais: z.enum(['Mexico', 'Colombia']).optional(),
 });
 
 const esquemaPerfilClienteApp = z.object({
@@ -29,6 +40,10 @@ const esquemaPerfilClienteApp = z.object({
   fechaNacimiento: fechaIsoSchema.optional(),
 }).strict().refine((datos) => Object.keys(datos).length > 0, {
   message: 'Debes enviar al menos un campo para actualizar',
+});
+
+const esquemaActualizarEmailCliente = z.object({
+  email: z.string().trim().max(120, 'El email no puede superar 120 caracteres').email('Email inválido'),
 });
 
 function dirAvatares(): string {
@@ -52,9 +67,17 @@ function normalizarTexto(valor: string): string {
     .toLowerCase();
 }
 
+function obtenerFechaHoyLocal(): string {
+  const hoy = new Date();
+  const compensacion = hoy.getTimezoneOffset();
+  return new Date(hoy.getTime() - compensacion * 60 * 1000).toISOString().split('T')[0]!;
+}
+
 export async function rutasClientesApp(servidor: FastifyInstance): Promise<void> {
   // ─── GET /salones/publicos ───────────────────────────────────────────────
-  servidor.get<{ Querystring: { buscar?: string; categoria?: string } }>(
+  servidor.get<{
+    Querystring: { buscar?: string; categoria?: string; categorias?: string | string[]; pais?: 'Mexico' | 'Colombia' };
+  }>(
     '/salones/publicos',
     async (solicitud, respuesta) => {
       const consulta = esquemaBusquedaSalones.safeParse(solicitud.query);
@@ -62,33 +85,56 @@ export async function rutasClientesApp(servidor: FastifyInstance): Promise<void>
         return respuesta.code(400).send({ error: obtenerMensajeValidacion(consulta.error) });
       }
 
-      const { buscar, categoria } = consulta.data;
+      const { buscar, categoria, categorias, pais } = consulta.data;
       const filtroDemo = obtenerFiltroDemo();
+      const hoy = obtenerFechaHoyLocal();
+      const categoriasEntrada = Array.isArray(categorias)
+        ? categorias
+        : typeof categorias === 'string'
+          ? categorias.split(',').map((valor) => valor.trim()).filter(Boolean)
+          : categoria
+            ? [categoria]
+            : [];
+      const categoriasFiltro = categoriasEntrada.map(normalizarTexto);
 
-      const salones = await prisma.estudio.findMany({
-        where: { estado: 'aprobado', activo: true, ...filtroDemo },
-        select: {
-          id: true,
-          nombre: true,
-          descripcion: true,
-          direccion: true,
-          telefono: true,
-          emailContacto: true,
-          logoUrl: true,
-          colorPrimario: true,
-          horarioApertura: true,
-          horarioCierre: true,
-          diasAtencion: true,
-          categorias: true,
-          servicios: true,
-        },
-        orderBy: { nombre: 'asc' },
-      });
+      // Caché solo cuando no hay filtros dinámicos (búsqueda libre)
+      const claveCache = `salones_${pais ?? 'todos'}`;
+      let salonesPublicos = cacheSalonesPublicos.get<{ id: string; nombre: string; descripcion: string | null; direccion: string | null; pais: string; telefono: string; emailContacto: string | null; logoUrl: string | null; colorPrimario: string | null; horarioApertura: string | null; horarioCierre: string | null; diasAtencion: string | null; categorias: string | null }[]>(claveCache);
 
-      const salonesPublicos = salones.map((salon) => ({
-        ...salon,
-        categorias: resolverCategoriasSalon({ categorias: salon.categorias, servicios: salon.servicios }),
-      }));
+      if (!salonesPublicos) {
+        const salones = await prisma.estudio.findMany({
+          where: {
+            estado: 'aprobado',
+            activo: true,
+            fechaVencimiento: { gte: hoy },
+            ...(pais ? { pais } : {}),
+            ...filtroDemo,
+          },
+          select: {
+            id: true,
+            nombre: true,
+            descripcion: true,
+            direccion: true,
+            pais: true,
+            telefono: true,
+            emailContacto: true,
+            logoUrl: true,
+            colorPrimario: true,
+            horarioApertura: true,
+            horarioCierre: true,
+            diasAtencion: true,
+            categorias: true,
+            servicios: true,
+          },
+          orderBy: { nombre: 'asc' },
+        });
+
+        salonesPublicos = salones.map(({ servicios, ...salon }) => ({
+          ...salon,
+          categorias: resolverCategoriasSalon({ categorias: salon.categorias, servicios }),
+        }));
+        cacheSalonesPublicos.set(claveCache, salonesPublicos);
+      }
 
       let filtrados = salonesPublicos;
 
@@ -98,18 +144,22 @@ export async function rutasClientesApp(servidor: FastifyInstance): Promise<void>
           (s) =>
             normalizarTexto(s.nombre).includes(termino) ||
             (s.descripcion ? normalizarTexto(s.descripcion).includes(termino) : false) ||
+            (s.direccion ? normalizarTexto(s.direccion).includes(termino) : false) ||
             (s.categorias ? normalizarTexto(s.categorias).includes(termino) : false),
         );
       }
 
-      if (categoria) {
-        const cat = normalizarTexto(categoria);
-        filtrados = filtrados.filter((s) => s.categorias ? normalizarTexto(s.categorias).includes(cat) : false);
+      if (categoriasFiltro.length > 0) {
+        filtrados = filtrados.filter((s) => {
+          const categoriasSalon = (s.categorias ?? '')
+            .split(',')
+            .map((valor) => normalizarTexto(valor.trim()))
+            .filter(Boolean);
+          return categoriasFiltro.every((categoriaActual) => categoriasSalon.includes(categoriaActual));
+        });
       }
 
-      return respuesta.send({
-        datos: filtrados.map(({ servicios, ...salon }) => salon),
-      });
+      return respuesta.send({ datos: filtrados });
     },
   );
 
@@ -119,9 +169,10 @@ export async function rutasClientesApp(servidor: FastifyInstance): Promise<void>
     async (solicitud, respuesta) => {
       const { id } = solicitud.params;
       const filtroDemo = obtenerFiltroDemo();
+      const hoy = obtenerFechaHoyLocal();
 
       const salon = await prisma.estudio.findFirst({
-        where: { id, estado: 'aprobado', activo: true, ...filtroDemo },
+        where: { id, estado: 'aprobado', activo: true, fechaVencimiento: { gte: hoy }, ...filtroDemo },
         select: {
           id: true,
           nombre: true,
@@ -175,6 +226,7 @@ export async function rutasClientesApp(servidor: FastifyInstance): Promise<void>
     async (solicitud, respuesta) => {
       const { id } = solicitud.params;
       const { personalId, fecha, duracion } = solicitud.query;
+      const hoy = obtenerFechaHoyLocal();
 
       if (!personalId || !fecha || !duracion) {
         return respuesta.code(400).send({ error: 'personalId, fecha y duracion son requeridos' });
@@ -187,7 +239,7 @@ export async function rutasClientesApp(servidor: FastifyInstance): Promise<void>
 
       const [salon, miembro, reservasExistentes] = await Promise.all([
         prisma.estudio.findFirst({
-          where: { id, estado: 'aprobado', activo: true },
+          where: { id, estado: 'aprobado', activo: true, fechaVencimiento: { gte: hoy } },
           select: { horario: true, festivos: true },
         }),
         prisma.personal.findFirst({
@@ -248,8 +300,10 @@ export async function rutasClientesApp(servidor: FastifyInstance): Promise<void>
         select: {
           id: true,
           email: true,
+          emailPendiente: true,
           nombre: true,
           apellido: true,
+          pais: true,
           telefono: true,
           fechaNacimiento: true,
           avatarUrl: true,
@@ -327,8 +381,10 @@ export async function rutasClientesApp(servidor: FastifyInstance): Promise<void>
         datos: {
           id: clienteApp.id,
           email: clienteApp.email,
+          emailPendiente: clienteApp.emailPendiente,
           nombre: clienteApp.nombre,
           apellido: clienteApp.apellido,
+          pais: clienteApp.pais,
           telefono: clienteApp.telefono,
           fechaNacimiento: clienteApp.fechaNacimiento.toISOString().split('T')[0],
           avatarUrl: clienteApp.avatarUrl,
@@ -387,8 +443,10 @@ export async function rutasClientesApp(servidor: FastifyInstance): Promise<void>
         select: {
           id: true,
           email: true,
+          emailPendiente: true,
           nombre: true,
           apellido: true,
+          pais: true,
           telefono: true,
           fechaNacimiento: true,
           avatarUrl: true,
@@ -399,6 +457,84 @@ export async function rutasClientesApp(servidor: FastifyInstance): Promise<void>
         datos: {
           ...actualizado,
           fechaNacimiento: actualizado.fechaNacimiento.toISOString().split('T')[0],
+        },
+      });
+    },
+  );
+
+  servidor.put<{ Body: { email: string } }>(
+    '/perfil/email',
+    { preHandler: verificarJWT },
+    async (solicitud, respuesta) => {
+      const payload = solicitud.user as { sub: string; rol: string; estudioId: string | null };
+      if (!soloClienteApp(payload)) {
+        return respuesta.code(403).send({ error: 'Sin permisos para esta acción' });
+      }
+
+      const resultado = esquemaActualizarEmailCliente.safeParse(solicitud.body);
+      if (!resultado.success) {
+        return respuesta.code(400).send({ error: obtenerMensajeValidacion(resultado.error) });
+      }
+
+      const emailNuevo = resultado.data.email.trim().toLowerCase();
+      if (!esEmailValido(emailNuevo)) {
+        return respuesta.code(400).send({ error: 'Solo se aceptan correos personales válidos y no temporales de Gmail, Hotmail, Outlook, Yahoo, iCloud o Proton' });
+      }
+
+      const clienteActual = await prisma.clienteApp.findUnique({
+        where: { id: payload.sub },
+        select: { id: true, email: true, nombre: true, emailPendiente: true },
+      });
+
+      if (!clienteActual) {
+        return respuesta.code(404).send({ error: 'Perfil no encontrado' });
+      }
+
+      if (clienteActual.email === emailNuevo) {
+        return respuesta.code(400).send({ error: 'Ese correo ya es el actual de tu cuenta.' });
+      }
+
+      const [clienteDuplicado, usuarioDuplicado] = await Promise.all([
+        prisma.clienteApp.findFirst({
+          where: { OR: [{ email: emailNuevo }, { emailPendiente: emailNuevo }], id: { not: payload.sub } },
+          select: { id: true },
+        }),
+        prisma.usuario.findUnique({ where: { email: emailNuevo }, select: { id: true } }),
+      ]);
+
+      if (clienteDuplicado ?? usuarioDuplicado) {
+        return respuesta.code(409).send({ error: 'Ese correo ya está registrado en otra cuenta.' });
+      }
+
+      await prisma.tokenVerificacionApp.updateMany({
+        where: { clienteId: payload.sub, tipo: 'cambio_email_cliente', usado: false },
+        data: { usado: true },
+      });
+
+      const tokenVerificacion = await prisma.tokenVerificacionApp.create({
+        data: {
+          clienteId: payload.sub,
+          tipo: 'cambio_email_cliente',
+          expiraEn: new Date(Date.now() + 24 * 60 * 60 * 1000),
+        },
+      });
+
+      await prisma.clienteApp.update({
+        where: { id: payload.sub },
+        data: { emailPendiente: emailNuevo },
+      });
+
+      const enlaceVerificacion = `${env.FRONTEND_URL}/verificar-email?token=${tokenVerificacion.token}`;
+      void enviarEmailVerificacionCliente({
+        emailDestino: emailNuevo,
+        nombreCliente: clienteActual.nombre,
+        enlaceVerificacion,
+      });
+
+      return respuesta.send({
+        datos: {
+          mensaje: 'Enviamos un enlace de verificación al nuevo correo. Tu correo actual seguirá activo hasta que confirmes el cambio.',
+          emailPendiente: emailNuevo,
         },
       });
     },
@@ -436,6 +572,11 @@ export async function rutasClientesApp(servidor: FastifyInstance): Promise<void>
         return respuesta.code(400).send({ error: 'La imagen no puede superar 2 MB' });
       }
 
+      const extensionSegura = detectarTipoImagen(buffer);
+      if (!extensionSegura) {
+        return respuesta.code(400).send({ error: 'El archivo no contiene una imagen válida' });
+      }
+
       const dir = dirAvatares();
       await fs.promises.mkdir(dir, { recursive: true });
 
@@ -453,8 +594,12 @@ export async function rutasClientesApp(servidor: FastifyInstance): Promise<void>
         await fs.promises.rm(rutaAnterior, { force: true });
       }
 
-      const nombreArchivo = `cliente-${payload.sub}.${extension}`;
-      await fs.promises.writeFile(path.join(dir, nombreArchivo), buffer);
+      const nombreArchivo = `cliente-${payload.sub}.jpg`;
+      const imagenOptimizada = await sharp(buffer)
+        .resize(400, 400, { fit: 'cover', withoutEnlargement: true })
+        .jpeg({ quality: 85, progressive: true })
+        .toBuffer();
+      await fs.promises.writeFile(path.join(dir, nombreArchivo), imagenOptimizada);
 
       const avatarUrl = `/uploads/avatares/${nombreArchivo}`;
       await prisma.clienteApp.update({

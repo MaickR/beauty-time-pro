@@ -1,3 +1,4 @@
+process.env.TZ = 'America/Mexico_City'; // normalizar timezone del servidor
 import './lib/env.js'; // validar entorno al arrancar
 import Fastify from 'fastify';
 import type { FastifyError } from 'fastify';
@@ -8,6 +9,7 @@ import fastifyMultipart from '@fastify/multipart';
 import fastifyStatic from '@fastify/static';
 import helmet from '@fastify/helmet';
 import rateLimit from '@fastify/rate-limit';
+import compress from '@fastify/compress';
 import path from 'path';
 import { env } from './lib/env.js';
 import { iniciarJobRecordatorios } from './jobs/recordatorios.js';
@@ -24,17 +26,31 @@ import { rutasFidelidad } from './rutas/fidelidad.js';
 import { rutasPerfil } from './rutas/perfil.js';
 import { rutasRegistro } from './rutas/registro.js';
 import { rutasClientesApp } from './rutas/clientesApp.js';
+import { rutasPush } from './rutas/push.js';
+import { rutasEmpleados } from './rutas/empleados.js';
 
 void (async () => {
-  const servidor = Fastify({ logger: true });
+  const servidor = Fastify({ logger: true, bodyLimit: 1_048_576 /* 1 MB */ });
 
   await servidor.register(helmet, {
-    contentSecurityPolicy: false,
+    contentSecurityPolicy: {
+      directives: {
+        defaultSrc: ["'self'"],
+        scriptSrc: ["'self'"],
+        styleSrc: ["'self'", "'unsafe-inline'"],
+        imgSrc: ["'self'", 'data:', 'blob:'],
+        connectSrc: ["'self'", env.FRONTEND_URL],
+      },
+    },
+    crossOriginEmbedderPolicy: false,
     crossOriginResourcePolicy: { policy: 'cross-origin' },
   });
 
+  await servidor.register(compress, { global: true });
+
   await servidor.register(rateLimit, { global: false });
 
+  const esProduccion = env.ENTORNO === 'production';
   await servidor.register(cors, {
     origin: (origen, callback) => {
       if (!origen) {
@@ -42,10 +58,13 @@ void (async () => {
         return;
       }
 
-      const permitido =
+      const esOrigenLocal =
         origen === 'http://localhost:4173' ||
         /^http:\/\/localhost:517\d$/.test(origen) ||
         /^http:\/\/127\.0\.0\.1:517\d$/.test(origen);
+
+      // En producción, SOLO se permite el FRONTEND_URL configurado.
+      const permitido = origen === env.FRONTEND_URL || (!esProduccion && esOrigenLocal);
 
       callback(null, permitido);
     },
@@ -81,7 +100,7 @@ void (async () => {
     parseOptions: {},
   });
 
-  await servidor.register(fastifyMultipart);
+  await servidor.register(fastifyMultipart, { limits: { fileSize: 2 * 1024 * 1024 /* 2 MB */ } });
   await servidor.register(fastifyStatic, {
     root: path.join(process.cwd(), 'uploads'),
     prefix: '/uploads/',
@@ -101,12 +120,30 @@ void (async () => {
   await servidor.register(rutasPerfil);
   await servidor.register(rutasRegistro);
   await servidor.register(rutasClientesApp);
+  await servidor.register(rutasPush);
+  await servidor.register(rutasEmpleados);
 
   servidor.get('/salud', async () => ({
     estado: 'ok',
     timestamp: new Date().toISOString(),
     entorno: env.ENTORNO,
   }));
+
+  // /health — Railway usará este endpoint para verificar que el deploy fue exitoso
+  servidor.get('/health', async () => ({
+    status: 'ok',
+    timestamp: new Date().toISOString(),
+    version: '1.0.0',
+  }));
+
+  const gracefulShutdown = async (signal: string) => {
+    servidor.log.info(`Recibida señal ${signal}, cerrando servidor...`);
+    await servidor.close();
+    await import('./prismaCliente.js').then((m) => m.prisma.$disconnect());
+    process.exit(0);
+  };
+  process.on('SIGTERM', () => void gracefulShutdown('SIGTERM'));
+  process.on('SIGINT', () => void gracefulShutdown('SIGINT'));
 
   try {
     await servidor.listen({ port: env.PUERTO, host: '0.0.0.0' });

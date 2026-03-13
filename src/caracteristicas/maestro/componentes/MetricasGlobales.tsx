@@ -8,6 +8,7 @@ import {
   ShieldCheck,
   CalendarDays,
   TrendingUp,
+  XCircle,
 } from 'lucide-react';
 import { peticion } from '../../../lib/clienteHTTP';
 import { EsqueletoTarjeta } from '../../../componentes/ui/Esqueleto';
@@ -21,6 +22,7 @@ interface Metricas {
   totalAuditLogs: number;
   reservasUltimos30Dias: number;
   salonesNuevosUltimos30Dias: number;
+  cancelacionesPendientes: number;
 }
 
 interface TarjetaMetricaProps {
@@ -47,8 +49,10 @@ function TarjetaMetrica({
       >
         <span className={colorIcono}>{icono}</span>
       </div>
-      <div>
-        <p className="text-xs font-bold text-slate-400 uppercase tracking-wider">{etiqueta}</p>
+      <div className="min-w-0">
+        <p className="text-sm font-bold text-slate-400 uppercase tracking-wider wrap-break-word">
+          {etiqueta}
+        </p>
         <p className={`text-2xl font-black ${colorTexto}`}>{valor.toLocaleString('es-MX')}</p>
       </div>
     </div>
@@ -65,7 +69,7 @@ export function MetricasGlobales() {
 
   if (isLoading) {
     return (
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
         {Array.from({ length: 8 }).map((_, i) => (
           <EsqueletoTarjeta key={i} className="h-24 rounded-2xl" />
         ))}
@@ -141,10 +145,22 @@ export function MetricasGlobales() {
       colorFondo: 'bg-teal-100',
       colorIcono: 'text-teal-600',
     },
+    ...(data.cancelacionesPendientes > 0
+      ? [
+          {
+            icono: <XCircle className="w-5 h-5" />,
+            etiqueta: 'Cancelaciones pendientes',
+            valor: data.cancelacionesPendientes,
+            colorFondo: 'bg-red-100',
+            colorIcono: 'text-red-600',
+            colorTexto: 'text-red-700',
+          } satisfies TarjetaMetricaProps,
+        ]
+      : []),
   ];
 
   return (
-    <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
+    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
       {tarjetas.map((t) => (
         <TarjetaMetrica key={t.etiqueta} {...t} />
       ))}

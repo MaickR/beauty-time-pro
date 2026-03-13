@@ -25,8 +25,5 @@
     "noEmit": true,
     "skipLibCheck": true
   },
-  // Solo se verifican los archivos nuevos en src/.
-  // Los archivos legacy en la raíz (app.tsx, main.tsx, firebaseClient.ts)
-  // se migrarán progresivamente en fases posteriores.
-  "include": ["src"]
+  "include": ["src", "main.tsx"]
 }

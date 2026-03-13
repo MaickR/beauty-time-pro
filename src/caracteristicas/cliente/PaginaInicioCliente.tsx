@@ -2,12 +2,16 @@ import { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Search, MapPin, Clock, ChevronRight, Star } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
-import { obtenerSalonesPublicos } from '../../servicios/servicioClienteApp';
+import { obtenerMiPerfil, obtenerSalonesPublicos } from '../../servicios/servicioClienteApp';
 import { usarTiendaAuth } from '../../tienda/tiendaAuth';
 import { NavegacionCliente } from '../../componentes/diseno/NavegacionCliente';
-import type { SalonPublico } from '../../tipos';
+import type { Pais, SalonPublico } from '../../tipos';
 
 const CATEGORIAS = ['Corte', 'Color', 'Tratamiento', 'Uñas', 'Maquillaje', 'Depilación'];
+
+function etiquetaPais(pais: Pais): string {
+  return pais === 'Mexico' ? 'México' : 'Colombia';
+}
 
 function iniciales(nombre: string): string {
   return nombre
@@ -50,6 +54,7 @@ function TarjetaSalon({ salon }: PropsTarjetaSalon) {
           <img
             src={salon.logoUrl}
             alt={`Logo de ${salon.nombre}`}
+            loading="lazy"
             className="h-20 w-20 rounded-2xl object-cover"
           />
         ) : (
@@ -118,27 +123,42 @@ function TarjetaSalon({ salon }: PropsTarjetaSalon) {
 export function PaginaInicioCliente() {
   const { usuario } = usarTiendaAuth();
   const [busqueda, setBusqueda] = useState('');
-  const [categoriaActiva, setCategoriaActiva] = useState<string | null>(null);
+  const [categoriasActivas, setCategoriasActivas] = useState<string[]>([]);
   const [busquedaDelay, setBusquedaDelay] = useState('');
+  const [paisExplorado, setPaisExplorado] = useState<Pais | null>(null);
 
-  // Debounce 400ms
+  const { data: perfilCliente } = useQuery({
+    queryKey: ['mi-perfil'],
+    queryFn: obtenerMiPerfil,
+    staleTime: 1000 * 60,
+  });
+
+  const paisCliente = perfilCliente?.pais ?? 'Mexico';
+  const paisActivo = paisExplorado ?? paisCliente;
+  const paisAlternativo = paisCliente === 'Mexico' ? 'Colombia' : 'Mexico';
+  const explorandoOtroPais = paisActivo !== paisCliente;
+
+  // Debounce 300ms
   useEffect(() => {
-    const t = window.setTimeout(() => setBusquedaDelay(busqueda), 400);
+    const t = window.setTimeout(() => setBusquedaDelay(busqueda), 300);
     return () => clearTimeout(t);
   }, [busqueda]);
 
   const { data: salones = [], isLoading } = useQuery<SalonPublico[]>({
-    queryKey: ['salones-publicos', busquedaDelay, categoriaActiva],
+    queryKey: ['salones-publicos', busquedaDelay, categoriasActivas.join('|'), paisActivo],
     queryFn: () =>
       obtenerSalonesPublicos({
         buscar: busquedaDelay || undefined,
-        categoria: categoriaActiva ?? undefined,
+        categorias: categoriasActivas,
+        pais: paisActivo,
       }),
     staleTime: 1000 * 60,
   });
 
   const alternarCategoria = useCallback((cat: string) => {
-    setCategoriaActiva((prev) => (prev === cat ? null : cat));
+    setCategoriasActivas((prev) =>
+      prev.includes(cat) ? prev.filter((item) => item !== cat) : [...prev, cat],
+    );
   }, []);
 
   const nombreCliente = usuario?.nombre?.split(' ')[0] ?? 'tú';
@@ -156,6 +176,20 @@ export function PaginaInicioCliente() {
           <p className="text-slate-500 font-medium mt-1">
             Encuentra y reserva en tu salón favorito
           </p>
+          <div className="mt-4 flex flex-wrap items-center gap-3 text-sm">
+            <span className="rounded-full bg-white border border-slate-200 px-3 py-1.5 font-bold text-slate-600">
+              Mostrando salones de {etiquetaPais(paisActivo)}
+            </span>
+            <button
+              type="button"
+              onClick={() => setPaisExplorado(explorandoOtroPais ? null : paisAlternativo)}
+              className="text-xs font-bold text-slate-500 hover:text-pink-600 transition-colors"
+            >
+              {explorandoOtroPais
+                ? `Volver a ${etiquetaPais(paisCliente)}`
+                : `Ver salones de ${etiquetaPais(paisAlternativo)}`}
+            </button>
+          </div>
         </header>
 
         {/* Buscador */}
@@ -177,15 +211,29 @@ export function PaginaInicioCliente() {
           />
         </div>
 
+        <div className="mb-3 flex items-center justify-between gap-3 flex-wrap">
+          <p className="text-sm font-bold text-slate-600">Filtra por servicios</p>
+          {categoriasActivas.length > 0 && (
+            <button
+              type="button"
+              onClick={() => setCategoriasActivas([])}
+              className="text-xs font-bold text-slate-400 hover:text-slate-600"
+            >
+              Limpiar filtros
+            </button>
+          )}
+        </div>
+
         {/* Chips de categorías */}
         <div className="flex gap-2 flex-wrap mb-8" role="group" aria-label="Filtrar por categoría">
           {CATEGORIAS.map((cat) => (
             <button
               key={cat}
+              type="button"
               onClick={() => alternarCategoria(cat)}
-              aria-pressed={categoriaActiva === cat}
+              aria-pressed={categoriasActivas.includes(cat)}
               className={`px-4 py-2 rounded-full text-sm font-bold transition-all border ${
-                categoriaActiva === cat
+                categoriasActivas.includes(cat)
                   ? 'bg-pink-600 text-white border-pink-600'
                   : 'bg-white text-slate-600 border-slate-200 hover:border-pink-300 hover:text-pink-600'
               }`}
@@ -208,7 +256,7 @@ export function PaginaInicioCliente() {
             <Star className="w-16 h-16 text-slate-200 mb-4" aria-hidden="true" />
             <p className="font-black text-slate-900 text-lg">No encontramos salones</p>
             <p className="text-slate-500 mt-1 text-sm">
-              Intenta con otra búsqueda o elimina el filtro de categoría
+              Intenta con otra búsqueda o elimina alguno de los filtros activos
             </p>
           </div>
         )}

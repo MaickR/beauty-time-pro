@@ -1,233 +1,274 @@
-﻿# Beauty Time Pro
+﻿<div align="center">
 
-> Plataforma SaaS para la gestion integral de salones de belleza en Mexico y Colombia.
+# Beauty Time Pro
+
+**Plataforma SaaS para la gestión integral de salones de belleza**
+
+[![TypeScript](https://img.shields.io/badge/TypeScript-5.9-3178C6?style=flat-square&logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
+[![React](https://img.shields.io/badge/React-19-61DAFB?style=flat-square&logo=react&logoColor=black)](https://react.dev/)
+[![Fastify](https://img.shields.io/badge/Fastify-5-000000?style=flat-square&logo=fastify&logoColor=white)](https://fastify.dev/)
+[![Prisma](https://img.shields.io/badge/Prisma-7-2D3748?style=flat-square&logo=prisma&logoColor=white)](https://www.prisma.io/)
+[![MySQL](https://img.shields.io/badge/MySQL-8-4479A1?style=flat-square&logo=mysql&logoColor=white)](https://www.mysql.com/)
+[![Vitest](https://img.shields.io/badge/Vitest-4-6E9F18?style=flat-square&logo=vitest&logoColor=white)](https://vitest.dev/)
+
+</div>
 
 ---
 
-## ¿Que es Beauty Time Pro?
+Beauty Time Pro conecta propietarios de salones de belleza con sus clientes en México y Colombia. Desde un solo panel el dueño gestiona agenda, personal, servicios y fidelidad — mientras el cliente encuentra y reserva su cita en segundos.
 
-Beauty Time Pro es una aplicacion web completa que conecta duenos de salones con sus clientes. Permite gestionar reservas, personal, servicios, fidelidad y pagos desde un unico panel, mientras los clientes encuentran y agendan citas en sus salones favoritos en segundos.
+<br>
 
----
+## Tabla de contenidos
 
-## Stack tecnologico
+- [Características](#características)
+- [Stack tecnológico](#stack-tecnológico)
+- [Arquitectura](#arquitectura)
+- [Instalación local](#instalación-local)
+- [Variables de entorno](#variables-de-entorno)
+- [Scripts disponibles](#scripts-disponibles)
+- [Autenticación y seguridad](#autenticación-y-seguridad)
+- [Deploy](#deploy)
+- [Licencia](#licencia)
 
-| Capa | Tecnologia |
+<br>
+
+## Características
+
+### Panel del propietario
+- **Agenda visual** semanal con disponibilidad en tiempo real
+- **Gestión de personal** — especialidades, horarios, descansos y días libres
+- **Catálogo de servicios** con precio, duración y categorías
+- **Programa de fidelidad** configurable por salón (puntos, recompensas)
+- **Perfil de marca** — logo, color primario, descripción y datos de contacto
+- **Control de festivos** y cierre por días especiales
+- Notificaciones push a clientes ante cambios en sus reservas
+
+### Portal del cliente
+- Búsqueda y filtro de salones por categoría, país y texto libre
+- Flujo de reserva guiado: servicio → especialista → horario → confirmación
+- Recordatorios automáticos por email (24 h antes)
+- Cancelación segura con enlace único por email
+- Historial de citas y próximas reservas
+- Perfil con foto de avatar y acumulación de puntos de fidelidad
+- Notificaciones push en tiempo real
+
+### Panel maestro (superadmin)
+- Aprobación y rechazo de solicitudes de nuevos salones
+- Gestión de suscripciones, fechas de vencimiento y pagos globales
+- Auditoría de acciones con log detallado
+- Administración de admins con permisos granulares
+
+<br>
+
+## Stack tecnológico
+
+| Capa | Tecnología |
 |---|---|
-| Frontend | React 19, Vite 7, TypeScript strict, Tailwind CSS 4 |
+| Frontend | React 19, Vite 7, TypeScript 5.9 strict, Tailwind CSS v4 |
 | Estado y datos | TanStack Query v5, Zustand v5, React Hook Form + Zod |
 | Backend | Fastify 5, Node.js ESM, TypeScript |
 | Base de datos | MySQL 8, Prisma ORM 7 |
-| Autenticacion | JWT (access token 15 min + refresh token httpOnly) |
-| Email | Resend |
-| Seguridad | @fastify/helmet, @fastify/rate-limit, bcrypt |
-| Testing | Vitest, Testing Library |
-| Linting / formato | ESLint, Prettier, Husky |
+| Autenticación | JWT — access token 15 min + refresh token en cookie httpOnly |
+| Email | Resend con reintentos exponenciales |
+| Notificaciones push | Web Push API + VAPID |
+| Seguridad | @fastify/helmet (CSP completo), @fastify/rate-limit, bcrypt |
+| Rendimiento | @fastify/compress, node-cache, sharp (optimización de imágenes) |
+| Testing | Vitest + Testing Library |
 
----
+<br>
 
-## Caracteristicas principales
+## Arquitectura
 
-### Panel del dueno de salon
-- Agenda visual semanal con disponibilidad en tiempo real
-- Gestion de personal, especialidades y horarios
-- Configuracion de servicios, precios y duracion
-- Programa de fidelidad personalizable por salon
-- Carga de logo, color de marca y datos de contacto
-- Control de dias festivos
-- Registro de pagos y suscripciones
-
-### Portal del cliente
-- Busqueda y filtro de salones por categoria y texto
-- Reserva de citas en pocos pasos (servicio → especialista → horario → confirmacion)
-- Historial de reservas y proximas citas
-- Cancelacion con enlace seguro enviado por email
-- Perfil personal con foto de avatar
-- Acumulacion de puntos de fidelidad
-
-### Panel maestro (superadmin)
-- Aprobacion y rechazo de solicitudes de nuevos salones
-- Gestion de suscripciones y fechas de vencimiento
-- Finanzas y pagos globales
-- Administracion de admins con permisos granulares
-
----
-
-## Estructura del repositorio
-
-```
+~~~
 beauty-time-pro/
-├── src/                        # Aplicacion React (frontend)
-│   ├── app/                    # Enrutador y proveedores globales
-│   ├── caracteristicas/        # Modulos por dominio (autenticacion, estudio, reserva...)
-│   ├── componentes/            # UI generica y componentes de diseno
-│   ├── hooks/                  # Hooks reutilizables globales
-│   ├── servicios/              # Clientes HTTP hacia la API
-│   ├── tienda/                 # Estado global (Zustand)
-│   ├── tipos/                  # Interfaces TypeScript del dominio
-│   ├── utils/                  # Funciones puras
-│   └── lib/                    # TanStack Query, env, constantes
 │
-├── server/                     # API REST (Fastify + Prisma)
+├── src/                          # Aplicación React
+│   ├── app/                      # Enrutador y proveedores globales
+│   ├── caracteristicas/          # Módulos por dominio
+│   │   ├── autenticacion/
+│   │   ├── cliente/
+│   │   ├── estudio/
+│   │   ├── maestro/
+│   │   └── reserva/
+│   ├── componentes/
+│   │   ├── ui/                   # Modal, Toast, Badge, Spinner…
+│   │   └── diseno/               # Header, TabBar, NavegacionCliente…
+│   ├── servicios/                # Clientes HTTP hacia la API
+│   ├── tienda/                   # Estado global (Zustand — solo auth)
+│   ├── tipos/                    # Interfaces TypeScript del dominio
+│   ├── utils/                    # Funciones puras
+│   └── lib/                      # TanStack Query, env validado, constantes
+│
+├── server/                       # API REST
 │   ├── src/
-│   │   ├── rutas/              # Handlers por recurso
-│   │   ├── servicios/          # Logica de negocio y email
-│   │   ├── middleware/         # Autenticacion JWT
-│   │   ├── jobs/               # Tareas programadas (recordatorios)
-│   │   └── lib/                # Env, email, fidelidad
+│   │   ├── rutas/                # Handlers por recurso
+│   │   ├── servicios/            # Lógica de negocio y email
+│   │   ├── middleware/           # Autenticación JWT
+│   │   ├── jobs/                 # Tareas programadas (recordatorios)
+│   │   ├── lib/                  # Env, email, fidelidad, caché
+│   │   └── utils/                # Auditoría, sanitización, notificaciones
 │   └── prisma/
 │       ├── schema.prisma
 │       └── migrations/
 │
 └── scripts/
-    └── semilla.ts              # Datos de demostracion
-```
+    └── semilla.ts                # Datos de demostración
+~~~
 
----
+<br>
 
-## Instalacion y desarrollo local
+## Instalación local
 
-### Pre-requisitos
-- Node.js >= 20
+### Requisitos previos
+
+- Node.js ≥ 20
 - MySQL 8 corriendo localmente
-- Cuenta en [Resend](https://resend.com) para emails (opcional en dev)
+- (Opcional) Cuenta en [Resend](https://resend.com) para emails
 
-### 1. Instalar dependencias
+### 1. Clonar e instalar dependencias
 
-```bash
-# Raiz — frontend
+~~~bash
+git clone https://github.com/MaickR/beauty-time-pro.git
+cd beauty-time-pro
+
+# Frontend
 npm install
 
 # Backend
 cd server && npm install
-```
+~~~
 
 ### 2. Configurar variables de entorno
 
-Crear `server/.env` con al menos:
-
-```env
-ENTORNO=development
-PUERTO=3000
-DATABASE_URL="mysql://usuario:contrasena@localhost:3306/beauty_time_pro"
-JWT_SECRETO="secreto-largo-y-aleatorio"
-JWT_EXPIRA_EN="15m"
-JWT_REFRESH_EXPIRA_EN="7d"
-CLAVE_MAESTRO="clave-privada-maestra"
-RESEND_API_KEY="re_xxxxxxxxxxxx"
-EMAIL_REMITENTE="Beauty Time Pro <no-reply@tudominio.com>"
-FRONTEND_URL="http://localhost:5173"
-```
-
-Para el frontend solo es necesario en produccion:
-
-```env
-VITE_URL_API=https://api.tu-dominio.com
-```
+Ver sección [Variables de entorno](#variables-de-entorno).
 
 ### 3. Aplicar migraciones
 
-```bash
+~~~bash
 cd server
-npm run db:deploy     # produccion
-# o
-npm run db:migrate    # desarrollo (crea migration)
-```
+npm run db:migrate   # desarrollo
+~~~
 
-### 4. Cargar datos de demostracion (opcional)
+### 4. Datos de demostración (opcional)
 
-```bash
-# Desde la raiz:
+~~~bash
+# Desde la raíz del proyecto
 npm run semilla
-```
+~~~
 
-### 5. Levantar en modo desarrollo
+### 5. Iniciar en modo desarrollo
 
-```bash
-# Terminal 1 — Backend
+~~~bash
+# Terminal 1 — Backend (puerto 3000)
 cd server && npm run dev
 
-# Terminal 2 — Frontend
+# Terminal 2 — Frontend (puerto 5173)
 npm run dev
-```
+~~~
 
-Accede a la app en `http://localhost:5173` y a la API en `http://localhost:3000`.
+Abre [http://localhost:5173](http://localhost:5173) en tu navegador.
 
----
+<br>
+
+## Variables de entorno
+
+### Backend — `server/.env`
+
+~~~env
+ENTORNO=development
+PUERTO=3000
+DATABASE_URL="mysql://usuario:contrasena@localhost:3306/beauty_time_pro"
+
+# JWT
+JWT_SECRETO="secreto-largo-y-aleatorio-minimo-32-caracteres"
+JWT_EXPIRA_EN="15m"
+JWT_REFRESH_EXPIRA_EN="7d"
+
+# Superadmin
+CLAVE_MAESTRO="clave-privada-maestra"
+
+# Email (Resend)
+RESEND_API_KEY="re_xxxxxxxxxxxx"
+EMAIL_REMITENTE="Beauty Time Pro <no-reply@tudominio.com>"
+
+# CORS
+FRONTEND_URL="http://localhost:5173"
+
+# Web Push (VAPID)
+VAPID_PUBLIC_KEY="..."
+VAPID_PRIVATE_KEY="..."
+VAPID_SUBJECT="mailto:admin@tudominio.com"
+~~~
+
+### Frontend — `.env.local`
+
+~~~env
+VITE_URL_API=http://localhost:3000
+~~~
+
+> En producción apunta a la URL pública del backend.
+
+<br>
 
 ## Scripts disponibles
 
-### Frontend (raiz)
+### Frontend
 
-| Script | Descripcion |
+| Script | Descripción |
 |---|---|
 | `npm run dev` | Servidor de desarrollo Vite |
-| `npm run build` | Build de produccion |
-| `npm run preview` | Preview del build |
-| `npm run test` | Tests con Vitest |
+| `npm run build` | Build de producción |
+| `npm run preview` | Vista previa del build |
+| `npm run test` | Ejecutar tests con Vitest |
 | `npm run verificar-tipos` | Chequeo TypeScript sin emitir |
 | `npm run semilla` | Poblar BD con datos demo |
-| `npm run limpiar-pruebas` | Eliminar datos demo |
 
-### Backend (`server/`)
+### Backend — `server/`
 
-| Script | Descripcion |
+| Script | Descripción |
 |---|---|
 | `npm run dev` | Fastify con hot reload (tsx watch) |
 | `npm run build` | Compilar a `dist/` |
 | `npm run start` | Iniciar desde `dist/` |
-| `npm run db:migrate` | Crear y aplicar migracion |
-| `npm run db:deploy` | Aplicar migraciones (produccion) |
+| `npm run db:migrate` | Crear y aplicar migración |
+| `npm run db:deploy` | Aplicar migraciones (producción) |
 | `npm run db:studio` | Abrir Prisma Studio |
-| `npm run db:generar` | Regenerar cliente Prisma |
 | `npm run verificar-tipos` | Chequeo TypeScript sin emitir |
 
----
+<br>
 
-## Autenticacion
+## Autenticación y seguridad
 
-- Login emite un **access token JWT** (15 min) + **refresh token** en cookie `httpOnly`.
-- Cada request protegido lleva el access token en `Authorization: Bearer <token>`.
-- El refresh token rota automaticamente; no requiere re-login del usuario.
-- Las rutas protegidas redirigen a `/iniciar-sesion` si no hay sesion activa.
-- Roles disponibles: `cliente`, `dueno`, `admin`, `maestro`.
+- **JWT** — access token efímero (15 min) + refresh token en cookie `httpOnly`, `secure`, `sameSite: strict`
+- **Bcrypt** — contraseñas hasheadas con factor 12
+- **CSP completo** via `@fastify/helmet` — sin `unsafe-eval`, orígenes explícitos
+- **Rate limiting** en todos los endpoints públicos y de autenticación
+- **Sanitización** de inputs de texto libre antes de persistir en BD
+- **`bodyLimit`** de 1 MB en Fastify; máximo 2 MB para imágenes
+- **Índices de BD** en columnas de búsqueda frecuente (`estado`, `activo`, `pais`, `estudioId`)
+- Variables de entorno validadas con **Zod** al arranque — error descriptivo si falta alguna
+- Sin secretos expuestos en el frontend; toda autorización ocurre en el servidor
 
----
-
-## Seguridad
-
-- Contrasenas hasheadas con **bcrypt** (factor 12).
-- Rate limiting en todos los endpoints publicos (`@fastify/rate-limit`).
-- Headers de seguridad via `@fastify/helmet`.
-- Variables de entorno validadas con **Zod** al arranque; error descriptivo si falta alguna.
-- Sin secretos expuestos en el frontend.
-- Toda logica de autorizacion ocurre en el servidor.
-
----
+<br>
 
 ## Deploy
 
-### Backend (Railway)
+### Backend — Railway
 
-1. Apuntar a la carpeta `server/`.
-2. Configurar variables de entorno.
-3. Ejecutar `npm run db:deploy` para aplicar migraciones.
-4. Verificar `GET /salud` → `{ "estado": "ok" }`.
+1. Conectar repositorio y apuntar a la carpeta `server/`
+2. Configurar las variables de entorno del backend
+3. Railway detecta automáticamente `npm run build` y `npm run start`
+4. Verificar salud: `GET /health` → `{ "status": "ok" }`
 
-### Frontend (Vercel)
+### Frontend — Vercel
 
-1. Importar repositorio desde la raiz.
-2. Configurar `VITE_URL_API` apuntando al backend publicado.
-3. Verificar navegacion directa en rutas internas (e.g. `/iniciar-sesion`).
+1. Importar repositorio desde la raíz
+2. Configurar `VITE_URL_API` apuntando al backend publicado
+3. Vercel detecta Vite automáticamente
 
----
-
-## Modelos principales
-
-`Estudio` · `ClienteApp` · `Usuario` · `Personal` · `Reserva` · `Pago` · `DiaFestivo` · `ConfigFidelidad` · `PuntosFidelidad` · `TokenCancelacion` · `Recordatorio`
-
----
+<br>
 
 ## Licencia
 
-Proyecto privado — todos los derechos reservados.
+Proyecto privado — todos los derechos reservados © 2026 Beauty Time Pro.

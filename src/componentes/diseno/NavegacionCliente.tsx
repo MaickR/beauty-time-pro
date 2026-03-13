@@ -4,6 +4,9 @@ import { Link, useNavigate } from 'react-router-dom';
 import { Home, User, LogOut, ChevronDown, Star } from 'lucide-react';
 import { usarTiendaAuth } from '../../tienda/tiendaAuth';
 import { obtenerMiPerfil } from '../../servicios/servicioClienteApp';
+import { usarTemaSalon } from '../../hooks/usarTemaSalon';
+import { usarNotificacionesPush } from '../../hooks/usarNotificacionesPush';
+import { BannerNotificacionesPush } from '../ui/BannerNotificacionesPush';
 
 function inicialesDesdeNombre(nombre: string): string {
   return nombre
@@ -20,18 +23,25 @@ export function NavegacionCliente() {
   const menuRef = useRef<HTMLDivElement>(null);
   const { usuario, cerrarSesion } = usarTiendaAuth();
   const navegar = useNavigate();
+  const [activando, setActivando] = useState(false);
   const consultaPerfil = useQuery({
     queryKey: ['mi-perfil'],
     queryFn: obtenerMiPerfil,
     staleTime: 1000 * 60 * 2,
     enabled: usuario?.rol === 'cliente',
   });
+  const push = usarNotificacionesPush();
 
   const nombre = consultaPerfil.data?.nombre ?? usuario?.nombre ?? '';
   const apellido = consultaPerfil.data?.apellido ?? '';
   const avatarUrl = consultaPerfil.data?.avatarUrl ?? null;
   const inics = nombre ? inicialesDesdeNombre(nombre) : 'U';
   const etiquetaNombre = [nombre, apellido].filter(Boolean).join(' ') || 'Mi cuenta';
+  const colorCliente = consultaPerfil.data?.id
+    ? (localStorage.getItem(`color_cliente_${consultaPerfil.data.id}`) ?? '#F48FB1')
+    : '#F48FB1';
+
+  usarTemaSalon(colorCliente);
 
   // Cerrar menú al clic exterior
   useEffect(() => {
@@ -52,6 +62,20 @@ export function NavegacionCliente() {
 
   return (
     <>
+      <BannerNotificacionesPush
+        visible={push.bannerVisible}
+        activando={activando}
+        mensaje="Activa las notificaciones para recibir recordatorios de tus citas"
+        onActivar={async () => {
+          setActivando(true);
+          try {
+            await push.activar();
+          } finally {
+            setActivando(false);
+          }
+        }}
+        onDescartar={push.descartar}
+      />
       {/* Header desktop */}
       <header className="bg-white border-b border-slate-100 sticky top-0 z-50 hidden md:block">
         <div className="max-w-5xl mx-auto px-8 h-16 flex items-center justify-between">

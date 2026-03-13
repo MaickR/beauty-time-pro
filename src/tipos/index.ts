@@ -35,6 +35,7 @@ export interface ServicioPersonalizado {
 export interface Personal {
   id: string;
   name: string;
+  avatarUrl?: string | null;
   specialties: string[];
   active: boolean;
   shiftStart: string | null; // "HH:mm"
@@ -68,6 +69,9 @@ export interface Estudio {
   emailContacto?: string | null;
   estado?: string | null;
   primeraVez?: boolean;
+  cancelacionSolicitada?: boolean;
+  fechaSolicitudCancelacion?: string | null;
+  motivoCancelacion?: string | null;
   createdAt: string; // ISO datetime
   updatedAt: string; // ISO datetime
 }
@@ -93,6 +97,21 @@ export interface SolicitudSalon {
   fechaAprobacion?: string | null;
   fechaVencimiento: string;
   diasDesdeRegistro: number;
+  dueno: {
+    id: string;
+    email: string;
+    nombre: string;
+  } | null;
+}
+
+/** Solicitud de cancelación de suscripción pendiente de resolución */
+export interface SolicitudCancelacion {
+  id: string;
+  nombre: string;
+  fechaVencimiento: string;
+  cancelacionSolicitada: boolean;
+  fechaSolicitudCancelacion: string;
+  motivoCancelacion: string | null;
   dueno: {
     id: string;
     email: string;
@@ -127,6 +146,7 @@ export interface SalonPublico {
   nombre: string;
   descripcion: string | null;
   direccion: string | null;
+  pais: Pais;
   telefono: string;
   emailContacto: string | null;
   logoUrl: string | null;
@@ -185,8 +205,10 @@ export interface ReservaCliente {
 export interface PerfilClienteApp {
   id: string;
   email: string;
+  emailPendiente: string | null;
   nombre: string;
   apellido: string;
+  pais: Pais;
   telefono: string | null;
   fechaNacimiento: string;
   avatarUrl: string | null;
@@ -219,4 +241,51 @@ export interface EstadoSuscripcion {
   dueDateStr: string;
   daysRemaining: number;
   status: 'ACTIVE' | 'WARNING' | 'OVERDUE';
+}
+
+// ─── Tipos de empleados ──────────────────────────────────────────────────────
+
+export interface EmpleadoAccesoInfo {
+  id: string;
+  personalId: string;
+  email: string;
+  forzarCambioContrasena: boolean;
+  activo: boolean;
+  ultimoAcceso: string | null;
+  creadoEn: string;
+}
+
+export interface ReservaEmpleado {
+  id: string;
+  fecha: string;
+  horaInicio: string;
+  duracion: number;
+  estado: EstadoReserva;
+  servicios: Servicio[];
+  precioTotal: number;
+  nombreCliente: string;
+  telefonoCliente: string;
+  clienteAppId: string | null;
+  sucursal: string;
+}
+
+export interface PerfilEmpleado {
+  id: string;
+  nombre: string;
+  avatarUrl?: string | null;
+  especialidades: string[];
+  activo: boolean;
+  horaInicio: string | null;
+  horaFin: string | null;
+  descansoInicio: string | null;
+  descansoFin: string | null;
+  diasTrabajo: number[] | null;
+  estudio: {
+    id: string;
+    nombre: string;
+    colorPrimario: string | null;
+    logoUrl: string | null;
+    direccion: string | null;
+    telefono: string;
+  };
 }

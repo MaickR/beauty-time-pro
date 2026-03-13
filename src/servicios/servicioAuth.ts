@@ -24,6 +24,8 @@ interface DatosSesion {
   email: string;
   esMaestroTotal: boolean;
   permisos?: PermisosSesionMaestro;
+  personalId?: string | null;
+  forzarCambioContrasena?: boolean;
 }
 
 interface RespuestaInicioSesion {
@@ -102,6 +104,8 @@ export async function refrescarSesion(): Promise<{
   email: string;
   esMaestroTotal: boolean;
   permisos?: PermisosSesionMaestro;
+  personalId?: string | null;
+  forzarCambioContrasena?: boolean;
 } | null> {
   try {
     const res = await fetch(`${URL_BASE}/auth/refrescar`, {

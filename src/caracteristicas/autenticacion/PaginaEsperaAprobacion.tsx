@@ -1,8 +1,20 @@
-import { Link } from 'react-router-dom';
+import { useEffect } from 'react';
+import { Link, useNavigate } from 'react-router-dom';
 import { usarTituloPagina } from '../../hooks/usarTituloPagina';
 
 export function PaginaEsperaAprobacion() {
   usarTituloPagina('Solicitud enviada — Beauty Time Pro');
+  const navegar = useNavigate();
+
+  useEffect(() => {
+    const temporizador = setTimeout(() => {
+      navegar(
+        '/iniciar-sesion?mensaje=' +
+          encodeURIComponent('Tu solicitud fue enviada. Te notificaremos cuando sea aprobada.'),
+      );
+    }, 3000);
+    return () => clearTimeout(temporizador);
+  }, [navegar]);
 
   return (
     <div className="min-h-screen flex flex-col items-center justify-center bg-linear-to-br from-pink-50 to-slate-100 p-6">

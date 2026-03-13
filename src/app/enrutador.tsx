@@ -89,6 +89,16 @@ const PaginaPerfilCliente = lazy(() =>
     default: m.PaginaPerfilCliente,
   })),
 );
+const PaginaAgendaEmpleado = lazy(() =>
+  import('../caracteristicas/empleado/PaginaAgendaEmpleado').then((m) => ({
+    default: m.PaginaAgendaEmpleado,
+  })),
+);
+const PaginaPerfilEmpleado = lazy(() =>
+  import('../caracteristicas/empleado/PaginaPerfilEmpleado').then((m) => ({
+    default: m.PaginaPerfilEmpleado,
+  })),
+);
 
 function PantallaCargaRuta() {
   return (
@@ -99,7 +109,7 @@ function PantallaCargaRuta() {
 }
 
 function RedireccionRaiz() {
-  const { iniciando, rol, estudioActual, claveClienteActual } = usarTiendaAuth();
+  const { iniciando, rol, estudioActual, claveClienteActual, usuario } = usarTiendaAuth();
 
   if (iniciando) {
     return <PantallaCargaRuta />;
@@ -109,7 +119,17 @@ function RedireccionRaiz() {
     return <PaginaBienvenida />;
   }
 
-  return <Navigate to={obtenerRutaPorRol(rol, estudioActual, claveClienteActual)} replace />;
+  return (
+    <Navigate
+      to={obtenerRutaPorRol(
+        rol,
+        estudioActual,
+        claveClienteActual,
+        usuario?.forzarCambioContrasena ?? false,
+      )}
+      replace
+    />
+  );
 }
 
 export function Enrutador() {
@@ -177,7 +197,7 @@ export function Enrutador() {
 
         <Route element={<GuardiaRuta rolesPermitidos={['cliente']} />}>
           <Route
-            path="/reserva/:claveCliente"
+            path="/reservar/:claveCliente"
             element={
               <LimiteError>
                 <PaginaReserva />
@@ -205,6 +225,33 @@ export function Enrutador() {
             element={
               <LimiteError>
                 <PaginaPerfilCliente />
+              </LimiteError>
+            }
+          />
+        </Route>
+
+        <Route element={<GuardiaRuta rolesPermitidos={['empleado']} />}>
+          <Route
+            path="/empleado/agenda"
+            element={
+              <LimiteError>
+                <PaginaAgendaEmpleado />
+              </LimiteError>
+            }
+          />
+          <Route
+            path="/empleado/perfil"
+            element={
+              <LimiteError>
+                <PaginaPerfilEmpleado />
+              </LimiteError>
+            }
+          />
+          <Route
+            path="/empleado/cambiar-contrasena"
+            element={
+              <LimiteError>
+                <PaginaPerfilEmpleado />
               </LimiteError>
             }
           />

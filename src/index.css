@@ -10,6 +10,57 @@
   --color-primario-oscuro: #880e4f;
 }
 
+html,
+body {
+  overflow-x: hidden;
+}
+
+/*
+ * Theming dinámico del color de marca.
+ * Las clases pink-* de Tailwind se redirigen a var(--color-primario) para
+ * que el color del salón se refleje en todo el dashboard automáticamente.
+ * Las reglas fuera de @layer tienen mayor prioridad que las utilidades de Tailwind.
+ */
+.bg-pink-600 {
+  background-color: var(--color-primario);
+}
+.bg-pink-700 {
+  background-color: var(--color-primario-oscuro);
+}
+.hover\:bg-pink-600:hover {
+  background-color: var(--color-primario);
+}
+.hover\:bg-pink-700:hover {
+  background-color: var(--color-primario-oscuro);
+}
+.text-pink-600 {
+  color: var(--color-primario);
+}
+.text-pink-500 {
+  color: var(--color-primario);
+}
+.hover\:text-pink-600:hover {
+  color: var(--color-primario);
+}
+.border-pink-600 {
+  border-color: var(--color-primario);
+}
+.border-pink-500 {
+  border-color: var(--color-primario);
+}
+.focus\:ring-pink-400:focus {
+  --tw-ring-color: var(--color-primario);
+}
+.focus\:ring-pink-500:focus {
+  --tw-ring-color: var(--color-primario);
+}
+.ring-pink-400 {
+  --tw-ring-color: var(--color-primario);
+}
+.ring-pink-500 {
+  --tw-ring-color: var(--color-primario);
+}
+
 .selector-fecha-popover .rdp-root {
   --rdp-accent-color: var(--color-primario);
   --rdp-day_button-border-radius: 1rem;

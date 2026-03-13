@@ -18,7 +18,6 @@ const esquemaFormulario = z.object({
   email: z.string().email('Correo inválido').or(z.literal('')),
   sucursal: z.string().optional(),
   marcaTinte: z.string().optional(),
-  tonalidad: z.string().optional(),
 });
 
 type DatosFormulario = z.infer<typeof esquemaFormulario>;
@@ -94,7 +93,6 @@ export function ModalCrearReservaManual({
       email: '',
       sucursal: estudio.branches[0] ?? '',
       marcaTinte: '',
-      tonalidad: '',
     },
   });
 
@@ -119,7 +117,7 @@ export function ModalCrearReservaManual({
         staffId: personalSeleccionado,
         staffName: miembro?.name ?? '',
         colorBrand: requiereColor ? datos.marcaTinte || null : null,
-        colorNumber: requiereColor ? datos.tonalidad || null : null,
+        colorNumber: null,
         date: fechaStr,
         time: horaSeleccionada,
         createdAt: new Date().toISOString(),
@@ -134,7 +132,6 @@ export function ModalCrearReservaManual({
         email: '',
         sucursal: estudio.branches[0] ?? '',
         marcaTinte: '',
-        tonalidad: '',
       });
       setPersonalSeleccionado('');
       setServiciosSeleccionados([]);
@@ -294,12 +291,12 @@ export function ModalCrearReservaManual({
               )}
             </div>
 
-            <div className="rounded-3xl bg-slate-900 p-4 text-white">
-              <p className="text-xs font-bold uppercase tracking-widest text-pink-300">Resumen</p>
-              <p className="mt-2 text-sm font-medium">
+            <div className="rounded-3xl bg-pink-50 p-4 border border-pink-200">
+              <p className="text-xs font-bold uppercase tracking-widest text-pink-600">Resumen</p>
+              <p className="mt-2 text-sm font-medium text-slate-700">
                 {serviciosSeleccionados.length} servicio(s) · {totalDuracion} min
               </p>
-              <p className="mt-1 text-2xl font-black text-green-400">
+              <p className="mt-1 text-2xl font-black text-pink-700">
                 {formatearDinero(totalPrecio, moneda)}
               </p>
             </div>
@@ -401,35 +398,20 @@ export function ModalCrearReservaManual({
               </div>
             )}
             {requiereColor && (
-              <div className="grid gap-4 md:grid-cols-2">
-                <div>
-                  <label
-                    htmlFor="marcaTinte"
-                    className="mb-1 block text-xs font-bold uppercase text-slate-500"
-                  >
-                    Marca
-                  </label>
-                  <input
-                    id="marcaTinte"
-                    type="text"
-                    {...formulario.register('marcaTinte')}
-                    className="w-full rounded-2xl border border-slate-200 px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-pink-400"
-                  />
-                </div>
-                <div>
-                  <label
-                    htmlFor="tonalidad"
-                    className="mb-1 block text-xs font-bold uppercase text-slate-500"
-                  >
-                    Tonalidad
-                  </label>
-                  <input
-                    id="tonalidad"
-                    type="text"
-                    {...formulario.register('tonalidad')}
-                    className="w-full rounded-2xl border border-slate-200 px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-pink-400"
-                  />
-                </div>
+              <div>
+                <label
+                  htmlFor="marcaTinte"
+                  className="mb-1 block text-xs font-bold uppercase text-slate-500"
+                >
+                  Color o tono solicitado (opcional)
+                </label>
+                <input
+                  id="marcaTinte"
+                  type="text"
+                  placeholder="Ej: rubio ceniza, tinte 7.1"
+                  {...formulario.register('marcaTinte')}
+                  className="w-full rounded-2xl border border-slate-200 px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-pink-400"
+                />
               </div>
             )}
             <div className="flex gap-3 pt-2">

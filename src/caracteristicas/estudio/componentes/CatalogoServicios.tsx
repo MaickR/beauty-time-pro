@@ -113,7 +113,10 @@ export function CatalogoServicios({ estudio }: PropsCatalogoServicios) {
         (servicio) => servicio.name.toLowerCase() === servicioNuevo.name.toLowerCase(),
       )
     ) {
-      mostrarToast('Ese servicio ya existe');
+      mostrarToast({
+        mensaje: 'Ya tienes un servicio con ese nombre en tu catálogo',
+        variante: 'error',
+      });
       return;
     }
 
@@ -146,7 +149,7 @@ export function CatalogoServicios({ estudio }: PropsCatalogoServicios) {
           return (
             <div
               key={s.name}
-              className="group flex flex-col justify-between rounded-2xl border border-slate-100 border-l-[3px] border-l-transparent bg-white p-5 transition-all duration-150 hover:border-l-[var(--color-primario)] hover:bg-gray-50"
+              className="group flex flex-col justify-between rounded-2xl border border-slate-100 border-l-[3px] border-l-transparent bg-white p-5 transition-all duration-150 hover:border-l-(--color-primario) hover:bg-gray-50"
             >
               <div className="mb-4 flex items-start justify-between gap-4">
                 <div>
@@ -171,7 +174,7 @@ export function CatalogoServicios({ estudio }: PropsCatalogoServicios) {
                       <button
                         type="button"
                         onClick={() => iniciarEdicion(s.name)}
-                        className="rounded-xl bg-white p-2 text-slate-500 shadow-sm transition hover:text-[var(--color-primario)]"
+                        className="rounded-xl bg-white p-2 text-slate-500 shadow-sm transition hover:text-(--color-primario)"
                         aria-label={`Editar ${s.name}`}
                       >
                         <Pencil className="w-4 h-4" />
@@ -257,6 +260,7 @@ export function CatalogoServicios({ estudio }: PropsCatalogoServicios) {
                       <input
                         type="number"
                         min="5"
+                        max="480"
                         step="5"
                         value={servicioActual.duration}
                         onChange={(e) => actualizarCampoLocal(s.name, 'duration', e.target.value)}

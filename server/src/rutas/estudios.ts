@@ -6,6 +6,9 @@ import { env } from '../lib/env.js';
 import { obtenerSlotsDisponiblesBackend } from '../lib/programacion.js';
 import { prisma } from '../prismaCliente.js';
 import { verificarJWT } from '../middleware/autenticacion.js';
+import { registrarAuditoria } from '../utils/auditoria.js';
+import { sanitizarTexto } from '../utils/sanitizar.js';
+import { enviarEmailSolicitudCancelacion } from '../servicios/servicioEmail.js';
 import { colorHexSchema, emailOpcionalONuloSchema, fechaIsoSchema, horaOpcionalONulaSchema, horaSchema, obtenerMensajeValidacion, telefonoSchema, textoOpcionalONuloSchema, textoSchema, urlOpcionalSchema } from '../lib/validacion.js';
 
 const esquemaHorario = z.record(
@@ -76,6 +79,23 @@ function obtenerFiltroDemo() {
   return env.ENTORNO === 'development' || !env.DEMO_CLAVE_DUENO
     ? {}
     : { claveDueno: { not: env.DEMO_CLAVE_DUENO } };
+}
+
+async function verificarAccesoDuenoAEstudio(usuarioId: string, estudioId: string): Promise<boolean> {
+  const estudio = await prisma.estudio.findFirst({
+    where: {
+      id: estudioId,
+      usuarios: {
+        some: {
+          id: usuarioId,
+          rol: 'dueno',
+        },
+      },
+    },
+    select: { id: true },
+  });
+
+  return Boolean(estudio);
 }
 
 export async function rutasEstudios(servidor: FastifyInstance): Promise<void> {
@@ -153,8 +173,8 @@ export async function rutasEstudios(servidor: FastifyInstance): Promise<void> {
           serviciosCustom: (datos.serviciosCustom ?? []) as Prisma.InputJsonValue,
           festivos: datos.festivos ?? [],
           ...(datos.colorPrimario !== undefined && { colorPrimario: datos.colorPrimario }),
-          ...(datos.descripcion !== undefined && { descripcion: datos.descripcion }),
-          ...(datos.direccion !== undefined && { direccion: datos.direccion }),
+          ...(datos.descripcion !== undefined && { descripcion: sanitizarTexto(datos.descripcion ?? '') }),
+          ...(datos.direccion !== undefined && { direccion: sanitizarTexto(datos.direccion ?? '') }),
           ...(datos.emailContacto !== undefined && { emailContacto: datos.emailContacto }),
           ...(datos.horarioApertura !== undefined && { horarioApertura: datos.horarioApertura }),
           ...(datos.horarioCierre !== undefined && { horarioCierre: datos.horarioCierre }),
@@ -172,10 +192,16 @@ export async function rutasEstudios(servidor: FastifyInstance): Promise<void> {
     '/estudios/:id',
     { preHandler: verificarJWT },
     async (solicitud, respuesta) => {
-      const payload = solicitud.user as { rol: string; estudioId: string | null };
+      const payload = solicitud.user as { sub: string; rol: string; estudioId: string | null };
       const { id } = solicitud.params;
       if (payload.rol !== 'maestro' && payload.estudioId !== id) {
         return respuesta.code(403).send({ error: 'Sin permisos para esta acción' });
+      }
+      if (payload.rol === 'dueno') {
+        const tieneAcceso = await verificarAccesoDuenoAEstudio(payload.sub, id);
+        if (!tieneAcceso) {
+          return respuesta.code(403).send({ error: 'Sin acceso a este recurso' });
+        }
       }
       const resultado = esquemaActualizarEstudio.safeParse(solicitud.body);
       if (!resultado.success) {
@@ -207,8 +233,8 @@ export async function rutasEstudios(servidor: FastifyInstance): Promise<void> {
           ...(datos.serviciosCustom !== undefined && { serviciosCustom: datos.serviciosCustom as Prisma.InputJsonValue }),
           ...(datos.festivos !== undefined && { festivos: datos.festivos }),
           ...(datos.colorPrimario !== undefined && { colorPrimario: datos.colorPrimario }),
-          ...(datos.descripcion !== undefined && { descripcion: datos.descripcion }),
-          ...(datos.direccion !== undefined && { direccion: datos.direccion }),
+          ...(datos.descripcion !== undefined && { descripcion: sanitizarTexto(datos.descripcion ?? '') }),
+          ...(datos.direccion !== undefined && { direccion: sanitizarTexto(datos.direccion ?? '') }),
           ...(datos.emailContacto !== undefined && { emailContacto: datos.emailContacto }),
           ...(datos.horarioApertura !== undefined && { horarioApertura: datos.horarioApertura }),
           ...(datos.horarioCierre !== undefined && { horarioCierre: datos.horarioCierre }),
@@ -341,6 +367,105 @@ export async function rutasEstudios(servidor: FastifyInstance): Promise<void> {
       });
 
       return respuesta.code(200).send({ datos: { eliminado: true } });
+    },
+  );
+
+  // POST /estudios/:id/solicitar-cancelacion — dueno de su propio estudio
+  servidor.post<{ Params: { id: string }; Body: { motivo?: string } }>(
+    '/estudios/:id/solicitar-cancelacion',
+    { preHandler: verificarJWT },
+    async (solicitud, respuesta) => {
+      const payload = solicitud.user as { rol: string; estudioId: string | null; sub: string };
+      const { id } = solicitud.params;
+
+      if (payload.rol !== 'dueno' || payload.estudioId !== id) {
+        return respuesta.code(403).send({ error: 'Sin permisos para esta acción' });
+      }
+
+      const tieneAcceso = await verificarAccesoDuenoAEstudio(payload.sub, id);
+      if (!tieneAcceso) {
+        return respuesta.code(403).send({ error: 'Sin acceso a este recurso' });
+      }
+
+      const estudio = await prisma.estudio.findUnique({ where: { id } });
+      if (!estudio) {
+        return respuesta.code(404).send({ error: 'Estudio no encontrado' });
+      }
+
+      if (estudio.cancelacionSolicitada) {
+        return respuesta.code(400).send({ error: 'Ya tienes una solicitud de cancelación pendiente' });
+      }
+
+      const motivoRaw = (solicitud.body as { motivo?: string }).motivo;
+      const motivo = typeof motivoRaw === 'string' ? motivoRaw.trim().slice(0, 300) : undefined;
+      const ahora = new Date();
+
+      await prisma.estudio.update({
+        where: { id },
+        data: {
+          cancelacionSolicitada: true,
+          fechaSolicitudCancelacion: ahora,
+          motivoCancelacion: motivo ?? null,
+        },
+      });
+
+      await registrarAuditoria({
+        usuarioId: payload.sub,
+        accion: 'solicitar_cancelacion',
+        entidadTipo: 'estudio',
+        entidadId: id,
+        detalles: { nombre: estudio.nombre, motivo: motivo ?? null },
+        ip: solicitud.ip,
+      });
+
+      void enviarEmailSolicitudCancelacion({
+        nombreSalon: estudio.nombre,
+        motivo,
+        fechaSolicitud: ahora.toLocaleDateString('es-MX', { day: 'numeric', month: 'long', year: 'numeric' }),
+      });
+
+      return respuesta.send({
+        datos: { mensaje: 'Tu solicitud fue recibida. Te contactaremos en máximo 48 horas.' },
+      });
+    },
+  );
+
+  // DELETE /estudios/:id/cancelar-solicitud — dueno retira su solicitud
+  servidor.delete<{ Params: { id: string } }>(
+    '/estudios/:id/cancelar-solicitud',
+    { preHandler: verificarJWT },
+    async (solicitud, respuesta) => {
+      const payload = solicitud.user as { rol: string; estudioId: string | null; sub: string };
+      const { id } = solicitud.params;
+
+      if (payload.rol !== 'dueno' || payload.estudioId !== id) {
+        return respuesta.code(403).send({ error: 'Sin permisos para esta acción' });
+      }
+
+      const estudio = await prisma.estudio.findUnique({ where: { id } });
+      if (!estudio) {
+        return respuesta.code(404).send({ error: 'Estudio no encontrado' });
+      }
+
+      await prisma.estudio.update({
+        where: { id },
+        data: {
+          cancelacionSolicitada: false,
+          fechaSolicitudCancelacion: null,
+          motivoCancelacion: null,
+        },
+      });
+
+      await registrarAuditoria({
+        usuarioId: payload.sub,
+        accion: 'retirar_solicitud_cancelacion',
+        entidadTipo: 'estudio',
+        entidadId: id,
+        detalles: { nombre: estudio.nombre },
+        ip: solicitud.ip,
+      });
+
+      return respuesta.send({ datos: { mensaje: 'Solicitud de cancelación retirada' } });
     },
   );
 }

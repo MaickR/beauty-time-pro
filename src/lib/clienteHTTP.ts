@@ -23,6 +23,29 @@ export class ErrorAPI extends Error {
 
 export const URL_BASE = env.VITE_URL_API;
 const CLAVE_TOKEN = 'btp_access_token';
+const CODIGOS_BLOQUEO_SESION = new Set([
+  'CUENTA_SUSPENDIDA',
+  'SALON_SUSPENDIDO',
+  'ACCESO_REVOCADO',
+  'CUENTA_DESACTIVADA',
+]);
+
+/** Callback registrado externamente para reaccionar a la expiración de sesión. */
+let _callbackSesionExpirada:
+  | ((datos: { mensaje: string; codigo?: string; estado: number }) => void)
+  | null = null;
+
+/** Registra una función que se llama cuando el refresh token ha expirado y no se puede renovar la sesión. */
+export function registrarCallbackSesionExpirada(
+  fn: (datos: { mensaje: string; codigo?: string; estado: number }) => void,
+): void {
+  _callbackSesionExpirada = fn;
+}
+
+function manejarSesionInvalida(datos: { mensaje: string; codigo?: string; estado: number }): void {
+  limpiarToken();
+  _callbackSesionExpirada?.(datos);
+}
 
 /** Lee el token del almacenamiento de sesión. */
 function leerToken(): string | null {
@@ -55,8 +78,47 @@ async function intentarRefrescar(): Promise<string | null> {
   }
 }
 
+/** Lee la fecha de expiración del JWT actual (Unix timestamp en segundos). */
+function obtenerExpiracionToken(): number | null {
+  const token = leerToken();
+  if (!token) return null;
+  try {
+    const partes = token.split('.');
+    if (partes.length !== 3) return null;
+    const payload = JSON.parse(atob(partes[1])) as { exp?: number };
+    return typeof payload.exp === 'number' ? payload.exp : null;
+  } catch {
+    return null;
+  }
+}
+
+/** Promesa compartida para evitar múltiples refreshes simultáneos. */
+let _promesaRefrescando: Promise<string | null> | null = null;
+
+/**
+ * Refresca el token proactivamente si caduca en menos de 60 segundos.
+ * Deduplicado: varias llamadas concurrentes comparten la misma promesa.
+ */
+async function refrescarSiNecesario(): Promise<void> {
+  const exp = obtenerExpiracionToken();
+  if (!exp) return;
+  const margenSegundos = 60;
+  if (exp - Date.now() / 1000 > margenSegundos) return;
+
+  if (!_promesaRefrescando) {
+    _promesaRefrescando = intentarRefrescar().finally(() => {
+      _promesaRefrescando = null;
+    });
+  }
+  await _promesaRefrescando;
+}
+
 /** Realiza una petición HTTP al backend con JWT adjunto. */
 export async function peticion<T>(ruta: string, opciones: RequestInit = {}): Promise<T> {
+  // Refresh proactivo: si el token caduca pronto, renovarlo antes de la petición
+  // para evitar un 401 innecesario en consola.
+  await refrescarSiNecesario();
+
   const cabeceras = new Headers(opciones.headers);
 
   const token = leerToken();
@@ -87,6 +149,17 @@ export async function peticion<T>(ruta: string, opciones: RequestInit = {}): Pro
           codigo?: string;
           motivo?: string;
         };
+        if (
+          reintento.status === 403 &&
+          cuerpo.codigo &&
+          CODIGOS_BLOQUEO_SESION.has(cuerpo.codigo)
+        ) {
+          manejarSesionInvalida({
+            mensaje: cuerpo.error ?? 'Tu sesión ya no es válida.',
+            codigo: cuerpo.codigo,
+            estado: reintento.status,
+          });
+        }
         throw new ErrorAPI(
           cuerpo.error ?? `Error ${reintento.status}`,
           reintento.status,
@@ -96,7 +169,10 @@ export async function peticion<T>(ruta: string, opciones: RequestInit = {}): Pro
       }
       return (await reintento.json()) as T;
     }
-    limpiarToken();
+    manejarSesionInvalida({
+      mensaje: 'Sesión expirada. Inicia sesión nuevamente.',
+      estado: 401,
+    });
     throw new ErrorAPI('Sesión expirada. Inicia sesión nuevamente.', 401);
   }
 
@@ -106,6 +182,13 @@ export async function peticion<T>(ruta: string, opciones: RequestInit = {}): Pro
       codigo?: string;
       motivo?: string;
     };
+    if (respuesta.status === 403 && cuerpo.codigo && CODIGOS_BLOQUEO_SESION.has(cuerpo.codigo)) {
+      manejarSesionInvalida({
+        mensaje: cuerpo.error ?? 'Tu sesión ya no es válida.',
+        codigo: cuerpo.codigo,
+        estado: respuesta.status,
+      });
+    }
     throw new ErrorAPI(
       cuerpo.error ?? `Error ${respuesta.status}`,
       respuesta.status,
