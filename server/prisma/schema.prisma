@@ -17,6 +17,11 @@ enum EstadoSalon {
   suspendido
 }
 
+enum PlanEstudio {
+  STANDARD
+  PRO
+}
+
 // ─────────────────────────────────────────
 // Modelos de dominio — Beauty Time Pro
 // ─────────────────────────────────────────
@@ -29,9 +34,11 @@ model Estudio {
   sitioWeb          String?
   pais              String       @default("Mexico")
   sucursales        Json         // string[]
-  claveDueno        String       @unique
-  claveCliente      String       @unique
-  activo            Boolean      @default(true)
+  claveDueno           String       @unique
+  claveCliente         String       @unique
+  activo               Boolean      @default(true)
+  plan                 PlanEstudio  @default(STANDARD)
+  pinCancelacionHash   String?
   estado            EstadoSalon  @default(pendiente)
   motivoRechazo     String?
   fechaSolicitud    DateTime     @default(now())
@@ -230,11 +237,30 @@ model Reserva {
   empleado        Personal    @relation(fields: [personalId], references: [id])
   cliente         Cliente     @relation(fields: [clienteId], references: [id])
   clienteApp      ClienteApp? @relation(fields: [clienteAppId], references: [id])
+  serviciosDetalle ReservaServicio[]
 
   @@index([personalId, fecha])
   @@index([estudioId, fecha])
   @@index([clienteAppId])
   @@map("reservas")
+}
+
+model ReservaServicio {
+  id        String   @id @default(cuid())
+  reservaId String
+  nombre    String
+  duracion  Int
+  precio    Float    @default(0)
+  categoria String?
+  orden     Int      @default(0)
+  estado    String   @default("pending")
+  motivo    String?
+  creadoEn  DateTime @default(now())
+
+  reserva   Reserva  @relation(fields: [reservaId], references: [id], onDelete: Cascade)
+
+  @@index([reservaId, orden])
+  @@map("reserva_servicios")
 }
 
 model Pago {

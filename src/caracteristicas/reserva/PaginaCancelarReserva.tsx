@@ -36,7 +36,7 @@ export function PaginaCancelarReserva() {
     if (!cancelada) return;
 
     const temporizador = window.setTimeout(() => {
-      navegar('/inicio', { replace: true });
+      navegar('/', { replace: true });
     }, 2000);
 
     return () => window.clearTimeout(temporizador);
@@ -68,11 +68,11 @@ export function PaginaCancelarReserva() {
           <h1 className="text-2xl font-black text-slate-900 mb-2">Tu cita fue cancelada</h1>
           <p className="text-slate-500">
             La cancelación se registró correctamente. En un momento te llevaremos de regreso a tu
-            panel para que puedas seguir navegando o hacer una nueva reserva.
+            inicio para que puedas volver a ingresar con la clave del salón si lo necesitas.
           </p>
           <div className="mt-5">
-            <Link to="/inicio" className="text-sm font-bold text-pink-600 hover:text-pink-700">
-              Ir ahora al panel de usuario
+            <Link to="/" className="text-sm font-bold text-pink-600 hover:text-pink-700">
+              Volver ahora al inicio
             </Link>
           </div>
         </div>
@@ -125,8 +125,8 @@ export function PaginaCancelarReserva() {
         </button>
 
         <div className="text-center mt-4">
-          <Link to="/inicio" className="text-sm text-slate-400 hover:text-slate-600">
-            Volver al panel
+          <Link to="/" className="text-sm text-slate-400 hover:text-slate-600">
+            Volver al inicio
           </Link>
         </div>
       </div>

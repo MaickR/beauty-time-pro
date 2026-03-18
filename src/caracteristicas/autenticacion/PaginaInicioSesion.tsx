@@ -1,21 +1,42 @@
-import { useState, useEffect } from 'react';
+import { useMemo, useState } from 'react';
 import { useNavigate, Link, useSearchParams, useLocation } from 'react-router-dom';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
-import { Eye, EyeOff, Mail, Lock, Scissors } from 'lucide-react';
+import { Eye, EyeOff, KeyRound, Lock, Scissors } from 'lucide-react';
 import { usarTiendaAuth } from '../../tienda/tiendaAuth';
 import { usarTituloPagina } from '../../hooks/usarTituloPagina';
 
-const esquema = z.object({
-  email: z.string().email('Ingresa un correo electrónico válido'),
-  contrasena: z.string().min(1, 'La contraseña es requerida'),
-  recordarme: z.boolean().optional(),
-});
+const esquema = z
+  .object({
+    acceso: z.string().trim().min(3, 'Ingresa tu clave de acceso o correo electrónico'),
+    contrasena: z.string().optional(),
+  })
+  .superRefine((datos, contexto) => {
+    const esCorreo = datos.acceso.includes('@');
+
+    if (!esCorreo) {
+      return;
+    }
+
+    if (!z.string().email().safeParse(datos.acceso).success) {
+      contexto.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['acceso'],
+        message: 'Ingresa un correo electrónico válido',
+      });
+    }
+
+    if (!datos.contrasena?.trim()) {
+      contexto.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['contrasena'],
+        message: 'La contraseña es requerida',
+      });
+    }
+  });
 
 type CamposFormulario = z.infer<typeof esquema>;
-
-const STORAGE_EMAIL = 'beauty_email_recordado';
 
 export function PaginaInicioSesion() {
   usarTituloPagina('Iniciar sesión');
@@ -35,7 +56,7 @@ export function PaginaInicioSesion() {
     parametros.get('registro') === 'ok'
       ? (parametros.get('mensaje') ?? 'Cuenta creada correctamente. Ya puedes iniciar sesión.')
       : '';
-  const { iniciarSesion } = usarTiendaAuth();
+  const { iniciarSesion, iniciarSesionConClave } = usarTiendaAuth();
   const navegar = useNavigate();
   const ubicacion = useLocation();
   const rutaDesde = (ubicacion.state as { desde?: string } | null)?.desde;
@@ -43,32 +64,25 @@ export function PaginaInicioSesion() {
   const {
     register,
     handleSubmit,
-    setValue,
     setError,
+    watch,
     formState: { errors, isSubmitting },
   } = useForm<CamposFormulario>({
     resolver: zodResolver(esquema),
-    defaultValues: { recordarme: false },
+    defaultValues: { acceso: '', contrasena: '' },
   });
 
-  useEffect(() => {
-    const emailGuardado = localStorage.getItem(STORAGE_EMAIL);
-    if (emailGuardado) {
-      setValue('email', emailGuardado);
-      setValue('recordarme', true);
-    }
-  }, [setValue]);
+  const accesoActual = watch('acceso') ?? '';
+  const esCorreo = useMemo(() => accesoActual.includes('@'), [accesoActual]);
 
   const alEnviar = async (datos: CamposFormulario) => {
-    if (datos.recordarme) {
-      localStorage.setItem(STORAGE_EMAIL, datos.email);
-    } else {
-      localStorage.removeItem(STORAGE_EMAIL);
-    }
     setCodigoBloqueo(null);
     setMotivoRechazo(null);
 
-    const resultado = await iniciarSesion(datos.email, datos.contrasena);
+    const resultado = esCorreo
+      ? await iniciarSesion(datos.acceso.trim(), datos.contrasena?.trim() ?? '')
+      : await iniciarSesionConClave(datos.acceso.trim());
+
     if (!resultado.exito) {
       if (resultado.codigo) {
         setCodigoBloqueo(resultado.codigo);
@@ -144,96 +158,100 @@ export function PaginaInicioSesion() {
             <span className="font-black text-lg text-slate-900">Beauty Time Pro</span>
           </div>
 
-          <h2 className="text-3xl font-black text-slate-900 mb-1">Bienvenido</h2>
-          <p className="text-slate-500 text-sm mb-8">Ingresa a tu panel de gestión</p>
+          <h2 className="text-3xl font-black text-slate-900 mb-1">Acceso Beauty Time Pro</h2>
+          <p className="text-slate-500 text-sm mb-8">
+            Escribe la clave del salón o el correo del panel administrativo
+          </p>
 
           <form onSubmit={handleSubmit(alEnviar)} noValidate className="space-y-5">
-            {/* Email */}
             <div>
-              <label htmlFor="email" className="block text-sm font-semibold text-slate-700 mb-1.5">
-                Correo electrónico
+              <label htmlFor="acceso" className="block text-sm font-semibold text-slate-700 mb-1.5">
+                Clave de acceso o correo electrónico
               </label>
               <div className="relative">
-                <Mail
+                <KeyRound
                   className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 w-4 h-4"
                   aria-hidden="true"
                 />
                 <input
-                  id="email"
-                  type="email"
-                  autoComplete="email"
+                  id="acceso"
+                  type="text"
+                  autoComplete="username"
                   className="w-full pl-10 pr-4 py-3 bg-white border border-slate-200 rounded-xl text-slate-900 text-sm outline-none focus:ring-2 focus:ring-pink-500 focus:border-transparent transition-all"
-                  aria-describedby={errors.email ? 'error-email' : undefined}
-                  aria-invalid={!!errors.email}
-                  {...register('email')}
+                  placeholder="Ej. MIKELOVCLI2026 o hola@salon.com"
+                  aria-describedby={errors.acceso ? 'error-acceso' : 'ayuda-acceso'}
+                  aria-invalid={!!errors.acceso}
+                  {...register('acceso')}
                 />
               </div>
-              {errors.email && (
-                <p id="error-email" role="alert" className="mt-1 text-xs text-red-500 font-medium">
-                  {errors.email.message}
+              <p id="ayuda-acceso" className="mt-1 text-xs text-slate-500">
+                Si escribes un correo se pedirá contraseña. Si escribes una clave válida entrarás
+                directo a reservar.
+              </p>
+              {errors.acceso && (
+                <p id="error-acceso" role="alert" className="mt-1 text-xs text-red-500 font-medium">
+                  {errors.acceso.message}
                 </p>
               )}
             </div>
 
-            {/* Contraseña */}
-            <div>
-              <label
-                htmlFor="contrasena"
-                className="block text-sm font-semibold text-slate-700 mb-1.5"
-              >
-                Contraseña
-              </label>
-              <div className="relative">
-                <Lock
-                  className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 w-4 h-4"
-                  aria-hidden="true"
-                />
-                <input
-                  id="contrasena"
-                  type={mostrarContrasena ? 'text' : 'password'}
-                  autoComplete="current-password"
-                  className="w-full pl-10 pr-11 py-3 bg-white border border-slate-200 rounded-xl text-slate-900 text-sm outline-none focus:ring-2 focus:ring-pink-500 focus:border-transparent transition-all"
-                  aria-describedby={errors.contrasena ? 'error-contrasena' : undefined}
-                  aria-invalid={!!errors.contrasena}
-                  {...register('contrasena')}
-                />
-                <button
-                  type="button"
-                  onClick={() => setMostrarContrasena((v) => !v)}
-                  className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 transition-colors"
-                  aria-label={mostrarContrasena ? 'Ocultar contraseña' : 'Mostrar contraseña'}
+            {esCorreo && (
+              <div>
+                <label
+                  htmlFor="contrasena"
+                  className="block text-sm font-semibold text-slate-700 mb-1.5"
                 >
-                  {mostrarContrasena ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                </button>
+                  Contraseña
+                </label>
+                <div className="relative">
+                  <Lock
+                    className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 w-4 h-4"
+                    aria-hidden="true"
+                  />
+                  <input
+                    id="contrasena"
+                    type={mostrarContrasena ? 'text' : 'password'}
+                    autoComplete="current-password"
+                    className="w-full pl-10 pr-11 py-3 bg-white border border-slate-200 rounded-xl text-slate-900 text-sm outline-none focus:ring-2 focus:ring-pink-500 focus:border-transparent transition-all"
+                    aria-describedby={errors.contrasena ? 'error-contrasena' : undefined}
+                    aria-invalid={!!errors.contrasena}
+                    {...register('contrasena')}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setMostrarContrasena((v) => !v)}
+                    className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 transition-colors"
+                    aria-label={mostrarContrasena ? 'Ocultar contraseña' : 'Mostrar contraseña'}
+                  >
+                    {mostrarContrasena ? (
+                      <EyeOff className="w-4 h-4" />
+                    ) : (
+                      <Eye className="w-4 h-4" />
+                    )}
+                  </button>
+                </div>
+                {errors.contrasena && (
+                  <p
+                    id="error-contrasena"
+                    role="alert"
+                    className="mt-1 text-xs text-red-500 font-medium"
+                  >
+                    {errors.contrasena.message}
+                  </p>
+                )}
               </div>
-              {errors.contrasena && (
-                <p
-                  id="error-contrasena"
-                  role="alert"
-                  className="mt-1 text-xs text-red-500 font-medium"
-                >
-                  {errors.contrasena.message}
-                </p>
-              )}
-            </div>
+            )}
 
-            {/* Recordarme + ¿Olvidaste? */}
-            <div className="flex items-center justify-between">
-              <label className="flex items-center gap-2 cursor-pointer select-none">
-                <input
-                  type="checkbox"
-                  className="w-4 h-4 accent-pink-600 rounded"
-                  {...register('recordarme')}
-                />
-                <span className="text-sm text-slate-600">Recordarme</span>
-              </label>
-              <Link
-                to="/recuperar-contrasena"
-                className="text-sm text-pink-600 font-semibold hover:text-pink-700 transition-colors"
-              >
-                ¿Olvidaste tu contraseña?
-              </Link>
-            </div>
+            {esCorreo && (
+              <div className="flex items-center justify-end">
+                <Link
+                  to="/recuperar-contrasena"
+                  className="text-sm text-pink-600 font-semibold hover:text-pink-700 transition-colors"
+                >
+                  ¿Olvidaste tu contraseña?
+                </Link>
+              </div>
+            )}
 
             {/* Error global */}
             {errors.root && (
@@ -343,33 +361,24 @@ export function PaginaInicioSesion() {
                     className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"
                     aria-hidden="true"
                   />
-                  Verificando...
+                  Validando acceso...
                 </span>
+              ) : esCorreo ? (
+                'Entrar al panel'
               ) : (
-                'Iniciar sesión'
+                'Ir a reservar'
               )}
             </button>
           </form>
 
           <div className="text-center mt-6 space-y-2">
-            <p className="text-sm text-gray-500">¿No tienes cuenta?</p>
-            <div className="flex gap-4 justify-center">
-              <Link
-                to="/registro/cliente"
-                className="text-sm font-medium text-pink-600 hover:underline"
-              >
-                Soy cliente
-              </Link>
-              <span className="text-gray-300" aria-hidden="true">
-                |
-              </span>
-              <Link
-                to="/registro/salon"
-                className="text-sm font-medium text-pink-600 hover:underline"
-              >
-                Tengo un salón
-              </Link>
-            </div>
+            <p className="text-sm text-gray-500">¿Aún no tienes cuenta de administración?</p>
+            <Link
+              to="/registro/salon"
+              className="text-sm font-medium text-pink-600 hover:underline"
+            >
+              Registrar mi salón
+            </Link>
           </div>
         </div>
       </div>

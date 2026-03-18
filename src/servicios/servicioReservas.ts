@@ -80,10 +80,14 @@ export async function crearReserva(datos: DatosCrearReserva): Promise<ResultadoC
 }
 
 /** Actualiza el estado de una reserva existente. */
-export async function actualizarEstadoReserva(id: string, estado: EstadoReserva): Promise<void> {
+export async function actualizarEstadoReserva(
+  id: string,
+  estado: EstadoReserva,
+  pinCancelacion?: string,
+): Promise<void> {
   await peticion(`/reservas/${id}/estado`, {
     method: 'PUT',
-    body: JSON.stringify({ estado }),
+    body: JSON.stringify({ estado, pinCancelacion }),
   });
 }
 
@@ -95,6 +99,19 @@ export async function obtenerReservaCancelable(token: string): Promise<ReservaCa
 export async function cancelarReservaPorToken(token: string): Promise<void> {
   await peticion(`/reservas/cancelar/${token}`, {
     method: 'POST',
+  });
+}
+
+export async function actualizarEstadoServicioReserva(
+  reservaId: string,
+  servicioId: string,
+  estado: string,
+  pinCancelacion: string,
+  motivo?: string,
+): Promise<void> {
+  await peticion(`/reservas/${reservaId}/servicios/${servicioId}/estado`, {
+    method: 'PUT',
+    body: JSON.stringify({ estado, pinCancelacion, ...(motivo ? { motivo } : {}) }),
   });
 }
 

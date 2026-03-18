@@ -1,12 +1,12 @@
 import { create } from 'zustand';
 import {
   iniciarSesionConEmailAPI,
-  iniciarSesionConClaveAPI,
+  buscarAccesoSalonPorClaveAPI,
   refrescarSesion,
   cerrarSesionAPI,
   type PermisosSesionMaestro,
 } from '../servicios/servicioAuth';
-import { ErrorAPI, registrarCallbackSesionExpirada } from '../lib/clienteHTTP';
+import { ErrorAPI, limpiarToken, registrarCallbackSesionExpirada } from '../lib/clienteHTTP';
 
 export type RolUsuario = 'maestro' | 'dueno' | 'cliente' | 'empleado';
 
@@ -44,6 +44,37 @@ interface EstadoAuth {
 
 let inicializacionPendiente = false;
 const CLAVE_SESION = 'btp_tiene_sesion';
+const CLAVE_RESERVA_ESTUDIO_ID = 'btp_reserva_estudio_id';
+const CLAVE_RESERVA_ESTUDIO_NOMBRE = 'btp_reserva_estudio_nombre';
+const CLAVE_RESERVA_ESTUDIO_CLAVE = 'btp_reserva_estudio_clave';
+
+function guardarSesionReserva(datos: {
+  estudioId: string;
+  nombreSalon: string;
+  claveSalon: string;
+}) {
+  sessionStorage.setItem(CLAVE_RESERVA_ESTUDIO_ID, datos.estudioId);
+  sessionStorage.setItem(CLAVE_RESERVA_ESTUDIO_NOMBRE, datos.nombreSalon);
+  sessionStorage.setItem(CLAVE_RESERVA_ESTUDIO_CLAVE, datos.claveSalon);
+}
+
+function leerSesionReserva() {
+  const estudioId = sessionStorage.getItem(CLAVE_RESERVA_ESTUDIO_ID);
+  const nombreSalon = sessionStorage.getItem(CLAVE_RESERVA_ESTUDIO_NOMBRE);
+  const claveSalon = sessionStorage.getItem(CLAVE_RESERVA_ESTUDIO_CLAVE);
+
+  if (!estudioId || !nombreSalon || !claveSalon) {
+    return null;
+  }
+
+  return { estudioId, nombreSalon, claveSalon };
+}
+
+function limpiarSesionReserva() {
+  sessionStorage.removeItem(CLAVE_RESERVA_ESTUDIO_ID);
+  sessionStorage.removeItem(CLAVE_RESERVA_ESTUDIO_NOMBRE);
+  sessionStorage.removeItem(CLAVE_RESERVA_ESTUDIO_CLAVE);
+}
 
 function crearPermisosVacios(): PermisosSesionMaestro {
   return {
@@ -64,7 +95,8 @@ export function obtenerRutaPorRol(
 ) {
   if (rol === 'maestro') return '/maestro';
   if (rol === 'dueno' && estudioActual) return `/estudio/${estudioActual}/agenda`;
-  if (rol === 'cliente') return claveClienteActual ? `/reservar/${claveClienteActual}` : '/inicio';
+  if (rol === 'cliente')
+    return claveClienteActual ? `/reservar/${claveClienteActual}` : '/iniciar-sesion';
   if (rol === 'empleado')
     return forzarCambioContrasena ? '/empleado/cambiar-contrasena' : '/empleado/agenda';
   return '/iniciar-sesion';
@@ -80,6 +112,13 @@ export const usarTiendaAuth = create<EstadoAuth>((set) => ({
   inicializarAutenticacion: () => {
     if (!inicializacionPendiente) {
       inicializacionPendiente = true;
+      const sesionReserva = leerSesionReserva();
+      if (sesionReserva) {
+        set({
+          estudioActual: sesionReserva.estudioId,
+          claveClienteActual: sesionReserva.claveSalon,
+        });
+      }
       // Si nunca hubo una sesión en este dispositivo, no hace falta
       // llamar al servidor — evita el 401 en consola en visitas sin sesión.
       if (!localStorage.getItem(CLAVE_SESION)) {
@@ -106,7 +145,7 @@ export const usarTiendaAuth = create<EstadoAuth>((set) => ({
             iniciando: false,
           });
         } else {
-          set({ iniciando: false });
+          set({ usuario: null, rol: null, iniciando: false });
         }
       });
     }
@@ -119,7 +158,16 @@ export const usarTiendaAuth = create<EstadoAuth>((set) => ({
     try {
       const datos = await iniciarSesionConEmailAPI(email, contrasena);
       const rol = datos.rol as RolUsuario;
+      if (rol === 'cliente') {
+        limpiarToken();
+        limpiarSesionReserva();
+        return {
+          exito: false,
+          mensaje: 'Para reservar una cita debes ingresar con la clave del salón.',
+        };
+      }
       localStorage.setItem(CLAVE_SESION, '1');
+      limpiarSesionReserva();
       set({
         usuario: {
           rol,
@@ -133,12 +181,12 @@ export const usarTiendaAuth = create<EstadoAuth>((set) => ({
         },
         rol,
         estudioActual: datos.estudioId,
-        claveClienteActual: rol === 'cliente' ? datos.estudioId : null,
+        claveClienteActual: null,
       });
       const ruta = obtenerRutaPorRol(
         rol,
         datos.estudioId,
-        rol === 'cliente' ? datos.estudioId : null,
+        null,
         datos.forzarCambioContrasena ?? false,
       );
       return { exito: true, ruta, estudioId: datos.estudioId };
@@ -161,31 +209,14 @@ export const usarTiendaAuth = create<EstadoAuth>((set) => ({
 
   iniciarSesionConClave: async (clave) => {
     try {
-      const datos = await iniciarSesionConClaveAPI(clave);
-      const rol = datos.rol as RolUsuario;
-      localStorage.setItem(CLAVE_SESION, '1');
+      const datos = await buscarAccesoSalonPorClaveAPI(clave);
+      limpiarToken();
+      guardarSesionReserva(datos);
       set({
-        usuario: {
-          rol,
-          estudioId: datos.estudioId,
-          nombre: datos.nombre ?? '',
-          email: datos.email ?? '',
-          esMaestroTotal: datos.esMaestroTotal ?? false,
-          permisos: datos.permisos ?? crearPermisosVacios(),
-          personalId: datos.personalId ?? null,
-          forzarCambioContrasena: datos.forzarCambioContrasena ?? false,
-        },
-        rol,
         estudioActual: datos.estudioId,
-        claveClienteActual: rol === 'cliente' ? datos.estudioId : null,
+        claveClienteActual: datos.claveSalon,
       });
-      const ruta = obtenerRutaPorRol(
-        rol,
-        datos.estudioId,
-        rol === 'cliente' ? datos.estudioId : null,
-        datos.forzarCambioContrasena ?? false,
-      );
-      return { exito: true, ruta, estudioId: datos.estudioId };
+      return { exito: true, ruta: `/reservar/${datos.claveSalon}`, estudioId: datos.estudioId };
     } catch (error) {
       const mensajeError =
         error instanceof TypeError ||
@@ -208,6 +239,8 @@ export const usarTiendaAuth = create<EstadoAuth>((set) => ({
       await cerrarSesionAPI();
     } finally {
       localStorage.removeItem(CLAVE_SESION);
+      limpiarSesionReserva();
+      limpiarToken();
       inicializacionPendiente = false;
       set({ usuario: null, rol: null, estudioActual: null, claveClienteActual: null });
     }
@@ -228,6 +261,7 @@ export const usarTiendaAuth = create<EstadoAuth>((set) => ({
 // y redirigir al login mostrando el motivo exacto.
 registrarCallbackSesionExpirada(({ mensaje, codigo }) => {
   localStorage.removeItem(CLAVE_SESION);
+  limpiarSesionReserva();
   inicializacionPendiente = false;
   usarTiendaAuth.setState({
     usuario: null,

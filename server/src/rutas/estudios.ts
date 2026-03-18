@@ -1,5 +1,6 @@
 import type { FastifyInstance } from 'fastify';
 import type { Prisma } from '../generated/prisma/client.js';
+import bcrypt from 'bcrypt';
 import { z } from 'zod';
 import { resolverCategoriasSalon } from '../lib/categoriasSalon.js';
 import { env } from '../lib/env.js';
@@ -10,6 +11,7 @@ import { registrarAuditoria } from '../utils/auditoria.js';
 import { sanitizarTexto } from '../utils/sanitizar.js';
 import { enviarEmailSolicitudCancelacion } from '../servicios/servicioEmail.js';
 import { colorHexSchema, emailOpcionalONuloSchema, fechaIsoSchema, horaOpcionalONulaSchema, horaSchema, obtenerMensajeValidacion, telefonoSchema, textoOpcionalONuloSchema, textoSchema, urlOpcionalSchema } from '../lib/validacion.js';
+import { normalizarPlanEstudio, validarCantidadServiciosPlan } from '../lib/planes.js';
 
 const esquemaHorario = z.record(
   z.string(),
@@ -28,6 +30,7 @@ const esquemaCamposEstudio = {
   telefono: telefonoSchema.optional(),
   sitioWeb: urlOpcionalSchema,
   pais: textoSchema('pais', 50).optional(),
+  plan: z.enum(['STANDARD', 'PRO']).optional(),
   sucursales: z.array(textoSchema('sucursal', 80)).max(20, 'No puedes registrar más de 20 sucursales').optional(),
   horario: esquemaHorario.optional(),
   servicios: z.array(z.unknown()).max(100, 'No puedes registrar más de 100 servicios').optional(),
@@ -50,6 +53,7 @@ const esquemaCrearEstudio = z.object({
   telefono: telefonoSchema,
   sitioWeb: urlOpcionalSchema,
   pais: textoSchema('pais', 50).optional(),
+  plan: z.enum(['STANDARD', 'PRO']).optional(),
   sucursales: z.array(textoSchema('sucursal', 80)).max(20).optional(),
   claveDueno: textoSchema('claveDueno', 32),
   claveCliente: textoSchema('claveCliente', 32),
@@ -111,7 +115,12 @@ export async function rutasEstudios(servidor: FastifyInstance): Promise<void> {
       orderBy: { creadoEn: 'desc' },
       include: { personal: { orderBy: { creadoEn: 'asc' } } },
     });
-    return respuesta.send({ datos: estudios });
+    return respuesta.send({
+      datos: estudios.map(({ pinCancelacionHash, ...resto }) => ({
+        ...resto,
+        pinCancelacionConfigurado: Boolean(pinCancelacionHash),
+      })),
+    });
   });
 
   // GET /estudios/:id — dueno o maestro
@@ -130,7 +139,10 @@ export async function rutasEstudios(servidor: FastifyInstance): Promise<void> {
         include: { personal: { orderBy: { creadoEn: 'asc' } } },
       });
       if (!estudio) return respuesta.code(404).send({ error: 'Estudio no encontrado' });
-      return respuesta.send({ datos: estudio });
+      const { pinCancelacionHash, ...restoEstudio } = estudio;
+      return respuesta.send({
+        datos: { ...restoEstudio, pinCancelacionConfigurado: Boolean(pinCancelacionHash) },
+      });
     },
   );
 
@@ -162,6 +174,7 @@ export async function rutasEstudios(servidor: FastifyInstance): Promise<void> {
           telefono: datos.telefono,
           sitioWeb: datos.sitioWeb,
           pais: datos.pais ?? 'Mexico',
+          plan: normalizarPlanEstudio(datos.plan),
           sucursales: datos.sucursales ?? [],
           claveDueno: datos.claveDueno.toUpperCase(),
           claveCliente: datos.claveCliente.toUpperCase(),
@@ -211,36 +224,82 @@ export async function rutasEstudios(servidor: FastifyInstance): Promise<void> {
       const datos = resultado.data;
       const estudioExistente = await prisma.estudio.findUnique({
         where: { id },
-        select: { categorias: true, servicios: true, serviciosCustom: true },
+        select: { categorias: true, servicios: true, serviciosCustom: true, plan: true },
       });
+      if (!estudioExistente) {
+        return respuesta.code(404).send({ error: 'Estudio no encontrado' });
+      }
+
+      if (payload.rol !== 'maestro' && datos.plan !== undefined) {
+        return respuesta.code(403).send({ error: 'Solo el panel maestro puede cambiar el plan del salón' });
+      }
+
+      const planSiguiente = normalizarPlanEstudio(datos.plan ?? estudioExistente.plan);
+      const serviciosActuales = Array.isArray(estudioExistente.servicios)
+        ? estudioExistente.servicios.length
+        : 0;
+      const serviciosNuevos = Array.isArray(datos.servicios)
+        ? datos.servicios.length
+        : serviciosActuales;
+      const errorServicios = validarCantidadServiciosPlan({
+        plan: planSiguiente,
+        cantidadNueva: serviciosNuevos,
+        cantidadActual: serviciosActuales,
+      });
+      if (errorServicios) {
+        return respuesta.code(400).send({ error: errorServicios });
+      }
+
+      if (
+        datos.plan !== undefined &&
+        normalizarPlanEstudio(datos.plan) === 'STANDARD' &&
+        serviciosNuevos > 4
+      ) {
+        return respuesta.code(400).send({
+          error:
+            'Antes de cambiar a Standard debes dejar el catálogo con un máximo de 4 servicios activos.',
+        });
+      }
       const categorias = resolverCategoriasSalon({
         categorias: datos.categorias ?? estudioExistente?.categorias,
         servicios: datos.servicios ?? estudioExistente?.servicios,
         serviciosCustom: datos.serviciosCustom ?? estudioExistente?.serviciosCustom,
       });
 
-      const estudio = await prisma.estudio.update({
-        where: { id },
-        data: {
-          ...(datos.nombre !== undefined && { nombre: datos.nombre }),
-          ...(datos.propietario !== undefined && { propietario: datos.propietario }),
-          ...(datos.telefono !== undefined && { telefono: datos.telefono }),
-          ...(datos.sitioWeb !== undefined && { sitioWeb: datos.sitioWeb }),
-          ...(datos.pais !== undefined && { pais: datos.pais }),
-          ...(datos.sucursales !== undefined && { sucursales: datos.sucursales }),
-          ...(datos.horario !== undefined && { horario: datos.horario }),
-          ...(datos.servicios !== undefined && { servicios: datos.servicios as Prisma.InputJsonValue }),
-          ...(datos.serviciosCustom !== undefined && { serviciosCustom: datos.serviciosCustom as Prisma.InputJsonValue }),
-          ...(datos.festivos !== undefined && { festivos: datos.festivos }),
-          ...(datos.colorPrimario !== undefined && { colorPrimario: datos.colorPrimario }),
-          ...(datos.descripcion !== undefined && { descripcion: sanitizarTexto(datos.descripcion ?? '') }),
-          ...(datos.direccion !== undefined && { direccion: sanitizarTexto(datos.direccion ?? '') }),
-          ...(datos.emailContacto !== undefined && { emailContacto: datos.emailContacto }),
-          ...(datos.horarioApertura !== undefined && { horarioApertura: datos.horarioApertura }),
-          ...(datos.horarioCierre !== undefined && { horarioCierre: datos.horarioCierre }),
-          ...(datos.diasAtencion !== undefined && { diasAtencion: datos.diasAtencion }),
-          categorias,
-        },
+      const estudio = await prisma.$transaction(async (tx) => {
+        const estudioActualizado = await tx.estudio.update({
+          where: { id },
+          data: {
+            ...(datos.nombre !== undefined && { nombre: datos.nombre }),
+            ...(datos.propietario !== undefined && { propietario: datos.propietario }),
+            ...(datos.telefono !== undefined && { telefono: datos.telefono }),
+            ...(datos.sitioWeb !== undefined && { sitioWeb: datos.sitioWeb }),
+            ...(datos.pais !== undefined && { pais: datos.pais }),
+            ...(datos.plan !== undefined && { plan: normalizarPlanEstudio(datos.plan) }),
+            ...(datos.sucursales !== undefined && { sucursales: datos.sucursales }),
+            ...(datos.horario !== undefined && { horario: datos.horario }),
+            ...(datos.servicios !== undefined && { servicios: datos.servicios as Prisma.InputJsonValue }),
+            ...(datos.serviciosCustom !== undefined && { serviciosCustom: datos.serviciosCustom as Prisma.InputJsonValue }),
+            ...(datos.festivos !== undefined && { festivos: datos.festivos }),
+            ...(datos.colorPrimario !== undefined && { colorPrimario: datos.colorPrimario }),
+            ...(datos.descripcion !== undefined && { descripcion: sanitizarTexto(datos.descripcion ?? '') }),
+            ...(datos.direccion !== undefined && { direccion: sanitizarTexto(datos.direccion ?? '') }),
+            ...(datos.emailContacto !== undefined && { emailContacto: datos.emailContacto }),
+            ...(datos.horarioApertura !== undefined && { horarioApertura: datos.horarioApertura }),
+            ...(datos.horarioCierre !== undefined && { horarioCierre: datos.horarioCierre }),
+            ...(datos.diasAtencion !== undefined && { diasAtencion: datos.diasAtencion }),
+            categorias,
+          },
+        });
+
+        if (datos.plan !== undefined && normalizarPlanEstudio(datos.plan) === 'STANDARD') {
+          await tx.configFidelidad.updateMany({
+            where: { estudioId: id },
+            data: { activo: false },
+          });
+        }
+
+        return estudioActualizado;
       });
       return respuesta.send({ datos: estudio });
     },
@@ -367,6 +426,40 @@ export async function rutasEstudios(servidor: FastifyInstance): Promise<void> {
       });
 
       return respuesta.code(200).send({ datos: { eliminado: true } });
+    },
+  );
+
+  // PUT /estudios/:id/pin-cancelacion — set PIN de cancelación (dueno o maestro)
+  servidor.put<{ Params: { id: string }; Body: { pin: string; confirmacion: string } }>(
+    '/estudios/:id/pin-cancelacion',
+    { preHandler: verificarJWT },
+    async (solicitud, respuesta) => {
+      const payload = solicitud.user as { sub: string; rol: string; estudioId: string | null };
+      const { id } = solicitud.params;
+
+      if (payload.rol !== 'maestro' && payload.estudioId !== id) {
+        return respuesta.code(403).send({ error: 'Sin permisos para esta acción' });
+      }
+      if (payload.rol === 'dueno') {
+        const tieneAcceso = await verificarAccesoDuenoAEstudio(payload.sub, id);
+        if (!tieneAcceso) return respuesta.code(403).send({ error: 'Sin acceso a este recurso' });
+      }
+
+      const { pin, confirmacion } = solicitud.body;
+      if (!pin || !confirmacion) {
+        return respuesta.code(400).send({ error: 'PIN y confirmación son obligatorios' });
+      }
+      if (!/^\d{4,6}$/.test(pin)) {
+        return respuesta.code(400).send({ error: 'El PIN debe tener entre 4 y 6 dígitos numéricos' });
+      }
+      if (pin !== confirmacion) {
+        return respuesta.code(400).send({ error: 'El PIN y la confirmación no coinciden' });
+      }
+
+      const pinCancelacionHash = await bcrypt.hash(pin, 12);
+      await prisma.estudio.update({ where: { id }, data: { pinCancelacionHash } });
+
+      return respuesta.send({ datos: { pinCancelacionConfigurado: true } });
     },
   );
 

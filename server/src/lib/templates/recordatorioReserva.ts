@@ -8,6 +8,7 @@ interface DatosTemplateRecordatorio {
     colorPrimario: string | null;
     logoUrl: string | null;
     direccion: string | null;
+    claveCliente: string;
   };
   cliente: { nombre: string };
   especialista: string;
@@ -29,6 +30,7 @@ export function crearTemplateRecordatorioReserva(datos: DatosTemplateRecordatori
   const color = datos.salon.colorPrimario ?? '#C2185B';
   const enlaceCancelar = `${env.FRONTEND_URL}/cancelar-reserva/${datos.reservaId}/${datos.tokenCancelacion}`;
   const enlaceDetalles = `${env.FRONTEND_URL}/cancelar-reserva/${datos.reservaId}/${datos.tokenCancelacion}`;
+  const enlaceReagendar = `${env.FRONTEND_URL}/reservar/${datos.salon.claveCliente}`;
   const logoHtml = datos.salon.logoUrl
     ? `<img src="${datos.salon.logoUrl}" alt="Logo ${escaparHtml(datos.salon.nombre)}" style="max-height:56px; max-width:180px; display:block; margin:0 auto 12px;" />`
     : `<div style="font-size:28px; font-weight:800; color:${color}; margin-bottom:12px;">${escaparHtml(datos.salon.nombre)}</div>`;
@@ -51,6 +53,7 @@ export function crearTemplateRecordatorioReserva(datos: DatosTemplateRecordatori
           <div style="text-align:center; margin:28px 0 16px;">
             <a href="${enlaceDetalles}" style="display:inline-block; margin-right:12px; padding:14px 24px; background:${color}; color:#ffffff; text-decoration:none; border-radius:999px; font-weight:700;">Ver detalles</a>
             <a href="${enlaceCancelar}" style="display:inline-block; padding:14px 24px; background:#ffffff; color:${color}; text-decoration:none; border-radius:999px; font-weight:700; border:2px solid ${color};">Cancelar cita</a>
+            <a href="${enlaceReagendar}" style="display:inline-block; margin-left:12px; padding:14px 24px; background:#f8fafc; color:${color}; text-decoration:none; border-radius:999px; font-weight:700; border:2px solid #e2e8f0;">Reagendar</a>
           </div>
           <p style="margin:0; font-size:13px; color:#64748b;">Fecha: ${escaparHtml(datos.fecha)}</p>
         </div>

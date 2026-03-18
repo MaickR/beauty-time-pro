@@ -4,9 +4,9 @@ import { verificarJWT } from '../middleware/autenticacion.js';
 import {
   calcularRecompensasDisponibles,
   canjearRecompensaFidelidad,
-  configFidelidadPorDefecto,
   obtenerConfigFidelidad,
 } from '../lib/fidelidad.js';
+import { MENSAJE_FUNCION_PRO, normalizarPlanEstudio } from '../lib/planes.js';
 
 function tieneAccesoEstudio(payload: { rol: string; estudioId: string | null }, estudioId: string): boolean {
   return payload.rol === 'maestro' || payload.estudioId === estudioId;
@@ -25,6 +25,14 @@ export async function rutasFidelidad(servidor: FastifyInstance): Promise<void> {
       const { id } = solicitud.params;
       if (!tieneAccesoAdminEstudio(payload, id)) {
         return respuesta.code(403).send({ error: 'Sin permisos para esta acción' });
+      }
+
+      const estudio = await prisma.estudio.findUnique({ where: { id }, select: { plan: true } });
+      if (!estudio) {
+        return respuesta.code(404).send({ error: 'Estudio no encontrado' });
+      }
+      if (normalizarPlanEstudio(estudio.plan) !== 'PRO') {
+        return respuesta.code(403).send({ error: MENSAJE_FUNCION_PRO });
       }
 
       const config = await obtenerConfigFidelidad(id);
@@ -49,6 +57,14 @@ export async function rutasFidelidad(servidor: FastifyInstance): Promise<void> {
       const { id } = solicitud.params;
       if (!tieneAccesoAdminEstudio(payload, id)) {
         return respuesta.code(403).send({ error: 'Sin permisos para esta acción' });
+      }
+
+      const estudio = await prisma.estudio.findUnique({ where: { id }, select: { plan: true } });
+      if (!estudio) {
+        return respuesta.code(404).send({ error: 'Estudio no encontrado' });
+      }
+      if (normalizarPlanEstudio(estudio.plan) !== 'PRO') {
+        return respuesta.code(403).send({ error: MENSAJE_FUNCION_PRO });
       }
 
       const datos = solicitud.body;
@@ -82,6 +98,14 @@ export async function rutasFidelidad(servidor: FastifyInstance): Promise<void> {
       const { id } = solicitud.params;
       if (!tieneAccesoAdminEstudio(payload, id)) {
         return respuesta.code(403).send({ error: 'Sin permisos para esta acción' });
+      }
+
+      const estudio = await prisma.estudio.findUnique({ where: { id }, select: { plan: true } });
+      if (!estudio) {
+        return respuesta.code(404).send({ error: 'Estudio no encontrado' });
+      }
+      if (normalizarPlanEstudio(estudio.plan) !== 'PRO') {
+        return respuesta.code(403).send({ error: MENSAJE_FUNCION_PRO });
       }
 
       const limite = Math.min(50, Math.max(1, parseInt(solicitud.query.limite ?? '20', 10)));
@@ -164,13 +188,8 @@ export async function rutasFidelidad(servidor: FastifyInstance): Promise<void> {
 
   servidor.get<{ Params: { id: string }; Querystring: { telefono: string } }>(
     '/estudio/:id/fidelidad/cliente',
-    { preHandler: verificarJWT },
     async (solicitud, respuesta) => {
-      const payload = solicitud.user as { rol: string; estudioId: string | null };
       const { id } = solicitud.params;
-      if (!tieneAccesoEstudio(payload, id)) {
-        return respuesta.code(403).send({ error: 'Sin permisos para esta acción' });
-      }
 
       const telefono = solicitud.query.telefono?.trim();
       if (!telefono) {
@@ -179,7 +198,7 @@ export async function rutasFidelidad(servidor: FastifyInstance): Promise<void> {
 
       const cliente = await prisma.cliente.findUnique({
         where: { estudioId_telefono: { estudioId: id, telefono } },
-        select: { id: true },
+        select: { id: true, nombre: true, telefono: true },
       });
       if (!cliente) {
         return respuesta.send({ datos: null });
@@ -194,14 +213,28 @@ export async function rutasFidelidad(servidor: FastifyInstance): Promise<void> {
         visitasUsadas: 0,
         recompensasGanadas: 0,
         recompensasUsadas: 0,
+        ultimaVisita: null,
       };
 
       return respuesta.send({
         datos: {
           clienteId: cliente.id,
+          nombre: cliente.nombre,
+          telefono: cliente.telefono,
+          activo: config.activo,
           descripcionRecompensa: config.descripcionRecompensa,
+          visitasRequeridas: config.visitasRequeridas,
+          visitasAcumuladas: puntosSeguros.visitasAcumuladas,
+          visitasRestantes: Math.max(
+            0,
+            config.visitasRequeridas -
+              (puntosSeguros.visitasAcumuladas - puntosSeguros.visitasUsadas),
+          ),
+          recompensasGanadas: puntosSeguros.recompensasGanadas,
+          recompensasUsadas: puntosSeguros.recompensasUsadas,
           recompensasDisponibles: calcularRecompensasDisponibles(puntosSeguros),
           recompensaDisponible: calcularRecompensasDisponibles(puntosSeguros) > 0,
+          ultimaVisita: puntosSeguros.ultimaVisita,
         },
       });
     },
@@ -217,6 +250,17 @@ export async function rutasFidelidad(servidor: FastifyInstance): Promise<void> {
       const { clienteId, estudioId } = solicitud.body;
       if (!tieneAccesoAdminEstudio(payload, estudioId)) {
         return respuesta.code(403).send({ error: 'Sin permisos para esta acción' });
+      }
+
+      const estudio = await prisma.estudio.findUnique({
+        where: { id: estudioId },
+        select: { plan: true },
+      });
+      if (!estudio) {
+        return respuesta.code(404).send({ error: 'Estudio no encontrado' });
+      }
+      if (normalizarPlanEstudio(estudio.plan) !== 'PRO') {
+        return respuesta.code(403).send({ error: MENSAJE_FUNCION_PRO });
       }
 
       try {

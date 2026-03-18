@@ -9,6 +9,7 @@ import { env } from '../lib/env.js';
 import { detectarTipoImagen } from '../utils/validarImagen.js';
 import { resolverCategoriasSalon } from '../lib/categoriasSalon.js';
 import { cacheSalonesPublicos } from '../lib/cache.js';
+import { obtenerServiciosNormalizados } from '../lib/serializacionReservas.js';
 import { prisma } from '../prismaCliente.js';
 import { verificarJWT } from '../middleware/autenticacion.js';
 import { obtenerSlotsDisponiblesBackend } from '../lib/programacion.js';
@@ -217,6 +218,66 @@ export async function rutasClientesApp(servidor: FastifyInstance): Promise<void>
     },
   );
 
+  servidor.get<{ Params: { clave: string } }>(
+    '/salones/publicos/clave/:clave',
+    async (solicitud, respuesta) => {
+      const clave = solicitud.params.clave.trim().toUpperCase();
+      const filtroDemo = obtenerFiltroDemo();
+      const hoy = obtenerFechaHoyLocal();
+
+      const salon = await prisma.estudio.findFirst({
+        where: {
+          claveCliente: clave,
+          estado: 'aprobado',
+          activo: true,
+          fechaVencimiento: { gte: hoy },
+          ...filtroDemo,
+        },
+        select: {
+          id: true,
+          nombre: true,
+          descripcion: true,
+          direccion: true,
+          pais: true,
+          telefono: true,
+          emailContacto: true,
+          logoUrl: true,
+          colorPrimario: true,
+          horarioApertura: true,
+          horarioCierre: true,
+          diasAtencion: true,
+          categorias: true,
+          servicios: true,
+          horario: true,
+          festivos: true,
+          personal: {
+            where: { activo: true },
+            select: {
+              id: true,
+              nombre: true,
+              especialidades: true,
+              horaInicio: true,
+              horaFin: true,
+              descansoInicio: true,
+              descansoFin: true,
+              diasTrabajo: true,
+            },
+            orderBy: { nombre: 'asc' },
+          },
+        },
+      });
+
+      if (!salon) return respuesta.code(404).send({ error: 'Salón no encontrado' });
+
+      return respuesta.send({
+        datos: {
+          ...salon,
+          categorias: resolverCategoriasSalon({ categorias: salon.categorias, servicios: salon.servicios }),
+        },
+      });
+    },
+  );
+
   // ─── GET /salones/publicos/:id/disponibilidad ─────────────────────────────
   servidor.get<{
     Params: { id: string };
@@ -285,6 +346,133 @@ export async function rutasClientesApp(servidor: FastifyInstance): Promise<void>
     },
   );
 
+  // ─── GET /salones/publicos/:id/disponibilidad-completa ────────────────────
+  // Devuelve todos los especialistas activos con sus slots libres y ocupados
+  // para una fecha y duración dadas. Usado en el calendario de reservas.
+  servidor.get<{
+    Params: { id: string };
+    Querystring: { fecha: string; duracion: string };
+  }>(
+    '/salones/publicos/:id/disponibilidad-completa',
+    async (solicitud, respuesta) => {
+      const { id } = solicitud.params;
+      const { fecha, duracion } = solicitud.query;
+      const hoy = obtenerFechaHoyLocal();
+
+      if (!fecha || !duracion) {
+        return respuesta.code(400).send({ error: 'fecha y duracion son requeridos' });
+      }
+
+      const duracionMin = Number(duracion);
+      if (isNaN(duracionMin) || duracionMin <= 0) {
+        return respuesta.code(400).send({ error: 'duracion debe ser un número positivo' });
+      }
+
+      const [salon, personalActivo] = await Promise.all([
+        prisma.estudio.findFirst({
+          where: { id, estado: 'aprobado', activo: true, fechaVencimiento: { gte: hoy } },
+          select: { horario: true, festivos: true },
+        }),
+        prisma.personal.findMany({
+          where: { estudioId: id, activo: true },
+          select: {
+            id: true,
+            nombre: true,
+            avatarUrl: true,
+            especialidades: true,
+            horaInicio: true,
+            horaFin: true,
+            descansoInicio: true,
+            descansoFin: true,
+            diasTrabajo: true,
+          },
+        }),
+      ]);
+
+      if (!salon) {
+        return respuesta.code(404).send({ error: 'Salón no encontrado' });
+      }
+
+      const festivos = salon.festivos as string[];
+      if (festivos.includes(fecha)) {
+        return respuesta.send({ especialistas: [] });
+      }
+
+      // Para cada especialista, obtener sus reservas del día y calcular slots
+      const reservasPorEspecialista = await prisma.reserva.findMany({
+        where: {
+          estudioId: id,
+          fecha,
+          estado: { not: 'cancelled' },
+        },
+        select: { personalId: true, horaInicio: true, duracion: true },
+      });
+
+      // Agrupar reservas por especialista
+      const mapaReservas = new Map<string, { horaInicio: string; duracion: number }[]>();
+      for (const r of reservasPorEspecialista) {
+        if (!mapaReservas.has(r.personalId)) mapaReservas.set(r.personalId, []);
+        mapaReservas.get(r.personalId)!.push({ horaInicio: r.horaInicio, duracion: r.duracion });
+      }
+
+      const horario = salon.horario as Record<string, { isOpen: boolean; openTime: string; closeTime: string }>;
+
+      // Función auxiliar para convertir "HH:mm" a minutos
+      function hhmm(t: string): number {
+        const [h = '0', m = '0'] = t.split(':');
+        return parseInt(h, 10) * 60 + parseInt(m, 10);
+      }
+
+      const especialistas = personalActivo.map((miembro) => {
+        const reservasEsp = mapaReservas.get(miembro.id) ?? [];
+
+        // Slots libres (considerando duración solicitada)
+        const slotsCalculados = obtenerSlotsDisponiblesBackend({
+          horario,
+          miembro: {
+            horaInicio: miembro.horaInicio,
+            horaFin: miembro.horaFin,
+            descansoInicio: miembro.descansoInicio,
+            descansoFin: miembro.descansoFin,
+            diasTrabajo: miembro.diasTrabajo,
+          },
+          fecha,
+          duracionMin,
+          reservas: reservasEsp,
+        });
+
+        const slotsLibres = slotsCalculados.map((s) => s.hora);
+
+        // Slots ocupados: slots de 30 min que caen dentro de una reserva existente
+        const slotsOcupados: string[] = [];
+        for (const r of reservasEsp) {
+          const inicio = hhmm(r.horaInicio);
+          const fin = inicio + r.duracion;
+          for (let t = inicio; t < fin; t += 30) {
+            const hora = `${String(Math.floor(t / 60)).padStart(2, '0')}:${String(t % 60).padStart(2, '0')}`;
+            if (!slotsOcupados.includes(hora)) slotsOcupados.push(hora);
+          }
+        }
+
+        return {
+          id: miembro.id,
+          nombre: miembro.nombre,
+          foto: miembro.avatarUrl,
+          especialidades: miembro.especialidades as string[],
+          slotsLibres,
+          slotsOcupados,
+        };
+      });
+
+      // Solo devolver especialistas que trabajan ese día
+      const conDisponibilidad = especialistas.filter(
+        (e) => e.slotsLibres.length > 0 || e.slotsOcupados.length > 0,
+      );
+
+      return respuesta.send({ especialistas: conDisponibilidad });
+    },
+  );
+
   // ─── GET /mi-perfil ───────────────────────────────────────────────────────
   servidor.get(
     '/mi-perfil',
@@ -316,6 +504,18 @@ export async function rutasClientesApp(servidor: FastifyInstance): Promise<void>
               duracion: true,
               estado: true,
               servicios: true,
+              serviciosDetalle: {
+                select: {
+                  id: true,
+                  nombre: true,
+                  duracion: true,
+                  precio: true,
+                  categoria: true,
+                  orden: true,
+                  estado: true,
+                },
+                orderBy: { orden: 'asc' },
+              },
               precioTotal: true,
               tokenCancelacion: true,
               clienteId: true,
@@ -396,7 +596,12 @@ export async function rutasClientesApp(servidor: FastifyInstance): Promise<void>
             horaInicio: r.horaInicio,
             duracion: r.duracion,
             estado: r.estado,
-            servicios: r.servicios,
+            servicios: obtenerServiciosNormalizados(r).map((servicio) => ({
+              name: servicio.name,
+              duration: servicio.duration,
+              price: servicio.price,
+              ...(servicio.category ? { category: servicio.category } : {}),
+            })),
             precioTotal: r.precioTotal,
             tokenCancelacion: r.tokenCancelacion,
             salon: r.estudio,

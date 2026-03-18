@@ -12,6 +12,7 @@ export type DiaFestivo = string;
 
 export type Moneda = 'MXN' | 'COP';
 export type Pais = 'Mexico' | 'Colombia';
+export type PlanEstudio = 'STANDARD' | 'PRO';
 export type EstadoReserva = 'pending' | 'confirmed' | 'completed' | 'cancelled';
 export type EstadoSlot = 'AVAILABLE' | 'OCCUPIED' | 'BREAK_TIME' | 'TOO_SHORT';
 
@@ -25,6 +26,12 @@ export interface Servicio {
   duration: number; // minutos
   price: number;
   category?: string;
+}
+
+export interface DetalleServicioReserva extends Servicio {
+  id?: string;
+  status: string;
+  order: number;
 }
 
 export interface ServicioPersonalizado {
@@ -52,6 +59,7 @@ export interface Estudio {
   phone: string;
   website?: string;
   country: Pais;
+  plan: PlanEstudio;
   branches: string[];
   assignedKey: string;
   clientKey: string;
@@ -72,6 +80,7 @@ export interface Estudio {
   cancelacionSolicitada?: boolean;
   fechaSolicitudCancelacion?: string | null;
   motivoCancelacion?: string | null;
+  pinCancelacionConfigurado?: boolean;
   createdAt: string; // ISO datetime
   updatedAt: string; // ISO datetime
 }
@@ -126,6 +135,7 @@ export interface Reserva {
   clientName: string;
   clientPhone: string;
   services: Servicio[];
+  serviceDetails?: DetalleServicioReserva[];
   totalDuration: number; // minutos
   totalPrice: number;
   status: EstadoReserva;
@@ -175,6 +185,37 @@ export interface SalonDetalle extends SalonPublico {
   personal: EspecialistaPublico[];
 }
 
+export interface DisponibilidadEspecialista {
+  id: string;
+  nombre: string;
+  foto: string | null;
+  especialidades: string[];
+  slotsLibres: string[]; // ['09:00', '10:00']
+  slotsOcupados: string[]; // ['09:30', '12:00']
+}
+
+export interface ClienteAdmin {
+  id: string;
+  nombre: string;
+  telefono: string;
+  correo: string | null;
+  estudioId: string;
+  nombreEstudio: string;
+  paisEstudio: string;
+  serviciosRealizados: string[];
+  servicioMasFrecuente: string;
+  ultimaVisita: string | null;
+  totalVisitas: number;
+  totalGastado: number;
+}
+
+export interface RespuestaBaseClientes {
+  clientes: ClienteAdmin[];
+  total: number;
+  pagina: number;
+  totalPaginas: number;
+}
+
 export interface FidelidadSalon {
   estudioId: string;
   nombreSalon: string;
@@ -196,6 +237,7 @@ export interface ReservaCliente {
   duracion: number;
   estado: EstadoReserva;
   servicios: Servicio[];
+  serviciosDetalle?: DetalleServicioReserva[];
   precioTotal: number;
   tokenCancelacion: string;
   salon: { id: string; nombre: string; colorPrimario: string | null; logoUrl: string | null };
@@ -262,6 +304,7 @@ export interface ReservaEmpleado {
   duracion: number;
   estado: EstadoReserva;
   servicios: Servicio[];
+  serviciosDetalle?: DetalleServicioReserva[];
   precioTotal: number;
   nombreCliente: string;
   telefonoCliente: string;

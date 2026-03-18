@@ -1,10 +1,98 @@
 /**
  * Servicio de estudios — llama al backend Fastify en lugar de Firebase.
  */
-import type { Estudio, Servicio } from '../tipos/index';
+import type { Estudio, PlanEstudio, Servicio } from '../tipos/index';
 import { peticion } from '../lib/clienteHTTP';
 
 type RespuestaEstudio = { datos: Estudio };
+type EstudioBackend = Record<string, unknown>;
+
+interface DatosCrearSalonAdmin {
+  nombreSalon: string;
+  nombreAdmin: string;
+  emailDueno: string;
+  contrasenaDueno: string;
+  telefono: string;
+  pais: Estudio['country'];
+  plan: PlanEstudio;
+  inicioSuscripcion: string;
+  personal: Array<{
+    nombre: string;
+    especialidades: string[];
+    horaInicio?: string;
+    horaFin?: string;
+    descansoInicio?: string;
+    descansoFin?: string;
+  }>;
+}
+
+interface ResultadoCrearSalonAdmin {
+  estudio: Estudio;
+  acceso: {
+    emailDueno: string;
+    claveDueno: string;
+    claveClientes: string;
+  };
+}
+
+type RespuestaCrearSalonAdmin = {
+  datos: {
+    estudio: EstudioBackend;
+    acceso: ResultadoCrearSalonAdmin['acceso'];
+  };
+};
+
+function mapearEstudioBackend(estudio: EstudioBackend): Estudio {
+  const personal = Array.isArray(estudio['personal'])
+    ? (estudio['personal'] as Record<string, unknown>[])
+    : [];
+
+  return {
+    id: (estudio['id'] as string) ?? '',
+    name: (estudio['nombre'] as string) ?? '',
+    owner: (estudio['propietario'] as string) ?? '',
+    phone: (estudio['telefono'] as string) ?? '',
+    website: (estudio['sitioWeb'] as string | undefined) ?? '',
+    country: ((estudio['pais'] as string) ?? 'Mexico') as Estudio['country'],
+    plan: ((estudio['plan'] as string) ?? 'STANDARD') as PlanEstudio,
+    branches: (estudio['sucursales'] as string[]) ?? [],
+    assignedKey: (estudio['claveDueno'] as string) ?? '',
+    clientKey: (estudio['claveCliente'] as string) ?? '',
+    subscriptionStart: (estudio['inicioSuscripcion'] as string) ?? '',
+    paidUntil: (estudio['fechaVencimiento'] as string) ?? '',
+    holidays: (estudio['festivos'] as string[]) ?? [],
+    schedule: (estudio['horario'] as Estudio['schedule']) ?? {},
+    selectedServices: (estudio['servicios'] as Estudio['selectedServices']) ?? [],
+    customServices: (estudio['serviciosCustom'] as Estudio['customServices']) ?? [],
+    staff: personal.map((persona) => ({
+      id: (persona['id'] as string) ?? '',
+      name: (persona['nombre'] as string) ?? '',
+      avatarUrl: (persona['avatarUrl'] as string | null | undefined) ?? null,
+      specialties: (persona['especialidades'] as string[]) ?? [],
+      active: (persona['activo'] as boolean | undefined) ?? true,
+      shiftStart: (persona['horaInicio'] as string | null | undefined) ?? null,
+      shiftEnd: (persona['horaFin'] as string | null | undefined) ?? null,
+      breakStart: (persona['descansoInicio'] as string | null | undefined) ?? null,
+      breakEnd: (persona['descansoFin'] as string | null | undefined) ?? null,
+      workingDays: (persona['diasTrabajo'] as number[] | null | undefined) ?? null,
+    })),
+    colorPrimario: (estudio['colorPrimario'] as string | null | undefined) ?? null,
+    logoUrl: (estudio['logoUrl'] as string | null | undefined) ?? null,
+    descripcion: (estudio['descripcion'] as string | null | undefined) ?? null,
+    direccion: (estudio['direccion'] as string | null | undefined) ?? null,
+    emailContacto: (estudio['emailContacto'] as string | null | undefined) ?? null,
+    estado: (estudio['estado'] as string | null | undefined) ?? null,
+    primeraVez: (estudio['primeraVez'] as boolean | undefined) ?? true,
+    cancelacionSolicitada: (estudio['cancelacionSolicitada'] as boolean | undefined) ?? false,
+    fechaSolicitudCancelacion:
+      (estudio['fechaSolicitudCancelacion'] as string | null | undefined) ?? null,
+    motivoCancelacion: (estudio['motivoCancelacion'] as string | null | undefined) ?? null,
+    createdAt:
+      (estudio['createdAt'] as string | undefined) ?? (estudio['creadoEn'] as string) ?? '',
+    updatedAt:
+      (estudio['updatedAt'] as string | undefined) ?? (estudio['actualizadoEn'] as string) ?? '',
+  };
+}
 
 /** Crea un estudio nuevo. */
 export async function guardarEstudio(_id: string, datos: Omit<Estudio, 'id'>): Promise<Estudio> {
@@ -16,6 +104,7 @@ export async function guardarEstudio(_id: string, datos: Omit<Estudio, 'id'>): P
       telefono: datos.phone,
       sitioWeb: datos.website,
       pais: datos.country,
+      plan: datos.plan,
       sucursales: datos.branches,
       claveDueno: datos.assignedKey,
       claveCliente: datos.clientKey,
@@ -30,6 +119,30 @@ export async function guardarEstudio(_id: string, datos: Omit<Estudio, 'id'>): P
   return respuesta.datos;
 }
 
+export async function crearSalonAdmin(
+  datos: DatosCrearSalonAdmin,
+): Promise<ResultadoCrearSalonAdmin> {
+  const respuesta = await peticion<RespuestaCrearSalonAdmin>('/admin/salones', {
+    method: 'POST',
+    body: JSON.stringify({
+      nombreSalon: datos.nombreSalon,
+      nombreAdmin: datos.nombreAdmin,
+      email: datos.emailDueno,
+      contrasena: datos.contrasenaDueno,
+      telefono: datos.telefono,
+      pais: datos.pais,
+      plan: datos.plan,
+      inicioSuscripcion: datos.inicioSuscripcion,
+      personal: datos.personal,
+    }),
+  });
+
+  return {
+    estudio: mapearEstudioBackend(respuesta.datos.estudio),
+    acceso: respuesta.datos.acceso,
+  };
+}
+
 /** Actualiza campos parciales de un estudio. */
 export async function actualizarEstudio(id: string, campos: Partial<Estudio>): Promise<void> {
   const cuerpo: Record<string, unknown> = {};
@@ -38,6 +151,7 @@ export async function actualizarEstudio(id: string, campos: Partial<Estudio>): P
   if (campos.phone !== undefined) cuerpo['telefono'] = campos.phone;
   if (campos.website !== undefined) cuerpo['sitioWeb'] = campos.website;
   if (campos.country !== undefined) cuerpo['pais'] = campos.country;
+  if (campos.plan !== undefined) cuerpo['plan'] = campos.plan;
   if (campos.branches !== undefined) cuerpo['sucursales'] = campos.branches;
   if (campos.schedule !== undefined) cuerpo['horario'] = campos.schedule;
   if (campos.selectedServices !== undefined) cuerpo['servicios'] = campos.selectedServices;
@@ -67,5 +181,16 @@ export async function actualizarPreciosServicios(id: string, servicios: Servicio
   await peticion<RespuestaEstudio>(`/estudios/${id}`, {
     method: 'PUT',
     body: JSON.stringify({ servicios }),
+  });
+}
+
+export async function actualizarPinCancelacion(
+  estudioId: string,
+  pin: string,
+  confirmacion: string,
+): Promise<void> {
+  await peticion(`/estudios/${estudioId}/pin-cancelacion`, {
+    method: 'PUT',
+    body: JSON.stringify({ pin, confirmacion }),
   });
 }

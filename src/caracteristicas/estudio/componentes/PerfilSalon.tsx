@@ -11,6 +11,7 @@ import {
   subirLogo,
   type PerfilEstudio,
 } from '../../../servicios/servicioPerfil';
+import { obtenerDefinicionPlan } from '../../../lib/planes';
 
 interface PropsPerfilSalon {
   estudioId: string;
@@ -185,8 +186,20 @@ export function PerfilSalon({ estudioId }: PropsPerfilSalon) {
     );
   }
 
+  const definicionPlan = obtenerDefinicionPlan(perfil.plan);
+
   return (
     <div className="space-y-8 max-w-2xl">
+      <section className="bg-white rounded-4xl p-8 border border-slate-200 space-y-4">
+        <h3 className="text-lg font-black uppercase tracking-tight">Plan actual</h3>
+        <div className="rounded-3xl border border-slate-200 bg-slate-50 p-5">
+          <p className="text-xs font-black uppercase tracking-widest text-slate-500">
+            {definicionPlan.nombre}
+          </p>
+          <p className="mt-2 text-sm font-medium text-slate-600">{definicionPlan.resumen}</p>
+        </div>
+      </section>
+
       <section className="bg-white rounded-4xl p-8 border border-slate-200 space-y-6">
         <h3 className="text-lg font-black uppercase tracking-tight">Identidad visual</h3>
 

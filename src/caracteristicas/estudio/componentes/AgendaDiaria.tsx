@@ -9,13 +9,23 @@ import {
   ChevronRight,
   Users,
   Palette,
+  XCircle,
 } from 'lucide-react';
 import { useMutation } from '@tanstack/react-query';
 import { DialogoConfirmacion } from '../../../componentes/ui/DialogoConfirmacion';
 import { usarContextoApp } from '../../../contextos/ContextoApp';
 import { formatearDinero } from '../../../utils/formato';
-import { actualizarEstadoReserva } from '../../../servicios/servicioReservas';
-import type { Estudio, Reserva, Moneda, EstadoReserva } from '../../../tipos';
+import {
+  actualizarEstadoReserva,
+  actualizarEstadoServicioReserva,
+} from '../../../servicios/servicioReservas';
+import type {
+  Estudio,
+  Reserva,
+  Moneda,
+  EstadoReserva,
+  DetalleServicioReserva,
+} from '../../../tipos';
 
 interface PropsAgendaDiaria {
   estudio: Estudio;
@@ -47,6 +57,14 @@ const BADGE_ESTADO: Record<EstadoReserva, ColorBadge> = {
   cancelled: { fondo: 'bg-red-100', texto: 'text-red-600', etiqueta: 'Cancelada' },
 };
 
+const BADGE_ESTADO_SERVICIO: Record<string, ColorBadge> = {
+  pending: { fondo: 'bg-slate-100', texto: 'text-slate-500', etiqueta: 'Pendiente' },
+  confirmed: { fondo: 'bg-slate-100', texto: 'text-slate-500', etiqueta: 'Pendiente' },
+  completed: { fondo: 'bg-green-100', texto: 'text-green-700', etiqueta: 'Realizado' },
+  cancelled: { fondo: 'bg-red-100', texto: 'text-red-600', etiqueta: 'Cancelado' },
+  no_show: { fondo: 'bg-red-100', texto: 'text-red-600', etiqueta: 'No se realizó' },
+};
+
 function BadgeEstado({ estado }: { estado: EstadoReserva }) {
   const cfg = BADGE_ESTADO[estado] ?? BADGE_ESTADO.pending;
   return (
@@ -58,14 +76,142 @@ function BadgeEstado({ estado }: { estado: EstadoReserva }) {
   );
 }
 
+interface PropsItemServicio {
+  servicio: DetalleServicioReserva;
+  moneda: Moneda;
+  puedeMarcarNoShow: boolean;
+  onNoShow: () => void;
+}
+
+function ItemServicio({ servicio, moneda, puedeMarcarNoShow, onNoShow }: PropsItemServicio) {
+  const badge = BADGE_ESTADO_SERVICIO[servicio.status] ?? BADGE_ESTADO_SERVICIO['pending']!;
+  return (
+    <div className="flex items-center justify-between gap-2 py-1.5 border-b border-slate-50 last:border-0">
+      <div className="flex items-center gap-2 min-w-0">
+        {servicio.status === 'completed' ? (
+          <CheckCircle2 className="w-3.5 h-3.5 shrink-0 text-green-500" aria-hidden="true" />
+        ) : servicio.status === 'no_show' || servicio.status === 'cancelled' ? (
+          <XCircle className="w-3.5 h-3.5 shrink-0 text-red-400" aria-hidden="true" />
+        ) : (
+          <CheckCircle2 className="w-3.5 h-3.5 shrink-0 text-slate-300" aria-hidden="true" />
+        )}
+        <span className="text-xs font-medium text-slate-700 truncate">{servicio.name}</span>
+      </div>
+      <div className="flex items-center gap-1.5 shrink-0">
+        <span className="text-[10px] text-slate-500 font-bold">
+          {formatearDinero(servicio.price, moneda)}
+        </span>
+        <span
+          className={`rounded-full px-2 py-0.5 text-[9px] font-black uppercase ${badge.fondo} ${badge.texto}`}
+        >
+          {badge.etiqueta}
+        </span>
+        {puedeMarcarNoShow && (
+          <button
+            type="button"
+            onClick={onNoShow}
+            className="rounded-lg bg-red-50 px-2 py-0.5 text-[9px] font-black uppercase text-red-600 hover:bg-red-100 transition-colors"
+          >
+            No realizó
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ── Modal mini para marcar un servicio como no_show ──────────────────────────
+interface PropsModalNoShow {
+  nombreServicio: string;
+  onConfirmar: (pin: string, motivo: string) => void;
+  onCancelar: () => void;
+  cargando: boolean;
+}
+
+function ModalNoShow({ nombreServicio, onConfirmar, onCancelar, cargando }: PropsModalNoShow) {
+  const [pin, setPin] = useState('');
+  const [motivo, setMotivo] = useState('');
+
+  return (
+    <div
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="modal-no-show-titulo"
+      className="fixed inset-0 z-[300] flex items-center justify-center bg-black/70 backdrop-blur-sm p-4"
+      onKeyDown={(e) => e.key === 'Escape' && onCancelar()}
+    >
+      <div className="bg-white rounded-[2rem] p-6 max-w-sm w-full shadow-2xl">
+        <h2
+          id="modal-no-show-titulo"
+          className="text-base font-black uppercase tracking-tight text-slate-900 mb-1"
+        >
+          ¿Servicio no realizado?
+        </h2>
+        <p className="text-xs text-slate-500 font-medium mb-5">
+          <span className="font-black text-slate-700">{nombreServicio}</span> será marcado como "No
+          se realizó". El total de la cita se recalculará.
+        </p>
+        <div className="space-y-3">
+          <label className="block">
+            <span className="text-[11px] font-black uppercase tracking-wide text-slate-600 block mb-1.5">
+              PIN de cancelación *
+            </span>
+            <input
+              type="password"
+              inputMode="numeric"
+              maxLength={6}
+              value={pin}
+              onChange={(e) => setPin(e.target.value.replace(/\D/g, '').slice(0, 6))}
+              placeholder="••••"
+              className="w-full rounded-2xl border border-slate-200 px-4 py-2.5 text-sm font-semibold text-slate-900 outline-none transition focus:border-pink-400 focus:ring-2 focus:ring-pink-100"
+            />
+          </label>
+          <label className="block">
+            <span className="text-[11px] font-black uppercase tracking-wide text-slate-600 block mb-1.5">
+              Motivo (opcional)
+            </span>
+            <input
+              type="text"
+              maxLength={120}
+              value={motivo}
+              onChange={(e) => setMotivo(e.target.value)}
+              placeholder="Ej: cliente no llegó, producto sin stock…"
+              className="w-full rounded-2xl border border-slate-200 px-4 py-2.5 text-sm text-slate-700 outline-none transition focus:border-pink-400 focus:ring-2 focus:ring-pink-100"
+            />
+          </label>
+        </div>
+        <div className="flex gap-3 mt-5">
+          <button
+            type="button"
+            onClick={onCancelar}
+            className="flex-1 py-3 bg-slate-100 text-slate-600 font-black rounded-2xl uppercase text-xs hover:bg-slate-200 transition-colors"
+          >
+            Volver
+          </button>
+          <button
+            type="button"
+            disabled={cargando || !pin}
+            aria-busy={cargando}
+            onClick={() => onConfirmar(pin, motivo)}
+            className="flex-1 py-3 bg-red-600 text-white font-black rounded-2xl uppercase text-xs hover:bg-red-700 transition-colors disabled:opacity-60"
+          >
+            {cargando ? 'Procesando...' : 'Confirmar'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 interface PropsTarjetaCita {
   reserva: Reserva;
   moneda: Moneda;
   onCompletar: (id: string) => void;
   onCancelar: (id: string) => void;
+  onNoShow: (reservaId: string, servicioId: string, nombre: string) => void;
 }
 
-function TarjetaCita({ reserva: b, moneda, onCompletar, onCancelar }: PropsTarjetaCita) {
+function TarjetaCita({ reserva: b, moneda, onCompletar, onCancelar, onNoShow }: PropsTarjetaCita) {
   const horaFin = calcularHoraFin(b.time, b.totalDuration);
   const estaCompletada = b.status === 'completed';
   const estaCancelada = b.status === 'cancelled';
@@ -113,22 +259,44 @@ function TarjetaCita({ reserva: b, moneda, onCompletar, onCancelar }: PropsTarje
         </p>
       </div>
 
-      {/* Servicios */}
-      <div className="pl-5 mt-3 space-y-1.5">
-        {b.services.map((s, idx) => (
-          <div key={idx} className="flex justify-between items-center text-xs">
-            <span className="flex items-center gap-1.5 text-slate-700 font-medium">
-              <CheckCircle2
-                className={`w-3 h-3 shrink-0 ${estaCompletada ? 'text-slate-400' : 'text-pink-400'}`}
-                aria-hidden="true"
-              />
-              {s.name}
-            </span>
-            <span className="text-slate-500 font-bold shrink-0">
-              {formatearDinero(s.price, moneda)} · {s.duration}m
-            </span>
+      {/* Servicios — detalle con badge cuando hay serviceDetails, lista simple si no */}
+      <div className="pl-5 mt-3">
+        {b.serviceDetails && b.serviceDetails.length > 0 ? (
+          <div className="space-y-0">
+            {b.serviceDetails
+              .filter((s) => s.status !== 'cancelled')
+              .map((s) => (
+                <ItemServicio
+                  key={s.id ?? s.name}
+                  servicio={s}
+                  moneda={moneda}
+                  puedeMarcarNoShow={
+                    !estaCompletada &&
+                    !estaCancelada &&
+                    (s.status === 'pending' || s.status === 'confirmed')
+                  }
+                  onNoShow={() => onNoShow(b.id, s.id ?? '', s.name)}
+                />
+              ))}
           </div>
-        ))}
+        ) : (
+          <div className="space-y-1.5">
+            {b.services.map((s, idx) => (
+              <div key={idx} className="flex justify-between items-center text-xs">
+                <span className="flex items-center gap-1.5 text-slate-700 font-medium">
+                  <CheckCircle2
+                    className={`w-3 h-3 shrink-0 ${estaCompletada ? 'text-slate-400' : 'text-pink-400'}`}
+                    aria-hidden="true"
+                  />
+                  {s.name}
+                </span>
+                <span className="text-slate-500 font-bold shrink-0">
+                  {formatearDinero(s.price, moneda)} · {s.duration}m
+                </span>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
 
       {/* Info color / tinte */}
@@ -180,6 +348,7 @@ export function AgendaDiaria({
   onCrearCitaManual,
 }: PropsAgendaDiaria) {
   const { recargar } = usarContextoApp();
+  const [pinCancelacion, setPinCancelacion] = useState('');
   const [tab, setTab] = useState<'agenda' | 'historial'>('agenda');
   const [especialistaTab, setEspecialistaTab] = useState<string>('todos');
   const [mesHistorial, setMesHistorial] = useState(() => {
@@ -190,12 +359,37 @@ export function AgendaDiaria({
     tipo: 'completar' | 'cancelar';
     reservaId: string;
   } | null>(null);
+  const [modalNoShow, setModalNoShow] = useState<{
+    reservaId: string;
+    servicioId: string;
+    nombre: string;
+  } | null>(null);
 
   const { mutate: cambiarEstado, isPending: actualizando } = useMutation({
-    mutationFn: ({ id, estado }: { id: string; estado: EstadoReserva }) =>
-      actualizarEstadoReserva(id, estado),
+    mutationFn: ({ id, estado, pin }: { id: string; estado: EstadoReserva; pin?: string }) =>
+      actualizarEstadoReserva(id, estado, pin),
     onSuccess: async () => {
+      setPinCancelacion('');
       setConfirmacion(null);
+      await recargar();
+    },
+  });
+
+  const { mutate: marcarNoShow, isPending: marcandoNoShow } = useMutation({
+    mutationFn: ({
+      reservaId,
+      servicioId,
+      pin,
+      motivo,
+    }: {
+      reservaId: string;
+      servicioId: string;
+      pin: string;
+      motivo: string;
+    }) =>
+      actualizarEstadoServicioReserva(reservaId, servicioId, 'no_show', pin, motivo || undefined),
+    onSuccess: async () => {
+      setModalNoShow(null);
       await recargar();
     },
   });
@@ -204,7 +398,11 @@ export function AgendaDiaria({
     if (!confirmacion) return;
     const nuevoEstatus: EstadoReserva =
       confirmacion.tipo === 'completar' ? 'completed' : 'cancelled';
-    cambiarEstado({ id: confirmacion.reservaId, estado: nuevoEstatus });
+    cambiarEstado({
+      id: confirmacion.reservaId,
+      estado: nuevoEstatus,
+      pin: confirmacion.tipo === 'cancelar' ? pinCancelacion : undefined,
+    });
   };
 
   const moneda: Moneda = estudio.country === 'Colombia' ? 'COP' : 'MXN';
@@ -331,6 +529,9 @@ export function AgendaDiaria({
                   moneda={moneda}
                   onCompletar={(id) => setConfirmacion({ tipo: 'completar', reservaId: id })}
                   onCancelar={(id) => setConfirmacion({ tipo: 'cancelar', reservaId: id })}
+                  onNoShow={(reservaId, servicioId, nombre) =>
+                    setModalNoShow({ reservaId, servicioId, nombre })
+                  }
                 />
               ))}
             </div>
@@ -384,6 +585,9 @@ export function AgendaDiaria({
                       moneda={moneda}
                       onCompletar={(id) => setConfirmacion({ tipo: 'completar', reservaId: id })}
                       onCancelar={(id) => setConfirmacion({ tipo: 'cancelar', reservaId: id })}
+                      onNoShow={(reservaId, servicioId, nombre) =>
+                        setModalNoShow({ reservaId, servicioId, nombre })
+                      }
                     />
                   ))
                 )}
@@ -393,19 +597,44 @@ export function AgendaDiaria({
         </div>
       )}
 
+      {modalNoShow && (
+        <ModalNoShow
+          nombreServicio={modalNoShow.nombre}
+          cargando={marcandoNoShow}
+          onConfirmar={(pin, motivo) =>
+            marcarNoShow({
+              reservaId: modalNoShow.reservaId,
+              servicioId: modalNoShow.servicioId,
+              pin,
+              motivo,
+            })
+          }
+          onCancelar={() => setModalNoShow(null)}
+        />
+      )}
+
       <DialogoConfirmacion
         abierto={!!confirmacion}
         mensaje={confirmacion?.tipo === 'completar' ? '¿Confirmar cobro?' : '¿Cancelar cita?'}
         descripcion={
           confirmacion?.tipo === 'completar'
             ? 'Se registrará el ingreso en el balance.'
-            : 'La cita quedará marcada como cancelada.'
+            : 'La cita quedará marcada como cancelada. Ingresa el PIN del dueño para confirmar.'
         }
+        etiquetaCampo={confirmacion?.tipo === 'cancelar' ? 'PIN de cancelación' : undefined}
+        placeholderCampo={
+          confirmacion?.tipo === 'cancelar' ? 'Ingresa el PIN del dueño' : undefined
+        }
+        valorCampo={confirmacion?.tipo === 'cancelar' ? pinCancelacion : undefined}
+        onCambiarCampo={confirmacion?.tipo === 'cancelar' ? setPinCancelacion : undefined}
         variante={confirmacion?.tipo === 'cancelar' ? 'peligro' : 'advertencia'}
         textoConfirmar={confirmacion?.tipo === 'completar' ? 'Confirmar Cobro' : 'Cancelar Cita'}
         cargando={actualizando}
         onConfirmar={confirmarAccion}
-        onCancelar={() => setConfirmacion(null)}
+        onCancelar={() => {
+          setPinCancelacion('');
+          setConfirmacion(null);
+        }}
       />
     </section>
   );

@@ -7,6 +7,7 @@ import { usarToast } from '../../../componentes/ui/ProveedorToast';
 import { usarContextoApp } from '../../../contextos/ContextoApp';
 import { FormularioNuevoServicio } from './FormularioNuevoServicio';
 import type { Estudio, Moneda, Servicio } from '../../../tipos';
+import { MENSAJE_FUNCION_PRO, obtenerDefinicionPlan } from '../../../lib/planes';
 
 interface PropsCatalogoServicios {
   estudio: Estudio;
@@ -14,6 +15,7 @@ interface PropsCatalogoServicios {
 
 export function CatalogoServicios({ estudio }: PropsCatalogoServicios) {
   const moneda: Moneda = estudio.country === 'Colombia' ? 'COP' : 'MXN';
+  const definicionPlan = obtenerDefinicionPlan(estudio.plan);
   const { mostrarToast } = usarToast();
   const { recargar } = usarContextoApp();
   const [serviciosLocales, setServiciosLocales] = useState(estudio.selectedServices);
@@ -109,6 +111,17 @@ export function CatalogoServicios({ estudio }: PropsCatalogoServicios) {
 
   const agregarServicio = (servicioNuevo: Servicio) => {
     if (
+      definicionPlan.maxServicios !== null &&
+      serviciosLocales.length >= definicionPlan.maxServicios
+    ) {
+      mostrarToast({
+        mensaje: `El plan ${definicionPlan.nombre} permite hasta ${definicionPlan.maxServicios} servicios activos. ${MENSAJE_FUNCION_PRO}`,
+        variante: 'error',
+      });
+      return;
+    }
+
+    if (
       serviciosLocales.some(
         (servicio) => servicio.name.toLowerCase() === servicioNuevo.name.toLowerCase(),
       )
@@ -137,7 +150,31 @@ export function CatalogoServicios({ estudio }: PropsCatalogoServicios) {
       </div>
 
       <div className="mb-6">
-        <FormularioNuevoServicio moneda={moneda} onAgregar={agregarServicio} />
+        <FormularioNuevoServicio
+          moneda={moneda}
+          onAgregar={agregarServicio}
+          bloqueado={
+            definicionPlan.maxServicios !== null &&
+            serviciosLocales.length >= definicionPlan.maxServicios
+          }
+          mensajeBloqueo={
+            definicionPlan.maxServicios !== null &&
+            serviciosLocales.length >= definicionPlan.maxServicios
+              ? `Llegaste al límite de ${definicionPlan.maxServicios} servicios del plan ${definicionPlan.nombre}. ${MENSAJE_FUNCION_PRO}`
+              : undefined
+          }
+        />
+      </div>
+
+      <div className="mb-6 rounded-2xl border border-slate-200 bg-slate-50 p-4">
+        <p className="text-xs font-black uppercase tracking-widest text-slate-500">
+          Plan actual: {definicionPlan.nombre}
+        </p>
+        <p className="mt-2 text-sm font-medium text-slate-600">
+          {definicionPlan.maxServicios === null
+            ? 'Puedes administrar un catálogo de servicios sin límite.'
+            : `Tienes ${serviciosLocales.length} de ${definicionPlan.maxServicios} servicios activos disponibles.`}
+        </p>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">

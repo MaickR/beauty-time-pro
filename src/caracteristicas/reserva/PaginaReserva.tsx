@@ -1,23 +1,21 @@
-import { useEffect } from 'react';
-import { useParams } from 'react-router-dom';
+import { useEffect, useMemo } from 'react';
+import { useNavigate, useParams } from 'react-router-dom';
+import { useState } from 'react';
 import { LogOut } from 'lucide-react';
-import { usarContextoApp } from '../../contextos/ContextoApp';
 import { usarTiendaAuth } from '../../tienda/tiendaAuth';
 import { usarToast } from '../../componentes/ui/ProveedorToast';
 import { usarTemaSalon } from '../../hooks/usarTemaSalon';
 import { obtenerFechaLocalISO } from '../../utils/formato';
-import { obtenerSlotsDisponibles } from '../../utils/programacion';
-import { DIAS_SEMANA } from '../../lib/constantes';
 import { usarFlujoReserva } from './hooks/usarFlujoReserva';
-import { SelectorPersonal } from './componentes/SelectorPersonal';
 import { SelectorServicio } from './componentes/SelectorServicio';
 import { SelectorCalendario } from './componentes/SelectorCalendario';
-import { GrillaSlots } from './componentes/GrillaSlots';
+import { SelectorEspecialistaHorario } from './componentes/SelectorEspecialistaHorario';
 import { FormularioContacto } from './componentes/FormularioContacto';
 import { ConfirmacionReserva } from './componentes/ConfirmacionReserva';
 import { Spinner } from '../../componentes/ui/Spinner';
 import { URL_BASE } from '../../lib/clienteHTTP';
-import type { Moneda } from '../../tipos';
+import { obtenerSalonPublicoPorClave } from '../../servicios/servicioClienteApp';
+import type { Estudio, Moneda, SalonDetalle } from '../../tipos';
 
 const PALABRAS_COLOR = [
   'tinte',
@@ -32,18 +30,54 @@ const PALABRAS_COLOR = [
 ];
 
 export function PaginaReserva() {
-  const { claveCliente } = useParams<{ claveCliente: string }>();
-  const { estudios, reservas, cargando } = usarContextoApp();
+  const { claveEstudio } = useParams<{ claveEstudio: string }>();
   const { cerrarSesion } = usarTiendaAuth();
   const { mostrarToast } = usarToast();
+  const navegar = useNavigate();
   const flujo = usarFlujoReserva();
+  const [estudio, setEstudio] = useState<Estudio | null>(null);
+  const [cargando, setCargando] = useState(true);
 
-  const estudio = estudios.find((s) => s.clientKey === claveCliente);
+  useEffect(() => {
+    let cancelado = false;
 
-  // Aplicar tema del salón en la página pública
+    if (!claveEstudio) {
+      setEstudio(null);
+      setCargando(false);
+      return;
+    }
+
+    setCargando(true);
+    void obtenerSalonPublicoPorClave(claveEstudio)
+      .then((salon) => {
+        if (cancelado) return;
+        const claveNormalizada = claveEstudio.trim().toUpperCase();
+        setEstudio(mapearSalonDetalleAEstudio(salon, claveNormalizada));
+        sessionStorage.setItem('btp_reserva_estudio_id', salon.id);
+        sessionStorage.setItem('btp_reserva_estudio_nombre', salon.nombre);
+        sessionStorage.setItem('btp_reserva_estudio_clave', claveNormalizada);
+        usarTiendaAuth.setState({
+          estudioActual: salon.id,
+          claveClienteActual: claveNormalizada,
+        });
+      })
+      .catch(() => {
+        if (!cancelado) {
+          setEstudio(null);
+          usarTiendaAuth.setState({ estudioActual: null, claveClienteActual: null });
+        }
+      })
+      .finally(() => {
+        if (!cancelado) setCargando(false);
+      });
+
+    return () => {
+      cancelado = true;
+    };
+  }, [claveEstudio]);
+
   usarTemaSalon(estudio?.colorPrimario);
 
-  // Actualizar título con el nombre del salón
   useEffect(() => {
     if (estudio?.name) document.title = `${estudio.name} — Reservar cita`;
     return () => {
@@ -55,7 +89,12 @@ export function PaginaReserva() {
     if (estudio?.branches.length && !flujo.sucursalSeleccionada) {
       flujo.seleccionarSucursal(estudio.branches[0]);
     }
-  }, [estudio?.id]); // intencionalmente limitado: solo al cambio de studio
+  }, [estudio?.id]);
+
+  const totalDuracion = useMemo(
+    () => flujo.serviciosSeleccionados.reduce((acc, s) => acc + s.duration, 0),
+    [flujo.serviciosSeleccionados],
+  );
 
   if (cargando)
     return (
@@ -71,41 +110,10 @@ export function PaginaReserva() {
     );
 
   const moneda: Moneda = estudio.country === 'Colombia' ? 'COP' : 'MXN';
-  const reservasEstudio = reservas.filter((r) => r.studioId === estudio.id);
-  const totalDuracion = flujo.serviciosSeleccionados.reduce((acc, s) => acc + s.duration, 0);
   const requiereColor = flujo.serviciosSeleccionados.some((s) =>
     PALABRAS_COLOR.some((kw) => s.name.toLowerCase().includes(kw)),
   );
-
   const fechaStr = obtenerFechaLocalISO(flujo.fechaSeleccionada);
-  const nombreDia = DIAS_SEMANA[flujo.fechaSeleccionada.getDay()];
-  const horarioDia = estudio.schedule[nombreDia];
-  const esFestivo = !!estudio.holidays?.includes(fechaStr);
-  const estaCerrado = !horarioDia?.isOpen;
-
-  const slots = (() => {
-    if (
-      !flujo.personalSeleccionado ||
-      flujo.serviciosSeleccionados.length === 0 ||
-      esFestivo ||
-      estaCerrado
-    )
-      return [];
-    const miembro = estudio.staff.find((s) => s.id === flujo.personalSeleccionado);
-    const reservasDia = reservasEstudio.filter(
-      (b) =>
-        b.staffId === flujo.personalSeleccionado && b.date === fechaStr && b.status !== 'cancelled',
-    );
-    return obtenerSlotsDisponibles({
-      horarioDia,
-      miembro: miembro ?? { shiftStart: null, shiftEnd: null, breakStart: null, breakEnd: null },
-      reservasExistentes: reservasDia,
-      duracionSlot: totalDuracion,
-      fechaStr,
-      filtrarPasados: true,
-      filtrarDemasiadoCortos: true,
-    });
-  })();
 
   return (
     <div className="min-h-screen bg-white flex flex-col font-sans">
@@ -143,7 +151,10 @@ export function PaginaReserva() {
           </div>
         </div>
         <button
-          onClick={cerrarSesion}
+          onClick={async () => {
+            await cerrarSesion();
+            navegar('/iniciar-sesion');
+          }}
           aria-label="Cerrar sesión"
           className="p-3 bg-slate-50 rounded-full hover:bg-slate-100 text-slate-400"
         >
@@ -161,43 +172,39 @@ export function PaginaReserva() {
       )}
 
       <main className="max-w-4xl mx-auto w-full p-4 md:p-8 space-y-8 pb-32">
-        <SelectorPersonal
+        {/* Paso 1: Servicios */}
+        <SelectorServicio
           estudio={estudio}
-          personalSeleccionado={flujo.personalSeleccionado}
-          onSeleccionar={flujo.seleccionarPersonal}
+          serviciosSeleccionados={flujo.serviciosSeleccionados}
+          moneda={moneda}
+          onAlternar={flujo.alternarServicio}
         />
 
-        {flujo.personalSeleccionado && (
-          <SelectorServicio
+        {/* Paso 2: Calendario — solo cuando hay servicios seleccionados */}
+        {flujo.serviciosSeleccionados.length > 0 && (
+          <SelectorCalendario
             estudio={estudio}
-            personalSeleccionado={flujo.personalSeleccionado}
-            serviciosSeleccionados={flujo.serviciosSeleccionados}
-            moneda={moneda}
-            onAlternar={flujo.alternarServicio}
+            fechaSeleccionada={flujo.fechaSeleccionada}
+            totalDuracion={totalDuracion}
+            onCambiarFecha={flujo.seleccionarFecha}
           />
         )}
 
-        {flujo.serviciosSeleccionados.length > 0 && (
-          <>
-            <SelectorCalendario
-              estudio={estudio}
-              fechaSeleccionada={flujo.fechaSeleccionada}
-              totalDuracion={totalDuracion}
-              onCambiarFecha={flujo.seleccionarFecha}
-            />
-            <GrillaSlots
-              slots={slots}
-              horaSeleccionada={flujo.horaSeleccionada}
-              esFestivo={esFestivo}
-              estaCerrado={estaCerrado}
-              nombreDia={nombreDia}
-              totalDuracion={totalDuracion}
-              onSeleccionar={flujo.seleccionarHora}
-            />
-          </>
+        {/* Paso 3: Especialistas disponibles para el día elegido */}
+        {flujo.serviciosSeleccionados.length > 0 && totalDuracion > 0 && (
+          <SelectorEspecialistaHorario
+            salonId={estudio.id}
+            fecha={fechaStr}
+            totalDuracion={totalDuracion}
+            serviciosSeleccionados={flujo.serviciosSeleccionados}
+            personalSeleccionado={flujo.personalSeleccionado}
+            horaSeleccionada={flujo.horaSeleccionada}
+            onSeleccionar={flujo.seleccionarEspecialistaYHora}
+          />
         )}
 
-        {flujo.horaSeleccionada && (
+        {/* Paso 4: Formulario de contacto */}
+        {flujo.horaSeleccionada && flujo.personalSeleccionado && (
           <FormularioContacto
             estudio={estudio}
             flujo={flujo}
@@ -208,4 +215,42 @@ export function PaginaReserva() {
       </main>
     </div>
   );
+}
+
+function mapearSalonDetalleAEstudio(salon: SalonDetalle, claveSalon: string): Estudio {
+  return {
+    id: salon.id,
+    name: salon.nombre,
+    owner: '',
+    phone: salon.telefono,
+    country: salon.pais,
+    plan: 'STANDARD',
+    branches: ['Principal'],
+    assignedKey: '',
+    clientKey: claveSalon,
+    subscriptionStart: '',
+    paidUntil: '',
+    holidays: salon.festivos,
+    schedule: salon.horario,
+    selectedServices: salon.servicios,
+    customServices: [],
+    staff: salon.personal.map((miembro) => ({
+      id: miembro.id,
+      name: miembro.nombre,
+      specialties: miembro.especialidades,
+      active: true,
+      shiftStart: miembro.horaInicio,
+      shiftEnd: miembro.horaFin,
+      breakStart: miembro.descansoInicio,
+      breakEnd: miembro.descansoFin,
+      workingDays: (miembro.diasTrabajo as number[] | null | undefined) ?? null,
+    })),
+    colorPrimario: salon.colorPrimario,
+    logoUrl: salon.logoUrl,
+    descripcion: salon.descripcion,
+    direccion: salon.direccion,
+    emailContacto: salon.emailContacto,
+    createdAt: '',
+    updatedAt: '',
+  };
 }

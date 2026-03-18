@@ -1,5 +1,6 @@
 import type { Prisma, PrismaClient } from '../generated/prisma/client.js';
 import { prisma } from '../prismaCliente.js';
+import { normalizarPlanEstudio } from './planes.js';
 
 type ClientePrismaTransaccional = Prisma.TransactionClient;
 
@@ -36,6 +37,14 @@ export async function obtenerConfigFidelidad(
   tx?: ClientePrismaTransaccional,
 ): Promise<ConfigFidelidadPorDefecto> {
   const cliente = obtenerClientePrisma(tx);
+  const estudio = await cliente.estudio.findUnique({
+    where: { id: estudioId },
+    select: { plan: true },
+  });
+  if (!estudio || normalizarPlanEstudio(estudio.plan) !== 'PRO') {
+    return configFidelidadPorDefecto(estudioId);
+  }
+
   const config = await cliente.configFidelidad.findUnique({ where: { estudioId } });
   return config ?? configFidelidadPorDefecto(estudioId);
 }

@@ -7,6 +7,10 @@ import { crearTemplateRechazoSalon } from '../lib/templates/rechazoSalon.js';
 import { crearTemplateRecordatorioReserva } from '../lib/templates/recordatorioReserva.js';
 import { crearTemplateResetContrasena } from '../lib/templates/resetContrasena.js';
 import { crearTemplateVerificacionCliente } from '../lib/templates/verificacionCliente.js';
+import {
+  incluirReservaConRelaciones,
+  obtenerServiciosNormalizados,
+} from '../lib/serializacionReservas.js';
 import { prisma } from '../prismaCliente.js';
 
 function obtenerOrigenBackend(): string {
@@ -28,23 +32,12 @@ function normalizarLogo(logoUrl: string | null): string | null {
 async function obtenerReservaCompleta(reservaId: string) {
   return prisma.reserva.findUnique({
     where: { id: reservaId },
-    include: {
-      cliente: true,
-      empleado: true,
-      estudio: true,
-    },
+    include: incluirReservaConRelaciones,
   });
 }
 
-function obtenerServicios(servicios: unknown): string[] {
-  if (!Array.isArray(servicios)) return [];
-  return servicios.map((servicio) => {
-    if (typeof servicio === 'string') return servicio;
-    if (servicio && typeof servicio === 'object' && 'name' in servicio) {
-      return String((servicio as { name: unknown }).name);
-    }
-    return 'Servicio';
-  });
+function obtenerServicios(reserva: { servicios: unknown; serviciosDetalle?: unknown[] }): string[] {
+  return obtenerServiciosNormalizados(reserva).map((servicio) => servicio.name || 'Servicio');
 }
 
 export async function enviarEmailConfirmacion(
@@ -63,10 +56,11 @@ export async function enviarEmailConfirmacion(
       logoUrl: normalizarLogo(reserva.estudio.logoUrl),
       direccion: reserva.estudio.direccion,
       telefono: reserva.estudio.telefono,
+      claveCliente: reserva.estudio.claveCliente,
     },
     cliente: { nombre: reserva.nombreCliente },
     especialista: reserva.empleado.nombre,
-    servicios: obtenerServicios(reserva.servicios),
+    servicios: obtenerServicios(reserva),
     fecha: reserva.fecha,
     hora: reserva.horaInicio,
     duracionTotal: reserva.duracion,
@@ -90,10 +84,11 @@ export async function enviarEmailRecordatorio(reservaId: string): Promise<boolea
       colorPrimario: reserva.estudio.colorPrimario,
       logoUrl: normalizarLogo(reserva.estudio.logoUrl),
       direccion: reserva.estudio.direccion,
+      claveCliente: reserva.estudio.claveCliente,
     },
     cliente: { nombre: reserva.nombreCliente },
     especialista: reserva.empleado.nombre,
-    servicios: obtenerServicios(reserva.servicios),
+    servicios: obtenerServicios(reserva),
     fecha: reserva.fecha,
     hora: reserva.horaInicio,
   });

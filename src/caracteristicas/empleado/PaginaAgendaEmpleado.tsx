@@ -229,6 +229,7 @@ export function PaginaAgendaEmpleado() {
               const horaFin = calcularHoraFin(reserva.horaInicio, reserva.duracion);
               const actualizando =
                 mutacionEstado.isPending && mutacionEstado.variables?.id === reserva.id;
+              const serviciosMostrados = reserva.serviciosDetalle ?? reserva.servicios;
 
               return (
                 <div
@@ -271,7 +272,7 @@ export function PaginaAgendaEmpleado() {
 
                   {/* Servicios */}
                   <div className="flex flex-wrap gap-1">
-                    {reserva.servicios.map((s, i) => (
+                    {serviciosMostrados.map((s, i) => (
                       <span
                         key={i}
                         className="text-[10px] font-semibold bg-slate-100 text-slate-600 px-2 py-0.5 rounded-full"

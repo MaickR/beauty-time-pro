@@ -1,5 +1,5 @@
 import { peticion } from '../lib/clienteHTTP';
-import type { SolicitudSalon } from '../tipos';
+import type { SolicitudSalon, ClienteAdmin, RespuestaBaseClientes } from '../tipos';
 
 type RespuestaSolicitudes = { datos: SolicitudSalon[] };
 type RespuestaSolicitud = { datos: SolicitudSalon };
@@ -36,4 +36,37 @@ export async function rechazarSolicitud(id: string, motivo: string): Promise<voi
 /** Reactiva una solicitud rechazada */
 export async function reactivarSolicitud(id: string): Promise<void> {
   await peticion<RespuestaMensaje>(`/admin/solicitudes/${id}/reactivar`, { method: 'POST' });
+}
+
+export async function obtenerBaseClientesAdmin(params: {
+  pagina?: number;
+  limite?: number;
+  buscar?: string;
+  salonId?: string;
+  pais?: string;
+  servicioFrecuente?: string;
+}): Promise<RespuestaBaseClientes> {
+  const qs = new URLSearchParams();
+  if (params.pagina !== undefined) qs.set('pagina', String(params.pagina));
+  if (params.limite !== undefined) qs.set('limite', String(params.limite));
+  if (params.buscar) qs.set('buscar', params.buscar);
+  if (params.salonId) qs.set('salonId', params.salonId);
+  if (params.pais) qs.set('pais', params.pais);
+  if (params.servicioFrecuente) qs.set('servicioFrecuente', params.servicioFrecuente);
+  return peticion<RespuestaBaseClientes>(`/admin/clientes/todos?${qs}`);
+}
+
+export async function exportarBaseClientesAdmin(params: {
+  buscar?: string;
+  salonId?: string;
+  pais?: string;
+  servicioFrecuente?: string;
+}): Promise<ClienteAdmin[]> {
+  const qs = new URLSearchParams();
+  if (params.buscar) qs.set('buscar', params.buscar);
+  if (params.salonId) qs.set('salonId', params.salonId);
+  if (params.pais) qs.set('pais', params.pais);
+  if (params.servicioFrecuente) qs.set('servicioFrecuente', params.servicioFrecuente);
+  const res = await peticion<{ clientes: ClienteAdmin[] }>(`/admin/clientes/exportar?${qs}`);
+  return res.clientes;
 }

@@ -4,6 +4,7 @@
  * Todas las operaciones hablan con /auth/* en lugar de Firebase Auth.
  */
 import { ErrorAPI, peticion, guardarToken, limpiarToken, URL_BASE } from '../lib/clienteHTTP';
+import { obtenerSalonPublicoPorClave } from './servicioClienteApp';
 
 export type FuncionDesuscribir = () => void;
 
@@ -14,6 +15,12 @@ export interface PermisosSesionMaestro {
   verAuditLog: boolean;
   verMetricas: boolean;
   suspenderSalones: boolean;
+}
+
+export interface DatosAccesoSalon {
+  estudioId: string;
+  nombreSalon: string;
+  claveSalon: string;
 }
 
 interface DatosSesion {
@@ -84,10 +91,16 @@ export async function iniciarSesionConEmailAPI(
 }
 
 /**
- * Autentica con clave de estudio — para clientes que acceden por URL de reserva.
+ * Resuelve la clave del salón y devuelve los datos mínimos para abrir la reserva.
  */
-export async function iniciarSesionConClaveAPI(clave: string): Promise<DatosSesion> {
-  return autenticarConReintento({ clave });
+export async function buscarAccesoSalonPorClaveAPI(clave: string): Promise<DatosAccesoSalon> {
+  limpiarToken();
+  const salon = await obtenerSalonPublicoPorClave(clave);
+  return {
+    estudioId: salon.id,
+    nombreSalon: salon.nombre,
+    claveSalon: clave.trim().toUpperCase(),
+  };
 }
 
 /**

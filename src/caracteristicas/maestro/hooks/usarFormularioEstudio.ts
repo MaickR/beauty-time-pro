@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { guardarEstudio, actualizarEstudio } from '../../../servicios/servicioEstudios';
+import { actualizarEstudio, crearSalonAdmin } from '../../../servicios/servicioEstudios';
 import { sincronizarPersonalEstudio } from '../../../servicios/servicioPersonal';
 import { confirmarPago as _confirmarPago } from '../../../servicios/servicioPagos';
 import { ErrorAPI } from '../../../lib/clienteHTTP';
@@ -9,14 +9,46 @@ import type { Estudio, Servicio, Personal, TurnoTrabajo } from '../../../tipos';
 
 export interface FormularioEstudio extends Omit<Estudio, 'id' | 'createdAt' | 'updatedAt'> {
   id?: string;
+  emailDueno: string;
+  contrasenaDueno: string;
+}
+
+export interface ConfirmacionAltaSalon {
+  nombreSalon: string;
+  nombreDueno: string;
+  emailDueno: string;
+  contrasenaDueno: string;
+  claveDueno: string;
+  claveClientes: string;
+  urlReserva: string;
+}
+
+function generarContrasenaTemporal() {
+  const mayusculas = 'ABCDEFGHJKLMNPQRSTUVWXYZ';
+  const minusculas = 'abcdefghijkmnpqrstuvwxyz';
+  const numeros = '23456789';
+  const mezcla = `${mayusculas}${minusculas}${numeros}`;
+  let resultado =
+    mayusculas[Math.floor(Math.random() * mayusculas.length)] +
+    minusculas[Math.floor(Math.random() * minusculas.length)] +
+    numeros[Math.floor(Math.random() * numeros.length)];
+
+  for (let indice = 0; indice < 9; indice += 1) {
+    resultado += mezcla[Math.floor(Math.random() * mezcla.length)];
+  }
+
+  return resultado;
 }
 
 const crearEstadoInicial = (): FormularioEstudio => ({
   name: '',
   owner: '',
+  emailDueno: '',
+  contrasenaDueno: generarContrasenaTemporal(),
   phone: '',
   website: '',
   country: 'Mexico',
+  plan: 'STANDARD',
   selectedServices: [],
   customServices: [],
   branches: [''],
@@ -39,23 +71,33 @@ function normalizarTextoOpcional(valor?: string | null) {
 }
 
 export function usarFormularioEstudio() {
-  const [modoModal, setModoModal] = useState<'ADD' | 'EDIT' | null>(null);
+  const [modoModal, setModoModal] = useState<'ADD' | 'EDIT' | 'CONFIRMACION' | null>(null);
   const [formulario, setFormulario] = useState<FormularioEstudio>(crearEstadoInicial());
+  const [confirmacionAlta, setConfirmacionAlta] = useState<ConfirmacionAltaSalon | null>(null);
   const [entradaServicioPersonalizado, setEntradaServicioPersonalizado] = useState<
     Record<string, string>
   >({});
 
   const abrirModalAlta = () => {
     setFormulario(crearEstadoInicial());
+    setConfirmacionAlta(null);
     setModoModal('ADD');
   };
 
   const abrirModalEdicion = (estudio: Estudio) => {
-    setFormulario({ ...estudio });
+    setConfirmacionAlta(null);
+    setFormulario({ ...estudio, emailDueno: estudio.emailContacto ?? '', contrasenaDueno: '' });
     setModoModal('EDIT');
   };
 
-  const cerrarModal = () => setModoModal(null);
+  const cerrarModal = () => {
+    setModoModal(null);
+    setConfirmacionAlta(null);
+  };
+
+  const regenerarContrasenaDueno = () => {
+    setFormulario((prev) => ({ ...prev, contrasenaDueno: generarContrasenaTemporal() }));
+  };
 
   const alternarServicio = (nombre: string) => {
     setFormulario((prev) => {
@@ -103,20 +145,19 @@ export function usarFormularioEstudio() {
 
   const enviarFormulario = async (
     e: React.FormEvent,
-    onExito: () => void,
+    alRefrescar: () => Promise<void> | void,
+    mostrarExito: (msg: string) => void,
     mostrarError: (msg: string) => void,
   ) => {
     e.preventDefault();
-    if (modoModal === 'ADD' && (!formulario.assignedKey || !formulario.clientKey)) {
-      mostrarError('Faltan claves de acceso. Asigna Clave Dueño y Clave Clientes.');
-      return;
-    }
     try {
       const sucursales = formulario.branches.map((sucursal) => sucursal.trim()).filter(Boolean);
       const datosGuardar: FormularioEstudio & { updatedAt: string } = {
         ...formulario,
         name: formulario.name.trim(),
         owner: formulario.owner.trim(),
+        emailDueno: formulario.emailDueno.trim().toLowerCase(),
+        contrasenaDueno: formulario.contrasenaDueno,
         phone: formulario.phone.trim(),
         website: normalizarTextoOpcional(formulario.website),
         branches: sucursales,
@@ -126,23 +167,53 @@ export function usarFormularioEstudio() {
       };
 
       if (modoModal === 'ADD') {
-        const fechaInicio = new Date(formulario.subscriptionStart);
-        fechaInicio.setMonth(fechaInicio.getMonth() + 1);
-        datosGuardar.paidUntil = obtenerFechaLocalISO(fechaInicio);
-        const estudioId = `studio_${Date.now()}`;
-        const { id: _idOmitido, ...datosCrear } = datosGuardar;
-        const estudioCreado = await guardarEstudio(estudioId, {
-          ...datosCrear,
-          createdAt: new Date().toISOString(),
-        });
-        if (formulario.staff.length > 0) {
-          await sincronizarPersonalEstudio(estudioCreado.id, formulario.staff);
+        if (!datosGuardar.emailDueno) {
+          mostrarError('Captura el email del dueño antes de registrar el salón.');
+          return;
         }
+
+        if (datosGuardar.contrasenaDueno.trim().length < 8) {
+          mostrarError('La contraseña inicial del dueño debe tener al menos 8 caracteres.');
+          return;
+        }
+
+        const resultado = await crearSalonAdmin({
+          nombreSalon: datosGuardar.name,
+          nombreAdmin: datosGuardar.owner,
+          emailDueno: datosGuardar.emailDueno,
+          contrasenaDueno: datosGuardar.contrasenaDueno,
+          telefono: datosGuardar.phone,
+          pais: datosGuardar.country,
+          plan: datosGuardar.plan,
+          inicioSuscripcion: datosGuardar.subscriptionStart,
+          personal: formulario.staff.map((persona) => ({
+            nombre: persona.name,
+            especialidades: persona.specialties,
+            horaInicio: persona.shiftStart ?? undefined,
+            horaFin: persona.shiftEnd ?? undefined,
+            descansoInicio: persona.breakStart ?? undefined,
+            descansoFin: persona.breakEnd ?? undefined,
+          })),
+        });
+        setConfirmacionAlta({
+          nombreSalon: resultado.estudio.name,
+          nombreDueno: resultado.estudio.owner,
+          emailDueno: resultado.acceso.emailDueno,
+          contrasenaDueno: datosGuardar.contrasenaDueno,
+          claveDueno: resultado.acceso.claveDueno,
+          claveClientes: resultado.acceso.claveClientes,
+          urlReserva: `${window.location.origin}/reservar/${resultado.acceso.claveClientes}`,
+        });
+        setModoModal('CONFIRMACION');
+        await alRefrescar();
+        mostrarExito(`Salón "${resultado.estudio.name}" creado correctamente.`);
       } else if (formulario.id) {
         await actualizarEstudio(formulario.id, datosGuardar);
         await sincronizarPersonalEstudio(formulario.id, formulario.staff);
+        await alRefrescar();
+        mostrarExito(`Se actualizaron los datos de "${datosGuardar.name}".`);
+        cerrarModal();
       }
-      onExito();
     } catch (err) {
       console.error(err);
       mostrarError(
@@ -162,6 +233,8 @@ export function usarFormularioEstudio() {
     abrirModalAlta,
     abrirModalEdicion,
     cerrarModal,
+    confirmacionAlta,
+    regenerarContrasenaDueno,
     alternarServicio,
     actualizarCampoServicio,
     agregarServicioPersonalizado,

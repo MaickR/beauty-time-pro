@@ -4,6 +4,10 @@ interface PropsDialogoConfirmacion {
   abierto: boolean;
   mensaje: string;
   descripcion?: string;
+  etiquetaCampo?: string;
+  placeholderCampo?: string;
+  valorCampo?: string;
+  onCambiarCampo?: (valor: string) => void;
   textoCancelar?: string;
   textoConfirmar?: string;
   variante?: 'peligro' | 'advertencia';
@@ -16,6 +20,10 @@ export function DialogoConfirmacion({
   abierto,
   mensaje,
   descripcion,
+  etiquetaCampo,
+  placeholderCampo,
+  valorCampo,
+  onCambiarCampo,
   textoCancelar = 'Cancelar',
   textoConfirmar = 'Confirmar',
   variante = 'advertencia',
@@ -44,11 +52,29 @@ export function DialogoConfirmacion({
           <div className={`p-4 rounded-full bg-slate-100 ${colorIcono}`}>
             <AlertTriangle className="w-8 h-8" />
           </div>
-          <h2 id="dialogo-titulo" className="text-lg font-black text-slate-900 uppercase tracking-tight">
+          <h2
+            id="dialogo-titulo"
+            className="text-lg font-black text-slate-900 uppercase tracking-tight"
+          >
             {mensaje}
           </h2>
           {descripcion && (
             <p className="text-sm text-slate-500 font-medium leading-relaxed">{descripcion}</p>
+          )}
+          {onCambiarCampo && (
+            <label className="w-full text-left">
+              {etiquetaCampo && (
+                <span className="mb-2 block text-[11px] font-black uppercase tracking-wide text-slate-600">
+                  {etiquetaCampo}
+                </span>
+              )}
+              <input
+                value={valorCampo ?? ''}
+                onChange={(evento) => onCambiarCampo(evento.target.value)}
+                placeholder={placeholderCampo}
+                className="w-full rounded-2xl border border-slate-200 px-4 py-3 text-sm font-semibold text-slate-900 outline-none transition focus:border-pink-400 focus:ring-2 focus:ring-pink-100"
+              />
+            </label>
           )}
         </div>
         <div className="flex gap-3 mt-8">

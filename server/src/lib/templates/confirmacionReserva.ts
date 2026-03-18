@@ -9,6 +9,7 @@ interface DatosTemplateConfirmacion {
     logoUrl: string | null;
     direccion: string | null;
     telefono: string;
+    claveCliente: string;
   };
   cliente: { nombre: string };
   especialista: string;
@@ -33,6 +34,7 @@ function escaparHtml(texto: string): string {
 export function crearTemplateConfirmacionReserva(datos: DatosTemplateConfirmacion): string {
   const color = datos.salon.colorPrimario ?? '#C2185B';
   const enlaceCancelacion = `${env.FRONTEND_URL}/cancelar-reserva/${datos.reservaId}/${datos.tokenCancelacion}`;
+  const enlaceReagendar = `${env.FRONTEND_URL}/reservar/${datos.salon.claveCliente}`;
   const serviciosHtml = datos.servicios.map((servicio) => `<li style="margin-bottom:4px;">${escaparHtml(servicio)}</li>`).join('');
   const logoHtml = datos.salon.logoUrl
     ? `<img src="${datos.salon.logoUrl}" alt="Logo ${escaparHtml(datos.salon.nombre)}" style="max-height:56px; max-width:180px; display:block; margin:0 auto 12px;" />`
@@ -63,6 +65,7 @@ export function crearTemplateConfirmacionReserva(datos: DatosTemplateConfirmacio
           ${datos.recompensaAplicada ? `<div style="margin-bottom:16px; padding:16px; border-radius:16px; background:#dcfce7; color:#166534;"><strong>🎁 Recompensa aplicada:</strong> ${escaparHtml(datos.recompensaAplicada)}</div>` : ''}
           <div style="text-align:center; margin:28px 0;">
             <a href="${enlaceCancelacion}" style="display:inline-block; padding:14px 24px; background:${color}; color:#ffffff; text-decoration:none; border-radius:999px; font-weight:700;">Cancelar mi cita</a>
+            <a href="${enlaceReagendar}" style="display:inline-block; margin-left:12px; padding:14px 24px; background:#ffffff; color:${color}; text-decoration:none; border-radius:999px; font-weight:700; border:2px solid ${color};">Reservar otra cita</a>
           </div>
           <div style="padding-top:20px; border-top:1px solid #e2e8f0; font-size:13px; color:#64748b; line-height:1.6;">
             <strong>${escaparHtml(datos.salon.nombre)}</strong><br />

@@ -1,5 +1,6 @@
 import { peticion } from '../lib/clienteHTTP';
 import { URL_BASE } from '../lib/clienteHTTP';
+import type { PlanEstudio } from '../tipos';
 
 export interface PerfilEstudio {
   id: string;
@@ -8,6 +9,7 @@ export interface PerfilEstudio {
   direccion: string | null;
   telefono: string;
   emailContacto: string | null;
+  plan: PlanEstudio;
   colorPrimario: string;
   logoUrl: string | null;
 }
@@ -19,7 +21,7 @@ export async function obtenerPerfilEstudio(estudioId: string): Promise<PerfilEst
 
 export async function actualizarPerfilEstudio(
   estudioId: string,
-  datos: Partial<Omit<PerfilEstudio, 'id' | 'logoUrl'>>,
+  datos: Partial<Omit<PerfilEstudio, 'id' | 'logoUrl' | 'plan'>>,
 ): Promise<PerfilEstudio> {
   const cuerpo: Record<string, unknown> = {};
 

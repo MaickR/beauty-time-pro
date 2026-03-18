@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useLocation } from 'react-router-dom';
-import { ShieldCheck, LogOut, Store, PlusCircle, PieChart, Users } from 'lucide-react';
+import { ShieldCheck, LogOut, Store, PlusCircle, PieChart, Users, Database } from 'lucide-react';
 import { usarContextoApp } from '../../contextos/ContextoApp';
 import { usarTiendaAuth } from '../../tienda/tiendaAuth';
 import { usarTituloPagina } from '../../hooks/usarTituloPagina';
@@ -16,9 +16,10 @@ import { ModalEstudio } from './componentes/ModalEstudio';
 import { GestionAdmins } from './componentes/GestionAdmins';
 import { MetricasGlobales } from './componentes/MetricasGlobales';
 import { PanelFinanciero } from './componentes/PanelFinanciero';
+import { BaseClientes } from './componentes/BaseClientes';
 import type { Estudio } from '../../tipos';
 
-type TabMaestro = 'directorio' | 'estado-cuenta' | 'administradores';
+type TabMaestro = 'directorio' | 'estado-cuenta' | 'administradores' | 'base-datos';
 
 export function PaginaMaestro() {
   usarTituloPagina('Panel Maestro');
@@ -43,6 +44,7 @@ export function PaginaMaestro() {
       : []),
     ...(puedeGestionarPagos ? ['estado-cuenta' as const] : []),
     ...(puedeCrearAdmins ? ['administradores' as const] : []),
+    ...(puedeVerMetricas ? ['base-datos' as const] : []),
   ];
 
   useEffect(() => {
@@ -120,6 +122,14 @@ export function PaginaMaestro() {
                 <Users className="w-4 h-4" /> Administradores
               </button>
             )}
+            {tabsDisponibles.includes('base-datos') && (
+              <button
+                onClick={() => setTabActiva('base-datos')}
+                className={`px-6 py-3 rounded-xl text-xs font-black transition-all flex items-center gap-2 ${tabActiva === 'base-datos' ? 'bg-white shadow-sm text-slate-900' : 'text-slate-500 hover:text-slate-800'}`}
+              >
+                <Database className="w-4 h-4" /> Base de Datos
+              </button>
+            )}
           </nav>
         )}
 
@@ -189,6 +199,8 @@ export function PaginaMaestro() {
         {tabActiva === 'administradores' && tabsDisponibles.includes('administradores') && (
           <GestionAdmins />
         )}
+
+        {tabActiva === 'base-datos' && tabsDisponibles.includes('base-datos') && <BaseClientes />}
       </main>
 
       {verReservasEstudio && (
@@ -212,6 +224,7 @@ export function PaginaMaestro() {
           modo={hook.modoModal}
           formulario={hook.formulario}
           setFormulario={hook.setFormulario}
+          confirmacionAlta={hook.confirmacionAlta}
           catalogoProps={{
             alternarServicio: hook.alternarServicio,
             actualizarCampoServicio: hook.actualizarCampoServicio,
@@ -220,16 +233,8 @@ export function PaginaMaestro() {
             setEntradaServicioPersonalizado: hook.setEntradaServicioPersonalizado,
           }}
           onAgregarPersonal={hook.agregarPersonal}
-          onEnviar={(e) =>
-            hook.enviarFormulario(
-              e,
-              () => {
-                hook.cerrarModal();
-                recargar();
-              },
-              mostrarToast,
-            )
-          }
+          onRegenerarContrasenaDueno={hook.regenerarContrasenaDueno}
+          onEnviar={(e) => hook.enviarFormulario(e, recargar, mostrarToast, mostrarToast)}
           onCerrar={hook.cerrarModal}
         />
       )}

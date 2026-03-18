@@ -140,3 +140,17 @@ export async function verificarJWT(
     await respuesta.code(401).send({ error: 'No autenticado' });
   }
 }
+
+export async function verificarJWTOpcional(
+  solicitud: FastifyRequest,
+  respuesta: FastifyReply,
+): Promise<void> {
+  const cabeceraAuth = solicitud.headers.authorization;
+  const tieneRefreshCookie = Boolean(solicitud.cookies?.refresh_token);
+
+  if (!cabeceraAuth && !tieneRefreshCookie) {
+    return;
+  }
+
+  await verificarJWT(solicitud, respuesta);
+}

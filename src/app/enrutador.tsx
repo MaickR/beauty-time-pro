@@ -25,11 +25,6 @@ const PaginaBienvenida = lazy(() =>
     default: m.PaginaBienvenida,
   })),
 );
-const PaginaRegistroCliente = lazy(() =>
-  import('../caracteristicas/autenticacion/PaginaRegistroCliente').then((m) => ({
-    default: m.PaginaRegistroCliente,
-  })),
-);
 const PaginaRegistroSalon = lazy(() =>
   import('../caracteristicas/autenticacion/PaginaRegistroSalon').then((m) => ({
     default: m.PaginaRegistroSalon,
@@ -69,26 +64,6 @@ const PaginaCancelarReserva = lazy(() =>
     default: m.PaginaCancelarReserva,
   })),
 );
-const PaginaInicioCliente = lazy(() =>
-  import('../caracteristicas/cliente/PaginaInicioCliente').then((m) => ({
-    default: m.PaginaInicioCliente,
-  })),
-);
-const PaginaDetalleSalon = lazy(() =>
-  import('../caracteristicas/cliente/PaginaDetalleSalon').then((m) => ({
-    default: m.PaginaDetalleSalon,
-  })),
-);
-const PaginaReservaCliente = lazy(() =>
-  import('../caracteristicas/cliente/PaginaReservaCliente').then((m) => ({
-    default: m.PaginaReservaCliente,
-  })),
-);
-const PaginaPerfilCliente = lazy(() =>
-  import('../caracteristicas/cliente/PaginaPerfilCliente').then((m) => ({
-    default: m.PaginaPerfilCliente,
-  })),
-);
 const PaginaAgendaEmpleado = lazy(() =>
   import('../caracteristicas/empleado/PaginaAgendaEmpleado').then((m) => ({
     default: m.PaginaAgendaEmpleado,
@@ -116,6 +91,9 @@ function RedireccionRaiz() {
   }
 
   if (!rol) {
+    if (claveClienteActual) {
+      return <Navigate to={`/reservar/${claveClienteActual}`} replace />;
+    }
     return <PaginaBienvenida />;
   }
 
@@ -141,7 +119,7 @@ export function Enrutador() {
         <Route path="/recuperar-contrasena" element={<PaginaRecuperarContrasena />} />
         <Route path="/reset-contrasena" element={<PaginaResetContrasena />} />
         <Route path="/cancelar-reserva/:reservaId/:token" element={<PaginaCancelarReserva />} />
-        <Route path="/registro/cliente" element={<PaginaRegistroCliente />} />
+        <Route path="/registro/cliente" element={<Navigate to="/" replace />} />
         <Route path="/registro/salon" element={<PaginaRegistroSalon />} />
         <Route path="/espera-aprobacion" element={<PaginaEsperaAprobacion />} />
         <Route path="/email-enviado" element={<PaginaEmailEnviado />} />
@@ -185,50 +163,19 @@ export function Enrutador() {
           />
         </Route>
 
-        {/* Rutas públicas del directorio de salones */}
+        <Route path="/salones/:id" element={<Navigate to="/" replace />} />
+        <Route path="/salones/:id/reservar" element={<Navigate to="/" replace />} />
+        <Route path="/inicio" element={<Navigate to="/" replace />} />
+        <Route path="/mi-perfil" element={<Navigate to="/" replace />} />
+
         <Route
-          path="/salones/:id"
+          path="/reservar/:claveEstudio"
           element={
             <LimiteError>
-              <PaginaDetalleSalon />
+              <PaginaReserva />
             </LimiteError>
           }
         />
-
-        <Route element={<GuardiaRuta rolesPermitidos={['cliente']} />}>
-          <Route
-            path="/reservar/:claveCliente"
-            element={
-              <LimiteError>
-                <PaginaReserva />
-              </LimiteError>
-            }
-          />
-          <Route
-            path="/inicio"
-            element={
-              <LimiteError>
-                <PaginaInicioCliente />
-              </LimiteError>
-            }
-          />
-          <Route
-            path="/salones/:id/reservar"
-            element={
-              <LimiteError>
-                <PaginaReservaCliente />
-              </LimiteError>
-            }
-          />
-          <Route
-            path="/mi-perfil"
-            element={
-              <LimiteError>
-                <PaginaPerfilCliente />
-              </LimiteError>
-            }
-          />
-        </Route>
 
         <Route element={<GuardiaRuta rolesPermitidos={['empleado']} />}>
           <Route

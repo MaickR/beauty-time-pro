@@ -29,6 +29,9 @@ const adaptador = new PrismaMariaDb({
 const prisma = new PrismaClient({ adapter: adaptador });
 
 const ARGUMENTOS = new Set(process.argv.slice(2));
+const NOMBRE_SALON_MIKELOV = 'MIKELOV STUDIO';
+const CLAVE_DUENO_MIKELOV = 'MIKELOV123';
+const EMAIL_DUENO_MIKELOV = 'hola@mikelovstudio.com';
 const ADMINS_SEMILLA = [
   {
     email: 'miguel@beautytimepro.com',
@@ -60,13 +63,13 @@ const DIAS = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', '
 
 async function sembrarMikelovStudio(): Promise<void> {
   const existe = await prisma.estudio.findFirst({
-    where: { claveDueno: 'MIKELOV123' },
+    where: { claveDueno: CLAVE_DUENO_MIKELOV },
     select: { id: true, emailContacto: true },
   });
 
   if (existe) {
     const usuarioDueno = await prisma.usuario.findUnique({
-      where: { email: 'hola@mikelovstudio.com' },
+      where: { email: EMAIL_DUENO_MIKELOV },
       select: { id: true },
     });
 
@@ -78,7 +81,7 @@ async function sembrarMikelovStudio(): Promise<void> {
     } else {
       await prisma.usuario.create({
         data: {
-          email: 'hola@mikelovstudio.com',
+          email: EMAIL_DUENO_MIKELOV,
           hashContrasena: await bcrypt.hash('Salon1234!', 12),
           nombre: 'Miguel Ángel Lovato',
           rol: 'dueno',
@@ -121,7 +124,7 @@ async function sembrarMikelovStudio(): Promise<void> {
         'Av. Presidente Masaryk 123, Polanco, CDMX',
         'Insurgentes Sur 456, Roma, CDMX',
       ],
-      claveDueno: 'MIKELOV123',
+      claveDueno: CLAVE_DUENO_MIKELOV,
       claveCliente: 'MIKELOVSTUDIO',
       estado: 'aprobado',
       fechaAprobacion: new Date(),
@@ -131,7 +134,7 @@ async function sembrarMikelovStudio(): Promise<void> {
       colorPrimario: '#C2185B',
       descripcion: 'Color, uñas y estética premium con atención personalizada.',
       direccion: 'Av. Presidente Masaryk 123, Polanco, CDMX',
-      emailContacto: 'hola@mikelovstudio.com',
+      emailContacto: EMAIL_DUENO_MIKELOV,
       horario,
       servicios: [
         { name: 'Corte Dama / Niña', duration: 60, price: 800 },
@@ -148,7 +151,7 @@ async function sembrarMikelovStudio(): Promise<void> {
   });
 
   await prisma.usuario.upsert({
-    where: { email: 'hola@mikelovstudio.com' },
+    where: { email: EMAIL_DUENO_MIKELOV },
     update: {
       nombre: 'Miguel Ángel Lovato',
       rol: 'dueno',
@@ -157,7 +160,7 @@ async function sembrarMikelovStudio(): Promise<void> {
       estudioId: estudio.id,
     },
     create: {
-      email: 'hola@mikelovstudio.com',
+      email: EMAIL_DUENO_MIKELOV,
       hashContrasena: await bcrypt.hash('Salon1234!', 12),
       nombre: 'Miguel Ángel Lovato',
       rol: 'dueno',
@@ -401,36 +404,86 @@ async function crearUsuarioMaestro(): Promise<void> {
 }
 
 async function limpiarPruebas(): Promise<void> {
-  const estudiosNoAprobados = await prisma.estudio.findMany({
-    where: { estado: { not: 'aprobado' } },
+  const estudioMikelov = await prisma.estudio.findFirst({
+    where: {
+      OR: [
+        { claveDueno: CLAVE_DUENO_MIKELOV },
+        { emailContacto: EMAIL_DUENO_MIKELOV },
+        { nombre: NOMBRE_SALON_MIKELOV },
+      ],
+    },
     select: { id: true },
   });
 
-  const idsEstudiosNoAprobados = estudiosNoAprobados.map((estudio) => estudio.id);
+  const estudiosAEliminar = await prisma.estudio.findMany({
+    where: estudioMikelov ? { id: { not: estudioMikelov.id } } : {},
+    select: { id: true },
+  });
+
+  const idsEstudiosAEliminar = estudiosAEliminar.map((estudio) => estudio.id);
+  const correosProtegidos = new Set([...ADMINS_PROTEGIDOS, EMAIL_DUENO_MIKELOV]);
 
   await prisma.tokenVerificacionApp.deleteMany({});
   await prisma.tokenReset.deleteMany({});
+  await prisma.auditLog.deleteMany({});
   await prisma.clienteApp.deleteMany({});
 
-  if (idsEstudiosNoAprobados.length > 0) {
-    await prisma.reserva.deleteMany({ where: { estudioId: { in: idsEstudiosNoAprobados } } });
-    await prisma.personal.deleteMany({ where: { estudioId: { in: idsEstudiosNoAprobados } } });
-    await prisma.diaFestivo.deleteMany({ where: { estudioId: { in: idsEstudiosNoAprobados } } });
-    await prisma.configFidelidad.deleteMany({ where: { estudioId: { in: idsEstudiosNoAprobados } } });
-    await prisma.puntosFidelidad.deleteMany({ where: { estudioId: { in: idsEstudiosNoAprobados } } });
-    await prisma.pago.deleteMany({ where: { estudioId: { in: idsEstudiosNoAprobados } } });
-    await prisma.usuario.updateMany({
-      where: { rol: 'dueno', estudioId: { in: idsEstudiosNoAprobados } },
-      data: { estudioId: null },
+  if (estudioMikelov) {
+    await prisma.reserva.deleteMany({ where: { estudioId: estudioMikelov.id } });
+    await prisma.puntosFidelidad.deleteMany({ where: { estudioId: estudioMikelov.id } });
+    await prisma.configFidelidad.deleteMany({ where: { estudioId: estudioMikelov.id } });
+    await prisma.pago.deleteMany({ where: { estudioId: estudioMikelov.id } });
+    await prisma.diaFestivo.deleteMany({ where: { estudioId: estudioMikelov.id } });
+    await prisma.cliente.deleteMany({ where: { estudioId: estudioMikelov.id } });
+    await prisma.personal.deleteMany({ where: { estudioId: estudioMikelov.id } });
+  }
+
+  if (idsEstudiosAEliminar.length > 0) {
+    await prisma.usuario.deleteMany({
+      where: {
+        rol: 'dueno',
+        estudioId: { in: idsEstudiosAEliminar },
+        email: { notIn: Array.from(correosProtegidos) },
+      },
     });
-    await prisma.estudio.deleteMany({ where: { id: { in: idsEstudiosNoAprobados } } });
+    await prisma.estudio.deleteMany({ where: { id: { in: idsEstudiosAEliminar } } });
   }
 
   await prisma.usuario.deleteMany({
-    where: { rol: 'dueno', estudioId: null },
+    where: {
+      email: { notIn: Array.from(correosProtegidos) },
+      OR: [
+        { rol: 'maestro' },
+        { rol: 'dueno', estudioId: null },
+      ],
+    },
   });
 
-  console.log('✅ Registros de prueba eliminados');
+  if (estudioMikelov) {
+    await prisma.usuario.upsert({
+      where: { email: EMAIL_DUENO_MIKELOV },
+      update: {
+        nombre: 'Miguel Ángel Lovato',
+        rol: 'dueno',
+        activo: true,
+        emailVerificado: true,
+        estudioId: estudioMikelov.id,
+      },
+      create: {
+        email: EMAIL_DUENO_MIKELOV,
+        hashContrasena: await bcrypt.hash('Salon1234!', 12),
+        nombre: 'Miguel Ángel Lovato',
+        rol: 'dueno',
+        activo: true,
+        emailVerificado: true,
+        estudioId: estudioMikelov.id,
+      },
+    });
+  }
+
+  console.log(estudioMikelov
+    ? '✅ Limpieza completa: se conservó únicamente MIKELOV STUDIO y los admins protegidos.'
+    : '✅ Limpieza completa: se conservaron únicamente los admins protegidos.');
 }
 
 async function main() {

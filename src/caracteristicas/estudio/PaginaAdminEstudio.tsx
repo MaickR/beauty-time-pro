@@ -22,6 +22,7 @@ import { CatalogoServicios } from './componentes/CatalogoServicios';
 import { ConfigFidelidad } from './componentes/ConfigFidelidad';
 import { DirectorioClientes } from './componentes/DirectorioClientes';
 import { PerfilSalon } from './componentes/PerfilSalon';
+import { FormularioPinCancelacion } from './componentes/FormularioPinCancelacion';
 import { Spinner } from '../../componentes/ui/Spinner';
 import { BannerNotificacionesPush } from '../../componentes/ui/BannerNotificacionesPush';
 import { usarNotificacionesPush } from '../../hooks/usarNotificacionesPush';
@@ -29,6 +30,7 @@ import { usarToast } from '../../componentes/ui/ProveedorToast';
 import { ModalSolicitudCancelacion } from './componentes/ModalSolicitudCancelacion';
 import { retirarSolicitudCancelacion } from '../../servicios/servicioSuscripcion';
 import type { Moneda } from '../../tipos';
+import { obtenerDefinicionPlan } from '../../lib/planes';
 
 export function PaginaAdminEstudio() {
   usarTituloPagina('Administración');
@@ -71,6 +73,7 @@ export function PaginaAdminEstudio() {
     );
 
   const moneda: Moneda = estudio.country === 'Colombia' ? 'COP' : 'MXN';
+  const definicionPlan = obtenerDefinicionPlan(estudio.plan);
   const reservasEstudio = reservas.filter((r) => r.studioId === estudio.id);
   const hoySrt = obtenerFechaLocalISO(new Date());
   const mesPrefijo = hoySrt.substring(0, 7);
@@ -238,7 +241,7 @@ export function PaginaAdminEstudio() {
         {seccion === 'fidelidad' && (
           <>
             <h2 className="text-3xl font-black italic uppercase tracking-tighter">Fidelidad</h2>
-            <ConfigFidelidad estudioId={estudio.id} />
+            <ConfigFidelidad estudioId={estudio.id} plan={estudio.plan} />
           </>
         )}
 
@@ -246,6 +249,10 @@ export function PaginaAdminEstudio() {
           <>
             <h2 className="text-3xl font-black italic uppercase tracking-tighter">Mi Salón</h2>
             <PerfilSalon estudioId={estudio.id} />
+            <FormularioPinCancelacion
+              estudioId={estudio.id}
+              pinConfigurado={estudio.pinCancelacionConfigurado ?? false}
+            />
           </>
         )}
 
@@ -263,9 +270,32 @@ export function PaginaAdminEstudio() {
                     Plan activo
                   </p>
                   <p className="text-xl font-black text-slate-900">
-                    Vence el <span className="text-pink-600">{estudio.paidUntil}</span>
+                    {definicionPlan.nombre}{' '}
+                    <span className="text-pink-600">· vence el {estudio.paidUntil}</span>
                   </p>
                 </div>
+              </div>
+
+              <div className="mb-6 rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                <p className="text-xs font-black uppercase tracking-widest text-slate-500">
+                  Límites del plan
+                </p>
+                <ul className="mt-3 space-y-2 text-sm font-medium text-slate-600">
+                  <li>
+                    Servicios activos:{' '}
+                    <span className="font-black text-slate-900">
+                      {definicionPlan.maxServicios === null
+                        ? 'Ilimitados'
+                        : `Hasta ${definicionPlan.maxServicios}`}
+                    </span>
+                  </li>
+                  <li>
+                    Fidelidad:{' '}
+                    <span className="font-black text-slate-900">
+                      {definicionPlan.fidelidad ? 'Incluida' : 'Solo disponible en Pro'}
+                    </span>
+                  </li>
+                </ul>
               </div>
 
               {estudio.cancelacionSolicitada ? (

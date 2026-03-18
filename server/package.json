@@ -12,6 +12,7 @@
     "db:deploy": "prisma migrate deploy",
     "db:studio": "prisma studio",
     "db:generar": "prisma generate",
+    "db:backfill-reserva-servicios": "tsx src/scripts/backfillReservaServicios.ts",
     "postinstall": "prisma generate"
   },
   "keywords": [],

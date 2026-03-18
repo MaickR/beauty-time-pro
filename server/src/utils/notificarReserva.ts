@@ -1,5 +1,9 @@
 import { prisma } from '../prismaCliente.js';
 import {
+  incluirReservaConRelaciones,
+  obtenerServiciosNormalizados,
+} from '../lib/serializacionReservas.js';
+import {
   enviarNotificacionPush,
   type CargaNotificacionPush,
 } from '../servicios/notificacionesPush.js';
@@ -66,18 +70,10 @@ async function obtenerSuscripcionesCliente(clienteId: string | null | undefined)
   });
 }
 
-function obtenerServiciosTexto(servicios: unknown): string {
-  if (!Array.isArray(servicios)) return 'tu cita';
-
-  const nombres = servicios
-    .map((servicio) => {
-      if (typeof servicio === 'string') return servicio;
-      if (servicio && typeof servicio === 'object' && 'name' in servicio) {
-        return String((servicio as { name: unknown }).name);
-      }
-      return null;
-    })
-    .filter((servicio): servicio is string => Boolean(servicio));
+function obtenerServiciosTexto(reserva: { servicios: unknown; serviciosDetalle?: unknown[] }): string {
+  const nombres = obtenerServiciosNormalizados(reserva)
+    .map((servicio) => servicio.name)
+    .filter(Boolean);
 
   return nombres.length > 0 ? nombres.join(', ') : 'tu cita';
 }
@@ -85,12 +81,7 @@ function obtenerServiciosTexto(servicios: unknown): string {
 export async function obtenerReservaConRelacionesPorId(reservaId: string) {
   return prisma.reserva.findUnique({
     where: { id: reservaId },
-    include: {
-      estudio: true,
-      empleado: true,
-      cliente: true,
-      clienteApp: true,
-    },
+    include: incluirReservaConRelaciones,
   });
 }
 
@@ -125,7 +116,7 @@ export async function notificarCitaCancelada(reserva: ReservaConRelaciones) {
   if (suscripcionesCliente.length > 0) {
     await enviarMultiplesSuscripciones(suscripcionesCliente, {
       titulo: 'Tu cita fue cancelada',
-      cuerpo: `La cita de ${obtenerServiciosTexto(reserva.servicios)} para ${reserva.fecha} fue cancelada.`,
+      cuerpo: `La cita de ${obtenerServiciosTexto(reserva)} para ${reserva.fecha} fue cancelada.`,
       url: '/mi-perfil#reservas',
     });
   }

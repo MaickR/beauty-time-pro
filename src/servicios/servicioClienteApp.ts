@@ -6,6 +6,7 @@ import type {
   SalonDetalle,
   PerfilClienteApp,
   SlotTiempo,
+  DisponibilidadEspecialista,
 } from '../tipos';
 
 interface RespuestaSalones {
@@ -16,12 +17,21 @@ interface RespuestaSalon {
   datos: SalonDetalle;
 }
 
+interface RespuestaAccesoSalon {
+  datos: SalonDetalle;
+}
+
 interface RespuestaPerfil {
   datos: PerfilClienteApp;
 }
 
 interface RespuestaSlots {
-  datos: { hora: string; disponible: boolean }[];
+  datos: Array<{
+    hora?: string;
+    disponible?: boolean;
+    time?: string;
+    status?: SlotTiempo['status'];
+  }>;
 }
 
 function normalizarSlots(
@@ -109,6 +119,14 @@ export async function obtenerSalonPublico(id: string): Promise<SalonDetalle> {
   return normalizarSalonDetalle(res.datos);
 }
 
+export async function obtenerSalonPublicoPorClave(clave: string): Promise<SalonDetalle> {
+  const claveNormalizada = clave.trim().toUpperCase();
+  const res = await peticion<RespuestaAccesoSalon>(
+    `/salones/publicos/clave/${encodeURIComponent(claveNormalizada)}`,
+  );
+  return normalizarSalonDetalle(res.datos);
+}
+
 export async function obtenerDisponibilidad(
   salonId: string,
   personalId: string,
@@ -119,6 +137,17 @@ export async function obtenerDisponibilidad(
     `/salones/publicos/${salonId}/disponibilidad?personalId=${personalId}&fecha=${fecha}&duracion=${duracion}`,
   );
   return normalizarSlots(res.datos);
+}
+
+export async function obtenerDisponibilidadCompleta(
+  salonId: string,
+  fecha: string,
+  duracion: number,
+): Promise<DisponibilidadEspecialista[]> {
+  const res = await peticion<{ especialistas: DisponibilidadEspecialista[] }>(
+    `/salones/publicos/${salonId}/disponibilidad-completa?fecha=${encodeURIComponent(fecha)}&duracion=${duracion}`,
+  );
+  return res.especialistas;
 }
 
 export async function obtenerMiPerfil(): Promise<PerfilClienteApp> {

@@ -55,6 +55,14 @@ export function ProveedorContextoApp({ children }: PropsWithChildren) {
   }, [usuario, rol]);
 
   useEffect(() => {
+    if (rol === 'cliente') {
+      setEstudios([]);
+      setReservas([]);
+      setPagos([]);
+      setCargando(false);
+      return;
+    }
+
     if (!usuario) {
       setEstudios([]);
       setReservas([]);
@@ -81,7 +89,7 @@ export function ProveedorContextoApp({ children }: PropsWithChildren) {
           setEstudios(estudiosMapeados);
           setReservas(mapearReservas(resReservas.datos, estudiosMap));
           setPagos(mapearPagos(resPagos.datos, estudiosMap));
-        } else if ((rol === 'dueno' || rol === 'cliente') && estudioActual) {
+        } else if (rol === 'dueno' && estudioActual) {
           const [resEstudio, resReservas, resPagos] = await Promise.all([
             peticion<{ datos: Estudio }>(`/estudios/${estudioActual}`),
             peticion<{ datos: unknown[] }>(`/estudios/${estudioActual}/reservas`),
@@ -100,7 +108,7 @@ export function ProveedorContextoApp({ children }: PropsWithChildren) {
           error instanceof ErrorAPI &&
           error.estado === 404 &&
           Boolean(estudioActual) &&
-          (rol === 'dueno' || rol === 'cliente');
+          rol === 'dueno';
 
         const sesionInvalida = error instanceof ErrorAPI && error.estado === 401;
 
@@ -168,6 +176,7 @@ function mapearEstudios(datos: Estudio[]): Estudio[] {
       phone: (d['telefono'] as string) ?? '',
       website: d['sitioWeb'] as string | undefined,
       country: ((d['pais'] as string) ?? 'Mexico') as import('../tipos').Pais,
+      plan: ((d['plan'] as string) ?? 'STANDARD') as import('../tipos').PlanEstudio,
       branches: (d['sucursales'] as string[]) ?? [],
       assignedKey: (d['claveDueno'] as string) ?? '',
       clientKey: (d['claveCliente'] as string) ?? '',
@@ -187,6 +196,7 @@ function mapearEstudios(datos: Estudio[]): Estudio[] {
       cancelacionSolicitada: (d['cancelacionSolicitada'] as boolean) ?? false,
       fechaSolicitudCancelacion: (d['fechaSolicitudCancelacion'] as string | null) ?? null,
       motivoCancelacion: (d['motivoCancelacion'] as string | null) ?? null,
+      pinCancelacionConfigurado: (d['pinCancelacionConfigurado'] as boolean) ?? false,
     } as Estudio;
   });
 }
@@ -196,13 +206,18 @@ function mapearReservas(datos: unknown[], estudiosMap: Map<string, Estudio>): Re
     const d = r as Record<string, unknown>;
     const estudio = estudiosMap.get(d['estudioId'] as string);
     const empleado = estudio?.staff?.find((s) => s.id === (d['personalId'] as string));
+    const servicios = (d['servicios'] as import('../tipos').Servicio[]) ?? [];
+    const serviciosDetalle =
+      (d['serviciosDetalle'] as import('../tipos').DetalleServicioReserva[] | undefined) ??
+      undefined;
     return {
       id: d['id'] as string,
       studioId: (d['estudioId'] as string) ?? '',
       studioName: estudio?.name ?? '',
       clientName: (d['nombreCliente'] as string) ?? '',
       clientPhone: (d['telefonoCliente'] as string) ?? '',
-      services: (d['servicios'] as import('../tipos').Servicio[]) ?? [],
+      services: servicios,
+      serviceDetails: serviciosDetalle,
       totalDuration: (d['duracion'] as number) ?? 0,
       totalPrice: (d['precioTotal'] as number) ?? 0,
       status: (d['estado'] as import('../tipos').EstadoReserva) ?? 'pending',

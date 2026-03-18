@@ -1,0 +1,2 @@
+-- AlterTable
+ALTER TABLE `estudios` ADD COLUMN `plan` ENUM('STANDARD', 'PRO') NOT NULL DEFAULT 'STANDARD';

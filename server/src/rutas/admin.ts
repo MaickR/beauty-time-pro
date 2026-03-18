@@ -9,7 +9,8 @@ import { resolverCategoriasSalon } from '../lib/categoriasSalon.js';
 import { cacheSalonesPublicos } from '../lib/cache.js';
 import { enviarEmailBienvenidaSalon, enviarEmailRechazoSalon, enviarEmailCancelacionProcesada, enviarEmailRecordatorioPagoSalon } from '../servicios/servicioEmail.js';
 import { registrarAuditoria } from '../utils/auditoria.js';
-import { emailSchema, obtenerMensajeValidacion, telefonoSchema, textoSchema } from '../lib/validacion.js';
+import { emailSchema, fechaIsoSchema, obtenerMensajeValidacion, telefonoSchema, textoSchema } from '../lib/validacion.js';
+import { normalizarPlanEstudio } from '../lib/planes.js';
 
 const esquemaRechazoSolicitud = z.object({
   motivo: textoSchema('motivo', 500, 10),
@@ -22,6 +23,8 @@ const esquemaCrearSalonAdmin = z.object({
   contrasena: z.string().min(8, 'La contraseña debe tener al menos 8 caracteres'),
   telefono: telefonoSchema,
   pais: z.enum(['Mexico', 'Colombia']).optional().default('Mexico'),
+  plan: z.enum(['STANDARD', 'PRO']).optional().default('STANDARD'),
+  inicioSuscripcion: fechaIsoSchema.optional(),
   personal: z.array(z.object({
     nombre: textoSchema('nombre', 120, 2),
     especialidades: z.array(z.string().trim()).default([]),
@@ -462,6 +465,8 @@ export async function rutasAdmin(servidor: FastifyInstance): Promise<void> {
       contrasena: string;
       telefono?: string;
       pais?: string;
+      plan?: 'STANDARD' | 'PRO';
+      inicioSuscripcion?: string;
       personal?: Array<{
         nombre: string;
         especialidades: string[];
@@ -492,6 +497,8 @@ export async function rutasAdmin(servidor: FastifyInstance): Promise<void> {
         contrasena,
         telefono,
         pais,
+        plan,
+        inicioSuscripcion,
         personal,
       } = resultado.data;
 
@@ -509,8 +516,9 @@ export async function rutasAdmin(servidor: FastifyInstance): Promise<void> {
       const claveDueno = `${BASE}${sufijo}`;
       const claveCliente = `${BASE}CLI${sufijo}`;
 
-      const ahora = new Date();
-      const vencimiento = new Date(ahora);
+      const fechaInicio = inicioSuscripcion ? crearFechaDesdeISO(inicioSuscripcion) : new Date();
+      fechaInicio.setHours(0, 0, 0, 0);
+      const vencimiento = new Date(fechaInicio);
       vencimiento.setMonth(vencimiento.getMonth() + 1);
 
       const formatearFecha = (d: Date) => d.toISOString().split('T')[0]!;
@@ -527,15 +535,17 @@ export async function rutasAdmin(servidor: FastifyInstance): Promise<void> {
             propietario: nombreAdmin,
             telefono,
             pais,
+            plan: normalizarPlanEstudio(plan),
             sucursales: [nombreSalon],
             claveDueno,
             claveCliente,
-            inicioSuscripcion: formatearFecha(ahora),
+            inicioSuscripcion: formatearFecha(fechaInicio),
             fechaVencimiento: formatearFecha(vencimiento),
             horario,
             servicios: [],
             serviciosCustom: [],
             festivos: [],
+            emailContacto: emailNorm,
           },
         });
 
@@ -566,7 +576,16 @@ export async function rutasAdmin(servidor: FastifyInstance): Promise<void> {
         return [nuevoEstudio, nuevoUsuario];
       });
 
-      return respuesta.code(201).send({ datos: estudio });
+      return respuesta.code(201).send({
+        datos: {
+          estudio,
+          acceso: {
+            emailDueno: emailNorm,
+            claveDueno,
+            claveClientes: claveCliente,
+          },
+        },
+      });
     },
   );
 
@@ -986,4 +1005,159 @@ export async function rutasAdmin(servidor: FastifyInstance): Promise<void> {
       });
     },
   );
+
+  // ── GET /admin/clientes/todos ─────────────────────────────────────────────
+  // Solo maestro con permiso verMetricas. Devuelve clientes de todos los salones
+  // con estadísticas de visitas calculadas a partir de reservas completadas.
+  servidor.get<{
+    Querystring: {
+      pagina?: string;
+      limite?: string;
+      buscar?: string;
+      salonId?: string;
+      pais?: string;
+      servicioFrecuente?: string;
+    };
+  }>(
+    '/admin/clientes/todos',
+    { preHandler: [verificarJWT, requierePermiso('verMetricas')] },
+    async (solicitud, respuesta) => {
+      const payload = solicitud.user as { rol: string };
+      if (payload.rol !== 'maestro') {
+        return respuesta.code(403).send({ error: 'Sin permisos para esta acción' });
+      }
+
+      const { pagina: paginaStr, limite: limiteStr, buscar, salonId, pais, servicioFrecuente } = solicitud.query;
+      const pagina = Math.max(1, parseInt(paginaStr ?? '1', 10));
+      const limite = Math.min(100, Math.max(1, parseInt(limiteStr ?? '50', 10)));
+
+      const clientes = await construirBaseClientes({ salonId, pais, servicioFrecuente, buscar });
+
+      const total = clientes.length;
+      const saltar = (pagina - 1) * limite;
+      const items = clientes.slice(saltar, saltar + limite);
+
+      return respuesta.send({
+        clientes: items,
+        total,
+        pagina,
+        totalPaginas: Math.ceil(total / limite) || 1,
+      });
+    },
+  );
+
+  // ── GET /admin/clientes/exportar ──────────────────────────────────────────
+  // Devuelve todos los registros (máximo 10,000) para exportación Excel desde el frontend.
+  servidor.get<{
+    Querystring: { salonId?: string; pais?: string; servicioFrecuente?: string; buscar?: string };
+  }>(
+    '/admin/clientes/exportar',
+    { preHandler: [verificarJWT, requierePermiso('verMetricas')] },
+    async (solicitud, respuesta) => {
+      const payload = solicitud.user as { rol: string };
+      if (payload.rol !== 'maestro') {
+        return respuesta.code(403).send({ error: 'Sin permisos para esta acción' });
+      }
+
+      const { salonId, pais, servicioFrecuente, buscar } = solicitud.query;
+      const clientes = await construirBaseClientes({ salonId, pais, servicioFrecuente, buscar });
+
+      return respuesta.send({ clientes: clientes.slice(0, 10_000) });
+    },
+  );
+}
+
+// ─── Helper: construye la lista de clientes con estadísticas ──────────────────
+async function construirBaseClientes(filtros: {
+  salonId?: string;
+  pais?: string;
+  servicioFrecuente?: string;
+  buscar?: string;
+}) {
+  const { salonId, pais, servicioFrecuente, buscar } = filtros;
+
+  // Traer clientes con sus reservas completadas y datos del salón
+  const clientes = await prisma.cliente.findMany({
+    where: {
+      ...(salonId ? { estudioId: salonId } : {}),
+      ...(pais ? { estudio: { pais: pais as 'Mexico' | 'Colombia' } } : {}),
+      activo: true,
+    },
+    select: {
+      id: true,
+      nombre: true,
+      telefono: true,
+      email: true,
+      estudioId: true,
+      estudio: { select: { nombre: true, pais: true } },
+      reservas: {
+        where: { estado: 'completed' },
+        select: {
+          fecha: true,
+          precioTotal: true,
+          serviciosDetalle: {
+            where: { estado: 'completed' },
+            select: { nombre: true },
+          },
+        },
+        orderBy: { fecha: 'desc' },
+      },
+    },
+    orderBy: { creadoEn: 'desc' },
+    take: 15_000,
+  });
+
+  // Construir estadísticas por cliente
+  const resultado = clientes.map((c) => {
+    const reservasCompletadas = c.reservas;
+    const totalVisitas = reservasCompletadas.length;
+    const totalGastado = reservasCompletadas.reduce((acc, r) => acc + r.precioTotal, 0);
+    const ultimaVisita = reservasCompletadas[0]?.fecha ?? null;
+
+    // Servicios únicos realizados + servicio más frecuente
+    const frecuencia = new Map<string, number>();
+    for (const r of reservasCompletadas) {
+      for (const s of r.serviciosDetalle) {
+        frecuencia.set(s.nombre, (frecuencia.get(s.nombre) ?? 0) + 1);
+      }
+    }
+    const serviciosRealizados = Array.from(frecuencia.keys());
+    let servicioMasFrecuente = '';
+    let maxFreq = 0;
+    for (const [nombre, freq] of frecuencia) {
+      if (freq > maxFreq) { maxFreq = freq; servicioMasFrecuente = nombre; }
+    }
+
+    return {
+      nombre: c.nombre,
+      telefono: c.telefono,
+      correo: c.email,
+      estudioId: c.estudioId,
+      nombreEstudio: c.estudio.nombre,
+      paisEstudio: c.estudio.pais,
+      serviciosRealizados,
+      servicioMasFrecuente,
+      ultimaVisita,
+      totalVisitas,
+      totalGastado,
+    };
+  });
+
+  // Filtro de búsqueda
+  const buscNorm = buscar?.toLowerCase().trim();
+  const filtrado = buscNorm
+    ? resultado.filter(
+        (c) =>
+          c.nombre.toLowerCase().includes(buscNorm) ||
+          c.telefono.includes(buscNorm) ||
+          (c.correo ?? '').toLowerCase().includes(buscNorm),
+      )
+    : resultado;
+
+  // Filtro por servicio frecuente
+  const filtradoFinal = servicioFrecuente
+    ? filtrado.filter((c) => c.servicioMasFrecuente.toLowerCase().includes(servicioFrecuente.toLowerCase()))
+    : filtrado;
+
+  return filtradoFinal;
 }

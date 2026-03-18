@@ -31,16 +31,42 @@ interface EstadoFlujo {
 export interface HookFlujoReserva extends EstadoFlujo {
   slots: SlotTiempo[];
   seleccionarPersonal: (id: string) => void;
+  seleccionarEspecialistaYHora: (personalId: string, hora: string) => void;
   alternarServicio: (servicio: Servicio) => void;
   seleccionarFecha: (d: Date) => void;
   seleccionarHora: (h: string) => void;
   seleccionarSucursal: (b: string) => void;
-  actualizarContacto: (campo: keyof Pick<EstadoFlujo, 'nombreCliente' | 'telefonoCliente' | 'fechaNacimiento' | 'email' | 'marcaTinte' | 'numeroTinte'>, valor: string) => void;
-  enviarReserva: (estudio: Estudio, mostrarError: (msg: string) => void, datos: DatosContactoFormulario) => Promise<void>;
+  actualizarContacto: (
+    campo: keyof Pick<
+      EstadoFlujo,
+      | 'nombreCliente'
+      | 'telefonoCliente'
+      | 'fechaNacimiento'
+      | 'email'
+      | 'marcaTinte'
+      | 'numeroTinte'
+    >,
+    valor: string,
+  ) => void;
+  enviarReserva: (
+    estudio: Estudio,
+    mostrarError: (msg: string) => void,
+    datos: DatosContactoFormulario,
+  ) => Promise<void>;
   reiniciar: () => void;
 }
 
-const PALABRAS_COLOR = ['tinte', 'color', 'balayage', 'babylights', 'canas', 'ombré', 'decoloración', 'rayitos', 'mechas'];
+const PALABRAS_COLOR = [
+  'tinte',
+  'color',
+  'balayage',
+  'babylights',
+  'canas',
+  'ombré',
+  'decoloración',
+  'rayitos',
+  'mechas',
+];
 
 export function usarFlujoReserva(): Omit<HookFlujoReserva, 'slots'> {
   const [personalSeleccionado, setPersonalSeleccionado] = useState('');
@@ -64,6 +90,13 @@ export function usarFlujoReserva(): Omit<HookFlujoReserva, 'slots'> {
     setHoraSeleccionada('');
   };
 
+  // Versión que selecciona especialista + hora juntos sin borrar los servicios.
+  // Usada desde el nuevo SelectorEspecialistaHorario (flujo Block 8).
+  const seleccionarEspecialistaYHora = (personalId: string, hora: string) => {
+    setPersonalSeleccionado(personalId);
+    setHoraSeleccionada(hora);
+  };
+
   const alternarServicio = (servicio: Servicio) => {
     setServiciosSeleccionados((prev) => {
       const idx = prev.findIndex((s) => s.name === servicio.name);
@@ -73,12 +106,23 @@ export function usarFlujoReserva(): Omit<HookFlujoReserva, 'slots'> {
     setHoraSeleccionada('');
   };
 
-  const seleccionarFecha = (d: Date) => { setFechaSeleccionada(d); setHoraSeleccionada(''); };
+  const seleccionarFecha = (d: Date) => {
+    setFechaSeleccionada(d);
+    setHoraSeleccionada('');
+  };
   const seleccionarHora = (h: string) => setHoraSeleccionada(h);
   const seleccionarSucursal = (b: string) => setSucursalSeleccionada(b);
 
   const actualizarContacto = (
-    campo: keyof Pick<EstadoFlujo, 'nombreCliente' | 'telefonoCliente' | 'fechaNacimiento' | 'email' | 'marcaTinte' | 'numeroTinte'>,
+    campo: keyof Pick<
+      EstadoFlujo,
+      | 'nombreCliente'
+      | 'telefonoCliente'
+      | 'fechaNacimiento'
+      | 'email'
+      | 'marcaTinte'
+      | 'numeroTinte'
+    >,
     valor: string,
   ) => {
     const setters: Record<string, (v: string) => void> = {
@@ -97,7 +141,12 @@ export function usarFlujoReserva(): Omit<HookFlujoReserva, 'slots'> {
     mostrarError: (msg: string) => void,
     datos: DatosContactoFormulario,
   ) => {
-    if (serviciosSeleccionados.length === 0 || !horaSeleccionada || !sucursalSeleccionada || !personalSeleccionado) {
+    if (
+      serviciosSeleccionados.length === 0 ||
+      !horaSeleccionada ||
+      !sucursalSeleccionada ||
+      !personalSeleccionado
+    ) {
       mostrarError('Por favor completa todos los campos requeridos antes de confirmar.');
       return;
     }
@@ -133,7 +182,7 @@ export function usarFlujoReserva(): Omit<HookFlujoReserva, 'slots'> {
       });
 
       setNombreClienteReservado(datos.nombreCliente);
-  setDescripcionRecompensaGanada(resultado.descripcion ?? '');
+      setDescripcionRecompensaGanada(resultado.descripcion ?? '');
       setReservaExitosa(true);
       setNombreCliente('');
       setTelefonoCliente('');
@@ -171,6 +220,7 @@ export function usarFlujoReserva(): Omit<HookFlujoReserva, 'slots'> {
     nombreClienteReservado,
     descripcionRecompensaGanada,
     seleccionarPersonal,
+    seleccionarEspecialistaYHora,
     alternarServicio,
     seleccionarFecha,
     seleccionarHora,

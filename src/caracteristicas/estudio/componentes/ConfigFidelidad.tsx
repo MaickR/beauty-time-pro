@@ -8,24 +8,31 @@ import {
   obtenerRankingFidelidad,
   type ConfiguracionFidelidad,
 } from '../../../servicios/servicioFidelidad';
+import type { PlanEstudio } from '../../../tipos';
+import { MENSAJE_FUNCION_PRO, obtenerDefinicionPlan } from '../../../lib/planes';
 
 interface PropsConfigFidelidad {
   estudioId: string;
+  plan: PlanEstudio;
 }
 
-export function ConfigFidelidad({ estudioId }: PropsConfigFidelidad) {
+export function ConfigFidelidad({ estudioId, plan }: PropsConfigFidelidad) {
+  const definicionPlan = obtenerDefinicionPlan(plan);
   const { mostrarToast } = usarToast();
   const clienteConsulta = useQueryClient();
+  const planPermiteFidelidad = definicionPlan.fidelidad;
   const { data: config } = useQuery({
     queryKey: ['fidelidad-config', estudioId],
     queryFn: () => obtenerConfigFidelidad(estudioId),
     staleTime: 2 * 60 * 1000,
+    enabled: planPermiteFidelidad,
   });
   const { data: ranking = [] } = useQuery({
     queryKey: ['fidelidad-ranking', estudioId],
     queryFn: () => obtenerRankingFidelidad(estudioId, 10),
     staleTime: 10 * 1000,
     refetchInterval: 10000,
+    enabled: planPermiteFidelidad,
   });
 
   const [formulario, setFormulario] = useState<ConfiguracionFidelidad | null>(null);
@@ -43,6 +50,22 @@ export function ConfigFidelidad({ estudioId }: PropsConfigFidelidad) {
     },
     onError: () => mostrarToast('No fue posible guardar la configuración'),
   });
+
+  if (!planPermiteFidelidad) {
+    return (
+      <section className="max-w-4xl rounded-[2.5rem] border border-amber-200 bg-amber-50 p-8 shadow-sm">
+        <p className="text-xs font-black uppercase tracking-widest text-amber-700">
+          Función disponible solo en Pro
+        </p>
+        <h3 className="mt-3 text-2xl font-black tracking-tight text-slate-900">
+          El programa de fidelidad no está incluido en el plan {definicionPlan.nombre}
+        </h3>
+        <p className="mt-3 text-sm font-medium leading-relaxed text-slate-600">
+          {MENSAJE_FUNCION_PRO}
+        </p>
+      </section>
+    );
+  }
 
   if (!formulario) {
     return (

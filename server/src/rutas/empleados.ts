@@ -1,6 +1,10 @@
 import type { FastifyInstance } from 'fastify';
 import bcrypt from 'bcrypt';
 import { z } from 'zod';
+import {
+  incluirServiciosDetalleReserva,
+  serializarReservaApi,
+} from '../lib/serializacionReservas.js';
 import { prisma } from '../prismaCliente.js';
 import { verificarJWT } from '../middleware/autenticacion.js';
 import type { PayloadJWT } from '../middleware/autenticacion.js';
@@ -38,22 +42,10 @@ export async function rutasEmpleados(servidor: FastifyInstance): Promise<void> {
       const reservas = await prisma.reserva.findMany({
         where: { personalId: payload.personalId, fecha, estado: { not: 'cancelled' } },
         orderBy: { horaInicio: 'asc' },
-        select: {
-          id: true,
-          fecha: true,
-          horaInicio: true,
-          duracion: true,
-          estado: true,
-          servicios: true,
-          precioTotal: true,
-          nombreCliente: true,
-          telefonoCliente: true,
-          clienteAppId: true,
-          sucursal: true,
-        },
+        include: incluirServiciosDetalleReserva,
       });
 
-      return respuesta.send({ datos: reservas });
+      return respuesta.send({ datos: reservas.map(serializarReservaApi) });
     },
   );
 
@@ -102,14 +94,23 @@ export async function rutasEmpleados(servidor: FastifyInstance): Promise<void> {
         return respuesta.code(403).send({ error: 'Esta reserva no te pertenece' });
       }
 
-      const actualizada = await prisma.reserva.update({
+      await prisma.reserva.update({
         where: { id: solicitud.params.id },
         data: { estado: solicitud.body.estado },
       });
 
+      const actualizada = await prisma.reserva.findUnique({
+        where: { id: solicitud.params.id },
+        include: incluirServiciosDetalleReserva,
+      });
+
+      if (!actualizada) {
+        return respuesta.code(404).send({ error: 'Reserva no encontrada' });
+      }
+
       console.log(`[Empleado] cambió reserva ${solicitud.params.id} a ${solicitud.body.estado}`);
 
-      return respuesta.send({ datos: actualizada });
+      return respuesta.send({ datos: serializarReservaApi(actualizada) });
     },
   );
 

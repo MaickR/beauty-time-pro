@@ -5,9 +5,16 @@ import type { Moneda, Servicio } from '../../../tipos';
 interface PropsFormularioNuevoServicio {
   moneda: Moneda;
   onAgregar: (servicio: Servicio) => void;
+  bloqueado?: boolean;
+  mensajeBloqueo?: string;
 }
 
-export function FormularioNuevoServicio({ moneda, onAgregar }: PropsFormularioNuevoServicio) {
+export function FormularioNuevoServicio({
+  moneda,
+  onAgregar,
+  bloqueado = false,
+  mensajeBloqueo,
+}: PropsFormularioNuevoServicio) {
   const [nombre, setNombre] = useState('');
   const [duracion, setDuracion] = useState('60');
   const [precio, setPrecio] = useState('350');
@@ -83,12 +90,16 @@ export function FormularioNuevoServicio({ moneda, onAgregar }: PropsFormularioNu
         <button
           type="button"
           onClick={manejarAgregar}
-          className="inline-flex items-center justify-center gap-2 rounded-2xl bg-slate-900 px-5 py-3 text-xs font-black uppercase text-white transition hover:bg-black"
+          disabled={bloqueado}
+          className="inline-flex items-center justify-center gap-2 rounded-2xl bg-slate-900 px-5 py-3 text-xs font-black uppercase text-white transition hover:bg-black disabled:opacity-50"
         >
           <PlusCircle className="h-4 w-4" />
           Agregar
         </button>
       </div>
+      {mensajeBloqueo && (
+        <p className="mt-3 text-xs font-medium text-amber-700">{mensajeBloqueo}</p>
+      )}
     </div>
   );
 }
