@@ -168,6 +168,14 @@ export async function cambiarContrasenaAPI(
   });
 }
 
+export async function solicitarCambioEmailAPI(emailNuevo: string): Promise<{ mensaje: string }> {
+  const respuesta = await peticion<{ datos: { mensaje: string } }>('/auth/solicitar-cambio-email', {
+    method: 'POST',
+    body: JSON.stringify({ emailNuevo }),
+  });
+  return respuesta.datos;
+}
+
 /**
  * Cierra sesión en el servidor (limpia la cookie httpOnly) y el estado local.
  */

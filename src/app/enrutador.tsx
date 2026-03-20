@@ -163,10 +163,12 @@ export function Enrutador() {
           />
         </Route>
 
+        <Route path="/salones" element={<Navigate to="/" replace />} />
         <Route path="/salones/:id" element={<Navigate to="/" replace />} />
         <Route path="/salones/:id/reservar" element={<Navigate to="/" replace />} />
         <Route path="/inicio" element={<Navigate to="/" replace />} />
         <Route path="/mi-perfil" element={<Navigate to="/" replace />} />
+        <Route path="/administracion" element={<Navigate to="/" replace />} />
 
         <Route
           path="/reservar/:claveEstudio"

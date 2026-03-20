@@ -22,16 +22,19 @@ function obtenerFechaLocalISO(fecha: Date): string {
 
 export function PanelPersonal({ estudio, reservas, fechaVista }: PropsPanelPersonal) {
   const { recargar } = usarContextoApp();
-  const [personalVisual, setPersonalVisual] = useState(estudio.staff);
+  const personalInicial = estudio.staff ?? [];
+  const serviciosDisponibles = estudio.selectedServices ?? [];
+  const reservasDisponibles = reservas ?? [];
+  const [personalVisual, setPersonalVisual] = useState(personalInicial);
   const [personalPendiente, setPersonalPendiente] = useState<string[]>([]);
-  const [personalModal, setPersonalModal] = useState<(typeof estudio.staff)[number] | null>(null);
+  const [personalModal, setPersonalModal] = useState<(typeof personalInicial)[number] | null>(null);
   const fechaStr = obtenerFechaLocalISO(fechaVista);
   const diaSemana = fechaVista.toLocaleString('es-ES', { weekday: 'long' });
   const diaNombre = diaSemana.charAt(0).toUpperCase() + diaSemana.slice(1);
   const horarioDia = estudio.schedule?.[diaNombre];
 
   useEffect(() => {
-    setPersonalVisual(estudio.staff);
+    setPersonalVisual(estudio.staff ?? []);
   }, [estudio.staff]);
 
   const { mutate: guardarCambioPersonal } = useMutation({
@@ -118,7 +121,7 @@ export function PanelPersonal({ estudio, reservas, fechaVista }: PropsPanelPerso
       <div className="mb-6">
         <FormularioNuevoPersonal
           estudioId={estudio.id}
-          serviciosDisponibles={estudio.selectedServices}
+          serviciosDisponibles={serviciosDisponibles}
         />
       </div>
 
@@ -130,7 +133,7 @@ export function PanelPersonal({ estudio, reservas, fechaVista }: PropsPanelPerso
         )}
         {personalVisual.map((st) => {
           const estaGuardando = personalPendiente.includes(st.id);
-          const reservasEspecialista = reservas.filter(
+          const reservasEspecialista = reservasDisponibles.filter(
             (b) =>
               b.studioId === estudio.id &&
               b.staffId === st.id &&
@@ -275,7 +278,7 @@ export function PanelPersonal({ estudio, reservas, fechaVista }: PropsPanelPerso
                     Especialidades activas:
                   </p>
                   <div className="flex flex-wrap gap-2">
-                    {estudio.selectedServices.map((srv) => {
+                    {serviciosDisponibles.map((srv) => {
                       const asignado = st.specialties.includes(srv.name);
                       return (
                         <button
@@ -356,7 +359,7 @@ export function PanelPersonal({ estudio, reservas, fechaVista }: PropsPanelPerso
         abierto={personalModal !== null}
         estudioId={estudio.id}
         personal={personalModal}
-        serviciosDisponibles={estudio.selectedServices.map((servicio) => servicio.name)}
+        serviciosDisponibles={serviciosDisponibles.map((servicio) => servicio.name)}
         onCerrar={() => setPersonalModal(null)}
         onGuardado={(personalActualizado) => {
           setPersonalVisual((actual) =>

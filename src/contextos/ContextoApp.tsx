@@ -55,6 +55,9 @@ export function ProveedorContextoApp({ children }: PropsWithChildren) {
   }, [usuario, rol]);
 
   useEffect(() => {
+    const tokenSesion =
+      typeof window !== 'undefined' ? sessionStorage.getItem('btp_access_token') : null;
+
     if (rol === 'cliente') {
       setEstudios([]);
       setReservas([]);
@@ -70,6 +73,15 @@ export function ProveedorContextoApp({ children }: PropsWithChildren) {
       setCargando(false);
       return;
     }
+
+    if (!tokenSesion) {
+      setEstudios([]);
+      setReservas([]);
+      setPagos([]);
+      setCargando(false);
+      return;
+    }
+
     setCargando(true);
 
     void (async () => {

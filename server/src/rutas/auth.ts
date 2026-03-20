@@ -1,15 +1,19 @@
 import type { FastifyInstance } from 'fastify';
 import bcrypt from 'bcrypt';
 import crypto from 'crypto';
+import { z } from 'zod';
 import { prisma } from '../prismaCliente.js';
 import { env } from '../lib/env.js';
-import { enviarEmailResetContrasena } from '../servicios/servicioEmail.js';
+import { enviarEmailResetContrasena, enviarEmailVerificacionCliente } from '../servicios/servicioEmail.js';
 import { verificarJWT } from '../middleware/autenticacion.js';
 
 const REFRESH_EXPIRA = env.JWT_REFRESH_EXPIRA_EN;
 const COOKIE_REFRESH = 'refresh_token';
 
 const REGEX_CONTRASENA = /^(?=.*[A-Z])(?=.*[0-9]).{8,}$/;
+const esquemaCambioEmail = z.object({
+  emailNuevo: z.string().trim().email('Ingresa un correo válido'),
+});
 
 interface PermisosJWT {
   aprobarSalones: boolean;
@@ -59,15 +63,40 @@ export async function rutasAuth(servidor: FastifyInstance): Promise<void> {
 
         const estudioDueno = await prisma.estudio.findFirst({
           where: { claveDueno: claveNorm },
-          select: { id: true },
+          select: {
+            id: true,
+            activo: true,
+            estado: true,
+            usuarios: {
+              where: { rol: 'dueno' },
+              select: { id: true, nombre: true, email: true, activo: true },
+              take: 1,
+            },
+          },
         });
         if (estudioDueno) {
+          const usuarioDueno = estudioDueno.usuarios[0];
+
+          if (!estudioDueno.activo || estudioDueno.estado === 'suspendido') {
+            return respuesta.code(403).send({
+              error: 'Tu salón está suspendido. Contacta a Beauty Time Pro.',
+              codigo: 'SALON_SUSPENDIDO',
+            });
+          }
+
+          if (!usuarioDueno?.activo) {
+            return respuesta.code(403).send({
+              error: 'Tu cuenta ha sido desactivada.',
+              codigo: 'CUENTA_DESACTIVADA',
+            });
+          }
+
           return emitirTokens(servidor, respuesta, {
-            sub: estudioDueno.id,
+            sub: usuarioDueno.id,
             rol: 'dueno',
             estudioId: estudioDueno.id,
-            nombre: '',
-            email: '',
+            nombre: usuarioDueno.nombre,
+            email: usuarioDueno.email,
           });
         }
 
@@ -171,6 +200,13 @@ export async function rutasAuth(servidor: FastifyInstance): Promise<void> {
           });
         }
 
+        if (usuario.rol === 'dueno' && usuario.estudio?.estado === 'suspendido') {
+          return respuesta.code(403).send({
+            error: 'Tu salón está suspendido',
+            codigo: 'SALON_SUSPENDIDO',
+          });
+        }
+
         // Dueño pendiente de aprobación — verificar estado del estudio
         if (usuario.rol === 'dueno' && usuario.estudio) {
           if (usuario.estudio.estado === 'pendiente') {
@@ -188,6 +224,13 @@ export async function rutasAuth(servidor: FastifyInstance): Promise<void> {
           }
         }
         return respuesta.code(403).send({ error: 'Esta cuenta existe pero no tiene acceso activo. Contacta al administrador.' });
+      }
+
+      if (usuario.rol === 'dueno' && usuario.estudio?.estado === 'suspendido') {
+        return respuesta.code(403).send({
+          error: 'Tu salón está suspendido',
+          codigo: 'SALON_SUSPENDIDO',
+        });
       }
 
       void prisma.usuario.update({
@@ -278,6 +321,71 @@ export async function rutasAuth(servidor: FastifyInstance): Promise<void> {
       });
 
       return respuesta.send({ datos: { mensaje: 'Contraseña actualizada correctamente' } });
+    },
+  );
+
+  servidor.post<{ Body: { emailNuevo: string } }>(
+    '/auth/solicitar-cambio-email',
+    { preHandler: verificarJWT },
+    async (solicitud, respuesta) => {
+      const payload = solicitud.user as { sub: string; rol: string };
+      if (payload.rol !== 'dueno') {
+        return respuesta.code(403).send({ error: 'Sin permisos para esta acción' });
+      }
+
+      const resultado = esquemaCambioEmail.safeParse(solicitud.body);
+      if (!resultado.success) {
+        return respuesta.code(400).send({ error: resultado.error.issues[0]?.message ?? 'Email inválido' });
+      }
+
+      const emailNuevo = resultado.data.emailNuevo.trim().toLowerCase();
+      const usuario = await prisma.usuario.findUnique({
+        where: { id: payload.sub },
+        select: { id: true, nombre: true, email: true, rol: true },
+      });
+
+      if (!usuario || usuario.rol !== 'dueno') {
+        return respuesta.code(404).send({ error: 'Usuario no encontrado' });
+      }
+
+      if (usuario.email === emailNuevo) {
+        return respuesta.code(400).send({ error: 'Ese correo ya es el actual de tu cuenta.' });
+      }
+
+      const [duplicadoUsuario, duplicadoCliente] = await Promise.all([
+        prisma.usuario.findUnique({ where: { email: emailNuevo }, select: { id: true } }),
+        prisma.clienteApp.findFirst({
+          where: { OR: [{ email: emailNuevo }, { emailPendiente: emailNuevo }] },
+          select: { id: true },
+        }),
+      ]);
+
+      if (duplicadoUsuario || duplicadoCliente) {
+        return respuesta.code(409).send({ error: 'Ese correo ya está registrado en otra cuenta.' });
+      }
+
+      const token = servidor.jwt.sign(
+        {
+          tipo: 'cambio_email_dueno',
+          usuarioId: usuario.id,
+          emailNuevo,
+        },
+        { expiresIn: '24h' },
+      );
+
+      const enlaceVerificacion = `${env.FRONTEND_URL}/verificar-email?token=${token}`;
+      void enviarEmailVerificacionCliente({
+        emailDestino: emailNuevo,
+        nombreCliente: usuario.nombre || 'Beauty Time Pro',
+        enlaceVerificacion,
+      });
+
+      return respuesta.send({
+        datos: {
+          mensaje:
+            'Enviamos un enlace de verificación al nuevo correo. El cambio se aplicará cuando confirmes desde ese email.',
+        },
+      });
     },
   );
 

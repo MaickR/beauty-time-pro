@@ -100,34 +100,106 @@ export function BaseClientes() {
         'Total gastado': c.totalGastado,
       }));
 
-      const hoja = XLSX.utils.json_to_sheet(filas);
+      const encabezados = Object.keys(
+        filas[0] ?? {
+          Nombre: '',
+          Teléfono: '',
+          Correo: '',
+          Salón: '',
+          País: '',
+          'Servicio frecuente': '',
+          'Última visita': '',
+          'Total visitas': '',
+          'Total gastado': '',
+        },
+      );
+      const totalGastado = todos.reduce(
+        (acumulado, cliente) => acumulado + cliente.totalGastado,
+        0,
+      );
+      const datos = [
+        ['Base de Clientes — Beauty Time Pro'],
+        [
+          `Generado: ${new Date().toLocaleDateString('es-MX', { year: 'numeric', month: 'long', day: 'numeric' })}`,
+        ],
+        [],
+        encabezados,
+        ...filas.map((fila) =>
+          encabezados.map((clave) => (fila as Record<string, unknown>)[clave] ?? ''),
+        ),
+        [],
+        ['Total clientes', todos.length, '', '', '', '', '', 'Suma total gastado', totalGastado],
+      ];
 
-      // Estilo de encabezados — bold + fondo rosa
-      const encabezados = Object.keys(filas[0] ?? {});
-      encabezados.forEach((_, idx) => {
-        const celda = XLSX.utils.encode_cell({ r: 0, c: idx });
-        if (!hoja[celda]) return;
-        hoja[celda].s = {
-          font: { bold: true },
-          fill: { patternType: 'solid', fgColor: { rgb: 'F472B6' } },
-          alignment: { horizontal: 'center' },
-        };
+      const hoja = XLSX.utils.aoa_to_sheet(datos);
+      hoja['!merges'] = [
+        { s: { r: 0, c: 0 }, e: { r: 0, c: encabezados.length - 1 } },
+        { s: { r: 1, c: 0 }, e: { r: 1, c: encabezados.length - 1 } },
+      ];
+
+      const aplicarEstilo = (referencia: string, estilo: Record<string, unknown>) => {
+        const celda = hoja[referencia] as Record<string, unknown> | undefined;
+        if (!celda) return;
+        celda.s = estilo;
+      };
+
+      const estiloTitulo = {
+        font: { bold: true, sz: 14, color: { rgb: 'FFFFFF' } },
+        fill: { patternType: 'solid', fgColor: { rgb: 'F48FB1' } },
+        alignment: { horizontal: 'center' },
+      };
+      const estiloFecha = {
+        font: { color: { rgb: '6B7280' }, italic: true },
+        fill: { patternType: 'solid', fgColor: { rgb: 'F3F4F6' } },
+      };
+      const estiloEncabezado = {
+        font: { bold: true, color: { rgb: '831843' } },
+        fill: { patternType: 'solid', fgColor: { rgb: 'FCE4EC' } },
+        border: {
+          top: { style: 'thin', color: { rgb: 'E5E7EB' } },
+          bottom: { style: 'thin', color: { rgb: 'E5E7EB' } },
+          left: { style: 'thin', color: { rgb: 'F3F4F6' } },
+          right: { style: 'thin', color: { rgb: 'F3F4F6' } },
+        },
+      };
+
+      for (let columna = 0; columna < encabezados.length; columna += 1) {
+        aplicarEstilo(XLSX.utils.encode_cell({ r: 0, c: columna }), estiloTitulo);
+        aplicarEstilo(XLSX.utils.encode_cell({ r: 1, c: columna }), estiloFecha);
+        aplicarEstilo(XLSX.utils.encode_cell({ r: 3, c: columna }), estiloEncabezado);
+      }
+
+      filas.forEach((_, indice) => {
+        const fondo = indice % 2 === 0 ? 'FFFFFF' : 'FAFAFA';
+        encabezados.forEach((_, columna) => {
+          aplicarEstilo(XLSX.utils.encode_cell({ r: indice + 4, c: columna }), {
+            fill: { patternType: 'solid', fgColor: { rgb: fondo } },
+            border: {
+              left: { style: 'thin', color: { rgb: 'F3F4F6' } },
+              right: { style: 'thin', color: { rgb: 'F3F4F6' } },
+            },
+          });
+        });
       });
 
-      // Ancho automático de columnas
-      const anchos = encabezados.map((k) => ({
-        wch:
-          Math.max(
-            k.length,
-            ...todos.map((c) => String((c as unknown as Record<string, unknown>)[k] ?? '').length),
-          ) + 2,
+      encabezados.forEach((_, columna) => {
+        aplicarEstilo(XLSX.utils.encode_cell({ r: datos.length - 1, c: columna }), {
+          font: { bold: true },
+          fill: { patternType: 'solid', fgColor: { rgb: 'FCE7F3' } },
+        });
+      });
+
+      hoja['!cols'] = encabezados.map((clave) => ({
+        wch: Math.max(
+          clave.length + 4,
+          ...filas.map((fila) => String((fila as Record<string, unknown>)[clave] ?? '').length + 2),
+        ),
       }));
-      hoja['!cols'] = anchos;
 
       const libro = XLSX.utils.book_new();
       XLSX.utils.book_append_sheet(libro, hoja, 'Clientes');
 
-      const fecha = new Date().toISOString().slice(0, 10);
+      const fecha = new Date().toLocaleDateString('sv-SE');
       XLSX.writeFile(libro, `clientes-beauty-time-pro-${fecha}.xlsx`);
     } catch {
       setError('No se pudo exportar el archivo.');
@@ -256,7 +328,10 @@ export function BaseClientes() {
               </thead>
               <tbody>
                 {clientes.map((c, idx) => (
-                  <tr key={c.id} className={idx % 2 === 0 ? 'bg-white' : 'bg-slate-50/50'}>
+                  <tr
+                    key={`${c.estudioId}-${c.telefono}-${idx}`}
+                    className={idx % 2 === 0 ? 'bg-white' : 'bg-slate-50/50'}
+                  >
                     <td className="px-4 py-3 font-medium text-slate-900 whitespace-nowrap">
                       {c.nombre}
                     </td>

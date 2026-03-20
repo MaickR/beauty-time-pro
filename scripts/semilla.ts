@@ -10,11 +10,9 @@
 import { config } from 'dotenv';
 import bcrypt from 'bcrypt';
 import { PrismaMariaDb } from '@prisma/adapter-mariadb';
-import clientePrisma from '../server/src/generated/prisma/client.js';
+import { PrismaClient } from '../server/src/generated/prisma/client.js';
 
 config({ path: 'server/.env' });
-
-const { PrismaClient } = clientePrisma;
 
 const urlBaseDatos = new URL(process.env.DATABASE_URL ?? 'mysql://root:1234@localhost:3306/beauty_time_pro');
 
@@ -41,7 +39,7 @@ const ADMINS_SEMILLA = [
     contrasena: process.env.ADMIN_PRINCIPAL_CONTRASENA ?? 'Admin1234!',
   },
   {
-    email: 'msrl.dev420@gmail.com',
+    email: 'admin.secundario@beautytimepro.com',
     nombre: 'Mike',
     apellido: 'Admin',
     alias: 'Mike Admin',
@@ -61,42 +59,21 @@ function obtenerFechaLocalISO(fecha: Date): string {
 
 const DIAS = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'];
 
+function construirHorarioMikelov() {
+  return DIAS.reduce(
+    (acc, dia) => ({
+      ...acc,
+      [dia]: { isOpen: dia !== 'Domingo', openTime: '09:00', closeTime: '20:00' },
+    }),
+    {} as Record<string, { isOpen: boolean; openTime: string; closeTime: string }>,
+  );
+}
+
 async function sembrarMikelovStudio(): Promise<void> {
   const existe = await prisma.estudio.findFirst({
     where: { claveDueno: CLAVE_DUENO_MIKELOV },
     select: { id: true, emailContacto: true },
   });
-
-  if (existe) {
-    const usuarioDueno = await prisma.usuario.findUnique({
-      where: { email: EMAIL_DUENO_MIKELOV },
-      select: { id: true },
-    });
-
-    if (usuarioDueno) {
-      await prisma.usuario.update({
-        where: { id: usuarioDueno.id },
-        data: { estudioId: existe.id, rol: 'dueno', activo: true, emailVerificado: true },
-      });
-    } else {
-      await prisma.usuario.create({
-        data: {
-          email: EMAIL_DUENO_MIKELOV,
-          hashContrasena: await bcrypt.hash('Salon1234!', 12),
-          nombre: 'Miguel Ángel Lovato',
-          rol: 'dueno',
-          activo: true,
-          emailVerificado: true,
-          estudioId: existe.id,
-        },
-      });
-    }
-
-    console.log('ℹ️  MIKELOV STUDIO ya existe. No se insertaron datos duplicados.');
-    return;
-  }
-
-  console.log('🌱 Generando MIKELOV STUDIO...');
 
   const todayStr = obtenerFechaLocalISO(new Date());
   const due = new Date();
@@ -105,54 +82,61 @@ async function sembrarMikelovStudio(): Promise<void> {
   tomorrow.setDate(tomorrow.getDate() + 1);
   const tomorrowStr = obtenerFechaLocalISO(tomorrow);
 
-  const horario = DIAS.reduce(
-    (acc, dia) => ({
-      ...acc,
-      [dia]: { isOpen: dia !== 'Domingo', openTime: '09:00', closeTime: '20:00' },
-    }),
-    {} as Record<string, { isOpen: boolean; openTime: string; closeTime: string }>,
+  const horario = construirHorarioMikelov();
+  const datosEstudioMikelov = {
+    nombre: 'MIKELOV STUDIO',
+    propietario: 'Miguel Ángel Lovato',
+    telefono: '55 1234 5678',
+    sitioWeb: 'www.mikelovstudio.com',
+    pais: 'Mexico' as const,
+    sucursales: [
+      'Av. Presidente Masaryk 123, Polanco, CDMX',
+      'Insurgentes Sur 456, Roma, CDMX',
+    ],
+    claveDueno: CLAVE_DUENO_MIKELOV,
+    claveCliente: 'MIKELOVSTUDIO',
+    estado: 'aprobado' as const,
+    fechaAprobacion: new Date(),
+    inicioSuscripcion: '2026-02-15',
+    fechaVencimiento: obtenerFechaLocalISO(due),
+    festivos: [],
+    colorPrimario: '#C2185B',
+    descripcion: 'Color, uñas y estética premium con atención personalizada.',
+    direccion: 'Av. Presidente Masaryk 123, Polanco, CDMX',
+    emailContacto: EMAIL_DUENO_MIKELOV,
+    horario,
+    servicios: [
+      { name: 'Corte Dama / Niña', duration: 60, price: 800 },
+      { name: 'Balayage', duration: 240, price: 3500 },
+      { name: 'Tinte Global', duration: 120, price: 1800 },
+      { name: 'Diseño de Ceja', duration: 30, price: 400 },
+      { name: 'Lash Lifting', duration: 90, price: 950 },
+      { name: 'Mani Spa', duration: 60, price: 600 },
+      { name: 'Pedi Spa', duration: 60, price: 700 },
+      { name: 'Gel Semi Permanente', duration: 60, price: 500 },
+    ],
+    serviciosCustom: [],
+  };
+
+  const estudio = existe
+    ? await prisma.estudio.update({
+        where: { id: existe.id },
+        data: datosEstudioMikelov,
+      })
+    : await prisma.estudio.create({
+        data: datosEstudioMikelov,
+      });
+
+  console.log(
+    existe ? '🔄 Rehidratando datos de MIKELOV STUDIO...' : '🌱 Generando MIKELOV STUDIO...',
   );
 
-  const estudio = await prisma.estudio.create({
-    data: {
-      nombre: 'MIKELOV STUDIO',
-      propietario: 'Miguel Ángel Lovato',
-      telefono: '55 1234 5678',
-      sitioWeb: 'www.mikelovstudio.com',
-      pais: 'Mexico',
-      sucursales: [
-        'Av. Presidente Masaryk 123, Polanco, CDMX',
-        'Insurgentes Sur 456, Roma, CDMX',
-      ],
-      claveDueno: CLAVE_DUENO_MIKELOV,
-      claveCliente: 'MIKELOVSTUDIO',
-      estado: 'aprobado',
-      fechaAprobacion: new Date(),
-      inicioSuscripcion: '2026-02-15',
-      fechaVencimiento: obtenerFechaLocalISO(due),
-      festivos: [],
-      colorPrimario: '#C2185B',
-      descripcion: 'Color, uñas y estética premium con atención personalizada.',
-      direccion: 'Av. Presidente Masaryk 123, Polanco, CDMX',
-      emailContacto: EMAIL_DUENO_MIKELOV,
-      horario,
-      servicios: [
-        { name: 'Corte Dama / Niña', duration: 60, price: 800 },
-        { name: 'Balayage', duration: 240, price: 3500 },
-        { name: 'Tinte Global', duration: 120, price: 1800 },
-        { name: 'Diseño de Ceja', duration: 30, price: 400 },
-        { name: 'Lash Lifting', duration: 90, price: 950 },
-        { name: 'Mani Spa', duration: 60, price: 600 },
-        { name: 'Pedi Spa', duration: 60, price: 700 },
-        { name: 'Gel Semi Permanente', duration: 60, price: 500 },
-      ],
-      serviciosCustom: [],
-    },
-  });
+  const hashContrasenaDuenoMikelov = await bcrypt.hash('Demo1234!', 12);
 
   await prisma.usuario.upsert({
     where: { email: EMAIL_DUENO_MIKELOV },
     update: {
+      hashContrasena: hashContrasenaDuenoMikelov,
       nombre: 'Miguel Ángel Lovato',
       rol: 'dueno',
       activo: true,
@@ -161,7 +145,7 @@ async function sembrarMikelovStudio(): Promise<void> {
     },
     create: {
       email: EMAIL_DUENO_MIKELOV,
-      hashContrasena: await bcrypt.hash('Salon1234!', 12),
+      hashContrasena: hashContrasenaDuenoMikelov,
       nombre: 'Miguel Ángel Lovato',
       rol: 'dueno',
       activo: true,
@@ -169,6 +153,16 @@ async function sembrarMikelovStudio(): Promise<void> {
       estudioId: estudio.id,
     },
   });
+
+  await prisma.reservaServicio.deleteMany({ where: { reserva: { estudioId: estudio.id } } });
+  await prisma.reserva.deleteMany({ where: { estudioId: estudio.id } });
+  await prisma.puntosFidelidad.deleteMany({ where: { estudioId: estudio.id } });
+  await prisma.configFidelidad.deleteMany({ where: { estudioId: estudio.id } });
+  await prisma.pago.deleteMany({ where: { estudioId: estudio.id } });
+  await prisma.diaFestivo.deleteMany({ where: { estudioId: estudio.id } });
+  await prisma.empleadoAcceso.deleteMany({ where: { personal: { estudioId: estudio.id } } });
+  await prisma.cliente.deleteMany({ where: { estudioId: estudio.id } });
+  await prisma.personal.deleteMany({ where: { estudioId: estudio.id } });
 
   // Personal
   const [andrea, sofia, valeria] = await Promise.all([
@@ -341,7 +335,9 @@ async function sembrarMikelovStudio(): Promise<void> {
     }),
   ]);
 
-  console.log(`✅ MIKELOV STUDIO (id: ${estudio.id}), 3 empleados y 3 citas de demostración creados.`);
+  console.log(
+    `✅ MIKELOV STUDIO (id: ${estudio.id}) sincronizado con 3 empleados y 3 citas de demostración.`,
+  );
   // sofia is created but only used structurally to avoid TS unused var warning
   void sofia;
 }
@@ -429,16 +425,28 @@ async function limpiarPruebas(): Promise<void> {
   await prisma.clienteApp.deleteMany({});
 
   if (estudioMikelov) {
+    await prisma.reservaServicio.deleteMany({ where: { reserva: { estudioId: estudioMikelov.id } } });
     await prisma.reserva.deleteMany({ where: { estudioId: estudioMikelov.id } });
     await prisma.puntosFidelidad.deleteMany({ where: { estudioId: estudioMikelov.id } });
     await prisma.configFidelidad.deleteMany({ where: { estudioId: estudioMikelov.id } });
     await prisma.pago.deleteMany({ where: { estudioId: estudioMikelov.id } });
     await prisma.diaFestivo.deleteMany({ where: { estudioId: estudioMikelov.id } });
+    await prisma.empleadoAcceso.deleteMany({ where: { personal: { estudioId: estudioMikelov.id } } });
     await prisma.cliente.deleteMany({ where: { estudioId: estudioMikelov.id } });
     await prisma.personal.deleteMany({ where: { estudioId: estudioMikelov.id } });
   }
 
   if (idsEstudiosAEliminar.length > 0) {
+    await prisma.reservaServicio.deleteMany({ where: { reserva: { estudioId: { in: idsEstudiosAEliminar } } } });
+    await prisma.reserva.deleteMany({ where: { estudioId: { in: idsEstudiosAEliminar } } });
+    await prisma.puntosFidelidad.deleteMany({ where: { estudioId: { in: idsEstudiosAEliminar } } });
+    await prisma.configFidelidad.deleteMany({ where: { estudioId: { in: idsEstudiosAEliminar } } });
+    await prisma.pago.deleteMany({ where: { estudioId: { in: idsEstudiosAEliminar } } });
+    await prisma.diaFestivo.deleteMany({ where: { estudioId: { in: idsEstudiosAEliminar } } });
+    await prisma.empleadoAcceso.deleteMany({ where: { personal: { estudioId: { in: idsEstudiosAEliminar } } } });
+    await prisma.cliente.deleteMany({ where: { estudioId: { in: idsEstudiosAEliminar } } });
+    await prisma.personal.deleteMany({ where: { estudioId: { in: idsEstudiosAEliminar } } });
+
     await prisma.usuario.deleteMany({
       where: {
         rol: 'dueno',

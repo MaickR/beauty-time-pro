@@ -2,6 +2,22 @@ import { useState } from 'react';
 import { PlusCircle } from 'lucide-react';
 import type { Moneda, Servicio } from '../../../tipos';
 
+const obtenerLocaleMoneda = (moneda: Moneda) => (moneda === 'COP' ? 'es-CO' : 'es-MX');
+
+const limpiarDigitos = (valor: string) => valor.replace(/\D/g, '');
+
+const normalizarEnteroEditable = (valor: string) => limpiarDigitos(valor).replace(/^0+(?=\d)/, '');
+
+const formatearMontoEditable = (valor: string, moneda: Moneda) => {
+  if (!valor) {
+    return '';
+  }
+
+  return `$${new Intl.NumberFormat(obtenerLocaleMoneda(moneda), {
+    maximumFractionDigits: 0,
+  }).format(parseInt(valor, 10))}`;
+};
+
 interface PropsFormularioNuevoServicio {
   moneda: Moneda;
   onAgregar: (servicio: Servicio) => void;
@@ -18,6 +34,7 @@ export function FormularioNuevoServicio({
   const [nombre, setNombre] = useState('');
   const [duracion, setDuracion] = useState('60');
   const [precio, setPrecio] = useState('350');
+  const [mensajeError, setMensajeError] = useState('');
 
   const manejarAgregar = () => {
     const nombreLimpio = nombre.trim();
@@ -25,14 +42,30 @@ export function FormularioNuevoServicio({
       return;
     }
 
+    const precioNumerico = parseInt(precio, 10) || 0;
+    if (precioNumerico < 1) {
+      setMensajeError('El precio debe ser mayor a 0.');
+      return;
+    }
+
     onAgregar({
       name: nombreLimpio,
       duration: Math.max(5, parseInt(duracion, 10) || 0),
-      price: Math.max(0, parseInt(precio, 10) || 0),
+      price: precioNumerico,
     });
     setNombre('');
     setDuracion('60');
     setPrecio('350');
+    setMensajeError('');
+  };
+
+  const manejarCambioDuracion = (valor: string) => {
+    setDuracion(normalizarEnteroEditable(valor));
+  };
+
+  const manejarCambioPrecio = (valor: string) => {
+    setMensajeError('');
+    setPrecio(limpiarDigitos(valor));
   };
 
   return (
@@ -62,12 +95,10 @@ export function FormularioNuevoServicio({
           </label>
           <input
             id="duracion-servicio"
-            type="number"
-            min="5"
-            max="480"
-            step="5"
             value={duracion}
-            onChange={(evento) => setDuracion(evento.target.value)}
+            onChange={(evento) => manejarCambioDuracion(evento.target.value)}
+            inputMode="numeric"
+            placeholder="90"
             className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-black text-slate-800 outline-none transition focus:ring-2 focus:ring-pink-400"
           />
         </div>
@@ -80,10 +111,10 @@ export function FormularioNuevoServicio({
           </label>
           <input
             id="precio-servicio"
-            type="number"
-            min="0"
-            value={precio}
-            onChange={(evento) => setPrecio(evento.target.value)}
+            value={formatearMontoEditable(precio, moneda)}
+            onChange={(evento) => manejarCambioPrecio(evento.target.value)}
+            inputMode="numeric"
+            placeholder={moneda === 'COP' ? '$25.000' : '$25,000'}
             className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-black text-slate-800 outline-none transition focus:ring-2 focus:ring-pink-400"
           />
         </div>
@@ -100,6 +131,7 @@ export function FormularioNuevoServicio({
       {mensajeBloqueo && (
         <p className="mt-3 text-xs font-medium text-amber-700">{mensajeBloqueo}</p>
       )}
+      {mensajeError && <p className="mt-3 text-xs font-medium text-red-600">{mensajeError}</p>}
     </div>
   );
 }

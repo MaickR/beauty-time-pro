@@ -13,6 +13,7 @@ import {
 } from 'lucide-react';
 import { useMutation } from '@tanstack/react-query';
 import { DialogoConfirmacion } from '../../../componentes/ui/DialogoConfirmacion';
+import { usarToast } from '../../../componentes/ui/ProveedorToast';
 import { usarContextoApp } from '../../../contextos/ContextoApp';
 import { formatearDinero } from '../../../utils/formato';
 import {
@@ -126,9 +127,18 @@ interface PropsModalNoShow {
   onConfirmar: (pin: string, motivo: string) => void;
   onCancelar: () => void;
   cargando: boolean;
+  mensajeError?: string | null;
+  onLimpiarError: () => void;
 }
 
-function ModalNoShow({ nombreServicio, onConfirmar, onCancelar, cargando }: PropsModalNoShow) {
+function ModalNoShow({
+  nombreServicio,
+  onConfirmar,
+  onCancelar,
+  cargando,
+  mensajeError,
+  onLimpiarError,
+}: PropsModalNoShow) {
   const [pin, setPin] = useState('');
   const [motivo, setMotivo] = useState('');
 
@@ -137,10 +147,10 @@ function ModalNoShow({ nombreServicio, onConfirmar, onCancelar, cargando }: Prop
       role="dialog"
       aria-modal="true"
       aria-labelledby="modal-no-show-titulo"
-      className="fixed inset-0 z-[300] flex items-center justify-center bg-black/70 backdrop-blur-sm p-4"
+      className="fixed inset-0 z-300 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4"
       onKeyDown={(e) => e.key === 'Escape' && onCancelar()}
     >
-      <div className="bg-white rounded-[2rem] p-6 max-w-sm w-full shadow-2xl">
+      <div className="bg-white rounded-4xl p-6 max-w-sm w-full shadow-2xl">
         <h2
           id="modal-no-show-titulo"
           className="text-base font-black uppercase tracking-tight text-slate-900 mb-1"
@@ -161,7 +171,10 @@ function ModalNoShow({ nombreServicio, onConfirmar, onCancelar, cargando }: Prop
               inputMode="numeric"
               maxLength={6}
               value={pin}
-              onChange={(e) => setPin(e.target.value.replace(/\D/g, '').slice(0, 6))}
+              onChange={(e) => {
+                onLimpiarError();
+                setPin(e.target.value.replace(/\D/g, '').slice(0, 6));
+              }}
               placeholder="••••"
               className="w-full rounded-2xl border border-slate-200 px-4 py-2.5 text-sm font-semibold text-slate-900 outline-none transition focus:border-pink-400 focus:ring-2 focus:ring-pink-100"
             />
@@ -174,11 +187,15 @@ function ModalNoShow({ nombreServicio, onConfirmar, onCancelar, cargando }: Prop
               type="text"
               maxLength={120}
               value={motivo}
-              onChange={(e) => setMotivo(e.target.value)}
+              onChange={(e) => {
+                onLimpiarError();
+                setMotivo(e.target.value);
+              }}
               placeholder="Ej: cliente no llegó, producto sin stock…"
               className="w-full rounded-2xl border border-slate-200 px-4 py-2.5 text-sm text-slate-700 outline-none transition focus:border-pink-400 focus:ring-2 focus:ring-pink-100"
             />
           </label>
+          {mensajeError && <p className="text-xs font-medium text-red-600">{mensajeError}</p>}
         </div>
         <div className="flex gap-3 mt-5">
           <button
@@ -215,6 +232,8 @@ function TarjetaCita({ reserva: b, moneda, onCompletar, onCancelar, onNoShow }: 
   const horaFin = calcularHoraFin(b.time, b.totalDuration);
   const estaCompletada = b.status === 'completed';
   const estaCancelada = b.status === 'cancelled';
+  const detallesServicio = b.serviceDetails ?? [];
+  const serviciosReserva = b.services ?? [];
 
   const franjaColor = estaCompletada
     ? 'bg-slate-400'
@@ -261,9 +280,9 @@ function TarjetaCita({ reserva: b, moneda, onCompletar, onCancelar, onNoShow }: 
 
       {/* Servicios — detalle con badge cuando hay serviceDetails, lista simple si no */}
       <div className="pl-5 mt-3">
-        {b.serviceDetails && b.serviceDetails.length > 0 ? (
+        {detallesServicio.length > 0 ? (
           <div className="space-y-0">
-            {b.serviceDetails
+            {detallesServicio
               .filter((s) => s.status !== 'cancelled')
               .map((s) => (
                 <ItemServicio
@@ -281,7 +300,7 @@ function TarjetaCita({ reserva: b, moneda, onCompletar, onCancelar, onNoShow }: 
           </div>
         ) : (
           <div className="space-y-1.5">
-            {b.services.map((s, idx) => (
+            {serviciosReserva.map((s, idx) => (
               <div key={idx} className="flex justify-between items-center text-xs">
                 <span className="flex items-center gap-1.5 text-slate-700 font-medium">
                   <CheckCircle2
@@ -348,6 +367,9 @@ export function AgendaDiaria({
   onCrearCitaManual,
 }: PropsAgendaDiaria) {
   const { recargar } = usarContextoApp();
+  const { mostrarToast } = usarToast();
+  const reservasDisponibles = reservas ?? [];
+  const personalDisponible = estudio.staff ?? [];
   const [pinCancelacion, setPinCancelacion] = useState('');
   const [tab, setTab] = useState<'agenda' | 'historial'>('agenda');
   const [especialistaTab, setEspecialistaTab] = useState<string>('todos');
@@ -364,6 +386,7 @@ export function AgendaDiaria({
     servicioId: string;
     nombre: string;
   } | null>(null);
+  const [mensajeErrorNoShow, setMensajeErrorNoShow] = useState<string | null>(null);
 
   const { mutate: cambiarEstado, isPending: actualizando } = useMutation({
     mutationFn: ({ id, estado, pin }: { id: string; estado: EstadoReserva; pin?: string }) =>
@@ -371,7 +394,14 @@ export function AgendaDiaria({
     onSuccess: async () => {
       setPinCancelacion('');
       setConfirmacion(null);
+      mostrarToast({ mensaje: 'Estado de la cita actualizado', variante: 'exito' });
       await recargar();
+    },
+    onError: (error: unknown) => {
+      mostrarToast({
+        mensaje: error instanceof Error ? error.message : 'No se pudo actualizar la cita',
+        variante: 'error',
+      });
     },
   });
 
@@ -390,7 +420,21 @@ export function AgendaDiaria({
       actualizarEstadoServicioReserva(reservaId, servicioId, 'no_show', pin, motivo || undefined),
     onSuccess: async () => {
       setModalNoShow(null);
+      setMensajeErrorNoShow(null);
+      mostrarToast({ mensaje: 'Servicio marcado como no realizado', variante: 'exito' });
       await recargar();
+    },
+    onError: (error: unknown) => {
+      setMensajeErrorNoShow(
+        error instanceof Error ? error.message : 'No se pudo marcar el servicio como no realizado',
+      );
+      mostrarToast({
+        mensaje:
+          error instanceof Error
+            ? error.message
+            : 'No se pudo marcar el servicio como no realizado',
+        variante: 'error',
+      });
     },
   });
 
@@ -408,12 +452,12 @@ export function AgendaDiaria({
   const moneda: Moneda = estudio.country === 'Colombia' ? 'COP' : 'MXN';
   const fechaStr = obtenerFechaLocalISO(fechaVista);
 
-  const citasDelDia = reservas
+  const citasDelDia = reservasDisponibles
     .filter((r) => r.studioId === estudio.id && r.status !== 'cancelled' && r.date === fechaStr)
     .sort((a, b) => a.time.localeCompare(b.time));
 
   const idsConCitas = [...new Set(citasDelDia.map((c) => c.staffId))];
-  const especialistasConCitas = estudio.staff.filter((s) => idsConCitas.includes(s.id));
+  const especialistasConCitas = personalDisponible.filter((s) => idsConCitas.includes(s.id));
 
   const citasFiltradas =
     especialistaTab === 'todos'
@@ -421,7 +465,7 @@ export function AgendaDiaria({
       : citasDelDia.filter((c) => c.staffId === especialistaTab);
 
   const [anioH, mesH] = mesHistorial.split('-').map(Number);
-  const citasHistorial = reservas
+  const citasHistorial = reservasDisponibles
     .filter((r) => {
       if (r.studioId !== estudio.id) return false;
       if (r.status !== 'completed' && r.status !== 'cancelled') return false;
@@ -601,6 +645,8 @@ export function AgendaDiaria({
         <ModalNoShow
           nombreServicio={modalNoShow.nombre}
           cargando={marcandoNoShow}
+          mensajeError={mensajeErrorNoShow}
+          onLimpiarError={() => setMensajeErrorNoShow(null)}
           onConfirmar={(pin, motivo) =>
             marcarNoShow({
               reservaId: modalNoShow.reservaId,
@@ -609,7 +655,10 @@ export function AgendaDiaria({
               motivo,
             })
           }
-          onCancelar={() => setModalNoShow(null)}
+          onCancelar={() => {
+            setMensajeErrorNoShow(null);
+            setModalNoShow(null);
+          }}
         />
       )}
 

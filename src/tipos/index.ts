@@ -315,6 +315,7 @@ export interface ReservaEmpleado {
 export interface PerfilEmpleado {
   id: string;
   nombre: string;
+  email: string;
   avatarUrl?: string | null;
   especialidades: string[];
   activo: boolean;

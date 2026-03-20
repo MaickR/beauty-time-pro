@@ -2,6 +2,7 @@ import type { FastifyInstance } from 'fastify';
 import bcrypt from 'bcrypt';
 import { z } from 'zod';
 import { resolverCategoriasSalon } from '../lib/categoriasSalon.js';
+import { generarClavesSalonUnicas } from '../lib/clavesSalon.js';
 import { env } from '../lib/env.js';
 import { prisma } from '../prismaCliente.js';
 import { enviarEmailVerificacionCliente } from '../servicios/servicioEmail.js';
@@ -33,7 +34,7 @@ const esquemaHorarioRegistro = z.record(
 const esquemaServicioRegistro = z.object({
 	name: textoSchema('servicio', 80),
 	duration: z.number().int().min(5, 'La duración mínima es 5 minutos').max(720, 'La duración máxima es 720 minutos'),
-	price: z.number().min(0, 'El precio no puede ser negativo').max(10000000, 'El precio excede el máximo permitido'),
+	price: z.number().min(1, 'El precio debe ser mayor a 0').max(10000000, 'El precio excede el máximo permitido'),
 	category: textoSchema('categoria', 80).optional(),
 });
 
@@ -373,6 +374,55 @@ export async function rutasRegistro(servidor: FastifyInstance): Promise<void> {
 			return respuesta.send({ datos: { mensaje: 'Tu nuevo correo fue confirmado correctamente.' } });
 		}
 
+		try {
+			const tokenUsuario = servidor.jwt.verify<{
+				tipo?: string;
+				usuarioId?: string;
+				emailNuevo?: string;
+			}>(resultado.data.token);
+
+			if (
+				tokenUsuario.tipo === 'cambio_email_dueno' &&
+				tokenUsuario.usuarioId &&
+				tokenUsuario.emailNuevo
+			) {
+				const emailNuevo = tokenUsuario.emailNuevo.trim().toLowerCase();
+				const usuario = await prisma.usuario.findUnique({
+					where: { id: tokenUsuario.usuarioId },
+					select: { id: true, email: true },
+				});
+
+				if (!usuario) {
+					return respuesta.code(404).send({ error: 'La cuenta del dueño ya no existe.' });
+				}
+
+				if (usuario.email === emailNuevo) {
+					return respuesta.send({ datos: { mensaje: 'Tu nuevo correo ya estaba confirmado.' } });
+				}
+
+				const [existeCliente, existeUsuario] = await Promise.all([
+					prisma.clienteApp.findFirst({
+						where: { OR: [{ email: emailNuevo }, { emailPendiente: emailNuevo }] },
+						select: { id: true },
+					}),
+					obtenerUsuarioBloqueante(emailNuevo),
+				]);
+
+				if ((existeUsuario && existeUsuario.id !== usuario.id) || existeCliente) {
+					return respuesta.code(409).send({ error: 'Ese correo ya fue usado por otra cuenta.' });
+				}
+
+				await prisma.usuario.update({
+					where: { id: usuario.id },
+					data: { email: emailNuevo, emailVerificado: true },
+				});
+
+				return respuesta.send({ datos: { mensaje: 'Tu nuevo correo fue confirmado correctamente.' } });
+			}
+		} catch {
+			// Si no es un JWT válido, caerá al error genérico de enlace inválido.
+		}
+
 		return respuesta.code(400).send({ error: 'El enlace de verificación es inválido o expiró.' });
 	  },
 	);
@@ -460,11 +510,7 @@ export async function rutasRegistro(servidor: FastifyInstance): Promise<void> {
 
 		const hashContrasena = await bcrypt.hash(contrasena, 12);
 
-		// Generamos claves únicas legibles para el estudio
-		const base = nombreSalon.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 8);
-		const sufijo = Math.random().toString(36).substring(2, 6).toUpperCase();
-		const claveDueno = `${base}${sufijo}`;
-		const claveCliente = `${base}CLI${sufijo}`;
+		const { claveDueno, claveCliente } = await generarClavesSalonUnicas(nombreSalon);
 
 		const hoy = new Date();
 		const vencimiento = new Date(hoy);

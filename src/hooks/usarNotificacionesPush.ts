@@ -24,8 +24,13 @@ export function usarNotificacionesPush() {
   const [cargando, setCargando] = useState(true);
   const [descartado, setDescartado] = useState(false);
 
-  const soportado =
+  const soportadoNavegador =
     typeof window !== 'undefined' && 'serviceWorker' in navigator && 'PushManager' in window;
+  const contextoSeguroPush =
+    typeof window !== 'undefined' &&
+    (window.location.protocol === 'https:' ||
+      ['localhost', '127.0.0.1'].includes(window.location.hostname));
+  const soportado = soportadoNavegador && contextoSeguroPush;
   const claveUsuario = useMemo(() => {
     if (!usuario) return 'anonimo';
     return `${usuario.rol}:${usuario.email || usuario.estudioId || usuario.nombre}`;
@@ -79,7 +84,12 @@ export function usarNotificacionesPush() {
   }, [soportado]);
 
   const activar = async () => {
-    if (!soportado) return false;
+    if (!soportadoNavegador) return false;
+
+    if (location.protocol !== 'https:' && location.hostname !== 'localhost') {
+      console.warn('[Push] Solo disponible en HTTPS');
+      return false;
+    }
 
     const registro = await obtenerRegistroServiceWorker();
     if (!registro) return false;

@@ -1,4 +1,5 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
+import QRCode from 'qrcode';
 import { useParams, useNavigate } from 'react-router-dom';
 import {
   Store,
@@ -6,6 +7,8 @@ import {
   Copy,
   Link2,
   MessageCircle,
+  Download,
+  ExternalLink,
   ChevronLeft,
   ChevronRight,
   Wallet,
@@ -27,14 +30,27 @@ import { ModalBienvenidaSalon } from './componentes/ModalBienvenidaSalon';
 import { Spinner } from '../../componentes/ui/Spinner';
 import { BannerNotificacionesPush } from '../../componentes/ui/BannerNotificacionesPush';
 import { usarNotificacionesPush } from '../../hooks/usarNotificacionesPush';
+import { env } from '../../lib/env';
+import { colorMasClaro } from '../../utils/color';
 import type { Moneda } from '../../tipos';
+
+function obtenerOrigenReservas(): string {
+  const origenActual = window.location.origin;
+  if (/localhost|127\.0\.0\.1/.test(env.VITE_URL_API)) {
+    return origenActual;
+  }
+  if (env.VITE_URL_PUBLICA) {
+    return env.VITE_URL_PUBLICA;
+  }
+  return origenActual;
+}
 
 export function PaginaAgenda() {
   usarTituloPagina('Agenda');
   const { estudioId } = useParams<{ estudioId: string }>();
   const navegar = useNavigate();
   const { estudios, reservas, cargando, recargar } = usarContextoApp();
-  const { cerrarSesion } = usarTiendaAuth();
+  const { cerrarSesion, usuario } = usarTiendaAuth();
   const { mostrarToast } = usarToast();
   const [fechaVista, setFechaVista] = useState(new Date());
   const [mostrarBienvenida, setMostrarBienvenida] = useState(() => {
@@ -43,9 +59,32 @@ export function PaginaAgenda() {
   });
   const [mostrarModalCrearCita, setMostrarModalCrearCita] = useState(false);
   const [activandoPush, setActivandoPush] = useState(false);
+  const [qrReserva, setQrReserva] = useState<string | null>(null);
   const push = usarNotificacionesPush();
+  const estudiosDisponibles = estudios ?? [];
+  const reservasDisponibles = reservas ?? [];
 
-  const estudio = estudios.find((s) => s.id === estudioId);
+  const estudio = estudiosDisponibles.find((s) => s.id === estudioId);
+
+  const linkReservas = estudio ? `${obtenerOrigenReservas()}/reservar/${estudio.clientKey}` : null;
+
+  useEffect(() => {
+    if (!linkReservas) {
+      setQrReserva(null);
+      return;
+    }
+
+    let activo = true;
+    void QRCode.toDataURL(linkReservas, { width: 360, margin: 1 }).then((url) => {
+      if (activo) {
+        setQrReserva(url);
+      }
+    });
+
+    return () => {
+      activo = false;
+    };
+  }, [linkReservas]);
 
   if (cargando)
     return (
@@ -61,27 +100,47 @@ export function PaginaAgenda() {
     );
 
   const moneda: Moneda = estudio.country === 'Colombia' ? 'COP' : 'MXN';
-  const reservasEstudio = reservas.filter((r) => r.studioId === estudio.id);
+  const reservasEstudio = reservasDisponibles.filter((r) => r.studioId === estudio.id);
 
   const ahora = new Date();
   const horaActual = ahora.getHours();
   const saludoTiempo =
     horaActual < 12 ? 'Buenos días' : horaActual < 18 ? 'Buenas tardes' : 'Buenas noches';
+  const nombreSaludo = usuario?.nombre?.trim() || estudio.owner || estudio.name;
   const hoyStr = obtenerFechaLocalISO(ahora);
   const citasHoy = reservasEstudio.filter((r) => r.date === hoyStr && r.status !== 'cancelled');
   const totalEstimadoHoy = citasHoy.reduce((sum, r) => sum + r.totalPrice, 0);
-  const especialistasActivos = estudio.staff.filter((s) => s.active).length;
-  const linkReservas = `${window.location.origin}/salones/${estudio.id}/reservar`;
+  const especialistasActivos = (estudio.staff ?? []).filter((s) => s.active).length;
+  const colorPrimario = estudio.colorPrimario ?? '#C2185B';
 
   const copiarLink = () => {
+    if (!linkReservas) return;
     navigator.clipboard
       .writeText(linkReservas)
       .then(() => mostrarToast({ mensaje: 'Enlace copiado al portapapeles', variante: 'exito' }));
   };
 
   const compartirWhatsApp = () => {
-    const texto = encodeURIComponent(`¡Reserva tu cita en ${estudio.name}! ${linkReservas}`);
-    window.open(`https://wa.me/?text=${texto}`, '_blank', 'noopener,noreferrer');
+    if (!linkReservas) return;
+    const mensajeWA = encodeURIComponent(`Reserva tu cita en ${estudio.name}: ${linkReservas}`);
+    window.open(`https://wa.me/?text=${mensajeWA}`, '_blank', 'noopener');
+  };
+
+  const abrirLinkReservas = () => {
+    window.open(`/reservar/${estudio.clientKey}`, '_blank', 'noopener');
+  };
+
+  const descargarQr = () => {
+    if (!qrReserva) return;
+    const fecha = new Date().toLocaleDateString('es-MX', {
+      day: '2-digit',
+      month: 'short',
+      year: 'numeric',
+    });
+    const enlace = document.createElement('a');
+    enlace.href = qrReserva;
+    enlace.download = `${estudio.name.replace(/\s+/g, '_').toUpperCase()}_${fecha.replace(/\s+/g, '')}.png`;
+    enlace.click();
   };
   const subStatus = obtenerEstadoSuscripcion(estudio);
   const subPrecio = moneda === 'COP' ? '$200,000 COP' : '$1,000 MXN';
@@ -138,9 +197,16 @@ export function PaginaAgenda() {
 
       <main className="max-w-7xl mx-auto p-4 md:p-8 space-y-8">
         {/* Saludo y resumen del día */}
-        <div className="bg-linear-to-br from-pink-600 to-rose-500 rounded-[2.5rem] p-6 md:p-8 text-white shadow-lg">
+        <div
+          className="rounded-[2.5rem] p-6 text-white shadow-lg md:p-8"
+          style={{
+            background: `linear-gradient(135deg, var(--color-primario), ${colorMasClaro(colorPrimario)})`,
+          }}
+        >
           <div>
-            <p className="text-sm font-bold opacity-80">{saludoTiempo},</p>
+            <p className="text-sm font-bold opacity-80">
+              {saludoTiempo}, {nombreSaludo}
+            </p>
             <h2 className="text-2xl md:text-3xl font-black uppercase leading-tight mt-1">
               {estudio.name}
             </h2>
@@ -255,10 +321,27 @@ export function PaginaAgenda() {
                 </button>
                 <button
                   type="button"
+                  onClick={abrirLinkReservas}
+                  className="flex-1 flex items-center justify-center gap-2 rounded-xl border border-slate-200 py-2.5 text-xs font-black text-slate-700 transition-colors hover:bg-slate-100"
+                >
+                  <ExternalLink className="w-3.5 h-3.5" aria-hidden="true" /> Abrir link de reservas
+                </button>
+              </div>
+              <div className="mt-2 flex gap-2">
+                <button
+                  type="button"
                   onClick={compartirWhatsApp}
                   className="flex-1 flex items-center justify-center gap-2 rounded-xl bg-green-500 py-2.5 text-xs font-black text-white hover:bg-green-600 transition-colors"
                 >
                   <MessageCircle className="w-3.5 h-3.5" aria-hidden="true" /> WhatsApp
+                </button>
+                <button
+                  type="button"
+                  onClick={descargarQr}
+                  disabled={!qrReserva}
+                  className="flex-1 flex items-center justify-center gap-2 rounded-xl bg-slate-900 py-2.5 text-xs font-black text-white transition-colors hover:bg-black disabled:opacity-60"
+                >
+                  <Download className="w-3.5 h-3.5" aria-hidden="true" /> Descargar QR
                 </button>
               </div>
             </div>

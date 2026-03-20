@@ -22,7 +22,8 @@ import { CatalogoServicios } from './componentes/CatalogoServicios';
 import { ConfigFidelidad } from './componentes/ConfigFidelidad';
 import { DirectorioClientes } from './componentes/DirectorioClientes';
 import { PerfilSalon } from './componentes/PerfilSalon';
-import { FormularioPinCancelacion } from './componentes/FormularioPinCancelacion';
+import { SeguridadDueno } from './componentes/SeguridadDueno';
+import { PanelMiEquipo } from './componentes/PanelMiEquipo';
 import { Spinner } from '../../componentes/ui/Spinner';
 import { BannerNotificacionesPush } from '../../componentes/ui/BannerNotificacionesPush';
 import { usarNotificacionesPush } from '../../hooks/usarNotificacionesPush';
@@ -41,7 +42,7 @@ export function PaginaAdminEstudio() {
   const { mostrarToast } = usarToast();
   const clienteConsulta = useQueryClient();
   const [seccion, setSeccion] = useState<
-    'ingresos' | 'clientes' | 'fidelidad' | 'salon' | 'suscripcion'
+    'ingresos' | 'clientes' | 'fidelidad' | 'salon' | 'equipo' | 'seguridad' | 'suscripcion'
   >('ingresos');
   const [activandoPush, setActivandoPush] = useState(false);
   const [mostrarModalCancelacion, setMostrarModalCancelacion] = useState(false);
@@ -185,6 +186,18 @@ export function PaginaAdminEstudio() {
             <Palette className="w-4 h-4 shrink-0" /> Mi salón
           </button>
           <button
+            onClick={() => setSeccion('equipo')}
+            className={`flex-1 sm:flex-none px-3 sm:px-4 md:px-6 py-2.5 rounded-xl text-[10px] md:text-xs font-black transition-all flex items-center justify-center gap-1.5 ${seccion === 'equipo' ? 'bg-white shadow-sm text-slate-900' : 'text-slate-500 hover:text-slate-800'}`}
+          >
+            <Users className="w-4 h-4 shrink-0" /> Mi equipo
+          </button>
+          <button
+            onClick={() => setSeccion('seguridad')}
+            className={`flex-1 sm:flex-none px-3 sm:px-4 md:px-6 py-2.5 rounded-xl text-[10px] md:text-xs font-black transition-all flex items-center justify-center gap-1.5 ${seccion === 'seguridad' ? 'bg-white shadow-sm text-slate-900' : 'text-slate-500 hover:text-slate-800'}`}
+          >
+            <CreditCard className="w-4 h-4 shrink-0" /> Seguridad
+          </button>
+          <button
             onClick={() => setSeccion('fidelidad')}
             className={`flex-1 sm:flex-none px-3 sm:px-4 md:px-6 py-2.5 rounded-xl text-[10px] md:text-xs font-black transition-all flex items-center justify-center gap-1.5 ${seccion === 'fidelidad' ? 'bg-white shadow-sm text-slate-900' : 'text-slate-500 hover:text-slate-800'}`}
           >
@@ -249,7 +262,20 @@ export function PaginaAdminEstudio() {
           <>
             <h2 className="text-3xl font-black italic uppercase tracking-tighter">Mi Salón</h2>
             <PerfilSalon estudioId={estudio.id} />
-            <FormularioPinCancelacion
+          </>
+        )}
+
+        {seccion === 'equipo' && (
+          <>
+            <h2 className="text-3xl font-black italic uppercase tracking-tighter">Mi equipo</h2>
+            <PanelMiEquipo estudio={estudio} />
+          </>
+        )}
+
+        {seccion === 'seguridad' && (
+          <>
+            <h2 className="text-3xl font-black italic uppercase tracking-tighter">Seguridad</h2>
+            <SeguridadDueno
               estudioId={estudio.id}
               pinConfigurado={estudio.pinCancelacionConfigurado ?? false}
             />

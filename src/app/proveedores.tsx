@@ -1,6 +1,7 @@
 import { QueryClientProvider } from '@tanstack/react-query';
-import { BrowserRouter } from 'react-router-dom';
+import { BrowserRouter, useLocation } from 'react-router-dom';
 import type { PropsWithChildren } from 'react';
+import { LimiteError } from '../componentes/ui/LimiteError';
 import { ProveedorToast } from '../componentes/ui/ProveedorToast';
 import { ProveedorContextoApp, usarContextoApp } from '../contextos/ContextoApp';
 import { clienteConsulta } from '../lib/clienteConsulta';
@@ -15,13 +16,21 @@ function AplicadorTema() {
   return null;
 }
 
+function ArbolProtegido({ children }: PropsWithChildren) {
+  const ubicacion = useLocation();
+
+  return <LimiteError key={ubicacion.pathname}>{children}</LimiteError>;
+}
+
 export function Proveedores({ children }: PropsWithChildren) {
   return (
     <QueryClientProvider client={clienteConsulta}>
       <BrowserRouter>
         <ProveedorContextoApp>
           <AplicadorTema />
-          <ProveedorToast>{children}</ProveedorToast>
+          <ArbolProtegido>
+            <ProveedorToast>{children}</ProveedorToast>
+          </ArbolProtegido>
         </ProveedorContextoApp>
       </BrowserRouter>
     </QueryClientProvider>

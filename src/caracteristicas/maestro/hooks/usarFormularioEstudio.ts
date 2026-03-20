@@ -107,16 +107,24 @@ export function usarFormularioEstudio() {
         ...prev,
         selectedServices: existe
           ? prev.selectedServices.filter((servicio) => servicio.name !== nombre)
-          : [...prev.selectedServices, { name: nombre, duration: 30, price: 0 }],
+          : [...prev.selectedServices, { name: nombre, duration: 30, price: 1 }],
       };
     });
   };
 
   const actualizarCampoServicio = (nombre: string, campo: 'duration' | 'price', valor: string) => {
+    const valorSinCeros = valor.replace(/^0+/, '') || '';
+    const numero = Number.parseInt(valorSinCeros, 10);
+    const valorNormalizado = Number.isNaN(numero)
+      ? 1
+      : campo === 'price'
+        ? Math.min(9_999_999, Math.max(1, numero))
+        : Math.min(480, Math.max(1, numero));
+
     setFormulario((prev) => ({
       ...prev,
       selectedServices: prev.selectedServices.map((s) =>
-        s.name === nombre ? { ...s, [campo]: parseInt(valor) || 0 } : s,
+        s.name === nombre ? { ...s, [campo]: valorNormalizado } : s,
       ),
     }));
   };
@@ -129,7 +137,7 @@ export function usarFormularioEstudio() {
       ...prev,
       selectedServices: prev.selectedServices.some((servicio) => servicio.name === nombre)
         ? prev.selectedServices
-        : [...prev.selectedServices, { name: nombre, duration: 30, price: 0 }],
+        : [...prev.selectedServices, { name: nombre, duration: 30, price: 1 }],
       customServices:
         esCatalogoConocido &&
         !(prev.customServices ?? []).some((servicio) => servicio.name === nombre)

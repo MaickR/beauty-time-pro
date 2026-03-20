@@ -11,7 +11,9 @@ function hexArgb(hex: string): [number, number, number] {
  * Convierte componentes RGB a color hex.
  */
 function rgbAHex(r: number, g: number, b: number): string {
-  return '#' + [r, g, b].map((v) => Math.max(0, Math.min(255, v)).toString(16).padStart(2, '0')).join('');
+  return (
+    '#' + [r, g, b].map((v) => Math.max(0, Math.min(255, v)).toString(16).padStart(2, '0')).join('')
+  );
 }
 
 /**
@@ -50,13 +52,41 @@ export function calcularOscuro(hex: string): string {
   const x = c2 * (1 - Math.abs(((h / 60) % 2) - 1));
   const m = l - c2 / 2;
 
-  let r2 = 0, g2 = 0, b2 = 0;
-  if (h < 60) { r2 = c2; g2 = x; }
-  else if (h < 120) { r2 = x; g2 = c2; }
-  else if (h < 180) { g2 = c2; b2 = x; }
-  else if (h < 240) { g2 = x; b2 = c2; }
-  else if (h < 300) { r2 = x; b2 = c2; }
-  else { r2 = c2; b2 = x; }
+  let r2 = 0,
+    g2 = 0,
+    b2 = 0;
+  if (h < 60) {
+    r2 = c2;
+    g2 = x;
+  } else if (h < 120) {
+    r2 = x;
+    g2 = c2;
+  } else if (h < 180) {
+    g2 = c2;
+    b2 = x;
+  } else if (h < 240) {
+    g2 = x;
+    b2 = c2;
+  } else if (h < 300) {
+    r2 = x;
+    b2 = c2;
+  } else {
+    r2 = c2;
+    b2 = x;
+  }
 
-  return rgbAHex(Math.round((r2 + m) * 255), Math.round((g2 + m) * 255), Math.round((b2 + m) * 255));
+  return rgbAHex(
+    Math.round((r2 + m) * 255),
+    Math.round((g2 + m) * 255),
+    Math.round((b2 + m) * 255),
+  );
+}
+
+/**
+ * Aclara un color hex mezclándolo con blanco para usarlo en gradientes.
+ */
+export function colorMasClaro(hex: string, intensidad = 0.24): string {
+  const [r, g, b] = hexArgb(hex);
+  const mezclar = (canal: number) => Math.round(canal + (255 - canal) * intensidad);
+  return rgbAHex(mezclar(r), mezclar(g), mezclar(b));
 }

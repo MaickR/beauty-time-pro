@@ -1,12 +1,12 @@
 import type { FastifyInstance } from 'fastify';
 import bcrypt from 'bcrypt';
-import crypto from 'crypto';
 import { z } from 'zod';
 import { prisma } from '../prismaCliente.js';
 import { verificarJWT } from '../middleware/autenticacion.js';
 import { requierePermiso } from '../middleware/verificarPermiso.js';
 import { resolverCategoriasSalon } from '../lib/categoriasSalon.js';
 import { cacheSalonesPublicos } from '../lib/cache.js';
+import { generarClavesSalonUnicas } from '../lib/clavesSalon.js';
 import { enviarEmailBienvenidaSalon, enviarEmailRechazoSalon, enviarEmailCancelacionProcesada, enviarEmailRecordatorioPagoSalon } from '../servicios/servicioEmail.js';
 import { registrarAuditoria } from '../utils/auditoria.js';
 import { emailSchema, fechaIsoSchema, obtenerMensajeValidacion, telefonoSchema, textoSchema } from '../lib/validacion.js';
@@ -65,6 +65,14 @@ function formatearFechaISO(fecha: Date): string {
   return fecha.toISOString().split('T')[0]!;
 }
 
+function obtenerMonedaPorPais(pais?: string | null): 'MXN' | 'COP' {
+  return pais === 'Colombia' ? 'COP' : 'MXN';
+}
+
+function obtenerMontoPlanPorPais(pais?: string | null): number {
+  return obtenerMonedaPorPais(pais) === 'COP' ? 200000 : 1000;
+}
+
 function calcularNuevaFechaVencimiento(params: {
   fechaVencimiento?: string | null;
   inicioSuscripcion?: string | null;
@@ -110,7 +118,7 @@ export async function rutasAdmin(servidor: FastifyInstance): Promise<void> {
    */
   servidor.get<{ Querystring: { estado?: string; pagina?: string; limite?: string } }>(
     '/admin/salones',
-    { preHandler: verificarJWT },
+    { preHandler: [verificarJWT, requierePermiso('aprobarSalones')] },
     async (solicitud, respuesta) => {
       const payload = solicitud.user as { rol: string };
       if (payload.rol !== 'maestro') {
@@ -198,7 +206,7 @@ export async function rutasAdmin(servidor: FastifyInstance): Promise<void> {
    */
   servidor.get<{ Querystring: { pagina?: string; limite?: string } }>(
     '/admin/solicitudes',
-    { preHandler: verificarJWT },
+    { preHandler: [verificarJWT, requierePermiso('aprobarSalones')] },
     async (solicitud, respuesta) => {
       const payload = solicitud.user as { rol: string };
       if (payload.rol !== 'maestro') {
@@ -241,7 +249,7 @@ export async function rutasAdmin(servidor: FastifyInstance): Promise<void> {
    */
   servidor.get<{ Params: { id: string } }>(
     '/admin/solicitudes/:id',
-    { preHandler: verificarJWT },
+    { preHandler: [verificarJWT, requierePermiso('aprobarSalones')] },
     async (solicitud, respuesta) => {
       const payload = solicitud.user as { rol: string };
       if (payload.rol !== 'maestro') {
@@ -478,7 +486,7 @@ export async function rutasAdmin(servidor: FastifyInstance): Promise<void> {
     };
   }>(
     '/admin/salones',
-    { preHandler: verificarJWT },
+    { preHandler: [verificarJWT, requierePermiso('aprobarSalones')] },
     async (solicitud, respuesta) => {
       const payload = solicitud.user as { rol: string };
       if (payload.rol !== 'maestro') {
@@ -510,11 +518,7 @@ export async function rutasAdmin(servidor: FastifyInstance): Promise<void> {
 
       const hashContrasena = await bcrypt.hash(contrasena, 12);
 
-      // Generar claves únicas automáticamente
-      const BASE = nombreSalon.toUpperCase().replace(/\s+/g, '').slice(0, 8);
-      const sufijo = crypto.randomBytes(3).toString('hex').toUpperCase();
-      const claveDueno = `${BASE}${sufijo}`;
-      const claveCliente = `${BASE}CLI${sufijo}`;
+  const { claveDueno, claveCliente } = await generarClavesSalonUnicas(nombreSalon);
 
       const fechaInicio = inicioSuscripcion ? crearFechaDesdeISO(inicioSuscripcion) : new Date();
       fechaInicio.setHours(0, 0, 0, 0);
@@ -528,7 +532,10 @@ export async function rutasAdmin(servidor: FastifyInstance): Promise<void> {
         diasSemana.map((dia) => [dia, { isOpen: dia !== 'Domingo', openTime: '09:00', closeTime: '19:00' }]),
       );
 
-      const [estudio] = await prisma.$transaction(async (tx) => {
+      const monedaInicial = obtenerMonedaPorPais(pais);
+      const montoInicial = obtenerMontoPlanPorPais(pais);
+
+      const [estudio, pagoInicial] = await prisma.$transaction(async (tx) => {
         const nuevoEstudio = await tx.estudio.create({
           data: {
             nombre: nombreSalon,
@@ -573,7 +580,38 @@ export async function rutasAdmin(servidor: FastifyInstance): Promise<void> {
           });
         }
 
-        return [nuevoEstudio, nuevoUsuario];
+        const nuevoPago = await tx.pago.create({
+          data: {
+            estudioId: nuevoEstudio.id,
+            monto: montoInicial,
+            moneda: monedaInicial,
+            concepto: `Suscripción mensual Beauty Time Pro (${monedaInicial})`,
+            fecha: formatearFecha(fechaInicio),
+            tipo: 'suscripcion',
+            referencia: 'alta_inicial',
+          },
+        });
+
+        return [nuevoEstudio, nuevoPago, nuevoUsuario];
+      });
+
+      await registrarAuditoria({
+        usuarioId: (solicitud.user as { sub: string }).sub,
+        accion: 'registrar_pago',
+        entidadTipo: 'pago',
+        entidadId: pagoInicial.id,
+        detalles: {
+          estudioId: estudio.id,
+          estudioNombre: estudio.nombre,
+          monto: montoInicial,
+          monedaAplicada: monedaInicial,
+          registradoPorNombre: (solicitud.user as { nombre?: string }).nombre ?? null,
+          registradoPorEmail: (solicitud.user as { email?: string }).email ?? null,
+          fechaBase: formatearFecha(fechaInicio),
+          nuevaFechaVencimiento: formatearFecha(vencimiento),
+          estrategia: 'alta_inicial',
+        },
+        ip: solicitud.ip,
       });
 
       return respuesta.code(201).send({
@@ -656,7 +694,7 @@ export async function rutasAdmin(servidor: FastifyInstance): Promise<void> {
    */
   servidor.put<{ Params: { id: string } }>(
     '/admin/salones/:id/reset-contrasena',
-    { preHandler: verificarJWT },
+    { preHandler: [verificarJWT, requierePermiso('suspenderSalones')] },
     async (solicitud, respuesta) => {
       const payload = solicitud.user as { rol: string };
       if (payload.rol !== 'maestro') {

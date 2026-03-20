@@ -1,6 +1,7 @@
 import type { FastifyInstance } from 'fastify';
 import bcrypt from 'bcrypt';
 import crypto from 'crypto';
+import { z } from 'zod';
 import type { Prisma } from '../generated/prisma/client.js';
 import { canjearRecompensaFidelidad, obtenerConfigFidelidad, registrarVisitaFidelidad, revertirVisitaFidelidad } from '../lib/fidelidad.js';
 import {
@@ -33,6 +34,45 @@ function serializarServiciosResumen(servicios: ReturnType<typeof obtenerServicio
     ...(servicio.category ? { category: servicio.category } : {}),
   })) as Prisma.InputJsonValue;
 }
+
+const esquemaCrearReservaBase = z.object({
+  estudioId: z.string().trim().min(1, 'El estudio es obligatorio'),
+  personalId: z.string().trim().min(1, 'Debes seleccionar un especialista'),
+  nombreCliente: z.string().trim().optional(),
+  telefonoCliente: z.string().trim().optional(),
+  fechaNacimiento: z.string().trim().optional(),
+  email: z.string().trim().email('Correo inválido').optional().or(z.literal('')),
+  fecha: z
+    .string()
+    .trim()
+    .refine((valor) => /^\d{4}-\d{2}-\d{2}$/.test(valor), 'La fecha debe usar formato YYYY-MM-DD')
+    .refine((valor) => !Number.isNaN(new Date(`${valor}T00:00:00`).getTime()), 'La fecha no es válida'),
+  horaInicio: z
+    .string()
+    .trim()
+    .regex(/^([01]\d|2[0-3]):[0-5]\d$/, 'La hora debe usar formato HH:mm'),
+  duracion: z.number().int().min(1).max(480).optional(),
+  servicios: z.array(z.unknown()).min(1, 'Debes seleccionar al menos un servicio'),
+  precioTotal: z.number().min(0).optional(),
+  estado: z.enum(['pending', 'confirmed', 'completed', 'cancelled']).optional(),
+  sucursal: z.string().trim().optional(),
+  marcaTinte: z.string().trim().optional().nullable(),
+  tonalidad: z.string().trim().optional().nullable(),
+  usarRecompensa: z.boolean().optional(),
+});
+
+const esquemaDatosClienteReserva = z.object({
+  nombreCliente: z.string().trim().min(2, 'El nombre del cliente es obligatorio'),
+  telefonoCliente: z
+    .string()
+    .trim()
+    .regex(/^[0-9+\-\s()]{7,20}$/, 'El teléfono debe contener entre 7 y 20 caracteres válidos'),
+  fechaNacimiento: z
+    .string()
+    .trim()
+    .refine((valor) => /^\d{4}-\d{2}-\d{2}$/.test(valor), 'La fecha de nacimiento debe usar formato YYYY-MM-DD')
+    .refine((valor) => !Number.isNaN(new Date(`${valor}T00:00:00`).getTime()), 'La fecha de nacimiento no es válida'),
+});
 
 async function sincronizarResumenReserva(reservaId: string) {
   const reserva = await prisma.reserva.findUnique({
@@ -173,18 +213,33 @@ export async function rutasReservas(servidor: FastifyInstance): Promise<void> {
       usarRecompensa?: boolean;
     };
   }>('/reservas', { preHandler: verificarJWTOpcional }, async (solicitud, respuesta) => {
+    const resultadoValidacionBase = esquemaCrearReservaBase.safeParse(solicitud.body);
+    if (!resultadoValidacionBase.success) {
+      const campos = Object.fromEntries(
+        resultadoValidacionBase.error.issues.map((issue) => [
+          issue.path.join('.') || 'body',
+          issue.message,
+        ]),
+      );
+      return respuesta.code(400).send({
+        error: 'Datos inválidos para crear la reserva',
+        campos,
+      });
+    }
+
     const payload =
       (solicitud.user as { sub: string; rol: string; estudioId: string | null } | undefined) ??
       null;
+    const datosReserva = resultadoValidacionBase.data;
     const {
       estudioId, personalId,
       fecha, horaInicio, duracion, servicios, precioTotal, estado, sucursal, marcaTinte, tonalidad, usarRecompensa,
-    } = solicitud.body;
+    } = datosReserva;
 
-    let nombreCliente = solicitud.body.nombreCliente ?? '';
-    let telefonoCliente = solicitud.body.telefonoCliente ?? '';
-    let fechaNacimiento = solicitud.body.fechaNacimiento ?? '';
-    const email = solicitud.body.email;
+    let nombreCliente = datosReserva.nombreCliente ?? '';
+    let telefonoCliente = datosReserva.telefonoCliente ?? '';
+    let fechaNacimiento = datosReserva.fechaNacimiento ?? '';
+    const email = datosReserva.email;
     let clienteAppId: string | undefined;
 
     if (payload?.rol === 'dueno') {
@@ -272,9 +327,21 @@ export async function rutasReservas(servidor: FastifyInstance): Promise<void> {
       }
     }
 
-    if (!estudioId || !personalId || !nombreCliente || !telefonoCliente || !fecha || !horaInicio || !fechaNacimiento) {
+    const resultadoDatosCliente = esquemaDatosClienteReserva.safeParse({
+      nombreCliente,
+      telefonoCliente,
+      fechaNacimiento,
+    });
+    if (!resultadoDatosCliente.success) {
+      const campos = Object.fromEntries(
+        resultadoDatosCliente.error.issues.map((issue) => [
+          issue.path.join('.') || 'body',
+          issue.message,
+        ]),
+      );
       return respuesta.code(400).send({
-        error: 'Campos requeridos: estudioId, personalId, nombreCliente, telefonoCliente, fecha, horaInicio, fechaNacimiento',
+        error: 'Datos del cliente inválidos para crear la reserva',
+        campos,
       });
     }
 
@@ -295,7 +362,7 @@ export async function rutasReservas(servidor: FastifyInstance): Promise<void> {
     }
 
     // Calcular edad para detectar menor de edad
-    const nacimiento = new Date(fechaNacimiento);
+    const nacimiento = new Date(`${fechaNacimiento}T00:00:00`);
     const hoy = new Date();
     let edad = hoy.getFullYear() - nacimiento.getFullYear();
     const cumpleEsteAnio = new Date(hoy.getFullYear(), nacimiento.getMonth(), nacimiento.getDate());

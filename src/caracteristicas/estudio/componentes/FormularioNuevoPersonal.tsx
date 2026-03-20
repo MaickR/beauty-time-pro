@@ -9,6 +9,7 @@ import type { Servicio } from '../../../tipos';
 interface PropsFormularioNuevoPersonal {
   estudioId: string;
   serviciosDisponibles: Servicio[];
+  alCrearExitoso?: () => void | Promise<void>;
 }
 
 const DIAS_LABORALES_PREDETERMINADOS = [1, 2, 3, 4, 5];
@@ -16,6 +17,7 @@ const DIAS_LABORALES_PREDETERMINADOS = [1, 2, 3, 4, 5];
 export function FormularioNuevoPersonal({
   estudioId,
   serviciosDisponibles,
+  alCrearExitoso,
 }: PropsFormularioNuevoPersonal) {
   const { mostrarToast } = usarToast();
   const { recargar } = usarContextoApp();
@@ -75,12 +77,16 @@ export function FormularioNuevoPersonal({
 
       return personal;
     },
-    onSuccess: () => {
+    onSuccess: async () => {
       setNombre('');
       setAvatarPreview(null);
       setArchivoAvatar(null);
       localStorage.removeItem(CLAVE_ALMACEN);
-      recargar();
+      if (alCrearExitoso) {
+        await alCrearExitoso();
+      } else {
+        recargar();
+      }
       mostrarToast('Especialista agregado correctamente');
     },
     onError: (error) => {

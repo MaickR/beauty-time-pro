@@ -189,7 +189,7 @@ export function PerfilSalon({ estudioId }: PropsPerfilSalon) {
   const definicionPlan = obtenerDefinicionPlan(perfil.plan);
 
   return (
-    <div className="space-y-8 max-w-2xl">
+    <div className="mx-auto max-w-2xl space-y-8">
       <section className="bg-white rounded-4xl p-8 border border-slate-200 space-y-4">
         <h3 className="text-lg font-black uppercase tracking-tight">Plan actual</h3>
         <div className="rounded-3xl border border-slate-200 bg-slate-50 p-5">

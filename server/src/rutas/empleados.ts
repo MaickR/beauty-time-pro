@@ -49,6 +49,43 @@ export async function rutasEmpleados(servidor: FastifyInstance): Promise<void> {
     },
   );
 
+  servidor.get<{ Querystring: { mes: string } }>(
+    '/empleados/mi-agenda-mes',
+    { preHandler: verificarJWT },
+    async (solicitud, respuesta) => {
+      const payload = solicitud.user as PayloadJWT;
+      if (payload.rol !== 'empleado') {
+        return respuesta.code(403).send({ error: 'Sin permisos para esta acción' });
+      }
+      if (!payload.personalId) {
+        return respuesta.code(400).send({ error: 'Token inválido: falta personalId' });
+      }
+
+      const mes = solicitud.query.mes;
+      if (!/^\d{4}-\d{2}$/.test(mes)) {
+        return respuesta.code(400).send({ error: 'Formato de mes inválido. Use YYYY-MM' });
+      }
+
+      const [anioTexto, mesTexto] = mes.split('-');
+      const anio = Number(anioTexto);
+      const mesNumero = Number(mesTexto);
+      const inicioMes = `${anio}-${String(mesNumero).padStart(2, '0')}-01`;
+      const finMes = new Date(anio, mesNumero, 0).toISOString().split('T')[0]!;
+
+      const reservas = await prisma.reserva.findMany({
+        where: {
+          personalId: payload.personalId,
+          fecha: { gte: inicioMes, lte: finMes },
+          estado: { not: 'cancelled' },
+        },
+        orderBy: [{ fecha: 'asc' }, { horaInicio: 'asc' }],
+        include: incluirServiciosDetalleReserva,
+      });
+
+      return respuesta.send({ datos: reservas.map(serializarReservaApi) });
+    },
+  );
+
   // ─── PUT /empleados/reservas/:id/estado (rol empleado) ───────────────────
   servidor.put<{ Params: { id: string }; Body: { estado: string } }>(
     '/empleados/reservas/:id/estado',
@@ -153,9 +190,14 @@ export async function rutasEmpleados(servidor: FastifyInstance): Promise<void> {
         },
       });
 
+      const acceso = await prisma.empleadoAcceso.findUnique({
+        where: { id: payload.sub },
+        select: { email: true },
+      });
+
       if (!personal) return respuesta.code(404).send({ error: 'Perfil no encontrado' });
 
-      return respuesta.send({ datos: personal });
+      return respuesta.send({ datos: { ...personal, email: acceso?.email ?? payload.email ?? '' } });
     },
   );
 

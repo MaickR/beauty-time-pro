@@ -10,6 +10,7 @@ const adaptador = new PrismaMariaDb({
 	user: decodeURIComponent(urlBaseDatos.username),
 	password: decodeURIComponent(urlBaseDatos.password),
 	database: urlBaseDatos.pathname.replace(/^\//, ''),
+	allowPublicKeyRetrieval: true,
 });
 
 export const prisma = new PrismaClient({ adapter: adaptador });

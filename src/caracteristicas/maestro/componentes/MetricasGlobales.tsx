@@ -43,17 +43,19 @@ function TarjetaMetrica({
   colorTexto = 'text-slate-900',
 }: TarjetaMetricaProps) {
   return (
-    <div className="bg-white rounded-2xl p-5 border border-slate-100 shadow-sm flex items-center gap-4">
+    <div className="bg-white rounded-2xl p-5 border border-slate-100 shadow-sm flex flex-col items-center text-center gap-3">
       <div
         className={`w-12 h-12 rounded-xl flex items-center justify-center shrink-0 ${colorFondo}`}
       >
         <span className={colorIcono}>{icono}</span>
       </div>
-      <div className="min-w-0">
+      <div className="min-w-0 w-full">
         <p className="text-sm font-bold text-slate-400 uppercase tracking-wider wrap-break-word">
           {etiqueta}
         </p>
-        <p className={`text-2xl font-black ${colorTexto}`}>{valor.toLocaleString('es-MX')}</p>
+        <p className={`text-2xl font-black text-center ${colorTexto}`}>
+          {valor.toLocaleString('es-MX')}
+        </p>
       </div>
     </div>
   );

@@ -174,7 +174,7 @@ function formatearPrecioInput(valor: string, paisActual: Pais): string {
 }
 
 function limpiarPrecio(valor: string): number {
-  return Math.max(0, Number(valor.replace(/[^\d]/g, '')) || 0);
+  return Math.max(1, Number(valor.replace(/[^\d]/g, '')) || 0);
 }
 
 function obtenerResumenHorario(horario: HorarioLocal) {
@@ -237,6 +237,10 @@ function validarServiciosSalon(servicios: Servicio[]) {
   const servicioSinDuracion = servicios.find((servicio) => servicio.duration <= 0);
   if (servicioSinDuracion)
     return `El servicio ${servicioSinDuracion.name} debe tener una duración mayor a 0.`;
+
+  const servicioSinPrecioValido = servicios.find((servicio) => servicio.price < 1);
+  if (servicioSinPrecioValido)
+    return `El servicio ${servicioSinPrecioValido.name} debe tener un precio mayor a 0.`;
 
   return null;
 }
@@ -614,7 +618,7 @@ export function PaginaRegistroSalon() {
 
     setServiciosSeleccionados((actual) => [
       ...actual,
-      { name: nombreServicio, duration: 30, price: 0, category: categoria },
+      { name: nombreServicio, duration: 30, price: 1, category: categoria },
     ]);
   };
 
@@ -628,7 +632,8 @@ export function PaginaRegistroSalon() {
         if (servicio.name !== nombreServicio) return servicio;
         return {
           ...servicio,
-          [campo]: Math.max(0, Number(valor) || 0),
+          [campo]:
+            campo === 'price' ? Math.max(1, Number(valor) || 0) : Math.max(5, Number(valor) || 0),
         };
       }),
     );
@@ -646,7 +651,7 @@ export function PaginaRegistroSalon() {
 
     setServiciosSeleccionados((actual) => [
       ...actual,
-      { name: nombre, duration: 30, price: 0, category: categoria },
+      { name: nombre, duration: 30, price: 1, category: categoria },
     ]);
     setServiciosPersonalizados((actual) => [...actual, { name: nombre, category: categoria }]);
     setEntradaServicioPersonalizado((actual) => ({ ...actual, [categoria]: '' }));

@@ -79,7 +79,9 @@ export function PaginaInicioSesion() {
     setCodigoBloqueo(null);
     setMotivoRechazo(null);
 
-    const resultado = esCorreo
+    const accesoEsCorreo = datos.acceso.includes('@');
+
+    const resultado = accesoEsCorreo
       ? await iniciarSesion(datos.acceso.trim(), datos.contrasena?.trim() ?? '')
       : await iniciarSesionConClave(datos.acceso.trim());
 
@@ -94,7 +96,9 @@ export function PaginaInicioSesion() {
       }
       return;
     }
-    navegar(rutaDesde ?? resultado.ruta ?? '/');
+
+    const destino = accesoEsCorreo ? (rutaDesde ?? resultado.ruta ?? '/') : (resultado.ruta ?? '/');
+    navegar(destino);
   };
 
   return (

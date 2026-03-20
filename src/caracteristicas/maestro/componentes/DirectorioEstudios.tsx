@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { Store, List, Pencil, Trash2, CheckCircle2 } from 'lucide-react';
+import { useMemo, useState } from 'react';
+import { Store, List, Pencil, Trash2, CheckCircle2, ArrowUpDown } from 'lucide-react';
 import { useMutation } from '@tanstack/react-query';
 import { DialogoConfirmacion } from '../../../componentes/ui/DialogoConfirmacion';
 import { Tooltip } from '../../../componentes/ui/Tooltip';
@@ -24,6 +24,8 @@ export function DirectorioEstudios({
   onAbrirPago,
 }: PropsDirectorioEstudios) {
   const [idEliminar, setIdEliminar] = useState<string | null>(null);
+  const [campoOrden, setCampoOrden] = useState<'createdAt' | 'name' | 'country'>('createdAt');
+  const [direccionOrden, setDireccionOrden] = useState<'asc' | 'desc'>('desc');
   const { recargar } = usarContextoApp();
 
   const { mutate: borrarEstudio, isPending: eliminando } = useMutation({
@@ -39,6 +41,28 @@ export function DirectorioEstudios({
     borrarEstudio(idEliminar);
   };
 
+  const estudiosOrdenados = useMemo(() => {
+    const copia = [...estudios];
+    copia.sort((a, b) => {
+      let comparacion = 0;
+
+      if (campoOrden === 'createdAt') {
+        comparacion = new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime();
+      }
+
+      if (campoOrden === 'name') {
+        comparacion = a.name.localeCompare(b.name, 'es', { sensitivity: 'base' });
+      }
+
+      if (campoOrden === 'country') {
+        comparacion = a.country.localeCompare(b.country, 'es', { sensitivity: 'base' });
+      }
+
+      return direccionOrden === 'asc' ? comparacion : comparacion * -1;
+    });
+    return copia;
+  }, [campoOrden, direccionOrden, estudios]);
+
   if (estudios.length === 0) {
     return (
       <p className="text-center py-16 text-slate-400 font-bold italic">
@@ -49,8 +73,40 @@ export function DirectorioEstudios({
 
   return (
     <>
+      <div className="mb-6 flex flex-col gap-3 rounded-3xl border border-slate-200 bg-white p-4 md:flex-row md:items-center md:justify-between">
+        <div>
+          <p className="text-xs font-black uppercase tracking-[0.2em] text-slate-500">
+            Ordenar salones
+          </p>
+          <p className="mt-1 text-sm font-medium text-slate-500">
+            Orden aplicado en frontend sobre los salones ya cargados.
+          </p>
+        </div>
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+          <select
+            value={campoOrden}
+            onChange={(e) => setCampoOrden(e.target.value as 'createdAt' | 'name' | 'country')}
+            className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-bold text-slate-700 outline-none focus:ring-2 focus:ring-pink-500 sm:w-auto"
+            aria-label="Ordenar salones por"
+          >
+            <option value="createdAt">Fecha de creación</option>
+            <option value="name">Nombre</option>
+            <option value="country">País</option>
+          </select>
+          <button
+            type="button"
+            onClick={() => setDireccionOrden((valor) => (valor === 'asc' ? 'desc' : 'asc'))}
+            className="inline-flex items-center justify-center gap-2 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-black text-slate-700 transition-colors hover:bg-slate-100"
+            aria-label="Cambiar dirección de orden"
+          >
+            <ArrowUpDown className="h-4 w-4" />
+            {direccionOrden === 'asc' ? 'Ascendente' : 'Descendente'}
+          </button>
+        </div>
+      </div>
+
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        {estudios.map((s) => {
+        {estudiosOrdenados.map((s) => {
           const sub = obtenerEstadoSuscripcion(s);
           const totalCitas = reservas.filter((b) => b.studioId === s.id).length;
           const personalActivo = s.staff?.filter((persona) => persona.active).length ?? 0;

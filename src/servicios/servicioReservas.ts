@@ -11,6 +11,22 @@ interface SlotBackend {
   status?: SlotTiempo['status'];
 }
 
+function normalizarFechaReserva(fecha: string): string {
+  const fechaLimpia = fecha.trim();
+  if (/^\d{4}-\d{2}-\d{2}$/.test(fechaLimpia)) {
+    return fechaLimpia;
+  }
+
+  const fechaParseada = new Date(fechaLimpia);
+  if (Number.isNaN(fechaParseada.getTime())) {
+    throw new Error('La fecha de la reserva no es válida.');
+  }
+
+  const compensacion = fechaParseada.getTimezoneOffset();
+  const fechaLocal = new Date(fechaParseada.getTime() - compensacion * 60 * 1000);
+  return fechaLocal.toISOString().split('T')[0] ?? '';
+}
+
 function normalizarSlots(slots: SlotBackend[]): SlotTiempo[] {
   return slots
     .map((slot) => {
@@ -56,19 +72,34 @@ export interface ReservaCancelable {
 
 /** Crea una nueva reserva. */
 export async function crearReserva(datos: DatosCrearReserva): Promise<ResultadoCrearReserva> {
+  const personalId = datos.staffId.trim();
+  const estudioId = datos.studioId.trim();
+  const fecha = normalizarFechaReserva(datos.date);
+  const servicios = Array.isArray(datos.services) ? datos.services : [];
+
+  if (!estudioId) {
+    throw new Error('El estudio es obligatorio para crear la reserva.');
+  }
+  if (!personalId) {
+    throw new Error('Debes seleccionar un especialista.');
+  }
+  if (servicios.length === 0) {
+    throw new Error('Debes seleccionar al menos un servicio.');
+  }
+
   return peticion('/reservas', {
     method: 'POST',
     body: JSON.stringify({
-      estudioId: datos.studioId,
-      personalId: datos.staffId,
+      estudioId,
+      personalId,
       nombreCliente: datos.clientName,
       telefonoCliente: datos.clientPhone,
       fechaNacimiento: datos.fechaNacimiento,
       email: datos.email || undefined,
-      fecha: datos.date,
+      fecha,
       horaInicio: datos.time,
       duracion: datos.totalDuration,
-      servicios: datos.services,
+      servicios,
       precioTotal: datos.totalPrice,
       estado: datos.status,
       sucursal: datos.branch,

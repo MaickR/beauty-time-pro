@@ -4,10 +4,23 @@ import { useMutation } from '@tanstack/react-query';
 import { formatearDinero } from '../../../utils/formato';
 import { actualizarPreciosServicios } from '../../../servicios/servicioEstudios';
 import { usarToast } from '../../../componentes/ui/ProveedorToast';
+import { DialogoConfirmacion } from '../../../componentes/ui/DialogoConfirmacion';
 import { usarContextoApp } from '../../../contextos/ContextoApp';
 import { FormularioNuevoServicio } from './FormularioNuevoServicio';
 import type { Estudio, Moneda, Servicio } from '../../../tipos';
+import { CATALOGO_SERVICIOS } from '../../../lib/constantes';
 import { MENSAJE_FUNCION_PRO, obtenerDefinicionPlan } from '../../../lib/planes';
+
+const obtenerLocaleMoneda = (moneda: Moneda) => (moneda === 'COP' ? 'es-CO' : 'es-MX');
+
+const limpiarDigitos = (valor: string) => valor.replace(/\D/g, '');
+
+const normalizarEnteroEditable = (valor: string) => limpiarDigitos(valor).replace(/^0+(?=\d)/, '');
+
+const formatearMontoEditable = (valor: number, moneda: Moneda) =>
+  `$${new Intl.NumberFormat(obtenerLocaleMoneda(moneda), {
+    maximumFractionDigits: 0,
+  }).format(Math.max(0, valor || 0))}`;
 
 interface PropsCatalogoServicios {
   estudio: Estudio;
@@ -21,6 +34,9 @@ export function CatalogoServicios({ estudio }: PropsCatalogoServicios) {
   const [serviciosLocales, setServiciosLocales] = useState(estudio.selectedServices);
   const [servicioEditando, setServicioEditando] = useState<string | null>(null);
   const [borrandoServicio, setBorrandoServicio] = useState<string | null>(null);
+  const serviciosBaseDisponibles = Array.from(
+    new Set(Object.values(CATALOGO_SERVICIOS).flat()),
+  ).sort((a, b) => a.localeCompare(b, 'es'));
 
   useEffect(() => {
     setServiciosLocales(estudio.selectedServices);
@@ -52,18 +68,32 @@ export function CatalogoServicios({ estudio }: PropsCatalogoServicios) {
     );
   };
 
+  const actualizarPrecioLocal = (nombreServicio: string, valor: string) => {
+    actualizarCampoLocal(nombreServicio, 'price', limpiarDigitos(valor));
+  };
+
+  const actualizarDuracionLocal = (nombreServicio: string, valor: string) => {
+    actualizarCampoLocal(nombreServicio, 'duration', normalizarEnteroEditable(valor));
+  };
+
   const guardarServicios = (serviciosActualizados: Servicio[]) => {
     setServiciosLocales(serviciosActualizados);
     guardarPrecios(serviciosActualizados);
   };
 
   const confirmarEdicion = (nombreServicio: string) => {
+    const servicioEditado = serviciosLocales.find((servicio) => servicio.name === nombreServicio);
+    if ((servicioEditado?.price ?? 0) < 1) {
+      mostrarToast({ mensaje: 'El precio debe ser mayor a 0', variante: 'error' });
+      return;
+    }
+
     const serviciosActualizados = serviciosLocales.map((servicio) =>
       servicio.name === nombreServicio
         ? {
             ...servicio,
             duration: Math.max(5, servicio.duration || 0),
-            price: Math.max(0, servicio.price || 0),
+            price: Math.max(1, servicio.price || 0),
           }
         : servicio,
     );
@@ -95,19 +125,12 @@ export function CatalogoServicios({ estudio }: PropsCatalogoServicios) {
 
   const alternarEliminar = (nombreServicio: string) => {
     setServicioEditando(null);
-    setBorrandoServicio((actual) => (actual === nombreServicio ? null : nombreServicio));
+    setBorrandoServicio(nombreServicio);
   };
 
   const serviciosOrdenados = [...serviciosLocales].sort((a, b) =>
     a.name.localeCompare(b.name, 'es'),
   );
-
-  const actualizarPrecio = (nombreServicio: string, nuevoPrecio: string) => {
-    const serviciosActualizados = serviciosLocales.map((s) =>
-      s.name === nombreServicio ? { ...s, price: parseInt(nuevoPrecio) || 0 } : s,
-    );
-    guardarServicios(serviciosActualizados);
-  };
 
   const agregarServicio = (servicioNuevo: Servicio) => {
     if (
@@ -137,6 +160,20 @@ export function CatalogoServicios({ estudio }: PropsCatalogoServicios) {
     mostrarToast('Servicio agregado correctamente');
   };
 
+  const activarServicioBase = (nombreServicio: string) => {
+    agregarServicio({
+      name: nombreServicio,
+      duration: 60,
+      price: 1,
+    });
+  };
+
+  const nombresServiciosActivos = new Set(
+    serviciosLocales.map((servicio) => servicio.name.trim().toLowerCase()),
+  );
+  const llegoLimitePlan =
+    definicionPlan.maxServicios !== null && serviciosLocales.length >= definicionPlan.maxServicios;
+
   return (
     <div className="bg-white rounded-[3rem] p-6 md:p-8 border border-slate-200 shadow-sm">
       <div className="mb-6">
@@ -150,16 +187,38 @@ export function CatalogoServicios({ estudio }: PropsCatalogoServicios) {
       </div>
 
       <div className="mb-6">
+        <div className="mb-4 rounded-3xl border border-pink-100 bg-pink-50/70 p-4">
+          <p className="text-[10px] font-black uppercase tracking-[0.24em] text-pink-700">
+            Activa servicios del catálogo base
+          </p>
+          <p className="mt-2 text-sm font-medium text-slate-600">
+            Agrega servicios sugeridos con un clic y luego ajusta precio y duración a tu medida.
+          </p>
+          <div className="mt-4 flex flex-wrap gap-2">
+            {serviciosBaseDisponibles.map((nombreServicio) => {
+              const activo = nombresServiciosActivos.has(nombreServicio.toLowerCase());
+
+              return (
+                <button
+                  key={nombreServicio}
+                  type="button"
+                  onClick={() => activarServicioBase(nombreServicio)}
+                  disabled={activo || llegoLimitePlan}
+                  className="rounded-full border border-pink-200 bg-white px-3 py-2 text-xs font-black text-pink-700 transition hover:border-pink-400 hover:bg-pink-100 disabled:cursor-not-allowed disabled:border-slate-200 disabled:bg-slate-100 disabled:text-slate-400"
+                >
+                  {activo ? `${nombreServicio} activo` : `Activar ${nombreServicio}`}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
         <FormularioNuevoServicio
           moneda={moneda}
           onAgregar={agregarServicio}
-          bloqueado={
-            definicionPlan.maxServicios !== null &&
-            serviciosLocales.length >= definicionPlan.maxServicios
-          }
+          bloqueado={llegoLimitePlan}
           mensajeBloqueo={
-            definicionPlan.maxServicios !== null &&
-            serviciosLocales.length >= definicionPlan.maxServicios
+            llegoLimitePlan
               ? `Llegaste al límite de ${definicionPlan.maxServicios} servicios del plan ${definicionPlan.nombre}. ${MENSAJE_FUNCION_PRO}`
               : undefined
           }
@@ -186,32 +245,25 @@ export function CatalogoServicios({ estudio }: PropsCatalogoServicios) {
           return (
             <div
               key={s.name}
-              className="group flex flex-col justify-between rounded-2xl border border-slate-100 border-l-[3px] border-l-transparent bg-white p-5 transition-all duration-150 hover:border-l-(--color-primario) hover:bg-gray-50"
+              className="rounded-2xl border border-pink-100 bg-white p-4 transition-all hover:border-pink-300 hover:shadow-md"
             >
-              <div className="mb-4 flex items-start justify-between gap-4">
+              <div className="mb-3 flex items-start justify-between gap-4">
                 <div>
-                  <span className="block text-sm font-black uppercase text-slate-800">
+                  <span
+                    className="block text-sm font-medium"
+                    style={{ color: 'var(--color-texto)' }}
+                  >
                     {s.name}
                   </span>
-                  <div className="mt-2 flex flex-wrap items-center gap-2">
-                    <span className="inline-flex items-center gap-1 rounded-full bg-green-100 px-3 py-1 text-[10px] font-black uppercase text-green-700">
-                      <DollarSign className="w-3 h-3" />
-                      {formatearDinero(servicioActual.price ?? 0, moneda)}
-                    </span>
-                    <span className="inline-flex items-center gap-1 rounded-full bg-blue-100 px-3 py-1 text-[10px] font-black uppercase text-blue-700">
-                      <Clock className="w-3 h-3" />
-                      {servicioActual.duration} min
-                    </span>
-                  </div>
                 </div>
 
-                <div className="flex items-center gap-2 opacity-0 transition-opacity duration-150 group-hover:opacity-100">
+                <div className="flex items-center gap-2">
                   {!editando && !porEliminar && (
                     <>
                       <button
                         type="button"
                         onClick={() => iniciarEdicion(s.name)}
-                        className="rounded-xl bg-white p-2 text-slate-500 shadow-sm transition hover:text-(--color-primario)"
+                        className="rounded-lg p-1.5 text-pink-400 transition hover:bg-pink-50"
                         aria-label={`Editar ${s.name}`}
                       >
                         <Pencil className="w-4 h-4" />
@@ -219,7 +271,7 @@ export function CatalogoServicios({ estudio }: PropsCatalogoServicios) {
                       <button
                         type="button"
                         onClick={() => alternarEliminar(s.name)}
-                        className="rounded-xl bg-white p-2 text-slate-500 shadow-sm transition hover:text-red-600"
+                        className="rounded-lg p-1.5 text-red-400 transition hover:bg-red-50"
                         aria-label={`Eliminar ${s.name}`}
                       >
                         <Trash2 className="w-4 h-4" />
@@ -252,13 +304,6 @@ export function CatalogoServicios({ estudio }: PropsCatalogoServicios) {
                     <>
                       <button
                         type="button"
-                        onClick={() => eliminarServicio(s.name)}
-                        className="rounded-xl bg-red-100 px-3 py-2 text-[10px] font-black uppercase text-red-700 transition hover:bg-red-200"
-                      >
-                        Confirmar
-                      </button>
-                      <button
-                        type="button"
                         onClick={() => setBorrandoServicio(null)}
                         className="rounded-xl bg-slate-100 p-2 text-slate-600 transition hover:bg-slate-200"
                         aria-label={`Cancelar eliminación de ${s.name}`}
@@ -279,10 +324,9 @@ export function CatalogoServicios({ estudio }: PropsCatalogoServicios) {
                     <div className="flex items-center gap-2">
                       <span className="text-xs font-black text-green-700">{moneda}</span>
                       <input
-                        type="number"
-                        min="0"
-                        value={servicioActual.price ?? 0}
-                        onChange={(e) => actualizarCampoLocal(s.name, 'price', e.target.value)}
+                        value={formatearMontoEditable(servicioActual.price ?? 0, moneda)}
+                        onChange={(e) => actualizarPrecioLocal(s.name, e.target.value)}
+                        inputMode="numeric"
                         className="w-full bg-transparent text-right text-sm font-black text-slate-800 outline-none"
                         aria-label={`Precio de ${s.name}`}
                       />
@@ -295,12 +339,9 @@ export function CatalogoServicios({ estudio }: PropsCatalogoServicios) {
                     </span>
                     <div className="flex items-center gap-2">
                       <input
-                        type="number"
-                        min="5"
-                        max="480"
-                        step="5"
                         value={servicioActual.duration}
-                        onChange={(e) => actualizarCampoLocal(s.name, 'duration', e.target.value)}
+                        onChange={(e) => actualizarDuracionLocal(s.name, e.target.value)}
+                        inputMode="numeric"
                         className="w-full bg-transparent text-right text-sm font-black text-slate-800 outline-none"
                         aria-label={`Duración de ${s.name}`}
                       />
@@ -309,16 +350,15 @@ export function CatalogoServicios({ estudio }: PropsCatalogoServicios) {
                   </label>
                 </div>
               ) : (
-                <button
-                  type="button"
-                  onClick={() => actualizarPrecio(s.name, String(servicioActual.price ?? 0))}
-                  className="rounded-2xl border border-slate-200 bg-white p-3 text-left transition group-hover:border-green-300"
-                >
-                  <p className="text-[10px] font-black uppercase text-slate-400">Resumen</p>
-                  <p className="mt-1 text-sm font-black text-slate-800">
+                <div className="flex gap-4 text-sm" style={{ color: 'var(--color-texto-suave)' }}>
+                  <span className="inline-flex items-center gap-1">
+                    <Clock className="h-4 w-4 text-pink-400" /> {servicioActual.duration} min
+                  </span>
+                  <span className="inline-flex items-center gap-1">
+                    <DollarSign className="h-4 w-4 text-pink-400" />
                     {formatearDinero(servicioActual.price ?? 0, moneda)}
-                  </p>
-                </button>
+                  </span>
+                </div>
               )}
             </div>
           );
@@ -329,6 +369,22 @@ export function CatalogoServicios({ estudio }: PropsCatalogoServicios) {
           </p>
         )}
       </div>
+
+      <DialogoConfirmacion
+        abierto={Boolean(borrandoServicio)}
+        mensaje="Eliminar servicio"
+        descripcion={
+          borrandoServicio ? `Se quitará ${borrandoServicio} del catálogo del salón.` : undefined
+        }
+        variante="peligro"
+        textoConfirmar="Eliminar"
+        onCancelar={() => setBorrandoServicio(null)}
+        onConfirmar={() => {
+          if (borrandoServicio) {
+            eliminarServicio(borrandoServicio);
+          }
+        }}
+      />
     </div>
   );
 }

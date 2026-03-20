@@ -67,17 +67,18 @@ export function ModalCrearReservaManual({
   const nombreDia = DIAS_SEMANA[fechaVista.getDay()]!;
   const horarioDia = estudio.schedule[nombreDia];
   const esFestivo = estudio.holidays?.includes(fechaStr) ?? false;
+  const duracionConsulta = totalDuracion > 0 ? totalDuracion : 30;
   const consultaDisponibilidad = useQuery({
-    queryKey: ['disponibilidad-estudio', estudio.id, personalSeleccionado, fechaStr, totalDuracion],
+    queryKey: [
+      'disponibilidad-estudio',
+      estudio.id,
+      personalSeleccionado,
+      fechaStr,
+      duracionConsulta,
+    ],
     queryFn: () =>
-      obtenerDisponibilidadEstudio(estudio.id, personalSeleccionado, fechaStr, totalDuracion),
-    enabled: Boolean(
-      miembro &&
-      horarioDia?.isOpen &&
-      serviciosSeleccionados.length > 0 &&
-      totalDuracion > 0 &&
-      !esFestivo,
-    ),
+      obtenerDisponibilidadEstudio(estudio.id, personalSeleccionado, fechaStr, duracionConsulta),
+    enabled: Boolean(miembro && horarioDia?.isOpen && !esFestivo),
     staleTime: 30_000,
   });
   const slotsDisponibles = (consultaDisponibilidad.data ?? []).filter(
@@ -159,7 +160,12 @@ export function ModalCrearReservaManual({
 
   function cambiarPersonal(personalId: string) {
     setPersonalSeleccionado(personalId);
-    setServiciosSeleccionados([]);
+    setServiciosSeleccionados((actuales) => {
+      const miembroSiguiente = estudio.staff.find((item) => item.id === personalId);
+      if (!miembroSiguiente) return [];
+
+      return actuales.filter((servicio) => miembroSiguiente.specialties.includes(servicio.name));
+    });
     setHoraSeleccionada('');
   }
 

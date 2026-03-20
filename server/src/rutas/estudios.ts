@@ -11,6 +11,7 @@ import { registrarAuditoria } from '../utils/auditoria.js';
 import { sanitizarTexto } from '../utils/sanitizar.js';
 import { enviarEmailSolicitudCancelacion } from '../servicios/servicioEmail.js';
 import { colorHexSchema, emailOpcionalONuloSchema, fechaIsoSchema, horaOpcionalONulaSchema, horaSchema, obtenerMensajeValidacion, telefonoSchema, textoOpcionalONuloSchema, textoSchema, urlOpcionalSchema } from '../lib/validacion.js';
+import { sanitizarClaveSalon } from '../lib/clavesSalon.js';
 import { normalizarPlanEstudio, validarCantidadServiciosPlan } from '../lib/planes.js';
 
 const esquemaHorario = z.record(
@@ -21,6 +22,26 @@ const esquemaHorario = z.record(
     closeTime: horaSchema,
   }),
 );
+
+const CLAVE_SALON_REGEX = /^[A-Z0-9]+$/;
+
+const esquemaServicio = z.object({
+  name: textoSchema('servicio', 80),
+  duration: z.number().int().min(5, 'La duración mínima es 5 minutos').max(720, 'La duración máxima es 720 minutos'),
+  price: z.number().min(1, 'El precio debe ser mayor a 0').max(10000000, 'El precio excede el máximo permitido'),
+  category: textoOpcionalONuloSchema('categoria', 80).transform((valor) => valor ?? undefined),
+});
+
+const esquemaServicioPersonalizado = z.object({
+  name: textoSchema('servicioPersonalizado', 80),
+  category: textoSchema('categoria', 80),
+});
+
+const claveSalonSchema = (campo: 'claveDueno' | 'claveCliente') =>
+  textoSchema(campo, 32).transform((valor) => sanitizarClaveSalon(valor)).refine(
+    (valor) => CLAVE_SALON_REGEX.test(valor),
+    'La clave solo puede contener letras y números',
+  );
 
 const esquemaEmailContactoOpcional = emailOpcionalONuloSchema('emailContacto');
 
@@ -33,8 +54,8 @@ const esquemaCamposEstudio = {
   plan: z.enum(['STANDARD', 'PRO']).optional(),
   sucursales: z.array(textoSchema('sucursal', 80)).max(20, 'No puedes registrar más de 20 sucursales').optional(),
   horario: esquemaHorario.optional(),
-  servicios: z.array(z.unknown()).max(100, 'No puedes registrar más de 100 servicios').optional(),
-  serviciosCustom: z.array(z.unknown()).max(100, 'No puedes registrar más de 100 servicios personalizados').optional(),
+  servicios: z.array(esquemaServicio).max(100, 'No puedes registrar más de 100 servicios').optional(),
+  serviciosCustom: z.array(esquemaServicioPersonalizado).max(100, 'No puedes registrar más de 100 servicios personalizados').optional(),
   festivos: z.array(fechaIsoSchema).max(366, 'No puedes registrar más de 366 festivos').optional(),
   colorPrimario: colorHexSchema.optional(),
   descripcion: textoOpcionalONuloSchema('descripcion', 500),
@@ -55,14 +76,14 @@ const esquemaCrearEstudio = z.object({
   pais: textoSchema('pais', 50).optional(),
   plan: z.enum(['STANDARD', 'PRO']).optional(),
   sucursales: z.array(textoSchema('sucursal', 80)).max(20).optional(),
-  claveDueno: textoSchema('claveDueno', 32),
-  claveCliente: textoSchema('claveCliente', 32),
+  claveDueno: claveSalonSchema('claveDueno'),
+  claveCliente: claveSalonSchema('claveCliente'),
   suscripcion: textoSchema('suscripcion', 30).optional(),
   inicioSuscripcion: fechaIsoSchema.optional(),
   fechaVencimiento: fechaIsoSchema.optional(),
   horario: esquemaHorario.optional(),
-  servicios: z.array(z.unknown()).max(100).optional(),
-  serviciosCustom: z.array(z.unknown()).max(100).optional(),
+  servicios: z.array(esquemaServicio).max(100).optional(),
+  serviciosCustom: z.array(esquemaServicioPersonalizado).max(100).optional(),
   festivos: z.array(fechaIsoSchema).max(366).optional(),
   colorPrimario: colorHexSchema.optional(),
   descripcion: textoOpcionalONuloSchema('descripcion', 500),
@@ -387,14 +408,11 @@ export async function rutasEstudios(servidor: FastifyInstance): Promise<void> {
         return respuesta.code(403).send({ error: 'Sin permisos para esta acción' });
       }
 
+      const { id } = solicitud.params;
+
       const estudio = await prisma.estudio.findUnique({
-        where: { id: solicitud.params.id },
-        include: {
-          usuarios: {
-            where: { rol: 'dueno' },
-            select: { id: true, email: true, estudioId: true },
-          },
-        },
+        where: { id },
+        select: { id: true },
       });
 
       if (!estudio) {
@@ -402,27 +420,85 @@ export async function rutasEstudios(servidor: FastifyInstance): Promise<void> {
       }
 
       await prisma.$transaction(async (tx) => {
-        const duenosAsociados = estudio.usuarios;
-        const duenoPorCorreo = estudio.emailContacto
-          ? await tx.usuario.findMany({
-              where: { rol: 'dueno', email: estudio.emailContacto },
-              select: { id: true, email: true, estudioId: true },
-            })
-          : [];
+        await tx.suscripcionPush.deleteMany({
+          where: {
+            usuario: {
+              is: {
+                estudioId: id,
+              },
+            },
+          },
+        });
 
-        const duenosAEliminar = Array.from(
-          new Map(
-            [...duenosAsociados, ...duenoPorCorreo]
-              .filter((usuario) => !usuario.estudioId || usuario.estudioId === estudio.id)
-              .map((usuario) => [usuario.id, usuario]),
-          ).values(),
-        );
+        await tx.auditLog.deleteMany({
+          where: {
+            OR: [
+              {
+                usuario: {
+                  is: {
+                    estudioId: id,
+                  },
+                },
+              },
+              {
+                entidadTipo: 'estudio',
+                entidadId: id,
+              },
+            ],
+          },
+        });
 
-        for (const dueno of duenosAEliminar) {
-          await tx.usuario.delete({ where: { id: dueno.id } });
-        }
+        await tx.reservaServicio.deleteMany({
+          where: {
+            reserva: {
+              is: {
+                estudioId: id,
+              },
+            },
+          },
+        });
 
-        await tx.estudio.delete({ where: { id: estudio.id } });
+        await tx.reserva.deleteMany({ where: { estudioId: id } });
+        await tx.pago.deleteMany({ where: { estudioId: id } });
+
+        await tx.empleadoAcceso.deleteMany({
+          where: {
+            personal: {
+              is: {
+                estudioId: id,
+              },
+            },
+          },
+        });
+
+        await tx.personal.deleteMany({ where: { estudioId: id } });
+        await tx.cliente.deleteMany({ where: { estudioId: id } });
+        await tx.puntosFidelidad.deleteMany({ where: { estudioId: id } });
+        await tx.configFidelidad.deleteMany({ where: { estudioId: id } });
+        await tx.diaFestivo.deleteMany({ where: { estudioId: id } });
+
+        await tx.tokenReset.deleteMany({
+          where: {
+            usuario: {
+              is: {
+                estudioId: id,
+              },
+            },
+          },
+        });
+
+        await tx.permisosMaestro.deleteMany({
+          where: {
+            usuario: {
+              is: {
+                estudioId: id,
+              },
+            },
+          },
+        });
+
+        await tx.usuario.deleteMany({ where: { estudioId: id } });
+        await tx.estudio.delete({ where: { id } });
       });
 
       return respuesta.code(200).send({ datos: { eliminado: true } });

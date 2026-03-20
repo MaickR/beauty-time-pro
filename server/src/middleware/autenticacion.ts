@@ -100,18 +100,18 @@ export async function verificarJWT(
         return;
       }
 
-      if (!usuario.activo) {
-        await respuesta.code(403).send({
-          error: 'Tu cuenta ha sido suspendida',
-          codigo: 'CUENTA_SUSPENDIDA',
-        });
-        return;
-      }
-
       if (usuario.estudio?.estado === 'suspendido') {
         await respuesta.code(403).send({
           error: 'Tu salón está suspendido',
           codigo: 'SALON_SUSPENDIDO',
+        });
+        return;
+      }
+
+      if (!usuario.activo) {
+        await respuesta.code(403).send({
+          error: 'Tu cuenta ha sido suspendida',
+          codigo: 'CUENTA_SUSPENDIDA',
         });
         return;
       }

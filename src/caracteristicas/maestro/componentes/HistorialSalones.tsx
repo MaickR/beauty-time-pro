@@ -93,6 +93,7 @@ interface PropsSuspender {
 
 function BotonSuspender({ estudio, onCambio }: PropsSuspender) {
   const { mostrarToast } = usarToast();
+  const clienteConsulta = useQueryClient();
   const dueno = estudio.usuarios[0];
   const activo = estudio.estado !== 'suspendido' && (dueno?.activo ?? true);
 
@@ -103,6 +104,7 @@ function BotonSuspender({ estudio, onCambio }: PropsSuspender) {
         mensaje: activo ? 'Salón suspendido' : 'Salón reactivado',
         variante: 'exito',
       });
+      void clienteConsulta.invalidateQueries({ queryKey: ['historial-salones'] });
       onCambio();
     },
     onError: (err: Error) => mostrarToast({ mensaje: err.message, variante: 'error' }),
@@ -129,6 +131,7 @@ export function HistorialSalones() {
   const { mostrarToast } = usarToast();
   const clienteConsulta = useQueryClient();
   const [tabActivo, setTabActivo] = useState<TabHistorial>('aprobados');
+  const fechaArchivo = new Date().toLocaleDateString('sv-SE');
 
   const consultaEstados: Record<TabHistorial, string> = {
     aprobados: 'aprobado',
@@ -213,7 +216,7 @@ export function HistorialSalones() {
         );
       },
     });
-    doc.save(`salones-${tabActivo}-${new Date().toISOString().slice(0, 10)}.pdf`);
+    doc.save(`salones-${tabActivo}-${fechaArchivo}.pdf`);
   };
 
   const exportarExcel = async () => {
@@ -244,7 +247,7 @@ export function HistorialSalones() {
     );
     const libro = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(libro, hoja, tabActivo);
-    XLSX.writeFile(libro, `salones-${tabActivo}-${new Date().toISOString().slice(0, 10)}.xlsx`);
+    XLSX.writeFile(libro, `salones-${tabActivo}-${fechaArchivo}.xlsx`);
   };
 
   return (
@@ -254,20 +257,22 @@ export function HistorialSalones() {
       </h2>
 
       {/* Tabs */}
-      <div className="flex flex-wrap items-center gap-4 mb-6">
-        <div className="flex bg-slate-100 p-1 rounded-2xl w-fit gap-1">
-          {TABS.map((tab) => (
-            <button
-              key={tab.id}
-              onClick={() => setTabActivo(tab.id)}
-              className={`flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-bold transition-all ${tabActivo === tab.id ? 'bg-white shadow-sm text-slate-900' : 'text-slate-500 hover:text-slate-700'}`}
-            >
-              {tab.icono} {tab.etiqueta}
-            </button>
-          ))}
+      <div className="flex flex-col gap-4 mb-6 sm:flex-row sm:flex-wrap sm:items-center">
+        <div className="max-w-full overflow-x-auto pb-1">
+          <div className="flex min-w-max bg-slate-100 p-1 rounded-2xl gap-1">
+            {TABS.map((tab) => (
+              <button
+                key={tab.id}
+                onClick={() => setTabActivo(tab.id)}
+                className={`flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-bold transition-all ${tabActivo === tab.id ? 'bg-white shadow-sm text-slate-900' : 'text-slate-500 hover:text-slate-700'}`}
+              >
+                {tab.icono} {tab.etiqueta}
+              </button>
+            ))}
+          </div>
         </div>
         {salones.length > 0 && (
-          <div className="flex gap-2">
+          <div className="flex flex-wrap gap-2">
             <button
               onClick={() => void exportarPDF()}
               className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-red-50 text-red-700 text-xs font-bold hover:bg-red-100 transition-colors"
@@ -299,8 +304,8 @@ export function HistorialSalones() {
       )}
 
       {!isLoading && salones.length > 0 && (
-        <div className="bg-white rounded-3xl border border-slate-100 overflow-hidden overflow-x-auto">
-          <table className="w-full min-w-175 text-sm">
+        <div className="max-w-full overflow-x-auto rounded-3xl border border-slate-100 bg-white">
+          <table className="w-full min-w-180 text-sm">
             <thead>
               <tr className="border-b border-slate-100 text-left">
                 <th className="p-4 font-semibold text-slate-500">Salón</th>

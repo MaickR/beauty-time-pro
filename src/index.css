@@ -7,12 +7,29 @@
 
 :root {
   --color-primario: #c2185b;
+  --color-primario-suave: #fce4ec;
+  --color-acento: #f06292;
+  --color-texto: #2d2d2d;
+  --color-texto-suave: #6b6b6b;
+  --color-fondo: #fafafa;
+  --color-borde: #f0e6ea;
+  --color-superficie: #ffffff;
+  --color-exito: #2e7d32;
+  --color-advertencia: #f57f17;
+  --color-error: #c62828;
   --color-primario-oscuro: #880e4f;
 }
 
 html,
-body {
+body,
+#root {
   overflow-x: hidden;
+  max-width: 100vw;
+}
+
+body {
+  color: var(--color-texto);
+  background-color: var(--color-fondo);
 }
 
 /*
@@ -59,6 +76,67 @@ body {
 }
 .ring-pink-500 {
   --tw-ring-color: var(--color-primario);
+}
+
+/* Reemplazo visual global de tonos fríos por grises cálidos. */
+.text-slate-900,
+.text-gray-900,
+.text-slate-800,
+.text-gray-800 {
+  color: var(--color-texto);
+}
+
+.text-slate-700,
+.text-gray-700,
+.text-slate-600,
+.text-gray-600,
+.text-slate-500,
+.text-gray-500,
+.text-slate-400,
+.text-gray-400 {
+  color: var(--color-texto-suave);
+}
+
+.bg-slate-900,
+.bg-gray-900,
+.bg-slate-800,
+.bg-gray-800 {
+  background-color: var(--color-texto);
+}
+
+.border-slate-900,
+.border-gray-900,
+.border-slate-800,
+.border-gray-800 {
+  border-color: var(--color-texto);
+}
+
+.hover\:bg-slate-900:hover,
+.hover\:bg-gray-900:hover,
+.hover\:bg-slate-800:hover,
+.hover\:bg-gray-800:hover {
+  background-color: var(--color-texto);
+}
+
+.hover\:text-slate-900:hover,
+.hover\:text-gray-900:hover,
+.hover\:text-slate-800:hover,
+.hover\:text-gray-800:hover {
+  color: var(--color-texto);
+}
+
+.focus\:ring-slate-900:focus,
+.focus\:ring-gray-900:focus,
+.focus\:ring-slate-800:focus,
+.focus\:ring-gray-800:focus {
+  --tw-ring-color: var(--color-texto);
+}
+
+/* Ajuste global de tracking en UI para evitar espaciado excesivo. */
+.tracking-wide,
+.tracking-wider,
+.tracking-widest {
+  letter-spacing: 0;
 }
 
 .selector-fecha-popover .rdp-root {

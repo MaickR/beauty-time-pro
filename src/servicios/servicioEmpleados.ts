@@ -63,6 +63,11 @@ export async function obtenerMiAgenda(fecha?: string): Promise<ReservaEmpleado[]
   return respuesta.datos;
 }
 
+export async function obtenerMiAgendaMes(mes: string): Promise<ReservaEmpleado[]> {
+  const respuesta = await peticion<RespuestaReservas>(`/empleados/mi-agenda-mes?mes=${mes}`);
+  return respuesta.datos;
+}
+
 export async function actualizarEstadoReservaEmpleado(
   reservaId: string,
   estado: 'confirmed' | 'completed',

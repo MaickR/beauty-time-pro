@@ -37,11 +37,10 @@ export function PaginaMaestro() {
   const puedeGestionarPagos = usuario?.esMaestroTotal || usuario?.permisos.gestionarPagos;
   const puedeCrearAdmins = usuario?.esMaestroTotal || usuario?.permisos.crearAdmins;
   const puedeSuspenderSalones = usuario?.esMaestroTotal || usuario?.permisos.suspenderSalones;
+  const puedeVerDirectorio = puedeAprobarSalones || puedeSuspenderSalones;
 
   const tabsDisponibles: TabMaestro[] = [
-    ...(puedeVerMetricas || puedeAprobarSalones || puedeSuspenderSalones
-      ? ['directorio' as const]
-      : []),
+    ...(puedeVerDirectorio ? ['directorio' as const] : []),
     ...(puedeGestionarPagos ? ['estado-cuenta' as const] : []),
     ...(puedeCrearAdmins ? ['administradores' as const] : []),
     ...(puedeVerMetricas ? ['base-datos' as const] : []),
@@ -65,6 +64,7 @@ export function PaginaMaestro() {
       monto,
       moneda,
       (msg) => {
+        recargar();
         mostrarToast(msg);
         setPagoEstudio(null);
       },
@@ -97,7 +97,7 @@ export function PaginaMaestro() {
 
       <main className="max-w-7xl mx-auto p-8">
         {tabsDisponibles.length > 0 && (
-          <nav className="no-imprimir flex bg-slate-200/50 p-1 rounded-2xl w-fit mb-8 border border-slate-200 flex-wrap gap-1">
+          <nav className="no-imprimir flex bg-slate-100 p-1 rounded-2xl mb-8 border border-slate-200 flex-wrap gap-1 justify-center md:justify-start">
             {tabsDisponibles.includes('directorio') && (
               <button
                 onClick={() => setTabActiva('directorio')}

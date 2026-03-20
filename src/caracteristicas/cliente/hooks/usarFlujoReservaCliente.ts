@@ -131,6 +131,19 @@ export function usarFlujoReservaCliente(salon: SalonDetalle) {
   };
 
   const enviarReserva = async (mostrarError: (msg: string) => void) => {
+    if (!estado.personalId) {
+      mostrarError('Selecciona un especialista antes de continuar.');
+      return;
+    }
+    if (estado.serviciosSeleccionados.length === 0) {
+      mostrarError('Selecciona al menos un servicio para tu reserva.');
+      return;
+    }
+    if (!estado.horaSeleccionada) {
+      mostrarError('Selecciona un horario disponible antes de confirmar.');
+      return;
+    }
+
     setEstado((e) => ({ ...e, enviando: true }));
     try {
       const resultado = await mutacionCrearReserva.mutateAsync();

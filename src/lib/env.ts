@@ -15,6 +15,7 @@ const esquemaEntorno = z
     VITE_URL_API: z
       .string()
       .url('VITE_URL_API debe ser una URL válida (ej: http://localhost:3000)'),
+    VITE_URL_PUBLICA: z.string().url('VITE_URL_PUBLICA debe ser una URL válida').optional(),
 
     // ── Modo de ejecución ─────────────────────────────────────────────────
     MODE: z.enum(['development', 'production', 'test']).optional(),
