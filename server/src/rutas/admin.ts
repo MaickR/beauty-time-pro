@@ -836,7 +836,10 @@ export async function rutasAdmin(servidor: FastifyInstance): Promise<void> {
         } = resultado.data;
 
         const emailNorm = email.trim().toLowerCase();
-        const existente = await prisma.usuario.findUnique({ where: { email: emailNorm } });
+        const existente = await prisma.usuario.findUnique({
+          where: { email: emailNorm },
+          select: { id: true },
+        });
         if (existente) {
           return respuesta.code(409).send({ error: 'Ya existe un usuario con ese email' });
         }
