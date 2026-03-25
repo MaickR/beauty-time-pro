@@ -119,16 +119,24 @@ export async function peticion<T>(ruta: string, opciones: RequestInit = {}): Pro
   // para evitar un 401 innecesario en consola.
   await refrescarSiNecesario();
 
+  const metodo = (opciones.method ?? 'GET').toUpperCase();
+  const cuerpoNormalizado =
+    opciones.body === undefined && (metodo === 'PUT' || metodo === 'PATCH') ? '{}' : opciones.body;
   const cabeceras = new Headers(opciones.headers);
 
   const token = leerToken();
   if (token) cabeceras.set('Authorization', `Bearer ${token}`);
-  if (!cabeceras.has('Content-Type') && opciones.body && !(opciones.body instanceof FormData)) {
+  if (
+    !cabeceras.has('Content-Type') &&
+    cuerpoNormalizado &&
+    !(cuerpoNormalizado instanceof FormData)
+  ) {
     cabeceras.set('Content-Type', 'application/json');
   }
 
   const respuesta = await fetch(`${URL_BASE}${ruta}`, {
     ...opciones,
+    body: cuerpoNormalizado,
     headers: cabeceras,
     credentials: 'include',
   });
@@ -140,6 +148,7 @@ export async function peticion<T>(ruta: string, opciones: RequestInit = {}): Pro
       cabeceras.set('Authorization', `Bearer ${nuevoToken}`);
       const reintento = await fetch(`${URL_BASE}${ruta}`, {
         ...opciones,
+        body: cuerpoNormalizado,
         headers: cabeceras,
         credentials: 'include',
       });
