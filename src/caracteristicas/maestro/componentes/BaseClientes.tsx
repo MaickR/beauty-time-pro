@@ -6,19 +6,12 @@ import {
   obtenerBaseClientesAdmin,
   exportarBaseClientesAdmin,
 } from '../../../servicios/servicioAdmin';
+import { formatearDinero, obtenerMonedaPorPais } from '../../../utils/formato';
 import type { ClienteAdmin } from '../../../tipos';
 
 const LIMITE_PAGINA = 50;
 
 const PAISES = ['México', 'Colombia'];
-
-function formatearDinero(cantidad: number): string {
-  return new Intl.NumberFormat('es-MX', {
-    style: 'currency',
-    currency: 'MXN',
-    maximumFractionDigits: 0,
-  }).format(cantidad);
-}
 
 export function BaseClientes() {
   const { estudios } = usarContextoApp();
@@ -349,7 +342,7 @@ export function BaseClientes() {
                       {c.totalVisitas}
                     </td>
                     <td className="px-4 py-3 text-right font-semibold text-slate-900 whitespace-nowrap">
-                      {formatearDinero(c.totalGastado)}
+                      {formatearDinero(c.totalGastado, obtenerMonedaPorPais(c.paisEstudio))}
                     </td>
                   </tr>
                 ))}
