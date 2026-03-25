@@ -1,6 +1,5 @@
 import type { FastifyInstance } from 'fastify';
 import type { Prisma } from '../generated/prisma/client.js';
-import bcrypt from 'bcryptjs';
 import { randomBytes, randomUUID } from 'node:crypto';
 import { z } from 'zod';
 import { prisma } from '../prismaCliente.js';
@@ -10,6 +9,7 @@ import { resolverCategoriasSalon } from '../lib/categoriasSalon.js';
 import { construirSelectDesdeColumnas, obtenerColumnasTabla } from '../lib/compatibilidadEsquema.js';
 import { cacheSalonesPublicos } from '../lib/cache.js';
 import { enviarEmailBienvenidaSalon, enviarEmailRechazoSalon, enviarEmailCancelacionProcesada, enviarEmailRecordatorioPagoSalon } from '../servicios/servicioEmail.js';
+import { generarHashContrasena } from '../utils/contrasenas.js';
 import { registrarAuditoria } from '../utils/auditoria.js';
 import { emailSchema, fechaIsoSchema, obtenerMensajeValidacion, telefonoSchema, textoSchema } from '../lib/validacion.js';
 import { normalizarPlanEstudio } from '../lib/planes.js';
@@ -17,8 +17,6 @@ import { normalizarPlanEstudio } from '../lib/planes.js';
 const esquemaRechazoSolicitud = z.object({
   motivo: textoSchema('motivo', 500, 10),
 });
-
-const RONDAS_HASH_ADMIN = 4;
 
 const esquemaCrearSalonAdmin = z.object({
   nombreSalon: textoSchema('nombreSalon', 120, 2),
@@ -1009,7 +1007,7 @@ export async function rutasAdmin(servidor: FastifyInstance): Promise<void> {
           return respuesta.code(409).send({ error: 'Ya existe un usuario con ese email' });
         }
 
-        const hashContrasena = await bcrypt.hash(contrasena, RONDAS_HASH_ADMIN);
+        const hashContrasena = await generarHashContrasena(contrasena);
         if (depuracionHasta === 'despues_hash') {
           return respuesta.send({ datos: { paso: 'despues_hash' } });
         }
@@ -1243,7 +1241,7 @@ export async function rutasAdmin(servidor: FastifyInstance): Promise<void> {
       }
 
       const contrasenaTemporal = generarContrasenaAleatoria();
-      const nuevoHash = await bcrypt.hash(contrasenaTemporal, RONDAS_HASH_ADMIN);
+      const nuevoHash = await generarHashContrasena(contrasenaTemporal);
 
       await prisma.usuario.update({
         where: { id: usuario.id },

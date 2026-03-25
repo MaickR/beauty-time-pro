@@ -1,11 +1,11 @@
 import type { FastifyInstance } from 'fastify';
-import bcrypt from 'bcrypt';
 import crypto from 'crypto';
 import { z } from 'zod';
 import { prisma } from '../prismaCliente.js';
 import { env } from '../lib/env.js';
 import { enviarEmailResetContrasena, enviarEmailVerificacionCliente } from '../servicios/servicioEmail.js';
 import { verificarJWT } from '../middleware/autenticacion.js';
+import { compararHashContrasena, generarHashContrasena } from '../utils/contrasenas.js';
 
 const REFRESH_EXPIRA = env.JWT_REFRESH_EXPIRA_EN;
 const COOKIE_REFRESH = 'refresh_token';
@@ -140,7 +140,7 @@ export async function rutasAuth(servidor: FastifyInstance): Promise<void> {
       });
 
       if (clienteApp) {
-        if (!(await bcrypt.compare(contrasena, clienteApp.hashContrasena))) {
+        if (!(await compararHashContrasena(contrasena, clienteApp.hashContrasena))) {
           return respuesta.code(401).send({ error: 'La contraseña es incorrecta.', codigo: 'CONTRASENA_INCORRECTA' });
         }
         if (!clienteApp.activo) {
@@ -169,7 +169,7 @@ export async function rutasAuth(servidor: FastifyInstance): Promise<void> {
         if (!empleadoAcceso.activo) {
           return respuesta.code(403).send({ error: 'Tu acceso ha sido desactivado. Contacta al dueño del salón.' });
         }
-        if (!(await bcrypt.compare(contrasena, empleadoAcceso.hashContrasena))) {
+        if (!(await compararHashContrasena(contrasena, empleadoAcceso.hashContrasena))) {
           return respuesta.code(401).send({ error: 'La contraseña es incorrecta.', codigo: 'CONTRASENA_INCORRECTA' });
         }
         void prisma.empleadoAcceso.update({ where: { id: empleadoAcceso.id }, data: { ultimoAcceso: new Date() } });
@@ -197,7 +197,7 @@ export async function rutasAuth(servidor: FastifyInstance): Promise<void> {
         });
       }
 
-      if (!(await bcrypt.compare(contrasena, usuario.hashContrasena))) {
+      if (!(await compararHashContrasena(contrasena, usuario.hashContrasena))) {
         return respuesta.code(401).send({ error: 'La contraseña es incorrecta.', codigo: 'CONTRASENA_INCORRECTA' });
       }
 
@@ -319,11 +319,11 @@ export async function rutasAuth(servidor: FastifyInstance): Promise<void> {
       const usuario = await prisma.usuario.findUnique({ where: { id: payload.sub } });
       if (!usuario) return respuesta.code(404).send({ error: 'Usuario no encontrado' });
 
-      if (!(await bcrypt.compare(contrasenaActual, usuario.hashContrasena))) {
+      if (!(await compararHashContrasena(contrasenaActual, usuario.hashContrasena))) {
         return respuesta.code(401).send({ error: 'Contraseña actual incorrecta' });
       }
 
-      const nuevoHash = await bcrypt.hash(contrasenaNueva, 12);
+      const nuevoHash = await generarHashContrasena(contrasenaNueva);
       await prisma.usuario.update({
         where: { id: usuario.id },
         data: { hashContrasena: nuevoHash },
@@ -455,7 +455,7 @@ export async function rutasAuth(servidor: FastifyInstance): Promise<void> {
         return respuesta.code(400).send({ error: 'El enlace de recuperación es inválido o ha expirado.' });
       }
 
-      const nuevoHash = await bcrypt.hash(contrasenaNueva, 12);
+      const nuevoHash = await generarHashContrasena(contrasenaNueva);
       await prisma.$transaction([
         prisma.usuario.update({ where: { id: registro.usuarioId }, data: { hashContrasena: nuevoHash } }),
         prisma.tokenReset.update({ where: { id: registro.id }, data: { usado: true } }),
