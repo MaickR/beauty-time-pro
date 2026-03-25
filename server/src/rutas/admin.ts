@@ -336,6 +336,7 @@ async function crearSalonAdminCompat(
     claveDueno: string;
     claveCliente: string;
     emailNorm: string;
+    usuarioDuenoId: string;
     fechaInicio: string;
     fechaVencimiento: string;
     horario: Record<string, { isOpen: boolean; openTime: string; closeTime: string }>;
@@ -359,6 +360,7 @@ async function crearSalonAdminCompat(
         serviciosCustom: [],
         festivos: [],
         emailContacto: datos.emailNorm,
+        usuarios: { connect: { id: datos.usuarioDuenoId } },
       },
       select: seleccionarSalonCreadoModerno,
     });
@@ -383,6 +385,7 @@ async function crearSalonAdminCompat(
         serviciosCustom: [],
         festivos: [],
         emailContacto: datos.emailNorm,
+        usuarios: { connect: { id: datos.usuarioDuenoId } },
       },
       select: seleccionarSalonCreadoCompat,
     });
@@ -847,6 +850,16 @@ export async function rutasAdmin(servidor: FastifyInstance): Promise<void> {
       const montoInicial = obtenerMontoPlanPorPais(pais);
 
       const [estudio, pagoInicial] = await prisma.$transaction(async (tx) => {
+        const nuevoUsuario = await tx.usuario.create({
+          data: {
+            email: emailNorm,
+            hashContrasena,
+            nombre: nombreAdmin,
+            rol: 'dueno',
+            emailVerificado: true,
+          },
+        });
+
         const nuevoEstudio = await crearSalonAdminCompat(tx, {
           nombreSalon,
           nombreAdmin,
@@ -856,19 +869,10 @@ export async function rutasAdmin(servidor: FastifyInstance): Promise<void> {
           claveDueno,
           claveCliente,
           emailNorm,
+          usuarioDuenoId: nuevoUsuario.id,
           fechaInicio: formatearFecha(fechaInicio),
           fechaVencimiento: formatearFecha(vencimiento),
           horario,
-        });
-
-        await tx.usuario.create({
-          data: {
-            email: emailNorm,
-            hashContrasena,
-            nombre: nombreAdmin,
-            rol: 'dueno',
-            estudioId: nuevoEstudio.id,
-          },
         });
 
         if (personal.length > 0) {
