@@ -573,54 +573,51 @@ export async function rutasEstudios(servidor: FastifyInstance): Promise<void> {
         return respuesta.code(404).send({ error: 'Estudio no encontrado' });
       }
 
-      await prisma.$transaction(async (tx) => {
-        const [usuarios, personal, reservas, pagos] = await Promise.all([
-          tx.usuario.findMany({ where: { estudioId: id }, select: { id: true } }),
-          tx.personal.findMany({ where: { estudioId: id }, select: { id: true } }),
-          tx.reserva.findMany({ where: { estudioId: id }, select: { id: true } }),
-          tx.pago.findMany({ where: { estudioId: id }, select: { id: true } }),
-        ]);
+      const [usuarios, personal, reservas, pagos] = await Promise.all([
+        prisma.usuario.findMany({ where: { estudioId: id }, select: { id: true } }),
+        prisma.personal.findMany({ where: { estudioId: id }, select: { id: true } }),
+        prisma.reserva.findMany({ where: { estudioId: id }, select: { id: true } }),
+        prisma.pago.findMany({ where: { estudioId: id }, select: { id: true } }),
+      ]);
 
-        const usuarioIds = usuarios.map((usuario) => usuario.id);
-        const personalIds = personal.map((persona) => persona.id);
-        const reservaIds = reservas.map((reserva) => reserva.id);
-        const pagoIds = pagos.map((pago) => pago.id);
+      const usuarioIds = usuarios.map((usuario) => usuario.id);
+      const personalIds = personal.map((persona) => persona.id);
+      const reservaIds = reservas.map((reserva) => reserva.id);
+      const pagoIds = pagos.map((pago) => pago.id);
 
-        if (usuarioIds.length > 0) {
-          await tx.suscripcionPush.deleteMany({ where: { usuarioId: { in: usuarioIds } } });
-          await tx.tokenReset.deleteMany({ where: { usuarioId: { in: usuarioIds } } });
-          await tx.permisosMaestro.deleteMany({ where: { usuarioId: { in: usuarioIds } } });
-          await tx.auditLog.deleteMany({ where: { usuarioId: { in: usuarioIds } } });
-        }
+      if (usuarioIds.length > 0) {
+        await prisma.suscripcionPush.deleteMany({ where: { usuarioId: { in: usuarioIds } } });
+        await prisma.tokenReset.deleteMany({ where: { usuarioId: { in: usuarioIds } } });
+        await prisma.permisosMaestro.deleteMany({ where: { usuarioId: { in: usuarioIds } } });
+        await prisma.auditLog.deleteMany({ where: { usuarioId: { in: usuarioIds } } });
+      }
 
-        await tx.auditLog.deleteMany({
-          where: {
-            OR: [
-              { entidadTipo: 'estudio', entidadId: id },
-              ...(pagoIds.length > 0 ? [{ entidadTipo: 'pago', entidadId: { in: pagoIds } }] : []),
-            ],
-          },
-        });
-
-        if (reservaIds.length > 0) {
-          await tx.reservaServicio.deleteMany({ where: { reservaId: { in: reservaIds } } });
-        }
-
-        if (personalIds.length > 0) {
-          await tx.empleadoAcceso.deleteMany({ where: { personalId: { in: personalIds } } });
-        }
-
-        await tx.personal.deleteMany({ where: { estudioId: id } });
-        await tx.reserva.deleteMany({ where: { estudioId: id } });
-        await tx.pago.deleteMany({ where: { estudioId: id } });
-        await tx.cliente.deleteMany({ where: { estudioId: id } });
-        await tx.puntosFidelidad.deleteMany({ where: { estudioId: id } });
-        await tx.configFidelidad.deleteMany({ where: { estudioId: id } });
-        await tx.diaFestivo.deleteMany({ where: { estudioId: id } });
-
-        await tx.usuario.deleteMany({ where: { estudioId: id } });
-        await tx.estudio.delete({ where: { id } });
+      await prisma.auditLog.deleteMany({
+        where: {
+          OR: [
+            { entidadTipo: 'estudio', entidadId: id },
+            ...(pagoIds.length > 0 ? [{ entidadTipo: 'pago', entidadId: { in: pagoIds } }] : []),
+          ],
+        },
       });
+
+      if (reservaIds.length > 0) {
+        await prisma.reservaServicio.deleteMany({ where: { reservaId: { in: reservaIds } } });
+      }
+
+      if (personalIds.length > 0) {
+        await prisma.empleadoAcceso.deleteMany({ where: { personalId: { in: personalIds } } });
+      }
+
+      await prisma.personal.deleteMany({ where: { estudioId: id } });
+      await prisma.reserva.deleteMany({ where: { estudioId: id } });
+      await prisma.pago.deleteMany({ where: { estudioId: id } });
+      await prisma.cliente.deleteMany({ where: { estudioId: id } });
+      await prisma.puntosFidelidad.deleteMany({ where: { estudioId: id } });
+      await prisma.configFidelidad.deleteMany({ where: { estudioId: id } });
+      await prisma.diaFestivo.deleteMany({ where: { estudioId: id } });
+      await prisma.usuario.deleteMany({ where: { estudioId: id } });
+      await prisma.estudio.delete({ where: { id } });
 
       return respuesta.code(200).send({ datos: { eliminado: true } });
     },

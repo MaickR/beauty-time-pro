@@ -326,7 +326,7 @@ async function obtenerSalonAdminPorId(id: string) {
 }
 
 async function crearSalonAdminCompat(
-  tx: Prisma.TransactionClient,
+  cliente: Prisma.TransactionClient | typeof prisma,
   datos: {
     nombreSalon: string;
     nombreAdmin: string;
@@ -340,7 +340,7 @@ async function crearSalonAdminCompat(
     horario: Record<string, { isOpen: boolean; openTime: string; closeTime: string }>;
   },
 ) {
-  return tx.estudio.create({
+  return cliente.estudio.create({
     data: {
       nombre: datos.nombreSalon,
       propietario: datos.nombreAdmin,
@@ -362,7 +362,7 @@ async function crearSalonAdminCompat(
 }
 
 async function crearPagoAdminCompat(
-  tx: Prisma.TransactionClient,
+  cliente: Prisma.TransactionClient | typeof prisma,
   datos: {
     estudioId: string;
     monto: number;
@@ -372,7 +372,7 @@ async function crearPagoAdminCompat(
   },
 ) {
   try {
-    return await tx.pago.create({
+    return await cliente.pago.create({
       data: {
         estudioId: datos.estudioId,
         monto: datos.monto,
@@ -388,7 +388,7 @@ async function crearPagoAdminCompat(
       throw error;
     }
 
-    return tx.pago.create({
+    return cliente.pago.create({
       data: {
         estudioId: datos.estudioId,
         monto: datos.monto,
@@ -818,8 +818,14 @@ export async function rutasAdmin(servidor: FastifyInstance): Promise<void> {
       const monedaInicial = obtenerMonedaPorPais(pais);
       const montoInicial = obtenerMontoPlanPorPais(pais);
 
-      const [estudio, pagoInicial] = await prisma.$transaction(async (tx) => {
-        const nuevoUsuario = await tx.usuario.create({
+      let usuarioCreadoId: string | null = null;
+      let estudioCreadoId: string | null = null;
+
+      let estudio: Awaited<ReturnType<typeof crearSalonAdminCompat>>;
+      let pagoInicial: Awaited<ReturnType<typeof crearPagoAdminCompat>> | null = null;
+
+      try {
+        const nuevoUsuario = await prisma.usuario.create({
           data: {
             email: emailNorm,
             hashContrasena,
@@ -828,8 +834,9 @@ export async function rutasAdmin(servidor: FastifyInstance): Promise<void> {
             emailVerificado: true,
           },
         });
+        usuarioCreadoId = nuevoUsuario.id;
 
-        const nuevoEstudio = await crearSalonAdminCompat(tx, {
+        estudio = await crearSalonAdminCompat(prisma, {
           nombreSalon,
           nombreAdmin,
           telefono,
@@ -841,17 +848,18 @@ export async function rutasAdmin(servidor: FastifyInstance): Promise<void> {
           fechaVencimiento: formatearFecha(vencimiento),
           horario,
         });
+        estudioCreadoId = estudio.id;
 
-        await tx.usuario.update({
+        await prisma.usuario.update({
           where: { id: nuevoUsuario.id },
-          data: { estudioId: nuevoEstudio.id },
+          data: { estudioId: estudio.id },
         });
 
         if (personal.length > 0) {
           for (const persona of personal) {
-            await tx.personal.create({
+            await prisma.personal.create({
               data: {
-                estudioId: nuevoEstudio.id,
+                estudioId: estudio.id,
                 nombre: persona.nombre,
                 especialidades: persona.especialidades,
                 horaInicio: persona.horaInicio ?? null,
@@ -863,16 +871,31 @@ export async function rutasAdmin(servidor: FastifyInstance): Promise<void> {
           }
         }
 
-        const nuevoPago = await crearPagoAdminCompat(tx, {
-          estudioId: nuevoEstudio.id,
-          monto: montoInicial,
-          moneda: monedaInicial,
-          concepto: `Suscripción mensual Beauty Time Pro (${monedaInicial})`,
-          fecha: formatearFecha(fechaInicio),
-        });
+        try {
+          pagoInicial = await crearPagoAdminCompat(prisma, {
+            estudioId: estudio.id,
+            monto: montoInicial,
+            moneda: monedaInicial,
+            concepto: `Suscripción mensual Beauty Time Pro (${monedaInicial})`,
+            fecha: formatearFecha(fechaInicio),
+          });
+        } catch (error) {
+          solicitud.log.warn({ err: error, estudioId: estudio.id }, 'No se pudo registrar el pago inicial del salon');
+        }
+      } catch (error) {
+        if (estudioCreadoId) {
+          await prisma.personal.deleteMany({ where: { estudioId: estudioCreadoId } }).catch(() => undefined);
+          await prisma.pago.deleteMany({ where: { estudioId: estudioCreadoId } }).catch(() => undefined);
+          await prisma.usuario.updateMany({ where: { estudioId: estudioCreadoId }, data: { estudioId: null } }).catch(() => undefined);
+          await prisma.estudio.deleteMany({ where: { id: estudioCreadoId } }).catch(() => undefined);
+        }
 
-        return [nuevoEstudio, nuevoPago];
-      });
+        if (usuarioCreadoId) {
+          await prisma.usuario.deleteMany({ where: { id: usuarioCreadoId } }).catch(() => undefined);
+        }
+
+        throw error;
+      }
 
       try {
         await prisma.estudio.update({
@@ -885,7 +908,8 @@ export async function rutasAdmin(servidor: FastifyInstance): Promise<void> {
         }
       }
 
-      try {
+      if (pagoInicial) {
+        try {
         await registrarAuditoria({
           usuarioId: (solicitud.user as { sub: string }).sub,
           accion: 'registrar_pago',
@@ -904,8 +928,9 @@ export async function rutasAdmin(servidor: FastifyInstance): Promise<void> {
           },
           ip: solicitud.ip,
         });
-      } catch (error) {
-        solicitud.log.warn({ err: error }, 'No se pudo registrar la auditoria del alta inicial');
+        } catch (error) {
+          solicitud.log.warn({ err: error }, 'No se pudo registrar la auditoria del alta inicial');
+        }
       }
 
       return respuesta.code(201).send({
