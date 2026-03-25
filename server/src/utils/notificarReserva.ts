@@ -1,3 +1,4 @@
+import type { Prisma } from '../generated/prisma/client.js';
 import { prisma } from '../prismaCliente.js';
 import {
   incluirReservaConRelaciones,
@@ -8,9 +9,48 @@ import {
   type CargaNotificacionPush,
 } from '../servicios/notificacionesPush.js';
 
-export type ReservaConRelaciones = NonNullable<
-  Awaited<ReturnType<typeof obtenerReservaConRelacionesPorId>>
->;
+export interface ReservaConRelaciones {
+  estudioId: string;
+  nombreCliente: string;
+  horaInicio: string;
+  fecha: string;
+  clienteAppId?: string | null;
+  servicios: unknown;
+  serviciosDetalle?: unknown[];
+  estudio?: {
+    nombre: string;
+  };
+}
+
+function esErrorCompatibilidadReserva(error: unknown): boolean {
+  const codigo =
+    typeof error === 'object' && error !== null && 'code' in error
+      ? String((error as { code?: unknown }).code ?? '')
+      : '';
+  const mensaje = error instanceof Error ? error.message : '';
+
+  return (
+    codigo === 'P2021' ||
+    codigo === 'P2022' ||
+    /reserva_servicios/i.test(mensaje) ||
+    /(clienteAppId|tokenCancelacion|recordatorioEnviado|notasMenorEdad)/i.test(mensaje) ||
+    /Unknown column/i.test(mensaje) ||
+    /doesn'?t exist/i.test(mensaje)
+  );
+}
+
+const seleccionarReservaNotificacionCompat = {
+  estudioId: true,
+  nombreCliente: true,
+  horaInicio: true,
+  fecha: true,
+  servicios: true,
+  estudio: {
+    select: {
+      nombre: true,
+    },
+  },
+} satisfies Prisma.ReservaSelect;
 
 async function enviarMultiplesSuscripciones(
   suscripciones: Array<{ endpoint: string; p256dh: string; auth: string }>,
@@ -79,10 +119,21 @@ function obtenerServiciosTexto(reserva: { servicios: unknown; serviciosDetalle?:
 }
 
 export async function obtenerReservaConRelacionesPorId(reservaId: string) {
-  return prisma.reserva.findUnique({
-    where: { id: reservaId },
-    include: incluirReservaConRelaciones,
-  });
+  try {
+    return await prisma.reserva.findUnique({
+      where: { id: reservaId },
+      include: incluirReservaConRelaciones,
+    });
+  } catch (error) {
+    if (!esErrorCompatibilidadReserva(error)) {
+      throw error;
+    }
+
+    return prisma.reserva.findUnique({
+      where: { id: reservaId },
+      select: seleccionarReservaNotificacionCompat,
+    }) as Promise<ReservaConRelaciones | null>;
+  }
 }
 
 export async function notificarNuevaCita(reserva: ReservaConRelaciones) {
@@ -133,10 +184,11 @@ export async function notificarCitaCancelada(reserva: ReservaConRelaciones) {
 export async function notificarRecordatorio(reserva: ReservaConRelaciones) {
   const suscripciones = await obtenerSuscripcionesCliente(reserva.clienteAppId);
   if (suscripciones.length === 0) return;
+  const nombreEstudio = reserva.estudio?.nombre ?? 'tu estudio';
 
   await enviarMultiplesSuscripciones(suscripciones, {
     titulo: 'Recordatorio de cita',
-    cuerpo: `Tu cita en ${reserva.estudio.nombre} es a las ${reserva.horaInicio}.`,
+    cuerpo: `Tu cita en ${nombreEstudio} es a las ${reserva.horaInicio}.`,
     url: '/mi-perfil#reservas',
   });
 }

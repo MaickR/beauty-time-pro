@@ -1,4 +1,5 @@
 import type { FastifyInstance } from 'fastify';
+import type { Prisma } from '../generated/prisma/client.js';
 import bcrypt from 'bcrypt';
 import { z } from 'zod';
 import { prisma } from '../prismaCliente.js';
@@ -111,6 +112,273 @@ function clasificarEstadoSalon(params: {
   return 'aprobado';
 }
 
+function esErrorCompatibilidadAdmin(error: unknown): boolean {
+  const codigo =
+    typeof error === 'object' && error !== null && 'code' in error
+      ? String((error as { code?: unknown }).code ?? '')
+      : '';
+  const mensaje = error instanceof Error ? error.message : '';
+
+  return (
+    codigo === 'P2022' ||
+    /Unknown column/i.test(mensaje) ||
+    /(plan|pinCancelacionHash|fechaSolicitud|fechaAprobacion|motivoRechazo|primeraVez|cancelacionSolicitada|fechaSolicitudCancelacion|motivoCancelacion)/i.test(
+      mensaje,
+    )
+  );
+}
+
+const seleccionarDuenoAdmin = {
+  id: true,
+  email: true,
+  nombre: true,
+  ultimoAcceso: true,
+  activo: true,
+} satisfies Prisma.UsuarioSelect;
+
+const seleccionarSalonAdminModerno = {
+  id: true,
+  nombre: true,
+  propietario: true,
+  telefono: true,
+  pais: true,
+  sucursales: true,
+  activo: true,
+  estado: true,
+  plan: true,
+  motivoRechazo: true,
+  fechaSolicitud: true,
+  fechaAprobacion: true,
+  suscripcion: true,
+  inicioSuscripcion: true,
+  fechaVencimiento: true,
+  emailContacto: true,
+  creadoEn: true,
+  actualizadoEn: true,
+  usuarios: {
+    where: { rol: 'dueno' },
+    select: seleccionarDuenoAdmin,
+    take: 1,
+  },
+} satisfies Prisma.EstudioSelect;
+
+const seleccionarSalonAdminCompat = {
+  id: true,
+  nombre: true,
+  propietario: true,
+  telefono: true,
+  pais: true,
+  sucursales: true,
+  activo: true,
+  suscripcion: true,
+  inicioSuscripcion: true,
+  fechaVencimiento: true,
+  emailContacto: true,
+  creadoEn: true,
+  actualizadoEn: true,
+  usuarios: {
+    where: { rol: 'dueno' },
+    select: seleccionarDuenoAdmin,
+    take: 1,
+  },
+} satisfies Prisma.EstudioSelect;
+
+const seleccionarSalonCreadoModerno = {
+  id: true,
+  nombre: true,
+  propietario: true,
+  telefono: true,
+  pais: true,
+  sucursales: true,
+  activo: true,
+  estado: true,
+  plan: true,
+  inicioSuscripcion: true,
+  fechaVencimiento: true,
+  emailContacto: true,
+  creadoEn: true,
+  actualizadoEn: true,
+  claveDueno: true,
+  claveCliente: true,
+} satisfies Prisma.EstudioSelect;
+
+const seleccionarSalonCreadoCompat = {
+  id: true,
+  nombre: true,
+  propietario: true,
+  telefono: true,
+  pais: true,
+  sucursales: true,
+  activo: true,
+  inicioSuscripcion: true,
+  fechaVencimiento: true,
+  emailContacto: true,
+  creadoEn: true,
+  actualizadoEn: true,
+  claveDueno: true,
+  claveCliente: true,
+} satisfies Prisma.EstudioSelect;
+
+function convertirFecha(valor: unknown): Date | null {
+  if (valor instanceof Date) return valor;
+  if (typeof valor === 'string') {
+    const fecha = new Date(valor);
+    return Number.isNaN(fecha.getTime()) ? null : fecha;
+  }
+  return null;
+}
+
+function obtenerDuenoSalon(estudio: Record<string, unknown>) {
+  const usuarios = estudio['usuarios'];
+  if (!Array.isArray(usuarios) || usuarios.length === 0) {
+    return null;
+  }
+
+  return usuarios[0] as {
+    id?: string;
+    email?: string;
+    nombre?: string;
+    ultimoAcceso?: Date | null;
+    activo?: boolean;
+  };
+}
+
+function normalizarEstadoSalonDesdeRegistro(
+  estudio: Record<string, unknown>,
+): 'pendiente' | 'aprobado' | 'rechazado' | 'suspendido' {
+  const dueno = obtenerDuenoSalon(estudio);
+  const estado = estudio['estado'];
+
+  if (
+    estado === 'pendiente' ||
+    estado === 'aprobado' ||
+    estado === 'rechazado' ||
+    estado === 'suspendido'
+  ) {
+    return clasificarEstadoSalon({
+      estado,
+      activo: Boolean(estudio['activo']),
+      duenoActivo: typeof dueno?.activo === 'boolean' ? dueno.activo : undefined,
+    });
+  }
+
+  return Boolean(estudio['activo']) && dueno?.activo !== false ? 'aprobado' : 'suspendido';
+}
+
+function obtenerFechaSolicitudRegistro(estudio: Record<string, unknown>): Date {
+  return convertirFecha(estudio['fechaSolicitud']) ?? convertirFecha(estudio['creadoEn']) ?? new Date();
+}
+
+function serializarSalonCreado(estudio: Record<string, unknown>) {
+  return {
+    ...estudio,
+    plan: (estudio['plan'] as string | undefined) ?? 'STANDARD',
+    estado: normalizarEstadoSalonDesdeRegistro(estudio),
+    fechaSolicitud: convertirFecha(estudio['fechaSolicitud'])?.toISOString() ?? null,
+    fechaAprobacion: convertirFecha(estudio['fechaAprobacion'])?.toISOString() ?? null,
+  };
+}
+
+async function listarSalonesAdmin() {
+  try {
+    return await prisma.estudio.findMany({
+      select: seleccionarSalonAdminModerno,
+      orderBy: { creadoEn: 'asc' },
+    });
+  } catch (error) {
+    if (!esErrorCompatibilidadAdmin(error)) {
+      throw error;
+    }
+
+    return prisma.estudio.findMany({
+      select: seleccionarSalonAdminCompat,
+      orderBy: { creadoEn: 'asc' },
+    });
+  }
+}
+
+async function obtenerSalonAdminPorId(id: string) {
+  try {
+    return await prisma.estudio.findUnique({
+      where: { id },
+      select: seleccionarSalonAdminModerno,
+    });
+  } catch (error) {
+    if (!esErrorCompatibilidadAdmin(error)) {
+      throw error;
+    }
+
+    return prisma.estudio.findUnique({
+      where: { id },
+      select: seleccionarSalonAdminCompat,
+    });
+  }
+}
+
+async function crearSalonAdminCompat(
+  tx: Prisma.TransactionClient,
+  datos: {
+    nombreSalon: string;
+    nombreAdmin: string;
+    telefono: string;
+    pais: 'Mexico' | 'Colombia';
+    plan: 'STANDARD' | 'PRO';
+    claveDueno: string;
+    claveCliente: string;
+    emailNorm: string;
+    fechaInicio: string;
+    fechaVencimiento: string;
+    horario: Record<string, { isOpen: boolean; openTime: string; closeTime: string }>;
+  },
+) {
+  try {
+    return await tx.estudio.create({
+      data: {
+        nombre: datos.nombreSalon,
+        propietario: datos.nombreAdmin,
+        telefono: datos.telefono,
+        pais: datos.pais,
+        plan: normalizarPlanEstudio(datos.plan),
+        sucursales: [datos.nombreSalon],
+        claveDueno: datos.claveDueno,
+        claveCliente: datos.claveCliente,
+        inicioSuscripcion: datos.fechaInicio,
+        fechaVencimiento: datos.fechaVencimiento,
+        horario: datos.horario,
+        servicios: [],
+        serviciosCustom: [],
+        festivos: [],
+        emailContacto: datos.emailNorm,
+      },
+      select: seleccionarSalonCreadoModerno,
+    });
+  } catch (error) {
+    if (!esErrorCompatibilidadAdmin(error)) {
+      throw error;
+    }
+
+    return tx.estudio.create({
+      data: {
+        nombre: datos.nombreSalon,
+        propietario: datos.nombreAdmin,
+        telefono: datos.telefono,
+        pais: datos.pais,
+        sucursales: [datos.nombreSalon],
+        claveDueno: datos.claveDueno,
+        claveCliente: datos.claveCliente,
+        inicioSuscripcion: datos.fechaInicio,
+        fechaVencimiento: datos.fechaVencimiento,
+        horario: datos.horario,
+        servicios: [],
+        serviciosCustom: [],
+        festivos: [],
+        emailContacto: datos.emailNorm,
+      },
+      select: seleccionarSalonCreadoCompat,
+    });
+  }
+}
+
 export async function rutasAdmin(servidor: FastifyInstance): Promise<void> {
   /**
    * GET /admin/salones — lista todos los estudios con su usuario y último acceso
@@ -136,16 +404,7 @@ export async function rutasAdmin(servidor: FastifyInstance): Promise<void> {
           ? (estado as 'pendiente' | 'aprobado' | 'rechazado' | 'suspendido')
           : null;
 
-      const estudios = await prisma.estudio.findMany({
-        include: {
-          usuarios: {
-            where: { rol: 'dueno' },
-            select: { id: true, email: true, nombre: true, ultimoAcceso: true, activo: true },
-            take: 1,
-          },
-        },
-        orderBy: { creadoEn: 'asc' },
-      });
+      const estudios = await listarSalonesAdmin();
 
       const auditorias = await prisma.auditLog.findMany({
         where: {
@@ -174,18 +433,19 @@ export async function rutasAdmin(servidor: FastifyInstance): Promise<void> {
 
       const estudiosNormalizados = estudios
         .map((estudio) => {
-          const dueno = estudio.usuarios[0];
-          const estadoNormalizado = clasificarEstadoSalon({
-            estado: estudio.estado,
-            activo: estudio.activo,
-            duenoActivo: dueno?.activo,
-          });
+          const estudioNormalizado = estudio as unknown as Record<string, unknown>;
+          const dueno = obtenerDuenoSalon(estudioNormalizado);
+          const estadoNormalizado = normalizarEstadoSalonDesdeRegistro(estudioNormalizado);
           const aprobacion = aprobacionesPorEstudio.get(estudio.id);
           const renovacion = renovacionesPorEstudio.get(estudio.id);
 
           return {
             ...estudio,
             estado: estadoNormalizado,
+            plan: (estudioNormalizado['plan'] as string | undefined) ?? 'STANDARD',
+            fechaSolicitud: convertirFecha(estudioNormalizado['fechaSolicitud'])?.toISOString() ?? null,
+            fechaAprobacion: convertirFecha(estudioNormalizado['fechaAprobacion'])?.toISOString() ?? null,
+            motivoRechazo: (estudioNormalizado['motivoRechazo'] as string | null | undefined) ?? null,
             aprobadoPorNombre: aprobacion?.usuario.nombre ?? null,
             aprobadoPorEmail: aprobacion?.usuario.email ?? null,
             renovadoPorNombre: renovacion?.usuario.nombre ?? null,
@@ -217,27 +477,30 @@ export async function rutasAdmin(servidor: FastifyInstance): Promise<void> {
       const limite = Math.min(100, Math.max(1, parseInt(solicitud.query.limite ?? '50', 10)));
       const saltar = (pagina - 1) * limite;
 
-      const [total, solicitudes] = await Promise.all([
-        prisma.estudio.count({ where: { estado: 'pendiente' } }),
-        prisma.estudio.findMany({
-          where: { estado: 'pendiente' },
-          include: {
-            usuarios: {
-              where: { rol: 'dueno' },
-              select: { id: true, email: true, nombre: true },
-              take: 1,
-            },
-          },
-          orderBy: { fechaSolicitud: 'asc' },
-          skip: saltar,
-          take: limite,
-        }),
-      ]);
+      const solicitudesCompatibles = (await listarSalonesAdmin())
+        .map((estudio) => {
+          const estudioNormalizado = estudio as unknown as Record<string, unknown>;
+          const estadoNormalizado = normalizarEstadoSalonDesdeRegistro(estudioNormalizado);
+
+          return {
+            ...estudio,
+            estado: estadoNormalizado,
+            fechaSolicitudCompat: obtenerFechaSolicitudRegistro(estudioNormalizado),
+            dueno: obtenerDuenoSalon(estudioNormalizado),
+            motivoRechazo: (estudioNormalizado['motivoRechazo'] as string | null | undefined) ?? null,
+            plan: (estudioNormalizado['plan'] as string | undefined) ?? 'STANDARD',
+          };
+        })
+        .filter((estudio) => estudio.estado === 'pendiente')
+        .sort((a, b) => a.fechaSolicitudCompat.getTime() - b.fechaSolicitudCompat.getTime());
+
+      const total = solicitudesCompatibles.length;
+      const solicitudes = solicitudesCompatibles.slice(saltar, saltar + limite);
 
       const datos = solicitudes.map((s) => ({
         ...s,
-        diasDesdeRegistro: diasDesde(s.fechaSolicitud),
-        dueno: s.usuarios[0] ?? null,
+        fechaSolicitud: s.fechaSolicitudCompat.toISOString(),
+        diasDesdeRegistro: diasDesde(s.fechaSolicitudCompat),
       }));
 
       return respuesta.send({ datos, total, pagina, totalPaginas: Math.ceil(total / limite) });
@@ -257,31 +520,30 @@ export async function rutasAdmin(servidor: FastifyInstance): Promise<void> {
       }
 
       const { id } = solicitud.params;
-      const estudio = await prisma.estudio.findUnique({
-        where: { id },
-        include: {
-          usuarios: {
-            where: { rol: 'dueno' },
-            select: { id: true, email: true, nombre: true, activo: true },
-            take: 1,
-          },
-        },
-      });
+      const estudio = await obtenerSalonAdminPorId(id);
 
       if (!estudio) {
         return respuesta.code(404).send({ error: 'Solicitud no encontrada' });
       }
 
-      const categoriasFormateadas = estudio.categorias
-        ? estudio.categorias.split(',').map((c) => c.trim()).filter(Boolean)
+      const estudioNormalizado = estudio as unknown as Record<string, unknown>;
+
+      const categorias = estudioNormalizado['categorias'];
+      const categoriasFormateadas = typeof categorias === 'string'
+        ? categorias.split(',').map((c) => c.trim()).filter(Boolean)
         : [];
 
       return respuesta.send({
         datos: {
           ...estudio,
+          estado: normalizarEstadoSalonDesdeRegistro(estudioNormalizado),
+          plan: (estudioNormalizado['plan'] as string | undefined) ?? 'STANDARD',
+          motivoRechazo: (estudioNormalizado['motivoRechazo'] as string | null | undefined) ?? null,
+          fechaSolicitud: obtenerFechaSolicitudRegistro(estudioNormalizado).toISOString(),
+          fechaAprobacion: convertirFecha(estudioNormalizado['fechaAprobacion'])?.toISOString() ?? null,
           categoriasFormateadas,
-          dueno: estudio.usuarios[0] ?? null,
-          diasDesdeRegistro: diasDesde(estudio.fechaSolicitud),
+          dueno: obtenerDuenoSalon(estudioNormalizado),
+          diasDesdeRegistro: diasDesde(obtenerFechaSolicitudRegistro(estudioNormalizado)),
         },
       });
     },
@@ -536,24 +798,18 @@ export async function rutasAdmin(servidor: FastifyInstance): Promise<void> {
       const montoInicial = obtenerMontoPlanPorPais(pais);
 
       const [estudio, pagoInicial] = await prisma.$transaction(async (tx) => {
-        const nuevoEstudio = await tx.estudio.create({
-          data: {
-            nombre: nombreSalon,
-            propietario: nombreAdmin,
-            telefono,
-            pais,
-            plan: normalizarPlanEstudio(plan),
-            sucursales: [nombreSalon],
-            claveDueno,
-            claveCliente,
-            inicioSuscripcion: formatearFecha(fechaInicio),
-            fechaVencimiento: formatearFecha(vencimiento),
-            horario,
-            servicios: [],
-            serviciosCustom: [],
-            festivos: [],
-            emailContacto: emailNorm,
-          },
+        const nuevoEstudio = await crearSalonAdminCompat(tx, {
+          nombreSalon,
+          nombreAdmin,
+          telefono,
+          pais,
+          plan,
+          claveDueno,
+          claveCliente,
+          emailNorm,
+          fechaInicio: formatearFecha(fechaInicio),
+          fechaVencimiento: formatearFecha(vencimiento),
+          horario,
         });
 
         const nuevoUsuario = await tx.usuario.create({
@@ -616,7 +872,7 @@ export async function rutasAdmin(servidor: FastifyInstance): Promise<void> {
 
       return respuesta.code(201).send({
         datos: {
-          estudio,
+          estudio: serializarSalonCreado(estudio as unknown as Record<string, unknown>),
           acceso: {
             emailDueno: emailNorm,
             claveDueno,
@@ -863,47 +1119,154 @@ export async function rutasAdmin(servidor: FastifyInstance): Promise<void> {
       hace30Dias.setDate(hace30Dias.getDate() - 30);
       const hace30DiasStr = hace30Dias.toISOString().split('T')[0]!;
 
+      const hace7Dias = new Date();
+      hace7Dias.setDate(hace7Dias.getDate() + 7);
+      const hace7DiasStr = hace7Dias.toISOString().split('T')[0]!;
+
+      const hace30DiasLimite = new Date();
+      hace30DiasLimite.setDate(hace30DiasLimite.getDate() + 30);
+      const hace30DiasLimiteStr = hace30DiasLimite.toISOString().split('T')[0]!;
+
       const hoy = new Date().toISOString().split('T')[0]!;
+
+      const inicioMesActual = new Date();
+      inicioMesActual.setDate(1);
+      const inicioMesActualStr = inicioMesActual.toISOString().split('T')[0]!;
+
+      const inicioMesAnterior = new Date(inicioMesActual);
+      inicioMesAnterior.setMonth(inicioMesAnterior.getMonth() - 1);
+      const inicioMesAnteriorStr = inicioMesAnterior.toISOString().split('T')[0]!;
+
+      const finMesAnterior = new Date(inicioMesActual);
+      finMesAnterior.setDate(0);
+      const finMesAnteriorStr = finMesAnterior.toISOString().split('T')[0]!;
 
       const [
         totalSalones,
         salonesActivos,
         salonesPendientes,
+        salonesSuspendidos,
         salonesVencidos,
+        salonesPorVencer7Dias,
+        salonesPorVencer30Dias,
         totalAdmins,
         totalAuditLogs,
+        reservasHoy,
         reservasUltimos30Dias,
+        ticketPromedioUltimos30Dias,
         salonesNuevosUltimos30Dias,
+        solicitudesCreadasUltimos30Dias,
+        salonesAprobadosUltimos30Dias,
         cancelacionesPendientes,
+        ingresosMesActual,
+        ingresosMesAnterior,
       ] = await Promise.all([
         prisma.estudio.count(),
-        prisma.estudio.count({ where: { estado: 'aprobado' } }),
+        prisma.estudio.count({ where: { estado: 'aprobado', activo: true } }),
         prisma.estudio.count({ where: { estado: 'pendiente' } }),
+        prisma.estudio.count({ where: { estado: 'suspendido' } }),
         prisma.estudio.count({
-          where: { estado: 'aprobado', fechaVencimiento: { lt: hoy } },
+          where: { estado: 'aprobado', activo: true, fechaVencimiento: { lt: hoy } },
+        }),
+        prisma.estudio.count({
+          where: {
+            estado: 'aprobado',
+            activo: true,
+            fechaVencimiento: { gte: hoy, lte: hace7DiasStr },
+          },
+        }),
+        prisma.estudio.count({
+          where: {
+            estado: 'aprobado',
+            activo: true,
+            fechaVencimiento: { gte: hoy, lte: hace30DiasLimiteStr },
+          },
         }),
         prisma.usuario.count({ where: { rol: 'maestro', activo: true } }),
         prisma.auditLog.count(),
+        prisma.reserva.count({ where: { fecha: hoy } }),
         prisma.reserva.count({
           where: { fecha: { gte: hace30DiasStr } },
+        }),
+        prisma.reserva.aggregate({
+          where: {
+            fecha: { gte: hace30DiasStr },
+            estado: { not: 'cancelled' },
+          },
+          _avg: { precioTotal: true },
         }),
         prisma.estudio.count({
           where: { creadoEn: { gte: hace30Dias } },
         }),
+        prisma.estudio.count({
+          where: { fechaSolicitud: { gte: hace30Dias } },
+        }),
+        prisma.estudio.count({
+          where: { fechaAprobacion: { gte: hace30Dias } },
+        }),
         prisma.estudio.count({ where: { cancelacionSolicitada: true } }),
+        prisma.pago.groupBy({
+          by: ['moneda'],
+          where: { fecha: { gte: inicioMesActualStr, lte: hoy } },
+          _sum: { monto: true },
+        }),
+        prisma.pago.groupBy({
+          by: ['moneda'],
+          where: { fecha: { gte: inicioMesAnteriorStr, lte: finMesAnteriorStr } },
+          _sum: { monto: true },
+        }),
       ]);
+
+      const promedioReservasPorSalonActivo =
+        salonesActivos > 0 ? Number((reservasUltimos30Dias / salonesActivos).toFixed(1)) : 0;
+      const tasaAprobacionUltimos30Dias =
+        solicitudesCreadasUltimos30Dias > 0
+          ? Number(
+              ((salonesAprobadosUltimos30Dias / solicitudesCreadasUltimos30Dias) * 100).toFixed(1),
+            )
+          : 0;
+
+      const ingresosAnteriorPorMoneda = new Map(
+        ingresosMesAnterior.map((registro) => [registro.moneda, registro._sum.monto ?? 0]),
+      );
+      const ingresosPorMoneda = Array.from(
+        new Set([
+          ...ingresosMesActual.map((registro) => registro.moneda),
+          ...ingresosMesAnterior.map((registro) => registro.moneda),
+        ]),
+      ).map((moneda) => {
+        const actual = ingresosMesActual.find((registro) => registro.moneda === moneda)?._sum.monto ?? 0;
+        const anterior = ingresosAnteriorPorMoneda.get(moneda) ?? 0;
+        const variacion =
+          anterior > 0 ? Number((((actual - anterior) / anterior) * 100).toFixed(1)) : actual > 0 ? 100 : 0;
+
+        return {
+          moneda,
+          actual,
+          anterior,
+          variacion,
+        };
+      });
 
       return respuesta.send({
         datos: {
           totalSalones,
           salonesActivos,
           salonesPendientes,
+          salonesSuspendidos,
           salonesVencidos,
+          salonesPorVencer7Dias,
+          salonesPorVencer30Dias,
           totalAdmins,
           totalAuditLogs,
+          reservasHoy,
           reservasUltimos30Dias,
+          ticketPromedioUltimos30Dias: ticketPromedioUltimos30Dias._avg.precioTotal ?? 0,
+          promedioReservasPorSalonActivo,
           salonesNuevosUltimos30Dias,
+          tasaAprobacionUltimos30Dias,
           cancelacionesPendientes,
+          ingresosPorMoneda,
         },
       });
     },

@@ -35,6 +35,173 @@ function serializarServiciosResumen(servicios: ReturnType<typeof obtenerServicio
   })) as Prisma.InputJsonValue;
 }
 
+function esErrorCompatibilidadServiciosDetalle(error: unknown): boolean {
+  const codigo =
+    typeof error === 'object' && error !== null && 'code' in error
+      ? String((error as { code?: unknown }).code ?? '')
+      : '';
+  const mensaje = error instanceof Error ? error.message : '';
+
+  return (
+    codigo === 'P2021' ||
+    codigo === 'P2022' ||
+    /reserva_servicios/i.test(mensaje) ||
+    /(clienteAppId|tokenCancelacion|recordatorioEnviado|notasMenorEdad)/i.test(mensaje) ||
+    /Unknown column/i.test(mensaje) ||
+    /doesn'?t exist/i.test(mensaje)
+  );
+}
+
+const seleccionarReservaListadoCompat = {
+  id: true,
+  estudioId: true,
+  personalId: true,
+  clienteId: true,
+  nombreCliente: true,
+  telefonoCliente: true,
+  fecha: true,
+  horaInicio: true,
+  duracion: true,
+  servicios: true,
+  precioTotal: true,
+  estado: true,
+  sucursal: true,
+  marcaTinte: true,
+  tonalidad: true,
+  creadoEn: true,
+} satisfies Prisma.ReservaSelect;
+
+const seleccionarReservaConRelacionesCompat = {
+  id: true,
+  estudioId: true,
+  personalId: true,
+  clienteId: true,
+  nombreCliente: true,
+  telefonoCliente: true,
+  fecha: true,
+  horaInicio: true,
+  duracion: true,
+  servicios: true,
+  precioTotal: true,
+  estado: true,
+  sucursal: true,
+  marcaTinte: true,
+  tonalidad: true,
+  creadoEn: true,
+  estudio: {
+    select: {
+      id: true,
+      nombre: true,
+      telefono: true,
+      colorPrimario: true,
+      logoUrl: true,
+      direccion: true,
+      claveCliente: true,
+    },
+  },
+  empleado: {
+    select: {
+      id: true,
+      nombre: true,
+    },
+  },
+  cliente: {
+    select: {
+      id: true,
+      email: true,
+    },
+  },
+} satisfies Prisma.ReservaSelect;
+
+async function buscarReservasCompat(args: Prisma.ReservaFindManyArgs) {
+  try {
+    return await prisma.reserva.findMany({
+      ...args,
+      include: incluirServiciosDetalleReserva,
+    });
+  } catch (error) {
+    if (!esErrorCompatibilidadServiciosDetalle(error)) {
+      throw error;
+    }
+
+    return prisma.reserva.findMany({
+      ...args,
+      select: seleccionarReservaListadoCompat,
+    }) as Promise<Awaited<ReturnType<typeof prisma.reserva.findMany>>>;
+  }
+}
+
+async function buscarReservaCompat(args: Prisma.ReservaFindUniqueArgs) {
+  try {
+    return await prisma.reserva.findUnique({
+      ...args,
+      include: incluirReservaConRelaciones,
+    });
+  } catch (error) {
+    if (!esErrorCompatibilidadServiciosDetalle(error)) {
+      throw error;
+    }
+
+    return prisma.reserva.findUnique({
+      ...args,
+      select: seleccionarReservaConRelacionesCompat,
+    }) as Promise<Awaited<ReturnType<typeof prisma.reserva.findUnique>>>;
+  }
+}
+
+async function buscarReservaCancelableCompat(token: string) {
+  try {
+    return await prisma.reserva.findUnique({
+      where: { tokenCancelacion: token },
+      select: {
+        id: true,
+        fecha: true,
+        horaInicio: true,
+        estado: true,
+        tokenCancelacion: true,
+        nombreCliente: true,
+        servicios: true,
+        serviciosDetalle: {
+          select: {
+            id: true,
+            nombre: true,
+            duracion: true,
+            precio: true,
+            categoria: true,
+            orden: true,
+            estado: true,
+          },
+          orderBy: { orden: 'asc' },
+        },
+        empleado: { select: { nombre: true } },
+        estudio: { select: { nombre: true } },
+      },
+    });
+  } catch (error) {
+    if (!esErrorCompatibilidadServiciosDetalle(error)) {
+      throw error;
+    }
+
+    if (error instanceof Error && /tokenCancelacion/i.test(error.message)) {
+      return null;
+    }
+
+    return prisma.reserva.findUnique({
+      where: { tokenCancelacion: token },
+      select: {
+        id: true,
+        fecha: true,
+        horaInicio: true,
+        estado: true,
+        nombreCliente: true,
+        servicios: true,
+        empleado: { select: { nombre: true } },
+        estudio: { select: { nombre: true } },
+      },
+    });
+  }
+}
+
 const esquemaCrearReservaBase = z.object({
   estudioId: z.string().trim().min(1, 'El estudio es obligatorio'),
   personalId: z.string().trim().min(1, 'Debes seleccionar un especialista'),
@@ -75,10 +242,10 @@ const esquemaDatosClienteReserva = z.object({
 });
 
 async function sincronizarResumenReserva(reservaId: string) {
-  const reserva = await prisma.reserva.findUnique({
+  const reserva = await buscarReservasCompat({
     where: { id: reservaId },
-    include: incluirServiciosDetalleReserva,
-  });
+    take: 1,
+  }).then((reservas) => reservas[0] ?? null);
 
   if (!reserva) return null;
 
@@ -112,6 +279,169 @@ async function sincronizarResumenReserva(reservaId: string) {
   return obtenerReservaConRelacionesPorId(reservaId);
 }
 
+async function insertarReservaCompat(
+  tx: Prisma.TransactionClient,
+  datos: {
+    nuevaReservaId: string;
+    estudioId: string;
+    personalId: string;
+    clienteId: string;
+    nombreCliente: string;
+    telefonoCliente: string;
+    fecha: string;
+    horaInicio: string;
+    duracionEfectiva: number;
+    serviciosNormalizados: ReturnType<typeof normalizarServiciosEntrada>;
+    precioTotalEfectivo: number;
+    estadoReserva: string;
+    sucursal?: string;
+    marcaTinte?: string | null;
+    tonalidad?: string | null;
+    notaMenorEdad?: string | null;
+    clienteAppId?: string | null;
+    tokenCancelacion: string;
+    inicioMin: number;
+    finMin: number;
+  },
+): Promise<void> {
+  const serviciosJson = JSON.stringify(
+    datos.serviciosNormalizados.map((servicio) => ({
+      name: servicio.name,
+      duration: servicio.duration,
+      price: servicio.price,
+      ...(servicio.category ? { category: servicio.category } : {}),
+    })),
+  );
+
+  try {
+    const filasInsertadas = await tx.$executeRaw`
+      INSERT INTO reservas (
+        id,
+        estudioId,
+        personalId,
+        clienteId,
+        nombreCliente,
+        telefonoCliente,
+        fecha,
+        horaInicio,
+        duracion,
+        servicios,
+        precioTotal,
+        estado,
+        sucursal,
+        marcaTinte,
+        tonalidad,
+        notasMenorEdad,
+        clienteAppId,
+        tokenCancelacion,
+        recordatorioEnviado,
+        creadoEn
+      )
+      SELECT
+        ${datos.nuevaReservaId},
+        ${datos.estudioId},
+        ${datos.personalId},
+        ${datos.clienteId},
+        ${datos.nombreCliente},
+        ${datos.telefonoCliente},
+        ${datos.fecha},
+        ${datos.horaInicio},
+        ${datos.duracionEfectiva},
+        CAST(${serviciosJson} AS JSON),
+        ${datos.precioTotalEfectivo},
+        ${datos.estadoReserva},
+        ${datos.sucursal ?? ''},
+        ${datos.marcaTinte ?? null},
+        ${datos.tonalidad ?? null},
+        ${datos.notaMenorEdad ?? null},
+        ${datos.clienteAppId ?? null},
+        ${datos.tokenCancelacion},
+        false,
+        NOW()
+      FROM DUAL
+      WHERE NOT EXISTS (
+        SELECT 1
+        FROM reservas
+        WHERE personalId = ${datos.personalId}
+          AND fecha = ${datos.fecha}
+          AND estado IN ('pending', 'confirmed')
+          AND ${datos.inicioMin} < (TIME_TO_SEC(horaInicio) / 60 + duracion)
+          AND ${datos.finMin} > (TIME_TO_SEC(horaInicio) / 60)
+      )
+    `;
+
+    if (filasInsertadas === 0) {
+      throw new Error('SLOT_OCUPADO');
+    }
+  } catch (error) {
+    if (!esErrorCompatibilidadServiciosDetalle(error)) {
+      throw error;
+    }
+
+    const filasInsertadas = await tx.$executeRaw`
+      INSERT INTO reservas (
+        id,
+        estudioId,
+        personalId,
+        clienteId,
+        nombreCliente,
+        telefonoCliente,
+        fecha,
+        horaInicio,
+        duracion,
+        servicios,
+        precioTotal,
+        estado,
+        sucursal,
+        marcaTinte,
+        tonalidad,
+        creadoEn
+      )
+      SELECT
+        ${datos.nuevaReservaId},
+        ${datos.estudioId},
+        ${datos.personalId},
+        ${datos.clienteId},
+        ${datos.nombreCliente},
+        ${datos.telefonoCliente},
+        ${datos.fecha},
+        ${datos.horaInicio},
+        ${datos.duracionEfectiva},
+        CAST(${serviciosJson} AS JSON),
+        ${datos.precioTotalEfectivo},
+        ${datos.estadoReserva},
+        ${datos.sucursal ?? ''},
+        ${datos.marcaTinte ?? null},
+        ${datos.tonalidad ?? null},
+        NOW()
+      FROM DUAL
+      WHERE NOT EXISTS (
+        SELECT 1
+        FROM reservas
+        WHERE personalId = ${datos.personalId}
+          AND fecha = ${datos.fecha}
+          AND estado IN ('pending', 'confirmed')
+          AND ${datos.inicioMin} < (TIME_TO_SEC(horaInicio) / 60 + duracion)
+          AND ${datos.finMin} > (TIME_TO_SEC(horaInicio) / 60)
+      )
+    `;
+
+    if (filasInsertadas === 0) {
+      throw new Error('SLOT_OCUPADO');
+    }
+  }
+}
+
+async function actualizarServiciosReservaCompat(args: Prisma.ReservaServicioUpdateManyArgs) {
+  try {
+    await prisma.reservaServicio.updateMany(args);
+  } catch (error) {
+    if (!esErrorCompatibilidadServiciosDetalle(error)) {
+      throw error;
+    }
+  }
+}
+
 export async function rutasReservas(servidor: FastifyInstance): Promise<void> {
   // GET /reservas/todas — solo maestro
   servidor.get<{ Querystring: { pagina?: string; limite?: string } }>(
@@ -128,11 +458,10 @@ export async function rutasReservas(servidor: FastifyInstance): Promise<void> {
 
       const [total, reservas] = await Promise.all([
         prisma.reserva.count(),
-        prisma.reserva.findMany({
+        buscarReservasCompat({
           orderBy: [{ fecha: 'desc' }, { horaInicio: 'asc' }],
           skip: saltar,
           take: limite,
-          include: incluirServiciosDetalleReserva,
         }),
       ]);
 
@@ -160,10 +489,9 @@ export async function rutasReservas(servidor: FastifyInstance): Promise<void> {
 
       // Si se piden todas (sin pagina), devolver lista plana para compatibilidad
       if (!solicitud.query.pagina) {
-        const reservas = await prisma.reserva.findMany({
+        const reservas = await buscarReservasCompat({
           where,
           orderBy: [{ fecha: 'asc' }, { horaInicio: 'asc' }],
-          include: incluirServiciosDetalleReserva,
         });
         return respuesta.send({ datos: reservas.map(serializarReservaApi) });
       }
@@ -174,12 +502,11 @@ export async function rutasReservas(servidor: FastifyInstance): Promise<void> {
 
       const [total, reservas] = await Promise.all([
         prisma.reserva.count({ where }),
-        prisma.reserva.findMany({
+        buscarReservasCompat({
           where,
           orderBy: [{ fecha: 'desc' }, { horaInicio: 'asc' }],
           skip: saltar,
           take: limite,
-          include: incluirServiciosDetalleReserva,
         }),
       ]);
 
@@ -432,82 +759,48 @@ export async function rutasReservas(servidor: FastifyInstance): Promise<void> {
 
         const nuevaReservaId = crypto.randomUUID();
         const tokenCancelacion = crypto.randomUUID();
-        const filasInsertadas = await tx.$executeRaw`
-          INSERT INTO reservas (
-            id,
-            estudioId,
-            personalId,
-            clienteId,
-            nombreCliente,
-            telefonoCliente,
-            fecha,
-            horaInicio,
-            duracion,
-            servicios,
-            precioTotal,
-            estado,
-            sucursal,
-            marcaTinte,
-            tonalidad,
-            notasMenorEdad,
-            clienteAppId,
-            tokenCancelacion,
-            recordatorioEnviado,
-            creadoEn
-          )
-          SELECT
-            ${nuevaReservaId},
-            ${estudioId},
-            ${personalId},
-            ${cliente.id},
-            ${nombreCliente},
-            ${telefonoCliente},
-            ${fecha},
-            ${horaInicio},
-            ${duracionEfectiva},
-            CAST(${JSON.stringify(serviciosNormalizados.map((servicio) => ({
-              name: servicio.name,
-              duration: servicio.duration,
-              price: servicio.price,
-              ...(servicio.category ? { category: servicio.category } : {}),
-            })))} AS JSON),
-            ${precioTotalEfectivo},
-            ${estadoReserva},
-            ${sucursal ?? ''},
-            ${marcaTinte ?? null},
-            ${tonalidad ?? null},
-            ${esMenorDeEdad ? sanitizarTexto('Cliente menor de edad — requiere acompañante adulto') : null},
-            ${clienteAppId ?? null},
-            ${tokenCancelacion},
-            false,
-            NOW()
-          FROM DUAL
-          WHERE NOT EXISTS (
-            SELECT 1
-            FROM reservas
-            WHERE personalId = ${personalId}
-              AND fecha = ${fecha}
-              AND estado IN ('pending', 'confirmed')
-              AND ${inicioMin} < (TIME_TO_SEC(horaInicio) / 60 + duracion)
-              AND ${finMin} > (TIME_TO_SEC(horaInicio) / 60)
-          )
-        `;
-
-        if (filasInsertadas === 0) {
-          throw new Error('SLOT_OCUPADO');
-        }
-
-        await tx.reservaServicio.createMany({
-          data: serviciosNormalizados.map((servicio, indice) => ({
-            reservaId: nuevaReservaId,
-            nombre: servicio.name,
-            duracion: servicio.duration,
-            precio: servicio.price,
-            categoria: servicio.category ?? null,
-            orden: servicio.order ?? indice,
-            estado: servicio.status ?? estadoReserva,
-          })),
+        await insertarReservaCompat(tx, {
+          nuevaReservaId,
+          estudioId,
+          personalId,
+          clienteId: cliente.id,
+          nombreCliente,
+          telefonoCliente,
+          fecha,
+          horaInicio,
+          duracionEfectiva,
+          serviciosNormalizados,
+          precioTotalEfectivo,
+          estadoReserva,
+          sucursal,
+          marcaTinte,
+          tonalidad,
+          notaMenorEdad: esMenorDeEdad
+            ? sanitizarTexto('Cliente menor de edad - requiere acompanante adulto')
+            : null,
+          clienteAppId: clienteAppId ?? null,
+          tokenCancelacion,
+          inicioMin,
+          finMin,
         });
+
+        try {
+          await tx.reservaServicio.createMany({
+            data: serviciosNormalizados.map((servicio, indice) => ({
+              reservaId: nuevaReservaId,
+              nombre: servicio.name,
+              duracion: servicio.duration,
+              precio: servicio.price,
+              categoria: servicio.category ?? null,
+              orden: servicio.order ?? indice,
+              estado: servicio.status ?? estadoReserva,
+            })),
+          });
+        } catch (error) {
+          if (!esErrorCompatibilidadServiciosDetalle(error)) {
+            throw error;
+          }
+        }
 
         const resultadoFidelidadTx = estadoReserva === 'confirmed'
           ? await registrarVisitaFidelidad(cliente.id, estudioId, tx)
@@ -534,9 +827,8 @@ export async function rutasReservas(servidor: FastifyInstance): Promise<void> {
       throw error;
     }
 
-    const reserva = await prisma.reserva.findUnique({
+    const reserva = await buscarReservaCompat({
       where: { id: reservaId },
-      include: incluirReservaConRelaciones,
     });
 
     if (!reserva) {
@@ -550,8 +842,12 @@ export async function rutasReservas(servidor: FastifyInstance): Promise<void> {
     void enviarEmailConfirmacion(reserva.id, {
       recompensaAplicada: Boolean(usarRecompensa),
       descripcionRecompensa: descripcionRecompensaAplicada,
+    }).catch((error) => {
+      servidor.log.error(error);
     });
-    void notificarNuevaCita(reserva);
+    void notificarNuevaCita(reserva).catch((error) => {
+      servidor.log.error(error);
+    });
 
     return respuesta.code(201).send({
       datos: serializarReservaApi(reserva),
@@ -564,32 +860,7 @@ export async function rutasReservas(servidor: FastifyInstance): Promise<void> {
   servidor.get<{ Params: { token: string } }>(
     '/reservas/cancelar/:token',
     async (solicitud, respuesta) => {
-      const reserva = await prisma.reserva.findUnique({
-        where: { tokenCancelacion: solicitud.params.token },
-        select: {
-          id: true,
-          fecha: true,
-          horaInicio: true,
-          estado: true,
-          tokenCancelacion: true,
-          nombreCliente: true,
-          servicios: true,
-          serviciosDetalle: {
-            select: {
-              id: true,
-              nombre: true,
-              duracion: true,
-              precio: true,
-              categoria: true,
-              orden: true,
-              estado: true,
-            },
-            orderBy: { orden: 'asc' },
-          },
-          empleado: { select: { nombre: true } },
-          estudio: { select: { nombre: true } },
-        },
-      });
+      const reserva = await buscarReservaCancelableCompat(solicitud.params.token);
 
       if (!reserva) {
         return respuesta.code(404).send({ error: 'La reserva no existe o el enlace es inválido.' });
@@ -618,10 +889,7 @@ export async function rutasReservas(servidor: FastifyInstance): Promise<void> {
   servidor.post<{ Params: { token: string } }>(
     '/reservas/cancelar/:token',
     async (solicitud, respuesta) => {
-      const reserva = await prisma.reserva.findUnique({
-        where: { tokenCancelacion: solicitud.params.token },
-        select: { id: true, fecha: true, horaInicio: true, estado: true },
-      });
+      const reserva = await buscarReservaCancelableCompat(solicitud.params.token);
 
       if (!reserva) {
         return respuesta.code(404).send({ error: 'La reserva no existe o el enlace es inválido.' });
@@ -657,7 +925,7 @@ export async function rutasReservas(servidor: FastifyInstance): Promise<void> {
         data: { estado: 'cancelled' },
       });
 
-      await prisma.reservaServicio.updateMany({
+      await actualizarServiciosReservaCompat({
         where: { reservaId: reserva.id },
         data: { estado: 'cancelled' },
       });
@@ -750,14 +1018,14 @@ export async function rutasReservas(servidor: FastifyInstance): Promise<void> {
       });
 
       if (estado === 'confirmed') {
-        await prisma.reservaServicio.updateMany({
+        await actualizarServiciosReservaCompat({
           where: { reservaId: solicitud.params.id, estado: 'pending' },
           data: { estado: 'confirmed' },
         });
       }
 
       if (estado === 'completed') {
-        await prisma.reservaServicio.updateMany({
+        await actualizarServiciosReservaCompat({
           where: {
             reservaId: solicitud.params.id,
             estado: { in: ['pending', 'confirmed'] },
@@ -767,7 +1035,7 @@ export async function rutasReservas(servidor: FastifyInstance): Promise<void> {
       }
 
       if (estado === 'cancelled') {
-        await prisma.reservaServicio.updateMany({
+        await actualizarServiciosReservaCompat({
           where: {
             reservaId: solicitud.params.id,
             estado: { in: ['pending', 'confirmed'] },

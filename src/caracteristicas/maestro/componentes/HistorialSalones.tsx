@@ -50,6 +50,7 @@ interface PropsCeldaRenovar {
 
 function CeldaRenovar({ estudio, onRenovado }: PropsCeldaRenovar) {
   const { mostrarToast } = usarToast();
+  const clienteConsulta = useQueryClient();
   const [renovando, setRenovando] = useState(false);
 
   const renovar = async () => {
@@ -63,6 +64,7 @@ function CeldaRenovar({ estudio, onRenovado }: PropsCeldaRenovar) {
         mensaje: 'Suscripción extendida 1 mes con la regla automática de vigencia.',
         variante: 'exito',
       });
+      void clienteConsulta.invalidateQueries({ queryKey: ['admin', 'metricas'] });
       onRenovado();
     } catch (err) {
       mostrarToast({
@@ -105,6 +107,7 @@ function BotonSuspender({ estudio, onCambio }: PropsSuspender) {
         variante: 'exito',
       });
       void clienteConsulta.invalidateQueries({ queryKey: ['historial-salones'] });
+      void clienteConsulta.invalidateQueries({ queryKey: ['admin', 'metricas'] });
       onCambio();
     },
     onError: (err: Error) => mostrarToast({ mensaje: err.message, variante: 'error' }),
@@ -158,6 +161,7 @@ export function HistorialSalones() {
     onSuccess: () => {
       mostrarToast({ mensaje: 'Solicitud reactivada como pendiente', variante: 'exito' });
       void clienteConsulta.invalidateQueries({ queryKey: ['solicitudes-pendientes'] });
+      void clienteConsulta.invalidateQueries({ queryKey: ['admin', 'metricas'] });
       void refetch();
     },
     onError: (err: Error) => mostrarToast({ mensaje: err.message, variante: 'error' }),

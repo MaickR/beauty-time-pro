@@ -374,6 +374,7 @@ function ModalCrearSalon({ alCerrar }: PropsModalCrear) {
         body: JSON.stringify(datos),
       });
       await queryClient.invalidateQueries({ queryKey: ['admin-salones'] });
+      await queryClient.invalidateQueries({ queryKey: ['admin', 'metricas'] });
       mostrarToast(`Salón "${datos.nombreSalon}" creado correctamente`);
       alCerrar();
     } catch (error) {
@@ -629,6 +630,7 @@ export function GestionCuentas() {
       peticion<ResultadoSuspender>(`/admin/salones/${id}/suspender`, { method: 'PUT' }),
     onSuccess: (res) => {
       void queryClient.invalidateQueries({ queryKey: ['admin-salones'] });
+      void queryClient.invalidateQueries({ queryKey: ['admin', 'metricas'] });
       mostrarToast(res.datos.mensaje);
     },
     onError: () => mostrarToast('Error al actualizar el estado. Intenta nuevamente.'),
@@ -651,6 +653,7 @@ export function GestionCuentas() {
       }),
     onSuccess: async (resultado) => {
       await queryClient.invalidateQueries({ queryKey: ['admin-salones'] });
+      await queryClient.invalidateQueries({ queryKey: ['admin', 'metricas'] });
       mostrarToast({
         mensaje: resultado.datos.mensaje,
         variante: 'exito',

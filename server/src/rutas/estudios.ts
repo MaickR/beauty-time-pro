@@ -123,6 +123,169 @@ async function verificarAccesoDuenoAEstudio(usuarioId: string, estudioId: string
   return Boolean(estudio);
 }
 
+function esErrorCompatibilidadEstudio(error: unknown): boolean {
+  const codigo =
+    typeof error === 'object' && error !== null && 'code' in error
+      ? String((error as { code?: unknown }).code ?? '')
+      : '';
+  const mensaje = error instanceof Error ? error.message : '';
+
+  return (
+    codigo === 'P2022' ||
+    /Unknown column/i.test(mensaje) ||
+    /(pinCancelacionHash|plan|primeraVez|cancelacionSolicitada|fechaSolicitudCancelacion|motivoCancelacion)/i.test(
+      mensaje,
+    )
+  );
+}
+
+const seleccionarPersonalEstudio = {
+  id: true,
+  estudioId: true,
+  nombre: true,
+  avatarUrl: true,
+  especialidades: true,
+  activo: true,
+  horaInicio: true,
+  horaFin: true,
+  descansoInicio: true,
+  descansoFin: true,
+  diasTrabajo: true,
+  creadoEn: true,
+} satisfies Prisma.PersonalSelect;
+
+const seleccionarEstudioPanelModerno = {
+  id: true,
+  nombre: true,
+  propietario: true,
+  telefono: true,
+  sitioWeb: true,
+  pais: true,
+  sucursales: true,
+  claveDueno: true,
+  claveCliente: true,
+  activo: true,
+  plan: true,
+  pinCancelacionHash: true,
+  estado: true,
+  suscripcion: true,
+  inicioSuscripcion: true,
+  fechaVencimiento: true,
+  horario: true,
+  servicios: true,
+  serviciosCustom: true,
+  festivos: true,
+  colorPrimario: true,
+  logoUrl: true,
+  descripcion: true,
+  direccion: true,
+  emailContacto: true,
+  horarioApertura: true,
+  horarioCierre: true,
+  diasAtencion: true,
+  categorias: true,
+  primeraVez: true,
+  cancelacionSolicitada: true,
+  fechaSolicitudCancelacion: true,
+  motivoCancelacion: true,
+  creadoEn: true,
+  actualizadoEn: true,
+  personal: {
+    orderBy: { creadoEn: 'asc' },
+    select: seleccionarPersonalEstudio,
+  },
+} satisfies Prisma.EstudioSelect;
+
+const seleccionarEstudioPanelCompat = {
+  id: true,
+  nombre: true,
+  propietario: true,
+  telefono: true,
+  sitioWeb: true,
+  pais: true,
+  sucursales: true,
+  claveDueno: true,
+  claveCliente: true,
+  activo: true,
+  estado: true,
+  suscripcion: true,
+  inicioSuscripcion: true,
+  fechaVencimiento: true,
+  horario: true,
+  servicios: true,
+  serviciosCustom: true,
+  festivos: true,
+  colorPrimario: true,
+  logoUrl: true,
+  descripcion: true,
+  direccion: true,
+  emailContacto: true,
+  horarioApertura: true,
+  horarioCierre: true,
+  diasAtencion: true,
+  categorias: true,
+  creadoEn: true,
+  actualizadoEn: true,
+  personal: {
+    orderBy: { creadoEn: 'asc' },
+    select: seleccionarPersonalEstudio,
+  },
+} satisfies Prisma.EstudioSelect;
+
+function serializarEstudioPanel(estudio: Record<string, unknown>) {
+  const { pinCancelacionHash, ...resto } = estudio;
+
+  return {
+    ...resto,
+    plan: (estudio['plan'] as string | undefined) ?? 'STANDARD',
+    primeraVez: (estudio['primeraVez'] as boolean | undefined) ?? true,
+    cancelacionSolicitada: (estudio['cancelacionSolicitada'] as boolean | undefined) ?? false,
+    fechaSolicitudCancelacion:
+      (estudio['fechaSolicitudCancelacion'] as Date | string | null | undefined) ?? null,
+    motivoCancelacion: (estudio['motivoCancelacion'] as string | null | undefined) ?? null,
+    pinCancelacionConfigurado:
+      typeof pinCancelacionHash === 'string' && pinCancelacionHash.trim().length > 0,
+  };
+}
+
+async function listarEstudiosPanel(where: Prisma.EstudioWhereInput = {}) {
+  try {
+    return await prisma.estudio.findMany({
+      where,
+      orderBy: { creadoEn: 'desc' },
+      select: seleccionarEstudioPanelModerno,
+    });
+  } catch (error) {
+    if (!esErrorCompatibilidadEstudio(error)) {
+      throw error;
+    }
+
+    return prisma.estudio.findMany({
+      where,
+      orderBy: { creadoEn: 'desc' },
+      select: seleccionarEstudioPanelCompat,
+    });
+  }
+}
+
+async function obtenerEstudioPanel(where: Prisma.EstudioWhereInput) {
+  try {
+    return await prisma.estudio.findFirst({
+      where,
+      select: seleccionarEstudioPanelModerno,
+    });
+  } catch (error) {
+    if (!esErrorCompatibilidadEstudio(error)) {
+      throw error;
+    }
+
+    return prisma.estudio.findFirst({
+      where,
+      select: seleccionarEstudioPanelCompat,
+    });
+  }
+}
+
 export async function rutasEstudios(servidor: FastifyInstance): Promise<void> {
   // GET /estudios — solo rol maestro
   servidor.get('/estudios', { preHandler: verificarJWT }, async (solicitud, respuesta) => {
@@ -131,16 +294,11 @@ export async function rutasEstudios(servidor: FastifyInstance): Promise<void> {
       return respuesta.code(403).send({ error: 'Sin permisos para esta acción' });
     }
     const filtroDemo = obtenerFiltroDemo();
-    const estudios = await prisma.estudio.findMany({
-      where: filtroDemo,
-      orderBy: { creadoEn: 'desc' },
-      include: { personal: { orderBy: { creadoEn: 'asc' } } },
-    });
+    const estudios = await listarEstudiosPanel(filtroDemo);
     return respuesta.send({
-      datos: estudios.map(({ pinCancelacionHash, ...resto }) => ({
-        ...resto,
-        pinCancelacionConfigurado: Boolean(pinCancelacionHash),
-      })),
+      datos: estudios.map((estudio) =>
+        serializarEstudioPanel(estudio as unknown as Record<string, unknown>),
+      ),
     });
   });
 
@@ -155,14 +313,10 @@ export async function rutasEstudios(servidor: FastifyInstance): Promise<void> {
         return respuesta.code(403).send({ error: 'Sin permisos para esta acción' });
       }
       const filtroDemo = obtenerFiltroDemo();
-      const estudio = await prisma.estudio.findFirst({
-        where: { id, ...filtroDemo },
-        include: { personal: { orderBy: { creadoEn: 'asc' } } },
-      });
+      const estudio = await obtenerEstudioPanel({ id, ...filtroDemo });
       if (!estudio) return respuesta.code(404).send({ error: 'Estudio no encontrado' });
-      const { pinCancelacionHash, ...restoEstudio } = estudio;
       return respuesta.send({
-        datos: { ...restoEstudio, pinCancelacionConfigurado: Boolean(pinCancelacionHash) },
+        datos: serializarEstudioPanel(estudio as unknown as Record<string, unknown>),
       });
     },
   );

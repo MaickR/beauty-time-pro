@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import { useLocation } from 'react-router-dom';
 import { ShieldCheck, LogOut, Store, PlusCircle, PieChart, Users, Database } from 'lucide-react';
 import { usarContextoApp } from '../../contextos/ContextoApp';
@@ -27,6 +28,7 @@ export function PaginaMaestro() {
   const { estudios, reservas, pagos, recargar } = usarContextoApp();
   const { cerrarSesion, usuario } = usarTiendaAuth();
   const { mostrarToast } = usarToast();
+  const clienteConsulta = useQueryClient();
   const [verReservasEstudio, setVerReservasEstudio] = useState<Estudio | null>(null);
   const [pagoEstudio, setPagoEstudio] = useState<Estudio | null>(null);
   const [tabActiva, setTabActiva] = useState<TabMaestro>('directorio');
@@ -65,6 +67,7 @@ export function PaginaMaestro() {
       moneda,
       (msg) => {
         recargar();
+        void clienteConsulta.invalidateQueries({ queryKey: ['admin', 'metricas'] });
         mostrarToast(msg);
         setPagoEstudio(null);
       },
@@ -157,7 +160,7 @@ export function PaginaMaestro() {
               {puedeSuspenderSalones && (
                 <button
                   onClick={hook.abrirModalAlta}
-                  className="no-imprimir bg-pink-600 text-white px-8 py-4 rounded-2xl font-black shadow-xl flex items-center gap-2 hover:bg-pink-700 transition-all"
+                  className="no-imprimir bg-pink-600 text-white px-8 py-4 rounded-2xl font-black shadow-xl flex items-center justify-center gap-2 hover:bg-pink-700 transition-all"
                 >
                   <PlusCircle /> Registrar nuevo salón
                 </button>
