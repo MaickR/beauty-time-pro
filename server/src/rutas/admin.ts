@@ -1,6 +1,6 @@
 import type { FastifyInstance } from 'fastify';
 import type { Prisma } from '../generated/prisma/client.js';
-import bcrypt from 'bcrypt';
+import bcrypt from 'bcryptjs';
 import { randomBytes, randomUUID } from 'node:crypto';
 import { z } from 'zod';
 import { prisma } from '../prismaCliente.js';
