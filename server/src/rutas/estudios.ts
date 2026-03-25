@@ -380,103 +380,152 @@ export async function rutasEstudios(servidor: FastifyInstance): Promise<void> {
     '/estudios/:id',
     { preHandler: verificarJWT },
     async (solicitud, respuesta) => {
-      const payload = solicitud.user as { sub: string; rol: string; estudioId: string | null };
-      const { id } = solicitud.params;
-      if (payload.rol !== 'maestro' && payload.estudioId !== id) {
-        return respuesta.code(403).send({ error: 'Sin permisos para esta acción' });
-      }
-      if (payload.rol === 'dueno') {
-        const tieneAcceso = await verificarAccesoDuenoAEstudio(payload.sub, id);
-        if (!tieneAcceso) {
-          return respuesta.code(403).send({ error: 'Sin acceso a este recurso' });
+      try {
+        const payload = solicitud.user as { sub: string; rol: string; estudioId: string | null };
+        const { id } = solicitud.params;
+        if (payload.rol !== 'maestro' && payload.estudioId !== id) {
+          return respuesta.code(403).send({ error: 'Sin permisos para esta acción' });
         }
-      }
-      const resultado = esquemaActualizarEstudio.safeParse(solicitud.body);
-      if (!resultado.success) {
-        return respuesta.code(400).send({ error: obtenerMensajeValidacion(resultado.error) });
-      }
+        if (payload.rol === 'dueno') {
+          const tieneAcceso = await verificarAccesoDuenoAEstudio(payload.sub, id);
+          if (!tieneAcceso) {
+            return respuesta.code(403).send({ error: 'Sin acceso a este recurso' });
+          }
+        }
+        const resultado = esquemaActualizarEstudio.safeParse(solicitud.body);
+        if (!resultado.success) {
+          return respuesta.code(400).send({ error: obtenerMensajeValidacion(resultado.error) });
+        }
 
-      const datos = resultado.data;
-      const estudioExistente = await prisma.estudio.findUnique({
-        where: { id },
-        select: { categorias: true, servicios: true, serviciosCustom: true, plan: true },
-      });
-      if (!estudioExistente) {
-        return respuesta.code(404).send({ error: 'Estudio no encontrado' });
-      }
+        const datos = resultado.data;
+        let estudioExistente: { categorias: unknown; servicios: unknown; serviciosCustom: unknown; plan?: string } | null;
+        try {
+          estudioExistente = await prisma.estudio.findUnique({
+            where: { id },
+            select: { categorias: true, servicios: true, serviciosCustom: true, plan: true },
+          });
+        } catch (error) {
+          if (!esErrorCompatibilidadEstudio(error)) {
+            throw error;
+          }
+          estudioExistente = await prisma.estudio.findUnique({
+            where: { id },
+            select: { categorias: true, servicios: true, serviciosCustom: true },
+          });
+        }
 
-      if (payload.rol !== 'maestro' && datos.plan !== undefined) {
-        return respuesta.code(403).send({ error: 'Solo el panel maestro puede cambiar el plan del salón' });
-      }
+        if (!estudioExistente) {
+          return respuesta.code(404).send({ error: 'Estudio no encontrado' });
+        }
 
-      const planSiguiente = normalizarPlanEstudio(datos.plan ?? estudioExistente.plan);
-      const serviciosActuales = Array.isArray(estudioExistente.servicios)
-        ? estudioExistente.servicios.length
-        : 0;
-      const serviciosNuevos = Array.isArray(datos.servicios)
-        ? datos.servicios.length
-        : serviciosActuales;
-      const errorServicios = validarCantidadServiciosPlan({
-        plan: planSiguiente,
-        cantidadNueva: serviciosNuevos,
-        cantidadActual: serviciosActuales,
-      });
-      if (errorServicios) {
-        return respuesta.code(400).send({ error: errorServicios });
-      }
+        if (payload.rol !== 'maestro' && datos.plan !== undefined) {
+          return respuesta.code(403).send({ error: 'Solo el panel maestro puede cambiar el plan del salón' });
+        }
 
-      if (
-        datos.plan !== undefined &&
-        normalizarPlanEstudio(datos.plan) === 'STANDARD' &&
-        serviciosNuevos > 4
-      ) {
-        return respuesta.code(400).send({
-          error:
-            'Antes de cambiar a Standard debes dejar el catálogo con un máximo de 4 servicios activos.',
+        const planSiguiente = normalizarPlanEstudio(datos.plan ?? estudioExistente.plan);
+        const serviciosActuales = Array.isArray(estudioExistente.servicios)
+          ? estudioExistente.servicios.length
+          : 0;
+        const serviciosNuevos = Array.isArray(datos.servicios)
+          ? datos.servicios.length
+          : serviciosActuales;
+        const errorServicios = validarCantidadServiciosPlan({
+          plan: planSiguiente,
+          cantidadNueva: serviciosNuevos,
+          cantidadActual: serviciosActuales,
         });
-      }
-      const categorias = resolverCategoriasSalon({
-        categorias: datos.categorias ?? estudioExistente?.categorias,
-        servicios: datos.servicios ?? estudioExistente?.servicios,
-        serviciosCustom: datos.serviciosCustom ?? estudioExistente?.serviciosCustom,
-      });
+        if (errorServicios) {
+          return respuesta.code(400).send({ error: errorServicios });
+        }
 
-      const estudio = await prisma.$transaction(async (tx) => {
-        const estudioActualizado = await tx.estudio.update({
-          where: { id },
-          data: {
-            ...(datos.nombre !== undefined && { nombre: datos.nombre }),
-            ...(datos.propietario !== undefined && { propietario: datos.propietario }),
-            ...(datos.telefono !== undefined && { telefono: datos.telefono }),
-            ...(datos.sitioWeb !== undefined && { sitioWeb: datos.sitioWeb }),
-            ...(datos.pais !== undefined && { pais: datos.pais }),
-            ...(datos.plan !== undefined && { plan: normalizarPlanEstudio(datos.plan) }),
-            ...(datos.sucursales !== undefined && { sucursales: datos.sucursales }),
-            ...(datos.horario !== undefined && { horario: datos.horario }),
-            ...(datos.servicios !== undefined && { servicios: datos.servicios as Prisma.InputJsonValue }),
-            ...(datos.serviciosCustom !== undefined && { serviciosCustom: datos.serviciosCustom as Prisma.InputJsonValue }),
-            ...(datos.festivos !== undefined && { festivos: datos.festivos }),
-            ...(datos.colorPrimario !== undefined && { colorPrimario: datos.colorPrimario }),
-            ...(datos.descripcion !== undefined && { descripcion: sanitizarTexto(datos.descripcion ?? '') }),
-            ...(datos.direccion !== undefined && { direccion: sanitizarTexto(datos.direccion ?? '') }),
-            ...(datos.emailContacto !== undefined && { emailContacto: datos.emailContacto }),
-            ...(datos.horarioApertura !== undefined && { horarioApertura: datos.horarioApertura }),
-            ...(datos.horarioCierre !== undefined && { horarioCierre: datos.horarioCierre }),
-            ...(datos.diasAtencion !== undefined && { diasAtencion: datos.diasAtencion }),
-            categorias,
-          },
+        if (
+          datos.plan !== undefined &&
+          normalizarPlanEstudio(datos.plan) === 'STANDARD' &&
+          serviciosNuevos > 4
+        ) {
+          return respuesta.code(400).send({
+            error:
+              'Antes de cambiar a Standard debes dejar el catálogo con un máximo de 4 servicios activos.',
+          });
+        }
+        const categorias = resolverCategoriasSalon({
+          categorias:
+            datos.categorias ??
+            (typeof estudioExistente?.categorias === 'string' ? estudioExistente.categorias : null),
+          servicios: datos.servicios ?? estudioExistente?.servicios,
+          serviciosCustom: datos.serviciosCustom ?? estudioExistente?.serviciosCustom,
         });
+
+        let estudio: Record<string, unknown>;
+        try {
+          estudio = (await prisma.estudio.update({
+            where: { id },
+            data: {
+              ...(datos.nombre !== undefined && { nombre: datos.nombre }),
+              ...(datos.propietario !== undefined && { propietario: datos.propietario }),
+              ...(datos.telefono !== undefined && { telefono: datos.telefono }),
+              ...(datos.sitioWeb !== undefined && { sitioWeb: datos.sitioWeb }),
+              ...(datos.pais !== undefined && { pais: datos.pais }),
+              ...(datos.plan !== undefined && { plan: normalizarPlanEstudio(datos.plan) }),
+              ...(datos.sucursales !== undefined && { sucursales: datos.sucursales }),
+              ...(datos.horario !== undefined && { horario: datos.horario }),
+              ...(datos.servicios !== undefined && { servicios: datos.servicios as Prisma.InputJsonValue }),
+              ...(datos.serviciosCustom !== undefined && { serviciosCustom: datos.serviciosCustom as Prisma.InputJsonValue }),
+              ...(datos.festivos !== undefined && { festivos: datos.festivos }),
+              ...(datos.colorPrimario !== undefined && { colorPrimario: datos.colorPrimario }),
+              ...(datos.descripcion !== undefined && { descripcion: sanitizarTexto(datos.descripcion ?? '') }),
+              ...(datos.direccion !== undefined && { direccion: sanitizarTexto(datos.direccion ?? '') }),
+              ...(datos.emailContacto !== undefined && { emailContacto: datos.emailContacto }),
+              ...(datos.horarioApertura !== undefined && { horarioApertura: datos.horarioApertura }),
+              ...(datos.horarioCierre !== undefined && { horarioCierre: datos.horarioCierre }),
+              ...(datos.diasAtencion !== undefined && { diasAtencion: datos.diasAtencion }),
+              categorias,
+            },
+          })) as unknown as Record<string, unknown>;
+        } catch (error) {
+          if (!esErrorCompatibilidadEstudio(error)) {
+            throw error;
+          }
+          estudio = (await prisma.estudio.update({
+            where: { id },
+            data: {
+              ...(datos.nombre !== undefined && { nombre: datos.nombre }),
+              ...(datos.propietario !== undefined && { propietario: datos.propietario }),
+              ...(datos.telefono !== undefined && { telefono: datos.telefono }),
+              ...(datos.sitioWeb !== undefined && { sitioWeb: datos.sitioWeb }),
+              ...(datos.pais !== undefined && { pais: datos.pais }),
+              ...(datos.sucursales !== undefined && { sucursales: datos.sucursales }),
+              ...(datos.horario !== undefined && { horario: datos.horario }),
+              ...(datos.servicios !== undefined && { servicios: datos.servicios as Prisma.InputJsonValue }),
+              ...(datos.serviciosCustom !== undefined && { serviciosCustom: datos.serviciosCustom as Prisma.InputJsonValue }),
+              ...(datos.festivos !== undefined && { festivos: datos.festivos }),
+              ...(datos.colorPrimario !== undefined && { colorPrimario: datos.colorPrimario }),
+              ...(datos.descripcion !== undefined && { descripcion: sanitizarTexto(datos.descripcion ?? '') }),
+              ...(datos.direccion !== undefined && { direccion: sanitizarTexto(datos.direccion ?? '') }),
+              ...(datos.emailContacto !== undefined && { emailContacto: datos.emailContacto }),
+              ...(datos.horarioApertura !== undefined && { horarioApertura: datos.horarioApertura }),
+              ...(datos.horarioCierre !== undefined && { horarioCierre: datos.horarioCierre }),
+              ...(datos.diasAtencion !== undefined && { diasAtencion: datos.diasAtencion }),
+              categorias,
+            },
+          })) as unknown as Record<string, unknown>;
+        }
 
         if (datos.plan !== undefined && normalizarPlanEstudio(datos.plan) === 'STANDARD') {
-          await tx.configFidelidad.updateMany({
+          await prisma.configFidelidad.updateMany({
             where: { estudioId: id },
             data: { activo: false },
           });
         }
 
-        return estudioActualizado;
-      });
-      return respuesta.send({ datos: estudio });
+        return respuesta.send({ datos: estudio });
+      } catch (error) {
+        solicitud.log.error({ err: error }, 'Fallo al actualizar estudio');
+        return respuesta.code(500).send({
+          error: 'No se pudo actualizar el estudio',
+          detalle: error instanceof Error ? error.message : 'Error desconocido',
+        });
+      }
     },
   );
 
@@ -557,69 +606,77 @@ export async function rutasEstudios(servidor: FastifyInstance): Promise<void> {
     '/estudios/:id',
     { preHandler: verificarJWT },
     async (solicitud, respuesta) => {
-      const payload = solicitud.user as { rol: string };
-      if (payload.rol !== 'maestro') {
-        return respuesta.code(403).send({ error: 'Sin permisos para esta acción' });
+      try {
+        const payload = solicitud.user as { rol: string };
+        if (payload.rol !== 'maestro') {
+          return respuesta.code(403).send({ error: 'Sin permisos para esta acción' });
+        }
+
+        const { id } = solicitud.params;
+
+        const estudio = await prisma.estudio.findUnique({
+          where: { id },
+          select: { id: true },
+        });
+
+        if (!estudio) {
+          return respuesta.code(404).send({ error: 'Estudio no encontrado' });
+        }
+
+        const [usuarios, personal, reservas, pagos] = await Promise.all([
+          prisma.usuario.findMany({ where: { estudioId: id }, select: { id: true } }),
+          prisma.personal.findMany({ where: { estudioId: id }, select: { id: true } }),
+          prisma.reserva.findMany({ where: { estudioId: id }, select: { id: true } }),
+          prisma.pago.findMany({ where: { estudioId: id }, select: { id: true } }),
+        ]);
+
+        const usuarioIds = usuarios.map((usuario) => usuario.id);
+        const personalIds = personal.map((persona) => persona.id);
+        const reservaIds = reservas.map((reserva) => reserva.id);
+        const pagoIds = pagos.map((pago) => pago.id);
+
+        if (usuarioIds.length > 0) {
+          await prisma.suscripcionPush.deleteMany({ where: { usuarioId: { in: usuarioIds } } });
+          await prisma.tokenReset.deleteMany({ where: { usuarioId: { in: usuarioIds } } });
+          await prisma.permisosMaestro.deleteMany({ where: { usuarioId: { in: usuarioIds } } });
+          await prisma.auditLog.deleteMany({ where: { usuarioId: { in: usuarioIds } } });
+        }
+
+        await prisma.auditLog.deleteMany({
+          where: {
+            OR: [
+              { entidadTipo: 'estudio', entidadId: id },
+              ...(pagoIds.length > 0 ? [{ entidadTipo: 'pago', entidadId: { in: pagoIds } }] : []),
+            ],
+          },
+        });
+
+        if (reservaIds.length > 0) {
+          await prisma.reservaServicio.deleteMany({ where: { reservaId: { in: reservaIds } } });
+        }
+
+        if (personalIds.length > 0) {
+          await prisma.empleadoAcceso.deleteMany({ where: { personalId: { in: personalIds } } });
+        }
+
+        await prisma.personal.deleteMany({ where: { estudioId: id } });
+        await prisma.reserva.deleteMany({ where: { estudioId: id } });
+        await prisma.pago.deleteMany({ where: { estudioId: id } });
+        await prisma.cliente.deleteMany({ where: { estudioId: id } });
+        await prisma.puntosFidelidad.deleteMany({ where: { estudioId: id } });
+        await prisma.configFidelidad.deleteMany({ where: { estudioId: id } });
+        await prisma.diaFestivo.deleteMany({ where: { estudioId: id } });
+        await prisma.usuario.deleteMany({ where: { estudioId: id } });
+        await prisma.estudio.delete({ where: { id } });
+
+        return respuesta.code(200).send({ datos: { eliminado: true } });
+      } catch (error) {
+        solicitud.log.error({ err: error }, 'Fallo al eliminar estudio');
+        return respuesta.code(500).send({
+          error: 'No se pudo eliminar el estudio',
+          detalle: error instanceof Error ? error.message : 'Error desconocido',
+        });
       }
-
-      const { id } = solicitud.params;
-
-      const estudio = await prisma.estudio.findUnique({
-        where: { id },
-        select: { id: true },
-      });
-
-      if (!estudio) {
-        return respuesta.code(404).send({ error: 'Estudio no encontrado' });
-      }
-
-      const [usuarios, personal, reservas, pagos] = await Promise.all([
-        prisma.usuario.findMany({ where: { estudioId: id }, select: { id: true } }),
-        prisma.personal.findMany({ where: { estudioId: id }, select: { id: true } }),
-        prisma.reserva.findMany({ where: { estudioId: id }, select: { id: true } }),
-        prisma.pago.findMany({ where: { estudioId: id }, select: { id: true } }),
-      ]);
-
-      const usuarioIds = usuarios.map((usuario) => usuario.id);
-      const personalIds = personal.map((persona) => persona.id);
-      const reservaIds = reservas.map((reserva) => reserva.id);
-      const pagoIds = pagos.map((pago) => pago.id);
-
-      if (usuarioIds.length > 0) {
-        await prisma.suscripcionPush.deleteMany({ where: { usuarioId: { in: usuarioIds } } });
-        await prisma.tokenReset.deleteMany({ where: { usuarioId: { in: usuarioIds } } });
-        await prisma.permisosMaestro.deleteMany({ where: { usuarioId: { in: usuarioIds } } });
-        await prisma.auditLog.deleteMany({ where: { usuarioId: { in: usuarioIds } } });
-      }
-
-      await prisma.auditLog.deleteMany({
-        where: {
-          OR: [
-            { entidadTipo: 'estudio', entidadId: id },
-            ...(pagoIds.length > 0 ? [{ entidadTipo: 'pago', entidadId: { in: pagoIds } }] : []),
-          ],
-        },
-      });
-
-      if (reservaIds.length > 0) {
-        await prisma.reservaServicio.deleteMany({ where: { reservaId: { in: reservaIds } } });
-      }
-
-      if (personalIds.length > 0) {
-        await prisma.empleadoAcceso.deleteMany({ where: { personalId: { in: personalIds } } });
-      }
-
-      await prisma.personal.deleteMany({ where: { estudioId: id } });
-      await prisma.reserva.deleteMany({ where: { estudioId: id } });
-      await prisma.pago.deleteMany({ where: { estudioId: id } });
-      await prisma.cliente.deleteMany({ where: { estudioId: id } });
-      await prisma.puntosFidelidad.deleteMany({ where: { estudioId: id } });
-      await prisma.configFidelidad.deleteMany({ where: { estudioId: id } });
-      await prisma.diaFestivo.deleteMany({ where: { estudioId: id } });
-      await prisma.usuario.deleteMany({ where: { estudioId: id } });
-      await prisma.estudio.delete({ where: { id } });
-
-      return respuesta.code(200).send({ datos: { eliminado: true } });
     },
   );
 

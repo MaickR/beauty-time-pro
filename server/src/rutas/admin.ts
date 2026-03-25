@@ -771,178 +771,186 @@ export async function rutasAdmin(servidor: FastifyInstance): Promise<void> {
     '/admin/salones',
     { preHandler: [verificarJWT, requierePermiso('aprobarSalones')] },
     async (solicitud, respuesta) => {
-      const payload = solicitud.user as { rol: string };
-      if (payload.rol !== 'maestro') {
-        return respuesta.code(403).send({ error: 'Sin permisos para esta acción' });
-      }
-
-      const resultado = esquemaCrearSalonAdmin.safeParse(solicitud.body);
-      if (!resultado.success) {
-        return respuesta.code(400).send({ error: obtenerMensajeValidacion(resultado.error) });
-      }
-
-      const {
-        nombreSalon,
-        nombreAdmin,
-        email,
-        contrasena,
-        telefono,
-        pais,
-        plan,
-        inicioSuscripcion,
-        personal,
-      } = resultado.data;
-
-      const emailNorm = email.trim().toLowerCase();
-      const existente = await prisma.usuario.findUnique({ where: { email: emailNorm } });
-      if (existente) {
-        return respuesta.code(409).send({ error: 'Ya existe un usuario con ese email' });
-      }
-
-      const hashContrasena = await bcrypt.hash(contrasena, 12);
-
-  const { claveDueno, claveCliente } = await generarClavesSalonUnicas(nombreSalon);
-
-      const fechaInicio = inicioSuscripcion ? crearFechaDesdeISO(inicioSuscripcion) : new Date();
-      fechaInicio.setHours(0, 0, 0, 0);
-      const vencimiento = new Date(fechaInicio);
-      vencimiento.setMonth(vencimiento.getMonth() + 1);
-
-      const formatearFecha = (d: Date) => d.toISOString().split('T')[0]!;
-
-      const diasSemana = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado', 'Domingo'];
-      const horario = Object.fromEntries(
-        diasSemana.map((dia) => [dia, { isOpen: dia !== 'Domingo', openTime: '09:00', closeTime: '19:00' }]),
-      );
-
-      const monedaInicial = obtenerMonedaPorPais(pais);
-      const montoInicial = obtenerMontoPlanPorPais(pais);
-
-      let usuarioCreadoId: string | null = null;
-      let estudioCreadoId: string | null = null;
-
-      let estudio: Awaited<ReturnType<typeof crearSalonAdminCompat>>;
-      let pagoInicial: Awaited<ReturnType<typeof crearPagoAdminCompat>> | null = null;
-
       try {
-        const nuevoUsuario = await prisma.usuario.create({
-          data: {
-            email: emailNorm,
-            hashContrasena,
-            nombre: nombreAdmin,
-            rol: 'dueno',
-            emailVerificado: true,
-          },
-        });
-        usuarioCreadoId = nuevoUsuario.id;
+        const payload = solicitud.user as { rol: string };
+        if (payload.rol !== 'maestro') {
+          return respuesta.code(403).send({ error: 'Sin permisos para esta acción' });
+        }
 
-        estudio = await crearSalonAdminCompat(prisma, {
+        const resultado = esquemaCrearSalonAdmin.safeParse(solicitud.body);
+        if (!resultado.success) {
+          return respuesta.code(400).send({ error: obtenerMensajeValidacion(resultado.error) });
+        }
+
+        const {
           nombreSalon,
           nombreAdmin,
+          email,
+          contrasena,
           telefono,
           pais,
-          claveDueno,
-          claveCliente,
-          emailNorm,
-          fechaInicio: formatearFecha(fechaInicio),
-          fechaVencimiento: formatearFecha(vencimiento),
-          horario,
-        });
-        estudioCreadoId = estudio.id;
+          plan,
+          inicioSuscripcion,
+          personal,
+        } = resultado.data;
 
-        await prisma.usuario.update({
-          where: { id: nuevoUsuario.id },
-          data: { estudioId: estudio.id },
-        });
+        const emailNorm = email.trim().toLowerCase();
+        const existente = await prisma.usuario.findUnique({ where: { email: emailNorm } });
+        if (existente) {
+          return respuesta.code(409).send({ error: 'Ya existe un usuario con ese email' });
+        }
 
-        if (personal.length > 0) {
-          for (const persona of personal) {
-            await prisma.personal.create({
-              data: {
-                estudioId: estudio.id,
-                nombre: persona.nombre,
-                especialidades: persona.especialidades,
-                horaInicio: persona.horaInicio ?? null,
-                horaFin: persona.horaFin ?? null,
-                descansoInicio: persona.descansoInicio ?? null,
-                descansoFin: persona.descansoFin ?? null,
-              },
+        const hashContrasena = await bcrypt.hash(contrasena, 12);
+
+        const { claveDueno, claveCliente } = await generarClavesSalonUnicas(nombreSalon);
+
+        const fechaInicio = inicioSuscripcion ? crearFechaDesdeISO(inicioSuscripcion) : new Date();
+        fechaInicio.setHours(0, 0, 0, 0);
+        const vencimiento = new Date(fechaInicio);
+        vencimiento.setMonth(vencimiento.getMonth() + 1);
+
+        const formatearFecha = (d: Date) => d.toISOString().split('T')[0]!;
+
+        const diasSemana = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado', 'Domingo'];
+        const horario = Object.fromEntries(
+          diasSemana.map((dia) => [dia, { isOpen: dia !== 'Domingo', openTime: '09:00', closeTime: '19:00' }]),
+        );
+
+        const monedaInicial = obtenerMonedaPorPais(pais);
+        const montoInicial = obtenerMontoPlanPorPais(pais);
+
+        let usuarioCreadoId: string | null = null;
+        let estudioCreadoId: string | null = null;
+
+        let estudio: Awaited<ReturnType<typeof crearSalonAdminCompat>>;
+        let pagoInicial: Awaited<ReturnType<typeof crearPagoAdminCompat>> | null = null;
+
+        try {
+          const nuevoUsuario = await prisma.usuario.create({
+            data: {
+              email: emailNorm,
+              hashContrasena,
+              nombre: nombreAdmin,
+              rol: 'dueno',
+              emailVerificado: true,
+            },
+          });
+          usuarioCreadoId = nuevoUsuario.id;
+
+          estudio = await crearSalonAdminCompat(prisma, {
+            nombreSalon,
+            nombreAdmin,
+            telefono,
+            pais,
+            claveDueno,
+            claveCliente,
+            emailNorm,
+            fechaInicio: formatearFecha(fechaInicio),
+            fechaVencimiento: formatearFecha(vencimiento),
+            horario,
+          });
+          estudioCreadoId = estudio.id;
+
+          await prisma.usuario.update({
+            where: { id: nuevoUsuario.id },
+            data: { estudioId: estudio.id },
+          });
+
+          if (personal.length > 0) {
+            for (const persona of personal) {
+              await prisma.personal.create({
+                data: {
+                  estudioId: estudio.id,
+                  nombre: persona.nombre,
+                  especialidades: persona.especialidades,
+                  horaInicio: persona.horaInicio ?? null,
+                  horaFin: persona.horaFin ?? null,
+                  descansoInicio: persona.descansoInicio ?? null,
+                  descansoFin: persona.descansoFin ?? null,
+                },
+              });
+            }
+          }
+
+          try {
+            pagoInicial = await crearPagoAdminCompat(prisma, {
+              estudioId: estudio.id,
+              monto: montoInicial,
+              moneda: monedaInicial,
+              concepto: `Suscripción mensual Beauty Time Pro (${monedaInicial})`,
+              fecha: formatearFecha(fechaInicio),
             });
+          } catch (error) {
+            solicitud.log.warn({ err: error, estudioId: estudio.id }, 'No se pudo registrar el pago inicial del salon');
+          }
+        } catch (error) {
+          if (estudioCreadoId) {
+            await prisma.personal.deleteMany({ where: { estudioId: estudioCreadoId } }).catch(() => undefined);
+            await prisma.pago.deleteMany({ where: { estudioId: estudioCreadoId } }).catch(() => undefined);
+            await prisma.usuario.updateMany({ where: { estudioId: estudioCreadoId }, data: { estudioId: null } }).catch(() => undefined);
+            await prisma.estudio.deleteMany({ where: { id: estudioCreadoId } }).catch(() => undefined);
+          }
+
+          if (usuarioCreadoId) {
+            await prisma.usuario.deleteMany({ where: { id: usuarioCreadoId } }).catch(() => undefined);
+          }
+
+          throw error;
+        }
+
+        try {
+          await prisma.estudio.update({
+            where: { id: estudio.id },
+            data: { plan: normalizarPlanEstudio(plan) },
+          });
+        } catch (error) {
+          if (!esErrorCompatibilidadAdmin(error)) {
+            throw error;
           }
         }
 
-        try {
-          pagoInicial = await crearPagoAdminCompat(prisma, {
-            estudioId: estudio.id,
-            monto: montoInicial,
-            moneda: monedaInicial,
-            concepto: `Suscripción mensual Beauty Time Pro (${monedaInicial})`,
-            fecha: formatearFecha(fechaInicio),
-          });
-        } catch (error) {
-          solicitud.log.warn({ err: error, estudioId: estudio.id }, 'No se pudo registrar el pago inicial del salon');
-        }
-      } catch (error) {
-        if (estudioCreadoId) {
-          await prisma.personal.deleteMany({ where: { estudioId: estudioCreadoId } }).catch(() => undefined);
-          await prisma.pago.deleteMany({ where: { estudioId: estudioCreadoId } }).catch(() => undefined);
-          await prisma.usuario.updateMany({ where: { estudioId: estudioCreadoId }, data: { estudioId: null } }).catch(() => undefined);
-          await prisma.estudio.deleteMany({ where: { id: estudioCreadoId } }).catch(() => undefined);
+        if (pagoInicial) {
+          try {
+            await registrarAuditoria({
+              usuarioId: (solicitud.user as { sub: string }).sub,
+              accion: 'registrar_pago',
+              entidadTipo: 'pago',
+              entidadId: pagoInicial.id,
+              detalles: {
+                estudioId: estudio.id,
+                estudioNombre: estudio.nombre,
+                monto: montoInicial,
+                monedaAplicada: monedaInicial,
+                registradoPorNombre: (solicitud.user as { nombre?: string }).nombre ?? null,
+                registradoPorEmail: (solicitud.user as { email?: string }).email ?? null,
+                fechaBase: formatearFecha(fechaInicio),
+                nuevaFechaVencimiento: formatearFecha(vencimiento),
+                estrategia: 'alta_inicial',
+              },
+              ip: solicitud.ip,
+            });
+          } catch (error) {
+            solicitud.log.warn({ err: error }, 'No se pudo registrar la auditoria del alta inicial');
+          }
         }
 
-        if (usuarioCreadoId) {
-          await prisma.usuario.deleteMany({ where: { id: usuarioCreadoId } }).catch(() => undefined);
-        }
-
-        throw error;
-      }
-
-      try {
-        await prisma.estudio.update({
-          where: { id: estudio.id },
-          data: { plan: normalizarPlanEstudio(plan) },
+        return respuesta.code(201).send({
+          datos: {
+            estudio: serializarSalonCreado(estudio as unknown as Record<string, unknown>),
+            acceso: {
+              emailDueno: emailNorm,
+              claveDueno,
+              claveClientes: claveCliente,
+            },
+          },
         });
       } catch (error) {
-        if (!esErrorCompatibilidadAdmin(error)) {
-          throw error;
-        }
-      }
-
-      if (pagoInicial) {
-        try {
-        await registrarAuditoria({
-          usuarioId: (solicitud.user as { sub: string }).sub,
-          accion: 'registrar_pago',
-          entidadTipo: 'pago',
-          entidadId: pagoInicial.id,
-          detalles: {
-            estudioId: estudio.id,
-            estudioNombre: estudio.nombre,
-            monto: montoInicial,
-            monedaAplicada: monedaInicial,
-            registradoPorNombre: (solicitud.user as { nombre?: string }).nombre ?? null,
-            registradoPorEmail: (solicitud.user as { email?: string }).email ?? null,
-            fechaBase: formatearFecha(fechaInicio),
-            nuevaFechaVencimiento: formatearFecha(vencimiento),
-            estrategia: 'alta_inicial',
-          },
-          ip: solicitud.ip,
+        solicitud.log.error({ err: error }, 'Fallo al crear salon desde admin');
+        return respuesta.code(500).send({
+          error: 'No se pudo crear el salon',
+          detalle: error instanceof Error ? error.message : 'Error desconocido',
         });
-        } catch (error) {
-          solicitud.log.warn({ err: error }, 'No se pudo registrar la auditoria del alta inicial');
-        }
       }
-
-      return respuesta.code(201).send({
-        datos: {
-          estudio: serializarSalonCreado(estudio as unknown as Record<string, unknown>),
-          acceso: {
-            emailDueno: emailNorm,
-            claveDueno,
-            claveClientes: claveCliente,
-          },
-        },
-      });
     },
   );
 
