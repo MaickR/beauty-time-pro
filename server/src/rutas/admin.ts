@@ -1,7 +1,7 @@
 import type { FastifyInstance } from 'fastify';
 import type { Prisma } from '../generated/prisma/client.js';
 import bcrypt from 'bcrypt';
-import { randomUUID } from 'node:crypto';
+import { randomBytes, randomUUID } from 'node:crypto';
 import { z } from 'zod';
 import { prisma } from '../prismaCliente.js';
 import { verificarJWT } from '../middleware/autenticacion.js';
@@ -9,7 +9,6 @@ import { requierePermiso } from '../middleware/verificarPermiso.js';
 import { resolverCategoriasSalon } from '../lib/categoriasSalon.js';
 import { construirSelectDesdeColumnas, obtenerColumnasTabla } from '../lib/compatibilidadEsquema.js';
 import { cacheSalonesPublicos } from '../lib/cache.js';
-import { generarClavesSalonUnicas } from '../lib/clavesSalon.js';
 import { enviarEmailBienvenidaSalon, enviarEmailRechazoSalon, enviarEmailCancelacionProcesada, enviarEmailRecordatorioPagoSalon } from '../servicios/servicioEmail.js';
 import { registrarAuditoria } from '../utils/auditoria.js';
 import { emailSchema, fechaIsoSchema, obtenerMensajeValidacion, telefonoSchema, textoSchema } from '../lib/validacion.js';
@@ -510,6 +509,38 @@ async function buscarUsuarioPorEmailCompat(email: string) {
   return filas[0] ?? null;
 }
 
+function normalizarPrefijoClaveAdmin(nombreSalon: string): string {
+  const base = nombreSalon
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toUpperCase()
+    .replace(/[^A-Z0-9]/g, '')
+    .slice(0, 8);
+
+  return base || 'SALON';
+}
+
+async function generarClavesSalonCompat(nombreSalon: string) {
+  const prefijo = normalizarPrefijoClaveAdmin(nombreSalon);
+
+  for (let intento = 0; intento < 20; intento += 1) {
+    const sufijo = randomBytes(3).toString('hex').toUpperCase();
+    const claveDueno = `${prefijo}${sufijo}`;
+    const claveCliente = `${prefijo}CLI${sufijo}`;
+    const filas = await prisma.$queryRawUnsafe<Array<{ id: string }>>(
+      `SELECT ${escaparIdentificadorSQL('id')} FROM ${escaparIdentificadorSQL('estudios')} WHERE ${escaparIdentificadorSQL('claveDueno')} = ? OR ${escaparIdentificadorSQL('claveCliente')} = ? LIMIT 1`,
+      claveDueno,
+      claveCliente,
+    );
+
+    if (filas.length === 0) {
+      return { claveDueno, claveCliente };
+    }
+  }
+
+  throw new Error('No se pudieron generar claves únicas para el salón');
+}
+
 function normalizarCampoJSON(valor: unknown): unknown {
   if (typeof valor !== 'string') {
     return valor;
@@ -970,7 +1001,7 @@ export async function rutasAdmin(servidor: FastifyInstance): Promise<void> {
 
         const hashContrasena = await bcrypt.hash(contrasena, 12);
 
-        const { claveDueno, claveCliente } = await generarClavesSalonUnicas(nombreSalon);
+        const { claveDueno, claveCliente } = await generarClavesSalonCompat(nombreSalon);
 
         const fechaInicio = inicioSuscripcion ? crearFechaDesdeISO(inicioSuscripcion) : new Date();
         fechaInicio.setHours(0, 0, 0, 0);
@@ -986,94 +1017,89 @@ export async function rutasAdmin(servidor: FastifyInstance): Promise<void> {
 
         const monedaInicial = obtenerMonedaPorPais(pais);
         const montoInicial = obtenerMontoPlanPorPais(pais);
-        const [columnasUsuarios, columnasEstudios, columnasPago, columnasPersonal] = await Promise.all([
-          obtenerColumnasTabla('usuarios'),
-          obtenerColumnasTabla('estudios'),
-          obtenerColumnasTabla('pagos'),
-          obtenerColumnasTabla('personal'),
-        ]);
-
         const usuarioCreadoId = randomUUID();
         const estudioCreadoId = randomUUID();
 
         let estudio: Record<string, unknown> | null = null;
 
         try {
-          await insertarRegistroCompat('usuarios', {
-            id: usuarioCreadoId,
-            email: emailNorm,
-            hashContrasena,
-            rol: 'dueno',
-            ...(columnasUsuarios.has('nombre') && { nombre: nombreAdmin }),
-            ...(columnasUsuarios.has('emailVerificado') && { emailVerificado: true }),
-            ...(columnasUsuarios.has('activo') && { activo: true }),
-          });
-
           await insertarRegistroCompat('estudios', {
             id: estudioCreadoId,
             nombre: nombreSalon,
             propietario: nombreAdmin,
             telefono,
+            sitioWeb: null,
             pais,
             sucursales: [nombreSalon],
             claveDueno,
             claveCliente,
+            activo: true,
+            suscripcion: 'mensual',
             inicioSuscripcion: formatearFecha(fechaInicio),
             fechaVencimiento: formatearFecha(vencimiento),
             horario,
             servicios: [],
             serviciosCustom: [],
             festivos: [],
-            ...(columnasEstudios.has('emailContacto') && { emailContacto: emailNorm }),
-            ...(columnasEstudios.has('plan') && { plan: normalizarPlanEstudio(plan) }),
-            ...(columnasEstudios.has('estado') && { estado: 'aprobado' }),
-            ...(columnasEstudios.has('activo') && { activo: true }),
-            ...(columnasEstudios.has('suscripcion') && { suscripcion: 'mensual' }),
-            ...(columnasEstudios.has('fechaSolicitud') && { fechaSolicitud: fechaInicio }),
-            ...(columnasEstudios.has('fechaAprobacion') && { fechaAprobacion: fechaInicio }),
+            actualizadoEn: new Date(),
           });
 
-          estudio = await obtenerEstudioCreadoCompat(estudioCreadoId, columnasEstudios);
+          await insertarRegistroCompat('usuarios', {
+            id: usuarioCreadoId,
+            email: emailNorm,
+            hashContrasena,
+            rol: 'dueno',
+            estudioId: estudioCreadoId,
+          });
+
+          estudio = await obtenerEstudioCreadoCompat(
+            estudioCreadoId,
+            new Set([
+              'id',
+              'nombre',
+              'propietario',
+              'telefono',
+              'pais',
+              'sucursales',
+              'activo',
+              'inicioSuscripcion',
+              'fechaVencimiento',
+              'creadoEn',
+              'actualizadoEn',
+              'claveDueno',
+              'claveCliente',
+            ]),
+          );
           if (!estudio) {
             throw new Error('No se pudo recuperar el salon recien creado');
-          }
-
-          if (columnasUsuarios.has('estudioId')) {
-            await actualizarRegistroCompat('usuarios', 'id', usuarioCreadoId, {
-              estudioId: estudioCreadoId,
-            });
           }
 
           if (personal.length > 0) {
             for (const persona of personal) {
               await insertarRegistroCompat('personal', {
-                ...(columnasPersonal.has('id') && { id: randomUUID() }),
+                id: randomUUID(),
                 estudioId: estudioCreadoId,
                 nombre: persona.nombre,
                 especialidades: persona.especialidades,
-                ...(columnasPersonal.has('activo') && { activo: true }),
-                ...(columnasPersonal.has('horaInicio') && { horaInicio: persona.horaInicio ?? null }),
-                ...(columnasPersonal.has('horaFin') && { horaFin: persona.horaFin ?? null }),
-                ...(columnasPersonal.has('descansoInicio') && {
-                  descansoInicio: persona.descansoInicio ?? null,
-                }),
-                ...(columnasPersonal.has('descansoFin') && {
-                  descansoFin: persona.descansoFin ?? null,
-                }),
+                activo: true,
+                horaInicio: persona.horaInicio ?? null,
+                horaFin: persona.horaFin ?? null,
+                descansoInicio: persona.descansoInicio ?? null,
+                descansoFin: persona.descansoFin ?? null,
               });
             }
           }
 
           try {
             await insertarRegistroCompat('pagos', {
-              ...(columnasPago.has('id') && { id: randomUUID() }),
+              id: randomUUID(),
               estudioId: estudioCreadoId,
               monto: montoInicial,
               moneda: monedaInicial,
               concepto: `Suscripción mensual Beauty Time Pro (${monedaInicial})`,
               fecha: formatearFecha(fechaInicio),
-              ...(columnasPago.has('tipo') && { tipo: 'suscripcion' }),
-              ...(columnasPago.has('referencia') && { referencia: 'alta_inicial' }),
+              tipo: 'suscripcion',
+              referencia: 'alta_inicial',
             });
           } catch (error) {
             solicitud.log.warn({ err: error, estudioId: estudioCreadoId }, 'No se pudo registrar el pago inicial del salon');
@@ -1081,9 +1107,6 @@ export async function rutasAdmin(servidor: FastifyInstance): Promise<void> {
         } catch (error) {
           await eliminarRegistrosCompat('personal', 'estudioId', estudioCreadoId).catch(() => undefined);
           await eliminarRegistrosCompat('pagos', 'estudioId', estudioCreadoId).catch(() => undefined);
-          if (columnasUsuarios.has('estudioId')) {
-            await actualizarRegistroCompat('usuarios', 'id', usuarioCreadoId, { estudioId: null }).catch(() => undefined);
-          }
           await eliminarRegistrosCompat('estudios', 'id', estudioCreadoId).catch(() => undefined);
           await eliminarRegistrosCompat('usuarios', 'id', usuarioCreadoId).catch(() => undefined);
 
