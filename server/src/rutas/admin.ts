@@ -383,6 +383,8 @@ async function crearSalonAdminCompat(
     servicios: [],
     serviciosCustom: [],
     festivos: [],
+    estado: 'aprobado',
+    fechaAprobacion: new Date(),
   };
 
   if (datos.columnasEstudios.has('emailContacto')) {
