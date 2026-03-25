@@ -35,6 +35,9 @@ const esquemaCrearSalonAdmin = z.object({
     descansoInicio: z.string().optional(),
     descansoFin: z.string().optional(),
   })).optional().default([]),
+  depuracionHasta: z
+    .enum(['antes_hash', 'despues_hash', 'despues_columnas', 'despues_estudio', 'despues_usuario'])
+    .optional(),
 });
 
 function generarContrasenaAleatoria(): string {
@@ -995,6 +998,7 @@ export async function rutasAdmin(servidor: FastifyInstance): Promise<void> {
           plan,
           inicioSuscripcion,
           personal,
+          depuracionHasta,
         } = resultado.data;
 
         const emailNorm = email.trim().toLowerCase();
@@ -1002,8 +1006,14 @@ export async function rutasAdmin(servidor: FastifyInstance): Promise<void> {
         if (existente) {
           return respuesta.code(409).send({ error: 'Ya existe un usuario con ese email' });
         }
+        if (depuracionHasta === 'antes_hash') {
+          return respuesta.send({ datos: { paso: 'antes_hash' } });
+        }
 
         const hashContrasena = await generarHashContrasena(contrasena);
+        if (depuracionHasta === 'despues_hash') {
+          return respuesta.send({ datos: { paso: 'despues_hash' } });
+        }
 
         const { claveDueno, claveCliente } = await generarClavesSalonCompat(nombreSalon);
 
@@ -1021,8 +1031,26 @@ export async function rutasAdmin(servidor: FastifyInstance): Promise<void> {
 
         const monedaInicial = obtenerMonedaPorPais(pais);
         const montoInicial = obtenerMontoPlanPorPais(pais);
+        const [columnasEstudios, columnasUsuarios, columnasPersonal, columnasPagos] = await Promise.all([
+          obtenerColumnasTabla('estudios'),
+          obtenerColumnasTabla('usuarios'),
+          obtenerColumnasTabla('personal'),
+          obtenerColumnasTabla('pagos'),
+        ]);
+        if (depuracionHasta === 'despues_columnas') {
+          return respuesta.send({
+            datos: {
+              paso: 'despues_columnas',
+              estudios: Array.from(columnasEstudios),
+              usuarios: Array.from(columnasUsuarios),
+              personal: Array.from(columnasPersonal),
+              pagos: Array.from(columnasPagos),
+            },
+          });
+        }
         const usuarioCreadoId = randomUUID();
         const estudioCreadoId = randomUUID();
+        const marcaTiempoActual = formatearFechaHoraSQL(new Date());
 
         let estudio: Record<string, unknown> | null = null;
 
@@ -1045,8 +1073,17 @@ export async function rutasAdmin(servidor: FastifyInstance): Promise<void> {
             servicios: [],
             serviciosCustom: [],
             festivos: [],
-            actualizadoEn: formatearFechaHoraSQL(new Date()),
+            ...(columnasEstudios.has('plan') && { plan: normalizarPlanEstudio(plan) }),
+            ...(columnasEstudios.has('estado') && { estado: 'aprobado' }),
+            ...(columnasEstudios.has('emailContacto') && { emailContacto: emailNorm }),
+            ...(columnasEstudios.has('fechaSolicitud') && { fechaSolicitud: marcaTiempoActual }),
+            ...(columnasEstudios.has('fechaAprobacion') && { fechaAprobacion: marcaTiempoActual }),
+            ...(columnasEstudios.has('actualizadoEn') && { actualizadoEn: marcaTiempoActual }),
           });
+          if (depuracionHasta === 'despues_estudio') {
+            await eliminarRegistrosCompat('estudios', 'id', estudioCreadoId).catch(() => undefined);
+            return respuesta.send({ datos: { paso: 'despues_estudio', estudioCreadoId } });
+          }
 
           await insertarRegistroCompat('usuarios', {
             id: usuarioCreadoId,
@@ -1054,25 +1091,20 @@ export async function rutasAdmin(servidor: FastifyInstance): Promise<void> {
             hashContrasena,
             rol: 'dueno',
             estudioId: estudioCreadoId,
+            ...(columnasUsuarios.has('nombre') && { nombre: nombreAdmin }),
+            ...(columnasUsuarios.has('activo') && { activo: true }),
+            ...(columnasUsuarios.has('emailVerificado') && { emailVerificado: true }),
+            ...(columnasUsuarios.has('actualizadoEn') && { actualizadoEn: marcaTiempoActual }),
           });
+          if (depuracionHasta === 'despues_usuario') {
+            await eliminarRegistrosCompat('usuarios', 'id', usuarioCreadoId).catch(() => undefined);
+            await eliminarRegistrosCompat('estudios', 'id', estudioCreadoId).catch(() => undefined);
+            return respuesta.send({ datos: { paso: 'despues_usuario', usuarioCreadoId } });
+          }
 
           estudio = await obtenerEstudioCreadoCompat(
             estudioCreadoId,
-            new Set([
-              'id',
-              'nombre',
-              'propietario',
-              'telefono',
-              'pais',
-              'sucursales',
-              'activo',
-              'inicioSuscripcion',
-              'fechaVencimiento',
-              'creadoEn',
-              'actualizadoEn',
-              'claveDueno',
-              'claveCliente',
-            ]),
+            columnasEstudios,
           );
           if (!estudio) {
             throw new Error('No se pudo recuperar el salon recien creado');
@@ -1085,11 +1117,15 @@ export async function rutasAdmin(servidor: FastifyInstance): Promise<void> {
                 estudioId: estudioCreadoId,
                 nombre: persona.nombre,
                 especialidades: persona.especialidades,
-                activo: true,
-                horaInicio: persona.horaInicio ?? null,
-                horaFin: persona.horaFin ?? null,
-                descansoInicio: persona.descansoInicio ?? null,
-                descansoFin: persona.descansoFin ?? null,
+                ...(columnasPersonal.has('activo') && { activo: true }),
+                ...(columnasPersonal.has('horaInicio') && { horaInicio: persona.horaInicio ?? null }),
+                ...(columnasPersonal.has('horaFin') && { horaFin: persona.horaFin ?? null }),
+                ...(columnasPersonal.has('descansoInicio') && {
+                  descansoInicio: persona.descansoInicio ?? null,
+                }),
+                ...(columnasPersonal.has('descansoFin') && {
+                  descansoFin: persona.descansoFin ?? null,
+                }),
               });
             }
           }
@@ -1102,8 +1138,8 @@ export async function rutasAdmin(servidor: FastifyInstance): Promise<void> {
               moneda: monedaInicial,
               concepto: `Suscripción mensual Beauty Time Pro (${monedaInicial})`,
               fecha: formatearFecha(fechaInicio),
-              tipo: 'suscripcion',
-              referencia: 'alta_inicial',
+              ...(columnasPagos.has('tipo') && { tipo: 'suscripcion' }),
+              ...(columnasPagos.has('referencia') && { referencia: 'alta_inicial' }),
             });
           } catch (error) {
             solicitud.log.warn({ err: error, estudioId: estudioCreadoId }, 'No se pudo registrar el pago inicial del salon');
