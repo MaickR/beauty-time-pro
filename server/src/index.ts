@@ -29,6 +29,22 @@ import { rutasClientesApp } from './rutas/clientesApp.js';
 import { rutasPush } from './rutas/push.js';
 import { rutasEmpleados } from './rutas/empleados.js';
 
+function esOrigenLocal(origen: string): boolean {
+  return (
+    origen === 'http://localhost:4173' ||
+    /^http:\/\/localhost:517\d$/.test(origen) ||
+    /^http:\/\/127\.0\.0\.1:517\d$/.test(origen)
+  );
+}
+
+function esOrigenPermitido(origen: string | undefined, esProduccion: boolean): boolean {
+  if (!origen) {
+    return true;
+  }
+
+  return origen === env.FRONTEND_URL || (!esProduccion && esOrigenLocal(origen));
+}
+
 void (async () => {
   const servidor = Fastify({ logger: true, bodyLimit: 1_048_576 /* 1 MB */ });
 
@@ -53,24 +69,22 @@ void (async () => {
   const esProduccion = env.ENTORNO === 'production';
   await servidor.register(cors, {
     origin: (origen, callback) => {
-      if (!origen) {
-        callback(null, true);
-        return;
-      }
-
-      const esOrigenLocal =
-        origen === 'http://localhost:4173' ||
-        /^http:\/\/localhost:517\d$/.test(origen) ||
-        /^http:\/\/127\.0\.0\.1:517\d$/.test(origen);
-
-      // En producción, SOLO se permite el FRONTEND_URL configurado.
-      const permitido = origen === env.FRONTEND_URL || (!esProduccion && esOrigenLocal);
-
-      callback(null, permitido);
+      callback(null, esOrigenPermitido(origen, esProduccion));
     },
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
     credentials: true,
     allowedHeaders: ['Content-Type', 'Authorization'],
+  });
+
+  servidor.addHook('onSend', async (solicitud, respuesta, payload) => {
+    const origen = solicitud.headers.origin;
+    if (esOrigenPermitido(origen, esProduccion) && origen) {
+      respuesta.header('Access-Control-Allow-Origin', origen);
+      respuesta.header('Access-Control-Allow-Credentials', 'true');
+      respuesta.header('Vary', 'Origin');
+    }
+
+    return payload;
   });
 
   servidor.setErrorHandler((error: FastifyError, _solicitud, respuesta) => {
