@@ -67,6 +67,10 @@ function formatearFechaISO(fecha: Date): string {
   return fecha.toISOString().split('T')[0]!;
 }
 
+function formatearFechaHoraSQL(fecha: Date): string {
+  return fecha.toISOString().slice(0, 19).replace('T', ' ');
+}
+
 function obtenerMonedaPorPais(pais?: string | null): 'MXN' | 'COP' {
   return pais === 'Colombia' ? 'COP' : 'MXN';
 }
@@ -1041,7 +1045,7 @@ export async function rutasAdmin(servidor: FastifyInstance): Promise<void> {
             servicios: [],
             serviciosCustom: [],
             festivos: [],
-            actualizadoEn: new Date(),
+            actualizadoEn: formatearFechaHoraSQL(new Date()),
           });
 
           await insertarRegistroCompat('usuarios', {
