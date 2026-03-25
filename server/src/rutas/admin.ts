@@ -128,6 +128,16 @@ function esErrorCompatibilidadAdmin(error: unknown): boolean {
   );
 }
 
+function esErrorCompatibilidadPago(error: unknown): boolean {
+  const codigo =
+    typeof error === 'object' && error !== null && 'code' in error
+      ? String((error as { code?: unknown }).code ?? '')
+      : '';
+  const mensaje = error instanceof Error ? error.message : '';
+
+  return codigo === 'P2022' || /Unknown column/i.test(mensaje) || /(tipo|referencia)/i.test(mensaje);
+}
+
 const seleccionarDuenoAdmin = {
   id: true,
   email: true,
@@ -375,6 +385,45 @@ async function crearSalonAdminCompat(
         emailContacto: datos.emailNorm,
       },
       select: seleccionarSalonCreadoCompat,
+    });
+  }
+}
+
+async function crearPagoAdminCompat(
+  tx: Prisma.TransactionClient,
+  datos: {
+    estudioId: string;
+    monto: number;
+    moneda: 'MXN' | 'COP';
+    concepto: string;
+    fecha: string;
+  },
+) {
+  try {
+    return await tx.pago.create({
+      data: {
+        estudioId: datos.estudioId,
+        monto: datos.monto,
+        moneda: datos.moneda,
+        concepto: datos.concepto,
+        fecha: datos.fecha,
+        tipo: 'suscripcion',
+        referencia: 'alta_inicial',
+      },
+    });
+  } catch (error) {
+    if (!esErrorCompatibilidadPago(error)) {
+      throw error;
+    }
+
+    return tx.pago.create({
+      data: {
+        estudioId: datos.estudioId,
+        monto: datos.monto,
+        moneda: datos.moneda,
+        concepto: datos.concepto,
+        fecha: datos.fecha,
+      },
     });
   }
 }
@@ -812,7 +861,7 @@ export async function rutasAdmin(servidor: FastifyInstance): Promise<void> {
           horario,
         });
 
-        const nuevoUsuario = await tx.usuario.create({
+        await tx.usuario.create({
           data: {
             email: emailNorm,
             hashContrasena,
@@ -823,52 +872,54 @@ export async function rutasAdmin(servidor: FastifyInstance): Promise<void> {
         });
 
         if (personal.length > 0) {
-          await tx.personal.createMany({
-            data: personal.map((p) => ({
-              estudioId: nuevoEstudio.id,
-              nombre: p.nombre,
-              especialidades: p.especialidades,
-              horaInicio: p.horaInicio ?? null,
-              horaFin: p.horaFin ?? null,
-              descansoInicio: p.descansoInicio ?? null,
-              descansoFin: p.descansoFin ?? null,
-            })),
-          });
+          for (const persona of personal) {
+            await tx.personal.create({
+              data: {
+                estudioId: nuevoEstudio.id,
+                nombre: persona.nombre,
+                especialidades: persona.especialidades,
+                horaInicio: persona.horaInicio ?? null,
+                horaFin: persona.horaFin ?? null,
+                descansoInicio: persona.descansoInicio ?? null,
+                descansoFin: persona.descansoFin ?? null,
+              },
+            });
+          }
         }
 
-        const nuevoPago = await tx.pago.create({
-          data: {
-            estudioId: nuevoEstudio.id,
-            monto: montoInicial,
-            moneda: monedaInicial,
-            concepto: `Suscripción mensual Beauty Time Pro (${monedaInicial})`,
-            fecha: formatearFecha(fechaInicio),
-            tipo: 'suscripcion',
-            referencia: 'alta_inicial',
-          },
+        const nuevoPago = await crearPagoAdminCompat(tx, {
+          estudioId: nuevoEstudio.id,
+          monto: montoInicial,
+          moneda: monedaInicial,
+          concepto: `Suscripción mensual Beauty Time Pro (${monedaInicial})`,
+          fecha: formatearFecha(fechaInicio),
         });
 
-        return [nuevoEstudio, nuevoPago, nuevoUsuario];
+        return [nuevoEstudio, nuevoPago];
       });
 
-      await registrarAuditoria({
-        usuarioId: (solicitud.user as { sub: string }).sub,
-        accion: 'registrar_pago',
-        entidadTipo: 'pago',
-        entidadId: pagoInicial.id,
-        detalles: {
-          estudioId: estudio.id,
-          estudioNombre: estudio.nombre,
-          monto: montoInicial,
-          monedaAplicada: monedaInicial,
-          registradoPorNombre: (solicitud.user as { nombre?: string }).nombre ?? null,
-          registradoPorEmail: (solicitud.user as { email?: string }).email ?? null,
-          fechaBase: formatearFecha(fechaInicio),
-          nuevaFechaVencimiento: formatearFecha(vencimiento),
-          estrategia: 'alta_inicial',
-        },
-        ip: solicitud.ip,
-      });
+      try {
+        await registrarAuditoria({
+          usuarioId: (solicitud.user as { sub: string }).sub,
+          accion: 'registrar_pago',
+          entidadTipo: 'pago',
+          entidadId: pagoInicial.id,
+          detalles: {
+            estudioId: estudio.id,
+            estudioNombre: estudio.nombre,
+            monto: montoInicial,
+            monedaAplicada: monedaInicial,
+            registradoPorNombre: (solicitud.user as { nombre?: string }).nombre ?? null,
+            registradoPorEmail: (solicitud.user as { email?: string }).email ?? null,
+            fechaBase: formatearFecha(fechaInicio),
+            nuevaFechaVencimiento: formatearFecha(vencimiento),
+            estrategia: 'alta_inicial',
+          },
+          ip: solicitud.ip,
+        });
+      } catch (error) {
+        solicitud.log.warn({ err: error }, 'No se pudo registrar la auditoria del alta inicial');
+      }
 
       return respuesta.code(201).send({
         datos: {

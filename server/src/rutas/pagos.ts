@@ -30,6 +30,54 @@ function obtenerMonedaPorPais(pais?: string | null): MonedaPago {
   return normalizarPais(pais) === 'Colombia' ? 'COP' : 'MXN';
 }
 
+function esErrorCompatibilidadPago(error: unknown): boolean {
+  const codigo =
+    typeof error === 'object' && error !== null && 'code' in error
+      ? String((error as { code?: unknown }).code ?? '')
+      : '';
+  const mensaje = error instanceof Error ? error.message : '';
+
+  return codigo === 'P2022' || /Unknown column/i.test(mensaje) || /(tipo|referencia)/i.test(mensaje);
+}
+
+async function crearPagoCompat(datos: {
+  estudioId: string;
+  monto: number;
+  moneda: MonedaPago;
+  concepto: string;
+  fecha: string;
+  tipo?: string;
+  referencia?: string;
+}) {
+  try {
+    return await prisma.pago.create({
+      data: {
+        estudioId: datos.estudioId,
+        monto: datos.monto,
+        moneda: datos.moneda,
+        concepto: datos.concepto,
+        fecha: datos.fecha,
+        tipo: datos.tipo ?? 'suscripcion',
+        referencia: datos.referencia ?? null,
+      },
+    });
+  } catch (error) {
+    if (!esErrorCompatibilidadPago(error)) {
+      throw error;
+    }
+
+    return prisma.pago.create({
+      data: {
+        estudioId: datos.estudioId,
+        monto: datos.monto,
+        moneda: datos.moneda,
+        concepto: datos.concepto,
+        fecha: datos.fecha,
+      },
+    });
+  }
+}
+
 function calcularNuevaFechaVencimiento(params: {
   fechaVencimiento?: string | null;
   inicioSuscripcion?: string | null;
@@ -192,16 +240,14 @@ export async function rutasPagos(servidor: FastifyInstance): Promise<void> {
         })
       : null;
 
-    const pago = await prisma.pago.create({
-      data: {
-        estudioId,
-        monto,
-        moneda: monedaAplicada,
-        concepto: concepto ?? `Suscripción mensual Beauty Time Pro (${monedaAplicada})`,
-        fecha,
-        tipo: tipo ?? 'suscripcion',
-        referencia: referencia ?? null,
-      },
+    const pago = await crearPagoCompat({
+      estudioId,
+      monto,
+      moneda: monedaAplicada,
+      concepto: concepto ?? `Suscripción mensual Beauty Time Pro (${monedaAplicada})`,
+      fecha,
+      tipo,
+      referencia,
     });
 
     if (renovacion) {
