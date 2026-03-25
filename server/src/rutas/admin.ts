@@ -1201,51 +1201,63 @@ export async function rutasAdmin(servidor: FastifyInstance): Promise<void> {
 
       const { id } = solicitud.params;
 
-      const estudio = await prisma.estudio.findUnique({
-        where: { id },
-        include: { usuarios: { where: { rol: 'dueno' }, take: 1 } },
-      });
-
-      if (!estudio) {
-        return respuesta.code(404).send({ error: 'Salón no encontrado' });
-      }
-
-      let usuario = estudio.usuarios[0] ?? null;
-      if (!usuario && estudio.emailContacto) {
-        usuario = await prisma.usuario.findFirst({
-          where: { rol: 'dueno', email: estudio.emailContacto },
-        });
-      }
-
-      const estaActivo = usuario?.activo ?? estudio.activo;
-      const nuevoActivo = !estaActivo;
-      const nuevoEstado = nuevoActivo ? 'aprobado' : 'suspendido';
-
-      await prisma.$transaction(async (tx) => {
-        await tx.estudio.update({
+      try {
+        const estudio = await prisma.estudio.findUnique({
           where: { id },
-          data: { activo: nuevoActivo, estado: nuevoEstado },
+          include: { usuarios: { where: { rol: 'dueno' }, take: 1 } },
         });
 
-        if (usuario) {
-          await tx.usuario.update({
-            where: { id: usuario.id },
-            data: { activo: nuevoActivo, estudioId: id },
+        if (!estudio) {
+          return respuesta.code(404).send({ error: 'Salón no encontrado' });
+        }
+
+        let usuario = estudio.usuarios[0] ?? null;
+        if (!usuario && estudio.emailContacto) {
+          usuario = await prisma.usuario.findFirst({
+            where: { rol: 'dueno', email: estudio.emailContacto },
           });
         }
-      });
 
-      await registrarAuditoria({
-        usuarioId: payload.sub,
-        accion: nuevoActivo ? 'activar_salon' : 'suspender_salon',
-        entidadTipo: 'estudio',
-        entidadId: id,
-        ip: solicitud.ip,
-      });
+        const estaActivo = usuario?.activo ?? estudio.activo;
+        const nuevoActivo = !estaActivo;
+        const nuevoEstado = nuevoActivo ? 'aprobado' : 'suspendido';
 
-      return respuesta.send({
-        datos: { activo: nuevoActivo, mensaje: nuevoActivo ? 'Cuenta activada' : 'Cuenta suspendida' },
-      });
+        await prisma.$transaction(async (tx) => {
+          await tx.estudio.update({
+            where: { id },
+            data: { activo: nuevoActivo, estado: nuevoEstado },
+          });
+
+          if (usuario) {
+            await tx.usuario.update({
+              where: { id: usuario.id },
+              data: { activo: nuevoActivo, estudioId: id },
+            });
+          }
+        });
+
+        try {
+          await registrarAuditoria({
+            usuarioId: payload.sub,
+            accion: nuevoActivo ? 'activar_salon' : 'suspender_salon',
+            entidadTipo: 'estudio',
+            entidadId: id,
+            ip: solicitud.ip,
+          });
+        } catch (error) {
+          solicitud.log.warn(
+            { err: error, estudioId: id, accion: nuevoActivo ? 'activar_salon' : 'suspender_salon' },
+            'No se pudo registrar la auditoría del cambio de estado del salón',
+          );
+        }
+
+        return respuesta.send({
+          datos: { activo: nuevoActivo, mensaje: nuevoActivo ? 'Cuenta activada' : 'Cuenta suspendida' },
+        });
+      } catch (error) {
+        solicitud.log.error({ err: error, estudioId: id }, 'Error al suspender/reactivar salón');
+        return respuesta.code(500).send({ error: 'No se pudo cambiar el estado del salón' });
+      }
     },
   );
 
@@ -1795,11 +1807,9 @@ async function construirBaseClientes(filtros: {
 }) {
   const { salonId, pais, servicioFrecuente, buscar } = filtros;
 
-  // Traer clientes con sus reservas completadas y datos del salón
   const clientes = await prisma.cliente.findMany({
     where: {
       ...(salonId ? { estudioId: salonId } : {}),
-      ...(pais ? { estudio: { pais: pais as 'Mexico' | 'Colombia' } } : {}),
       activo: true,
     },
     select: {
@@ -1808,52 +1818,98 @@ async function construirBaseClientes(filtros: {
       telefono: true,
       email: true,
       estudioId: true,
-      estudio: { select: { nombre: true, pais: true } },
-      reservas: {
-        where: { estado: 'completed' },
-        select: {
-          fecha: true,
-          precioTotal: true,
-          serviciosDetalle: {
-            where: { estado: 'completed' },
-            select: { nombre: true },
-          },
-        },
-        orderBy: { fecha: 'desc' },
-      },
     },
     orderBy: { creadoEn: 'desc' },
     take: 15_000,
   });
 
-  // Construir estadísticas por cliente
-  const resultado = clientes.map((c) => {
-    const reservasCompletadas = c.reservas;
+  const estudiosIds = Array.from(new Set(clientes.map((cliente) => cliente.estudioId)));
+  const estudios = estudiosIds.length
+    ? await prisma.estudio.findMany({
+        where: {
+          id: { in: estudiosIds },
+          ...(pais ? { pais: pais as 'Mexico' | 'Colombia' } : {}),
+        },
+        select: { id: true, nombre: true, pais: true },
+      })
+    : [];
+
+  const estudiosPorId = new Map(estudios.map((estudio) => [estudio.id, estudio]));
+  const clientesFiltradosPorEstudio = clientes.filter((cliente) => estudiosPorId.has(cliente.estudioId));
+  const clientesIds = clientesFiltradosPorEstudio.map((cliente) => cliente.id);
+
+  const reservas = clientesIds.length
+    ? await prisma.reserva.findMany({
+        where: {
+          clienteId: { in: clientesIds },
+          estado: 'completed',
+        },
+        select: {
+          id: true,
+          clienteId: true,
+          fecha: true,
+          precioTotal: true,
+        },
+        orderBy: [{ fecha: 'desc' }, { creadoEn: 'desc' }],
+      })
+    : [];
+
+  const reservasIds = reservas.map((reserva) => reserva.id);
+  const serviciosDetalle = reservasIds.length
+    ? await prisma.reservaServicio.findMany({
+        where: {
+          reservaId: { in: reservasIds },
+          estado: 'completed',
+        },
+        select: { reservaId: true, nombre: true },
+      })
+    : [];
+
+  const reservasPorCliente = new Map<string, Array<(typeof reservas)[number]>>();
+  reservas.forEach((reserva) => {
+    const lista = reservasPorCliente.get(reserva.clienteId) ?? [];
+    lista.push(reserva);
+    reservasPorCliente.set(reserva.clienteId, lista);
+  });
+
+  const serviciosPorReserva = new Map<string, string[]>();
+  serviciosDetalle.forEach((servicio) => {
+    const lista = serviciosPorReserva.get(servicio.reservaId) ?? [];
+    lista.push(servicio.nombre);
+    serviciosPorReserva.set(servicio.reservaId, lista);
+  });
+
+  const resultado = clientesFiltradosPorEstudio.map((cliente) => {
+    const estudio = estudiosPorId.get(cliente.estudioId);
+    const reservasCompletadas = reservasPorCliente.get(cliente.id) ?? [];
     const totalVisitas = reservasCompletadas.length;
     const totalGastado = reservasCompletadas.reduce((acc, r) => acc + r.precioTotal, 0);
     const ultimaVisita = reservasCompletadas[0]?.fecha ?? null;
 
-    // Servicios únicos realizados + servicio más frecuente
     const frecuencia = new Map<string, number>();
-    for (const r of reservasCompletadas) {
-      for (const s of r.serviciosDetalle) {
-        frecuencia.set(s.nombre, (frecuencia.get(s.nombre) ?? 0) + 1);
+    for (const reserva of reservasCompletadas) {
+      for (const nombreServicio of serviciosPorReserva.get(reserva.id) ?? []) {
+        frecuencia.set(nombreServicio, (frecuencia.get(nombreServicio) ?? 0) + 1);
       }
     }
+
     const serviciosRealizados = Array.from(frecuencia.keys());
     let servicioMasFrecuente = '';
     let maxFreq = 0;
     for (const [nombre, freq] of frecuencia) {
-      if (freq > maxFreq) { maxFreq = freq; servicioMasFrecuente = nombre; }
+      if (freq > maxFreq) {
+        maxFreq = freq;
+        servicioMasFrecuente = nombre;
+      }
     }
 
     return {
-      nombre: c.nombre,
-      telefono: c.telefono,
-      correo: c.email,
-      estudioId: c.estudioId,
-      nombreEstudio: c.estudio.nombre,
-      paisEstudio: c.estudio.pais,
+      nombre: cliente.nombre,
+      telefono: cliente.telefono,
+      correo: cliente.email,
+      estudioId: cliente.estudioId,
+      nombreEstudio: estudio?.nombre ?? 'Salón sin referencia',
+      paisEstudio: estudio?.pais ?? '',
       serviciosRealizados,
       servicioMasFrecuente,
       ultimaVisita,
