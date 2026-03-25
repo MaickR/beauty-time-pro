@@ -77,16 +77,29 @@ type CamposCrear = z.infer<typeof esquemaCrear>;
 // ─── Utilidades ──────────────────────────────────────────────────────────────
 
 function generarContrasena(): string {
-  const letras = 'abcdefghijkmnpqrstuvwxyz';
   const mayusculas = 'ABCDEFGHJKLMNPQRSTUVWXYZ';
+  const minusculas = 'abcdefghijkmnpqrstuvwxyz';
   const numeros = '23456789';
-  let result = mayusculas[Math.floor(Math.random() * mayusculas.length)]!;
-  result += numeros[Math.floor(Math.random() * numeros.length)]!;
-  for (let i = 0; i < 7; i++) {
-    const pool = letras + mayusculas + numeros;
-    result += pool[Math.floor(Math.random() * pool.length)]!;
+  const especiales = '!@#$%&*';
+  const mezcla = `${mayusculas}${minusculas}${numeros}${especiales}`;
+
+  const chars = [
+    mayusculas[Math.floor(Math.random() * mayusculas.length)]!,
+    minusculas[Math.floor(Math.random() * minusculas.length)]!,
+    numeros[Math.floor(Math.random() * numeros.length)]!,
+    especiales[Math.floor(Math.random() * especiales.length)]!,
+  ];
+
+  for (let i = 0; i < 8; i++) {
+    chars.push(mezcla[Math.floor(Math.random() * mezcla.length)]!);
   }
-  return result;
+
+  for (let i = chars.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [chars[i], chars[j]] = [chars[j], chars[i]];
+  }
+
+  return chars.join('');
 }
 
 function formatearFecha(fechaISO: string | null): string {

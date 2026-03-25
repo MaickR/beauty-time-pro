@@ -27,17 +27,28 @@ function generarContrasenaTemporal() {
   const mayusculas = 'ABCDEFGHJKLMNPQRSTUVWXYZ';
   const minusculas = 'abcdefghijkmnpqrstuvwxyz';
   const numeros = '23456789';
-  const mezcla = `${mayusculas}${minusculas}${numeros}`;
-  let resultado =
-    mayusculas[Math.floor(Math.random() * mayusculas.length)] +
-    minusculas[Math.floor(Math.random() * minusculas.length)] +
-    numeros[Math.floor(Math.random() * numeros.length)];
+  const especiales = '!@#$%&*';
+  const mezcla = `${mayusculas}${minusculas}${numeros}${especiales}`;
 
-  for (let indice = 0; indice < 9; indice += 1) {
-    resultado += mezcla[Math.floor(Math.random() * mezcla.length)];
+  // Garantizar al menos un carácter de cada categoría requerida
+  const chars = [
+    mayusculas[Math.floor(Math.random() * mayusculas.length)],
+    minusculas[Math.floor(Math.random() * minusculas.length)],
+    numeros[Math.floor(Math.random() * numeros.length)],
+    especiales[Math.floor(Math.random() * especiales.length)],
+  ];
+
+  for (let indice = 0; indice < 8; indice += 1) {
+    chars.push(mezcla[Math.floor(Math.random() * mezcla.length)]);
   }
 
-  return resultado;
+  // Mezclar para que el orden no sea predecible
+  for (let i = chars.length - 1; i > 0; i -= 1) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [chars[i], chars[j]] = [chars[j], chars[i]];
+  }
+
+  return chars.join('');
 }
 
 const crearEstadoInicial = (): FormularioEstudio => ({
