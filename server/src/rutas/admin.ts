@@ -35,9 +35,6 @@ const esquemaCrearSalonAdmin = z.object({
     descansoInicio: z.string().optional(),
     descansoFin: z.string().optional(),
   })).optional().default([]),
-  depuracionHasta: z
-    .enum(['antes_hash', 'despues_hash', 'despues_claves', 'despues_estudio', 'despues_usuario'])
-    .optional(),
 });
 
 function generarContrasenaAleatoria(): string {
@@ -998,7 +995,6 @@ export async function rutasAdmin(servidor: FastifyInstance): Promise<void> {
           plan,
           inicioSuscripcion,
           personal,
-          depuracionHasta,
         } = resultado.data;
 
         const emailNorm = email.trim().toLowerCase();
@@ -1006,19 +1002,10 @@ export async function rutasAdmin(servidor: FastifyInstance): Promise<void> {
         if (existente) {
           return respuesta.code(409).send({ error: 'Ya existe un usuario con ese email' });
         }
-        if (depuracionHasta === 'antes_hash') {
-          return respuesta.send({ datos: { paso: 'antes_hash' } });
-        }
 
         const hashContrasena = await generarHashContrasena(contrasena);
-        if (depuracionHasta === 'despues_hash') {
-          return respuesta.send({ datos: { paso: 'despues_hash' } });
-        }
 
         const { claveDueno, claveCliente } = await generarClavesSalonCompat(nombreSalon);
-        if (depuracionHasta === 'despues_claves') {
-          return respuesta.send({ datos: { paso: 'despues_claves', claveDueno, claveCliente } });
-        }
 
         const fechaInicio = inicioSuscripcion ? crearFechaDesdeISO(inicioSuscripcion) : new Date();
         fechaInicio.setHours(0, 0, 0, 0);
@@ -1060,10 +1047,6 @@ export async function rutasAdmin(servidor: FastifyInstance): Promise<void> {
             festivos: [],
             actualizadoEn: formatearFechaHoraSQL(new Date()),
           });
-          if (depuracionHasta === 'despues_estudio') {
-            await eliminarRegistrosCompat('estudios', 'id', estudioCreadoId).catch(() => undefined);
-            return respuesta.send({ datos: { paso: 'despues_estudio', estudioCreadoId } });
-          }
 
           await insertarRegistroCompat('usuarios', {
             id: usuarioCreadoId,
@@ -1072,11 +1055,6 @@ export async function rutasAdmin(servidor: FastifyInstance): Promise<void> {
             rol: 'dueno',
             estudioId: estudioCreadoId,
           });
-          if (depuracionHasta === 'despues_usuario') {
-            await eliminarRegistrosCompat('usuarios', 'id', usuarioCreadoId).catch(() => undefined);
-            await eliminarRegistrosCompat('estudios', 'id', estudioCreadoId).catch(() => undefined);
-            return respuesta.send({ datos: { paso: 'despues_usuario', usuarioCreadoId, estudioCreadoId } });
-          }
 
           estudio = await obtenerEstudioCreadoCompat(
             estudioCreadoId,
