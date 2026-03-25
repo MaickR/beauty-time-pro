@@ -332,64 +332,33 @@ async function crearSalonAdminCompat(
     nombreAdmin: string;
     telefono: string;
     pais: 'Mexico' | 'Colombia';
-    plan: 'STANDARD' | 'PRO';
     claveDueno: string;
     claveCliente: string;
     emailNorm: string;
-    usuarioDuenoId: string;
     fechaInicio: string;
     fechaVencimiento: string;
     horario: Record<string, { isOpen: boolean; openTime: string; closeTime: string }>;
   },
 ) {
-  try {
-    return await tx.estudio.create({
-      data: {
-        nombre: datos.nombreSalon,
-        propietario: datos.nombreAdmin,
-        telefono: datos.telefono,
-        pais: datos.pais,
-        plan: normalizarPlanEstudio(datos.plan),
-        sucursales: [datos.nombreSalon],
-        claveDueno: datos.claveDueno,
-        claveCliente: datos.claveCliente,
-        inicioSuscripcion: datos.fechaInicio,
-        fechaVencimiento: datos.fechaVencimiento,
-        horario: datos.horario,
-        servicios: [],
-        serviciosCustom: [],
-        festivos: [],
-        emailContacto: datos.emailNorm,
-        usuarios: { connect: { id: datos.usuarioDuenoId } },
-      },
-      select: seleccionarSalonCreadoModerno,
-    });
-  } catch (error) {
-    if (!esErrorCompatibilidadAdmin(error)) {
-      throw error;
-    }
-
-    return tx.estudio.create({
-      data: {
-        nombre: datos.nombreSalon,
-        propietario: datos.nombreAdmin,
-        telefono: datos.telefono,
-        pais: datos.pais,
-        sucursales: [datos.nombreSalon],
-        claveDueno: datos.claveDueno,
-        claveCliente: datos.claveCliente,
-        inicioSuscripcion: datos.fechaInicio,
-        fechaVencimiento: datos.fechaVencimiento,
-        horario: datos.horario,
-        servicios: [],
-        serviciosCustom: [],
-        festivos: [],
-        emailContacto: datos.emailNorm,
-        usuarios: { connect: { id: datos.usuarioDuenoId } },
-      },
-      select: seleccionarSalonCreadoCompat,
-    });
-  }
+  return tx.estudio.create({
+    data: {
+      nombre: datos.nombreSalon,
+      propietario: datos.nombreAdmin,
+      telefono: datos.telefono,
+      pais: datos.pais,
+      sucursales: [datos.nombreSalon],
+      claveDueno: datos.claveDueno,
+      claveCliente: datos.claveCliente,
+      inicioSuscripcion: datos.fechaInicio,
+      fechaVencimiento: datos.fechaVencimiento,
+      horario: datos.horario,
+      servicios: [],
+      serviciosCustom: [],
+      festivos: [],
+      emailContacto: datos.emailNorm,
+    },
+    select: seleccionarSalonCreadoCompat,
+  });
 }
 
 async function crearPagoAdminCompat(
@@ -865,14 +834,17 @@ export async function rutasAdmin(servidor: FastifyInstance): Promise<void> {
           nombreAdmin,
           telefono,
           pais,
-          plan,
           claveDueno,
           claveCliente,
           emailNorm,
-          usuarioDuenoId: nuevoUsuario.id,
           fechaInicio: formatearFecha(fechaInicio),
           fechaVencimiento: formatearFecha(vencimiento),
           horario,
+        });
+
+        await tx.usuario.update({
+          where: { id: nuevoUsuario.id },
+          data: { estudioId: nuevoEstudio.id },
         });
 
         if (personal.length > 0) {
@@ -901,6 +873,17 @@ export async function rutasAdmin(servidor: FastifyInstance): Promise<void> {
 
         return [nuevoEstudio, nuevoPago];
       });
+
+      try {
+        await prisma.estudio.update({
+          where: { id: estudio.id },
+          data: { plan: normalizarPlanEstudio(plan) },
+        });
+      } catch (error) {
+        if (!esErrorCompatibilidadAdmin(error)) {
+          throw error;
+        }
+      }
 
       try {
         await registrarAuditoria({
