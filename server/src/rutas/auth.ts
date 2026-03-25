@@ -108,7 +108,6 @@ export async function rutasAuth(servidor: FastifyInstance): Promise<void> {
             email: usuarioDueno.email,
           });
         }
-
         const estudioCliente = await prisma.estudio.findFirst({
           where: { claveCliente: claveNorm },
           select: { id: true },
@@ -587,6 +586,7 @@ async function emitirTokens(
       estudioId: payload.estudioId,
       nombre: payload.nombre,
       email: payload.email,
+      versionServidor: 'debug-railway-20260325-1',
       esMaestroTotal: payload.esMaestroTotal ?? false,
       permisos: payload.permisos ?? crearPermisosVacios(),
       personalId: payload.personalId ?? null,
