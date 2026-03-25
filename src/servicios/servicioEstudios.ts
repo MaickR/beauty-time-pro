@@ -1,7 +1,7 @@
 /**
  * Servicio de estudios — llama al backend Fastify en lugar de Firebase.
  */
-import type { Estudio, PlanEstudio, Servicio } from '../tipos/index';
+import type { Estudio, PlanEstudio, Servicio, ServicioPersonalizado } from '../tipos/index';
 import { peticion } from '../lib/clienteHTTP';
 
 type RespuestaEstudio = { datos: Estudio };
@@ -16,6 +16,8 @@ interface DatosCrearSalonAdmin {
   pais: Estudio['country'];
   plan: PlanEstudio;
   inicioSuscripcion: string;
+  servicios: Servicio[];
+  serviciosCustom: ServicioPersonalizado[];
   personal: Array<{
     nombre: string;
     especialidades: string[];
@@ -133,6 +135,8 @@ export async function crearSalonAdmin(
       pais: datos.pais,
       plan: datos.plan,
       inicioSuscripcion: datos.inicioSuscripcion,
+      servicios: datos.servicios,
+      serviciosCustom: datos.serviciosCustom,
       personal: datos.personal,
     }),
   });

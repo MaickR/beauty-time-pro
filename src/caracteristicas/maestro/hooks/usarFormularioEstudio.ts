@@ -194,6 +194,8 @@ export function usarFormularioEstudio() {
           pais: datosGuardar.country,
           plan: datosGuardar.plan,
           inicioSuscripcion: datosGuardar.subscriptionStart,
+          servicios: datosGuardar.selectedServices,
+          serviciosCustom: datosGuardar.customServices,
           personal: formulario.staff.map((persona) => ({
             nombre: persona.name,
             especialidades: persona.specialties,

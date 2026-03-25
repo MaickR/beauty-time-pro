@@ -27,6 +27,16 @@ const esquemaCrearSalonAdmin = z.object({
   pais: z.enum(['Mexico', 'Colombia']).optional().default('Mexico'),
   plan: z.enum(['STANDARD', 'PRO']).optional().default('STANDARD'),
   inicioSuscripcion: fechaIsoSchema.optional(),
+  servicios: z.array(z.object({
+    name: textoSchema('name', 120, 1),
+    duration: z.number().int().min(1).max(480),
+    price: z.number().int().min(0).max(9_999_999),
+    category: z.string().trim().min(1).max(80).optional(),
+  })).optional().default([]),
+  serviciosCustom: z.array(z.object({
+    name: textoSchema('name', 120, 1),
+    category: textoSchema('category', 80, 1),
+  })).optional().default([]),
   personal: z.array(z.object({
     nombre: textoSchema('nombre', 120, 2),
     especialidades: z.array(z.string().trim()).default([]),
@@ -974,6 +984,16 @@ export async function rutasAdmin(servidor: FastifyInstance): Promise<void> {
       pais?: string;
       plan?: 'STANDARD' | 'PRO';
       inicioSuscripcion?: string;
+      servicios?: Array<{
+        name: string;
+        duration: number;
+        price: number;
+        category?: string;
+      }>;
+      serviciosCustom?: Array<{
+        name: string;
+        category: string;
+      }>;
       personal?: Array<{
         nombre: string;
         especialidades: string[];
@@ -1007,6 +1027,8 @@ export async function rutasAdmin(servidor: FastifyInstance): Promise<void> {
           pais,
           plan,
           inicioSuscripcion,
+          servicios,
+          serviciosCustom,
           personal,
         } = resultado.data;
 
@@ -1069,8 +1091,8 @@ export async function rutasAdmin(servidor: FastifyInstance): Promise<void> {
             inicioSuscripcion: formatearFecha(fechaInicio),
             fechaVencimiento: formatearFecha(vencimiento),
             horario,
-            servicios: [],
-            serviciosCustom: [],
+            servicios,
+            serviciosCustom,
             festivos: [],
             ...(columnasEstudios.has('plan') && { plan: normalizarPlanEstudio(plan) }),
             ...(columnasEstudios.has('estado') && { estado: 'aprobado' }),

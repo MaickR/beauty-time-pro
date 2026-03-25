@@ -26,6 +26,7 @@ export function SelectorServicio({
     : estudio.selectedServices;
   const totalPrecio = serviciosSeleccionados.reduce((acc, s) => acc + (s.price ?? 0), 0);
   const totalDuracion = serviciosSeleccionados.reduce((acc, s) => acc + s.duration, 0);
+  const salonSinServicios = estudio.selectedServices.length === 0;
 
   return (
     <section className="bg-slate-50 rounded-[3rem] p-8 md:p-10 border border-slate-200 shadow-sm">
@@ -43,7 +44,9 @@ export function SelectorServicio({
 
       {serviciosDisponibles.length === 0 ? (
         <p className="text-slate-400 italic font-bold">
-          El especialista no tiene tratamientos habilitados en este momento.
+          {salonSinServicios
+            ? 'Este salon aun no tiene servicios habilitados para reserva.'
+            : 'El especialista no tiene tratamientos habilitados en este momento.'}
         </p>
       ) : (
         <div className="flex flex-col gap-3">
