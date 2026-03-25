@@ -1,6 +1,7 @@
 import type { FastifyInstance } from 'fastify';
 import type { Prisma } from '../generated/prisma/client.js';
 import bcrypt from 'bcrypt';
+import { randomUUID } from 'node:crypto';
 import { z } from 'zod';
 import { prisma } from '../prismaCliente.js';
 import { verificarJWT } from '../middleware/autenticacion.js';
@@ -441,6 +442,132 @@ async function crearPagoAdminCompat(
   }
 }
 
+function escaparIdentificadorSQL(nombre: string): string {
+  return `\`${nombre.replace(/`/g, '')}\``;
+}
+
+function serializarValorSQL(valor: unknown): unknown {
+  if (valor == null) return valor;
+  if (typeof valor === 'object') {
+    return JSON.stringify(valor);
+  }
+
+  return valor;
+}
+
+async function insertarRegistroCompat(tabla: string, datos: Record<string, unknown>) {
+  const entradas = Object.entries(datos).filter(([, valor]) => valor !== undefined);
+  if (entradas.length === 0) {
+    throw new Error(`No hay datos para insertar en ${tabla}`);
+  }
+
+  const columnas = entradas.map(([columna]) => escaparIdentificadorSQL(columna)).join(', ');
+  const marcadores = entradas.map(() => '?').join(', ');
+  const valores = entradas.map(([, valor]) => serializarValorSQL(valor));
+
+  await prisma.$executeRawUnsafe(
+    `INSERT INTO ${escaparIdentificadorSQL(tabla)} (${columnas}) VALUES (${marcadores})`,
+    ...valores,
+  );
+}
+
+async function actualizarRegistroCompat(
+  tabla: string,
+  whereCampo: string,
+  whereValor: unknown,
+  datos: Record<string, unknown>,
+) {
+  const entradas = Object.entries(datos).filter(([, valor]) => valor !== undefined);
+  if (entradas.length === 0) {
+    return;
+  }
+
+  const asignaciones = entradas
+    .map(([columna]) => `${escaparIdentificadorSQL(columna)} = ?`)
+    .join(', ');
+  const valores = entradas.map(([, valor]) => serializarValorSQL(valor));
+
+  await prisma.$executeRawUnsafe(
+    `UPDATE ${escaparIdentificadorSQL(tabla)} SET ${asignaciones} WHERE ${escaparIdentificadorSQL(whereCampo)} = ?`,
+    ...valores,
+    serializarValorSQL(whereValor),
+  );
+}
+
+async function eliminarRegistrosCompat(tabla: string, whereCampo: string, whereValor: unknown) {
+  await prisma.$executeRawUnsafe(
+    `DELETE FROM ${escaparIdentificadorSQL(tabla)} WHERE ${escaparIdentificadorSQL(whereCampo)} = ?`,
+    serializarValorSQL(whereValor),
+  );
+}
+
+async function buscarUsuarioPorEmailCompat(email: string) {
+  const filas = await prisma.$queryRawUnsafe<Array<{ id: string }>>(
+    `SELECT ${escaparIdentificadorSQL('id')} FROM ${escaparIdentificadorSQL('usuarios')} WHERE ${escaparIdentificadorSQL('email')} = ? LIMIT 1`,
+    email,
+  );
+
+  return filas[0] ?? null;
+}
+
+function normalizarCampoJSON(valor: unknown): unknown {
+  if (typeof valor !== 'string') {
+    return valor;
+  }
+
+  try {
+    return JSON.parse(valor);
+  } catch {
+    return valor;
+  }
+}
+
+async function obtenerEstudioCreadoCompat(id: string, columnasEstudios: Set<string>) {
+  const columnas = [
+    'id',
+    'nombre',
+    'propietario',
+    'telefono',
+    'pais',
+    'sucursales',
+    'activo',
+    'inicioSuscripcion',
+    'fechaVencimiento',
+    'creadoEn',
+    'actualizadoEn',
+    'claveDueno',
+    'claveCliente',
+    'estado',
+    'plan',
+    'emailContacto',
+    'fechaSolicitud',
+    'fechaAprobacion',
+  ].filter((columna) => columnasEstudios.has(columna));
+
+  if (columnas.length === 0) {
+    return { id };
+  }
+
+  const seleccion = columnas.map((columna) => escaparIdentificadorSQL(columna)).join(', ');
+  const filas = await prisma.$queryRawUnsafe<Array<Record<string, unknown>>>(
+    `SELECT ${seleccion} FROM ${escaparIdentificadorSQL('estudios')} WHERE ${escaparIdentificadorSQL('id')} = ? LIMIT 1`,
+    id,
+  );
+  const estudio = filas[0];
+
+  if (!estudio) {
+    return null;
+  }
+
+  for (const campo of ['sucursales', 'horario', 'servicios', 'serviciosCustom', 'festivos']) {
+    if (campo in estudio) {
+      estudio[campo] = normalizarCampoJSON(estudio[campo]);
+    }
+  }
+
+  return estudio;
+}
+
 export async function rutasAdmin(servidor: FastifyInstance): Promise<void> {
   /**
    * GET /admin/salones — lista todos los estudios con su usuario y último acceso
@@ -836,10 +963,7 @@ export async function rutasAdmin(servidor: FastifyInstance): Promise<void> {
         } = resultado.data;
 
         const emailNorm = email.trim().toLowerCase();
-        const existente = await prisma.usuario.findUnique({
-          where: { email: emailNorm },
-          select: { id: true },
-        });
+        const existente = await buscarUsuarioPorEmailCompat(emailNorm);
         if (existente) {
           return respuesta.code(409).send({ error: 'Ya existe un usuario con ese email' });
         }
@@ -869,130 +993,101 @@ export async function rutasAdmin(servidor: FastifyInstance): Promise<void> {
           obtenerColumnasTabla('personal'),
         ]);
 
-        let usuarioCreadoId: string | null = null;
-        let estudioCreadoId: string | null = null;
+        const usuarioCreadoId = randomUUID();
+        const estudioCreadoId = randomUUID();
 
-        let estudio: Awaited<ReturnType<typeof crearSalonAdminCompat>>;
-        let pagoInicial: Awaited<ReturnType<typeof crearPagoAdminCompat>> | null = null;
+        let estudio: Record<string, unknown> | null = null;
 
         try {
-          const nuevoUsuario = await prisma.usuario.create({
-            data: {
-              email: emailNorm,
-              hashContrasena,
-              rol: 'dueno',
-              ...(columnasUsuarios.has('nombre') && { nombre: nombreAdmin }),
-              ...(columnasUsuarios.has('emailVerificado') && { emailVerificado: true }),
-              ...(columnasUsuarios.has('activo') && { activo: true }),
-            } as Prisma.UsuarioUncheckedCreateInput,
-            select: { id: true },
+          await insertarRegistroCompat('usuarios', {
+            id: usuarioCreadoId,
+            email: emailNorm,
+            hashContrasena,
+            rol: 'dueno',
+            ...(columnasUsuarios.has('nombre') && { nombre: nombreAdmin }),
+            ...(columnasUsuarios.has('emailVerificado') && { emailVerificado: true }),
+            ...(columnasUsuarios.has('activo') && { activo: true }),
           });
-          usuarioCreadoId = nuevoUsuario.id;
 
-          estudio = await crearSalonAdminCompat(prisma, {
-            nombreSalon,
-            nombreAdmin,
+          await insertarRegistroCompat('estudios', {
+            id: estudioCreadoId,
+            nombre: nombreSalon,
+            propietario: nombreAdmin,
             telefono,
             pais,
+            sucursales: [nombreSalon],
             claveDueno,
             claveCliente,
-            emailNorm,
-            fechaInicio: formatearFecha(fechaInicio),
+            inicioSuscripcion: formatearFecha(fechaInicio),
             fechaVencimiento: formatearFecha(vencimiento),
             horario,
-            columnasEstudios,
+            servicios: [],
+            serviciosCustom: [],
+            festivos: [],
+            ...(columnasEstudios.has('emailContacto') && { emailContacto: emailNorm }),
+            ...(columnasEstudios.has('plan') && { plan: normalizarPlanEstudio(plan) }),
+            ...(columnasEstudios.has('estado') && { estado: 'aprobado' }),
+            ...(columnasEstudios.has('activo') && { activo: true }),
+            ...(columnasEstudios.has('suscripcion') && { suscripcion: 'mensual' }),
+            ...(columnasEstudios.has('fechaSolicitud') && { fechaSolicitud: fechaInicio }),
+            ...(columnasEstudios.has('fechaAprobacion') && { fechaAprobacion: fechaInicio }),
           });
-          estudioCreadoId = estudio.id;
+
+          estudio = await obtenerEstudioCreadoCompat(estudioCreadoId, columnasEstudios);
+          if (!estudio) {
+            throw new Error('No se pudo recuperar el salon recien creado');
+          }
 
           if (columnasUsuarios.has('estudioId')) {
-            await prisma.usuario.update({
-            where: { id: nuevoUsuario.id },
-            data: { estudioId: estudio.id },
-            select: { id: true },
+            await actualizarRegistroCompat('usuarios', 'id', usuarioCreadoId, {
+              estudioId: estudioCreadoId,
             });
           }
 
           if (personal.length > 0) {
             for (const persona of personal) {
-              await prisma.personal.create({
-                data: {
-                  estudioId: estudio.id,
-                  nombre: persona.nombre,
-                  especialidades: persona.especialidades,
-                  horaInicio: persona.horaInicio ?? null,
-                  horaFin: persona.horaFin ?? null,
+              await insertarRegistroCompat('personal', {
+                ...(columnasPersonal.has('id') && { id: randomUUID() }),
+                estudioId: estudioCreadoId,
+                nombre: persona.nombre,
+                especialidades: persona.especialidades,
+                ...(columnasPersonal.has('activo') && { activo: true }),
+                ...(columnasPersonal.has('horaInicio') && { horaInicio: persona.horaInicio ?? null }),
+                ...(columnasPersonal.has('horaFin') && { horaFin: persona.horaFin ?? null }),
+                ...(columnasPersonal.has('descansoInicio') && {
                   descansoInicio: persona.descansoInicio ?? null,
+                }),
+                ...(columnasPersonal.has('descansoFin') && {
                   descansoFin: persona.descansoFin ?? null,
-                } as Prisma.PersonalUncheckedCreateInput,
-                select: construirSelectDesdeColumnas(columnasPersonal, ['id']) as Prisma.PersonalSelect,
+                }),
               });
             }
           }
 
           try {
-            pagoInicial = await crearPagoAdminCompat(prisma, {
-              estudioId: estudio.id,
+            await insertarRegistroCompat('pagos', {
+              ...(columnasPago.has('id') && { id: randomUUID() }),
+              estudioId: estudioCreadoId,
               monto: montoInicial,
               moneda: monedaInicial,
               concepto: `Suscripción mensual Beauty Time Pro (${monedaInicial})`,
               fecha: formatearFecha(fechaInicio),
-              columnasPago,
+              ...(columnasPago.has('tipo') && { tipo: 'suscripcion' }),
+              ...(columnasPago.has('referencia') && { referencia: 'alta_inicial' }),
             });
           } catch (error) {
-            solicitud.log.warn({ err: error, estudioId: estudio.id }, 'No se pudo registrar el pago inicial del salon');
+            solicitud.log.warn({ err: error, estudioId: estudioCreadoId }, 'No se pudo registrar el pago inicial del salon');
           }
         } catch (error) {
-          if (estudioCreadoId) {
-            await prisma.personal.deleteMany({ where: { estudioId: estudioCreadoId } }).catch(() => undefined);
-            await prisma.pago.deleteMany({ where: { estudioId: estudioCreadoId } }).catch(() => undefined);
-            await prisma.usuario.updateMany({ where: { estudioId: estudioCreadoId }, data: { estudioId: null } }).catch(() => undefined);
-            await prisma.estudio.deleteMany({ where: { id: estudioCreadoId } }).catch(() => undefined);
+          await eliminarRegistrosCompat('personal', 'estudioId', estudioCreadoId).catch(() => undefined);
+          await eliminarRegistrosCompat('pagos', 'estudioId', estudioCreadoId).catch(() => undefined);
+          if (columnasUsuarios.has('estudioId')) {
+            await actualizarRegistroCompat('usuarios', 'id', usuarioCreadoId, { estudioId: null }).catch(() => undefined);
           }
-
-          if (usuarioCreadoId) {
-            await prisma.usuario.deleteMany({ where: { id: usuarioCreadoId } }).catch(() => undefined);
-          }
+          await eliminarRegistrosCompat('estudios', 'id', estudioCreadoId).catch(() => undefined);
+          await eliminarRegistrosCompat('usuarios', 'id', usuarioCreadoId).catch(() => undefined);
 
           throw error;
-        }
-
-        try {
-          if (columnasEstudios.has('plan')) {
-          await prisma.estudio.update({
-            where: { id: estudio.id },
-            data: { plan: normalizarPlanEstudio(plan) },
-            select: { id: true },
-          });
-          }
-        } catch (error) {
-          if (!esErrorCompatibilidadAdmin(error)) {
-            throw error;
-          }
-        }
-
-        if (pagoInicial) {
-          try {
-            await registrarAuditoria({
-              usuarioId: (solicitud.user as { sub: string }).sub,
-              accion: 'registrar_pago',
-              entidadTipo: 'pago',
-              entidadId: pagoInicial.id,
-              detalles: {
-                estudioId: estudio.id,
-                estudioNombre: estudio.nombre,
-                monto: montoInicial,
-                monedaAplicada: monedaInicial,
-                registradoPorNombre: (solicitud.user as { nombre?: string }).nombre ?? null,
-                registradoPorEmail: (solicitud.user as { email?: string }).email ?? null,
-                fechaBase: formatearFecha(fechaInicio),
-                nuevaFechaVencimiento: formatearFecha(vencimiento),
-                estrategia: 'alta_inicial',
-              },
-              ip: solicitud.ip,
-            });
-          } catch (error) {
-            solicitud.log.warn({ err: error }, 'No se pudo registrar la auditoria del alta inicial');
-          }
         }
 
         return respuesta.code(201).send({
