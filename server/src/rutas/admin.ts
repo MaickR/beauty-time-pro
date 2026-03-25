@@ -538,6 +538,42 @@ async function buscarUsuarioPorEmailCompat(email: string) {
   return filas[0] ?? null;
 }
 
+async function buscarDuenoSalonCompat(estudioId: string, emailContacto?: string | null) {
+  const columnasUsuarios = await obtenerColumnasTabla('usuarios');
+  const columnasBase = ['id', 'email', 'nombre', 'activo', 'estudioId', 'rol'].filter((columna) =>
+    columnasUsuarios.has(columna),
+  );
+
+  if (columnasBase.length === 0) {
+    return null;
+  }
+
+  const seleccion = columnasBase.map((columna) => escaparIdentificadorSQL(columna)).join(', ');
+  const filtroRol = columnasUsuarios.has('rol')
+    ? ` AND ${escaparIdentificadorSQL('rol')} = 'dueno'`
+    : '';
+
+  const porEstudio = await prisma.$queryRawUnsafe<Array<Record<string, unknown>>>(
+    `SELECT ${seleccion} FROM ${escaparIdentificadorSQL('usuarios')} WHERE ${escaparIdentificadorSQL('estudioId')} = ?${filtroRol} LIMIT 1`,
+    estudioId,
+  );
+
+  if (porEstudio[0]) {
+    return porEstudio[0];
+  }
+
+  if (!emailContacto || !columnasUsuarios.has('email')) {
+    return null;
+  }
+
+  const porEmail = await prisma.$queryRawUnsafe<Array<Record<string, unknown>>>(
+    `SELECT ${seleccion} FROM ${escaparIdentificadorSQL('usuarios')} WHERE ${escaparIdentificadorSQL('email')} = ?${filtroRol} LIMIT 1`,
+    emailContacto,
+  );
+
+  return porEmail[0] ?? null;
+}
+
 function normalizarPrefijoClaveAdmin(nombreSalon: string): string {
   const base = nombreSalon
     .normalize('NFD')
@@ -1202,39 +1238,37 @@ export async function rutasAdmin(servidor: FastifyInstance): Promise<void> {
       const { id } = solicitud.params;
 
       try {
-        const estudio = await prisma.estudio.findUnique({
-          where: { id },
-          include: { usuarios: { where: { rol: 'dueno' }, take: 1 } },
-        });
+        const columnasEstudios = await obtenerColumnasTabla('estudios');
+        const columnasUsuarios = await obtenerColumnasTabla('usuarios');
+        const estudio = await obtenerEstudioCreadoCompat(id, columnasEstudios);
 
         if (!estudio) {
           return respuesta.code(404).send({ error: 'Salón no encontrado' });
         }
 
-        let usuario = estudio.usuarios[0] ?? null;
-        if (!usuario && estudio.emailContacto) {
-          usuario = await prisma.usuario.findFirst({
-            where: { rol: 'dueno', email: estudio.emailContacto },
-          });
-        }
-
-        const estaActivo = usuario?.activo ?? estudio.activo;
+        const emailContacto =
+          typeof estudio['emailContacto'] === 'string' ? estudio['emailContacto'] : null;
+        const usuario = await buscarDuenoSalonCompat(id, emailContacto);
+        const estaActivo =
+          typeof usuario?.['activo'] === 'boolean'
+            ? Boolean(usuario['activo'])
+            : Boolean(estudio['activo']);
         const nuevoActivo = !estaActivo;
         const nuevoEstado = nuevoActivo ? 'aprobado' : 'suspendido';
 
-        await prisma.$transaction(async (tx) => {
-          await tx.estudio.update({
-            where: { id },
-            data: { activo: nuevoActivo, estado: nuevoEstado },
-          });
-
-          if (usuario) {
-            await tx.usuario.update({
-              where: { id: usuario.id },
-              data: { activo: nuevoActivo, estudioId: id },
-            });
-          }
+        await actualizarRegistroCompat('estudios', 'id', id, {
+          activo: nuevoActivo,
+          ...(columnasEstudios.has('estado') && { estado: nuevoEstado }),
+          ...(columnasEstudios.has('actualizadoEn') && { actualizadoEn: formatearFechaHoraSQL(new Date()) }),
         });
+
+        if (usuario && typeof usuario['id'] === 'string') {
+          await actualizarRegistroCompat('usuarios', 'id', usuario['id'], {
+            ...(columnasUsuarios.has('activo') && { activo: nuevoActivo }),
+            ...(columnasUsuarios.has('estudioId') && { estudioId: id }),
+            ...(columnasUsuarios.has('actualizadoEn') && { actualizadoEn: formatearFechaHoraSQL(new Date()) }),
+          });
+        }
 
         try {
           await registrarAuditoria({
