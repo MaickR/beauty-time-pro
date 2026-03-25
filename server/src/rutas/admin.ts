@@ -71,6 +71,19 @@ function formatearFechaHoraSQL(fecha: Date): string {
   return fecha.toISOString().slice(0, 19).replace('T', ' ');
 }
 
+function fechaInicioEsValidaParaAlta(fecha: Date): boolean {
+  const hoy = new Date();
+  hoy.setHours(0, 0, 0, 0);
+
+  const fechaMinima = new Date(hoy);
+  fechaMinima.setFullYear(fechaMinima.getFullYear() - 1);
+
+  const fechaMaxima = new Date(hoy);
+  fechaMaxima.setFullYear(fechaMaxima.getFullYear() + 10);
+
+  return fecha >= fechaMinima && fecha <= fechaMaxima;
+}
+
 function obtenerMonedaPorPais(pais?: string | null): 'MXN' | 'COP' {
   return pais === 'Colombia' ? 'COP' : 'MXN';
 }
@@ -1009,6 +1022,13 @@ export async function rutasAdmin(servidor: FastifyInstance): Promise<void> {
 
         const fechaInicio = inicioSuscripcion ? crearFechaDesdeISO(inicioSuscripcion) : new Date();
         fechaInicio.setHours(0, 0, 0, 0);
+
+        if (!fechaInicioEsValidaParaAlta(fechaInicio)) {
+          return respuesta.code(400).send({
+            error: 'La fecha de inicio de operaciones no es válida. Verifica día, mes y año.',
+          });
+        }
+
         const vencimiento = new Date(fechaInicio);
         vencimiento.setMonth(vencimiento.getMonth() + 1);
 
@@ -1261,24 +1281,31 @@ export async function rutasAdmin(servidor: FastifyInstance): Promise<void> {
         return respuesta.code(400).send({ error: 'fechaVencimiento o meses es requerido' });
       }
 
-      const estudio = await prisma.estudio.findUnique({ where: { id } });
+      const columnasEstudios = await obtenerColumnasTabla('estudios');
+      const estudio = await obtenerEstudioCreadoCompat(id, columnasEstudios);
       if (!estudio) {
         return respuesta.code(404).send({ error: 'Salón no encontrado' });
       }
 
+      const fechaVencimientoActual =
+        typeof estudio['fechaVencimiento'] === 'string' ? estudio['fechaVencimiento'] : null;
+      const inicioSuscripcionActual =
+        typeof estudio['inicioSuscripcion'] === 'string' ? estudio['inicioSuscripcion'] : null;
+      const nombreSalon = typeof estudio['nombre'] === 'string' ? estudio['nombre'] : id;
+
       const renovacion = meses && meses > 0
         ? calcularNuevaFechaVencimiento({
-            fechaVencimiento: estudio.fechaVencimiento,
-            inicioSuscripcion: estudio.inicioSuscripcion,
+            fechaVencimiento: fechaVencimientoActual,
+            inicioSuscripcion: inicioSuscripcionActual,
             meses,
           })
         : null;
 
       const fechaFinal = renovacion?.nuevaFechaVencimiento ?? fechaVencimiento!;
 
-      const actualizado = await prisma.estudio.update({
-        where: { id },
-        data: { fechaVencimiento: fechaFinal },
+      await actualizarRegistroCompat('estudios', 'id', id, {
+        fechaVencimiento: fechaFinal,
+        ...(columnasEstudios.has('actualizadoEn') && { actualizadoEn: formatearFechaHoraSQL(new Date()) }),
       });
 
       await registrarAuditoria({
@@ -1287,9 +1314,9 @@ export async function rutasAdmin(servidor: FastifyInstance): Promise<void> {
         entidadTipo: 'estudio',
         entidadId: id,
         detalles: {
-          nombre: estudio.nombre,
-          fechaBase: renovacion?.fechaBase ?? estudio.fechaVencimiento,
-          fechaVencimientoAnterior: estudio.fechaVencimiento,
+          nombre: nombreSalon,
+          fechaBase: renovacion?.fechaBase ?? fechaVencimientoActual,
+          fechaVencimientoAnterior: fechaVencimientoActual,
           fechaVencimientoNueva: fechaFinal,
           estrategia: renovacion?.estrategia ?? 'manual',
           meses: meses ?? null,
@@ -1299,8 +1326,8 @@ export async function rutasAdmin(servidor: FastifyInstance): Promise<void> {
 
       return respuesta.send({
         datos: {
-          fechaVencimiento: actualizado.fechaVencimiento,
-          fechaBaseRenovacion: renovacion?.fechaBase ?? estudio.fechaVencimiento,
+          fechaVencimiento: fechaFinal,
+          fechaBaseRenovacion: renovacion?.fechaBase ?? fechaVencimientoActual,
           estrategiaRenovacion: renovacion?.estrategia ?? 'manual',
           mensaje: renovacion
             ? 'Suscripción extendida correctamente'

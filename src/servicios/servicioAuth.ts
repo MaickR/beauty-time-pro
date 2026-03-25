@@ -23,7 +23,7 @@ export interface DatosAccesoSalon {
   claveSalon: string;
 }
 
-interface DatosSesion {
+export interface DatosSesion {
   token: string;
   rol: string;
   estudioId: string | null;
@@ -88,6 +88,10 @@ export async function iniciarSesionConEmailAPI(
   contrasena: string,
 ): Promise<DatosSesion> {
   return autenticarConReintento({ email, contrasena });
+}
+
+export async function iniciarSesionConClaveAPI(clave: string): Promise<DatosSesion> {
+  return autenticarConReintento({ clave: clave.trim().toUpperCase() });
 }
 
 /**

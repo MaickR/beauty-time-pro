@@ -151,7 +151,7 @@ export function SelectorFecha({
         <select
           id={idCampo}
           name={`${nombreBase}-dia`}
-          autoComplete="bday-day"
+          autoComplete="off"
           value={seleccion.dia}
           onChange={(evento) => actualizarSeleccion('dia', evento.target.value)}
           aria-required={requerido}
@@ -171,7 +171,7 @@ export function SelectorFecha({
         <select
           id={`${idCampo}-mes`}
           name={`${nombreBase}-mes`}
-          autoComplete="bday-month"
+          autoComplete="off"
           value={seleccion.mes}
           onChange={(evento) => actualizarSeleccion('mes', evento.target.value)}
           aria-invalid={Boolean(error)}
@@ -190,7 +190,7 @@ export function SelectorFecha({
         <select
           id={`${idCampo}-anio`}
           name={`${nombreBase}-anio`}
-          autoComplete="bday-year"
+          autoComplete="off"
           value={seleccion.anio}
           onChange={(evento) => actualizarSeleccion('anio', evento.target.value)}
           aria-invalid={Boolean(error)}

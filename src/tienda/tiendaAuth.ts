@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import {
   iniciarSesionConEmailAPI,
+  iniciarSesionConClaveAPI,
   buscarAccesoSalonPorClaveAPI,
   refrescarSesion,
   cerrarSesionAPI,
@@ -209,14 +210,78 @@ export const usarTiendaAuth = create<EstadoAuth>((set) => ({
 
   iniciarSesionConClave: async (clave) => {
     try {
-      const datos = await buscarAccesoSalonPorClaveAPI(clave);
-      limpiarToken();
-      guardarSesionReserva(datos);
-      set({
-        estudioActual: datos.estudioId,
-        claveClienteActual: datos.claveSalon,
-      });
-      return { exito: true, ruta: `/reservar/${datos.claveSalon}`, estudioId: datos.estudioId };
+      try {
+        const datosReserva = await buscarAccesoSalonPorClaveAPI(clave);
+        limpiarToken();
+        guardarSesionReserva(datosReserva);
+        set({
+          estudioActual: datosReserva.estudioId,
+          claveClienteActual: datosReserva.claveSalon,
+        });
+        return {
+          exito: true,
+          ruta: `/reservar/${datosReserva.claveSalon}`,
+          estudioId: datosReserva.estudioId,
+        };
+      } catch {
+        const datos = await iniciarSesionConClaveAPI(clave);
+        const rol = datos.rol as RolUsuario;
+
+        if (rol === 'cliente') {
+          const claveNormalizada = clave.trim().toUpperCase();
+          guardarSesionReserva({
+            estudioId: datos.estudioId ?? '',
+            nombreSalon: datos.nombre,
+            claveSalon: claveNormalizada,
+          });
+          set({
+            usuario: {
+              rol,
+              estudioId: datos.estudioId,
+              nombre: datos.nombre,
+              email: datos.email,
+              esMaestroTotal: datos.esMaestroTotal,
+              permisos: datos.permisos ?? crearPermisosVacios(),
+              personalId: datos.personalId ?? null,
+              forzarCambioContrasena: datos.forzarCambioContrasena ?? false,
+            },
+            rol,
+            estudioActual: datos.estudioId,
+            claveClienteActual: claveNormalizada,
+          });
+          return {
+            exito: true,
+            ruta: `/reservar/${claveNormalizada}`,
+            estudioId: datos.estudioId,
+          };
+        }
+
+        localStorage.setItem(CLAVE_SESION, '1');
+        limpiarSesionReserva();
+        set({
+          usuario: {
+            rol,
+            estudioId: datos.estudioId,
+            nombre: datos.nombre,
+            email: datos.email,
+            esMaestroTotal: datos.esMaestroTotal,
+            permisos: datos.permisos ?? crearPermisosVacios(),
+            personalId: datos.personalId ?? null,
+            forzarCambioContrasena: datos.forzarCambioContrasena ?? false,
+          },
+          rol,
+          estudioActual: datos.estudioId,
+          claveClienteActual: null,
+        });
+
+        const ruta = obtenerRutaPorRol(
+          rol,
+          datos.estudioId,
+          null,
+          datos.forzarCambioContrasena ?? false,
+        );
+        return { exito: true, ruta, estudioId: datos.estudioId };
+      }
     } catch (error) {
       const mensajeError =
         error instanceof TypeError ||
