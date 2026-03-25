@@ -94,9 +94,7 @@ function formatearMoneda(monto: number, moneda: string) {
 
 function resumirIngresos(ingresos: IngresoPorMoneda[]) {
   if (ingresos.length === 0) return 'Sin pagos';
-  return ingresos
-    .map((ingreso) => `${ingreso.moneda} ${formatearMoneda(ingreso.actual, ingreso.moneda)}`)
-    .join(' · ');
+  return ingresos.map((ingreso) => formatearMoneda(ingreso.actual, ingreso.moneda)).join(' · ');
 }
 
 function resumirVariacion(ingresos: IngresoPorMoneda[]) {

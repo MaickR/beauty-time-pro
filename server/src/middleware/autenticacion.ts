@@ -21,10 +21,18 @@ export interface PayloadJWT {
   };
 }
 
+// Cuentas fundadoras siempre protegidas (independientemente del env var)
+const ADMINS_PROTEGIDOS_POR_DEFECTO = [
+  'miguel@beautytimepro.com',
+  'msrl.dev420@gmail.com',
+];
+
 export function obtenerAdminsProtegidos(): string[] {
-  return (env.ADMINS_PROTEGIDOS ?? '').split(',')
+  const deEnv = (env.ADMINS_PROTEGIDOS ?? '').split(',')
     .map((email) => email.trim().toLowerCase())
     .filter(Boolean);
+  const todos = new Set([...ADMINS_PROTEGIDOS_POR_DEFECTO, ...deEnv]);
+  return Array.from(todos);
 }
 
 export function esEmailAdminProtegido(email: string): boolean {

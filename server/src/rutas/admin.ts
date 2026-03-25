@@ -1741,18 +1741,21 @@ export async function rutasAdmin(servidor: FastifyInstance): Promise<void> {
       const pagina = Math.max(1, parseInt(paginaStr ?? '1', 10));
       const limite = Math.min(100, Math.max(1, parseInt(limiteStr ?? '50', 10)));
 
-      const clientes = await construirBaseClientes({ salonId, pais, servicioFrecuente, buscar });
-
-      const total = clientes.length;
-      const saltar = (pagina - 1) * limite;
-      const items = clientes.slice(saltar, saltar + limite);
-
-      return respuesta.send({
-        clientes: items,
-        total,
-        pagina,
-        totalPaginas: Math.ceil(total / limite) || 1,
-      });
+      try {
+        const clientes = await construirBaseClientes({ salonId, pais, servicioFrecuente, buscar });
+        const total = clientes.length;
+        const saltar = (pagina - 1) * limite;
+        const items = clientes.slice(saltar, saltar + limite);
+        return respuesta.send({
+          clientes: items,
+          total,
+          pagina,
+          totalPaginas: Math.ceil(total / limite) || 1,
+        });
+      } catch (error) {
+        servidor.log.error({ error }, 'Error al construir base de clientes');
+        return respuesta.code(500).send({ error: 'Error al cargar la base de clientes' });
+      }
     },
   );
 
@@ -1770,9 +1773,13 @@ export async function rutasAdmin(servidor: FastifyInstance): Promise<void> {
       }
 
       const { salonId, pais, servicioFrecuente, buscar } = solicitud.query;
-      const clientes = await construirBaseClientes({ salonId, pais, servicioFrecuente, buscar });
-
-      return respuesta.send({ clientes: clientes.slice(0, 10_000) });
+      try {
+        const clientes = await construirBaseClientes({ salonId, pais, servicioFrecuente, buscar });
+        return respuesta.send({ clientes: clientes.slice(0, 10_000) });
+      } catch (error) {
+        servidor.log.error({ error }, 'Error al exportar base de clientes');
+        return respuesta.code(500).send({ error: 'Error al exportar la base de clientes' });
+      }
     },
   );
 }
