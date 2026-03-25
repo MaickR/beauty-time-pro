@@ -1,9 +1,6 @@
 import 'dotenv/config';
 import { PrismaMariaDb } from '@prisma/adapter-mariadb';
-import { PrismaClient as PrismaClientEstandar } from '@prisma/client';
 import { PrismaClient as PrismaClientGenerado } from './generated/prisma/client.js';
-
-const usarAdaptadorMariaDb = process.env.PRISMA_USAR_ADAPTADOR_MARIADB === 'true';
 
 function crearPrismaConAdaptador() {
 	const urlBaseDatos = new URL(
@@ -22,6 +19,4 @@ function crearPrismaConAdaptador() {
 	return new PrismaClientGenerado({ adapter: adaptador });
 }
 
-export const prisma = (
-	usarAdaptadorMariaDb ? crearPrismaConAdaptador() : new PrismaClientEstandar()
-) as unknown as PrismaClientGenerado;
+export const prisma = crearPrismaConAdaptador();
