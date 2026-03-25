@@ -36,7 +36,7 @@ const esquemaCrearSalonAdmin = z.object({
     descansoFin: z.string().optional(),
   })).optional().default([]),
   depuracionHasta: z
-    .enum(['despues_hash', 'despues_claves', 'despues_estudio', 'despues_usuario'])
+    .enum(['antes_hash', 'despues_hash', 'despues_claves', 'despues_estudio', 'despues_usuario'])
     .optional(),
 });
 
@@ -1005,6 +1005,9 @@ export async function rutasAdmin(servidor: FastifyInstance): Promise<void> {
         const existente = await buscarUsuarioPorEmailCompat(emailNorm);
         if (existente) {
           return respuesta.code(409).send({ error: 'Ya existe un usuario con ese email' });
+        }
+        if (depuracionHasta === 'antes_hash') {
+          return respuesta.send({ datos: { paso: 'antes_hash' } });
         }
 
         const hashContrasena = await generarHashContrasena(contrasena);
