@@ -6,6 +6,7 @@ import { prisma } from '../prismaCliente.js';
 import { verificarJWT } from '../middleware/autenticacion.js';
 import { requierePermiso } from '../middleware/verificarPermiso.js';
 import { resolverCategoriasSalon } from '../lib/categoriasSalon.js';
+import { construirSelectDesdeColumnas, obtenerColumnasTabla } from '../lib/compatibilidadEsquema.js';
 import { cacheSalonesPublicos } from '../lib/cache.js';
 import { generarClavesSalonUnicas } from '../lib/clavesSalon.js';
 import { enviarEmailBienvenidaSalon, enviarEmailRechazoSalon, enviarEmailCancelacionProcesada, enviarEmailRecordatorioPagoSalon } from '../servicios/servicioEmail.js';
@@ -338,26 +339,51 @@ async function crearSalonAdminCompat(
     fechaInicio: string;
     fechaVencimiento: string;
     horario: Record<string, { isOpen: boolean; openTime: string; closeTime: string }>;
+    columnasEstudios: Set<string>;
   },
 ) {
+  const data: Record<string, unknown> = {
+    nombre: datos.nombreSalon,
+    propietario: datos.nombreAdmin,
+    telefono: datos.telefono,
+    pais: datos.pais,
+    sucursales: [datos.nombreSalon],
+    claveDueno: datos.claveDueno,
+    claveCliente: datos.claveCliente,
+    inicioSuscripcion: datos.fechaInicio,
+    fechaVencimiento: datos.fechaVencimiento,
+    horario: datos.horario,
+    servicios: [],
+    serviciosCustom: [],
+    festivos: [],
+  };
+
+  if (datos.columnasEstudios.has('emailContacto')) {
+    data['emailContacto'] = datos.emailNorm;
+  }
+
+  const select = construirSelectDesdeColumnas(datos.columnasEstudios, [
+    'id',
+    'nombre',
+    'propietario',
+    'telefono',
+    'pais',
+    'sucursales',
+    'activo',
+    'inicioSuscripcion',
+    'fechaVencimiento',
+    'creadoEn',
+    'actualizadoEn',
+    'claveDueno',
+    'claveCliente',
+    'estado',
+    'plan',
+    'emailContacto',
+  ]);
+
   return cliente.estudio.create({
-    data: {
-      nombre: datos.nombreSalon,
-      propietario: datos.nombreAdmin,
-      telefono: datos.telefono,
-      pais: datos.pais,
-      sucursales: [datos.nombreSalon],
-      claveDueno: datos.claveDueno,
-      claveCliente: datos.claveCliente,
-      inicioSuscripcion: datos.fechaInicio,
-      fechaVencimiento: datos.fechaVencimiento,
-      horario: datos.horario,
-      servicios: [],
-      serviciosCustom: [],
-      festivos: [],
-      emailContacto: datos.emailNorm,
-    },
-    select: seleccionarSalonCreadoCompat,
+    data: data as Prisma.EstudioUncheckedCreateInput,
+    select: select as Prisma.EstudioSelect,
   });
 }
 
@@ -369,8 +395,21 @@ async function crearPagoAdminCompat(
     moneda: 'MXN' | 'COP';
     concepto: string;
     fecha: string;
+    columnasPago: Set<string>;
   },
 ) {
+  const select = construirSelectDesdeColumnas(datos.columnasPago, [
+    'id',
+    'estudioId',
+    'monto',
+    'moneda',
+    'concepto',
+    'fecha',
+    'tipo',
+    'referencia',
+    'creadoEn',
+  ]);
+
   try {
     return await cliente.pago.create({
       data: {
@@ -382,6 +421,7 @@ async function crearPagoAdminCompat(
         tipo: 'suscripcion',
         referencia: 'alta_inicial',
       },
+      select: select as Prisma.PagoSelect,
     });
   } catch (error) {
     if (!esErrorCompatibilidadPago(error)) {
@@ -396,6 +436,7 @@ async function crearPagoAdminCompat(
         concepto: datos.concepto,
         fecha: datos.fecha,
       },
+      select: select as Prisma.PagoSelect,
     });
   }
 }
@@ -818,6 +859,12 @@ export async function rutasAdmin(servidor: FastifyInstance): Promise<void> {
 
         const monedaInicial = obtenerMonedaPorPais(pais);
         const montoInicial = obtenerMontoPlanPorPais(pais);
+        const [columnasUsuarios, columnasEstudios, columnasPago, columnasPersonal] = await Promise.all([
+          obtenerColumnasTabla('usuarios'),
+          obtenerColumnasTabla('estudios'),
+          obtenerColumnasTabla('pagos'),
+          obtenerColumnasTabla('personal'),
+        ]);
 
         let usuarioCreadoId: string | null = null;
         let estudioCreadoId: string | null = null;
@@ -830,10 +877,12 @@ export async function rutasAdmin(servidor: FastifyInstance): Promise<void> {
             data: {
               email: emailNorm,
               hashContrasena,
-              nombre: nombreAdmin,
               rol: 'dueno',
-              emailVerificado: true,
-            },
+              ...(columnasUsuarios.has('nombre') && { nombre: nombreAdmin }),
+              ...(columnasUsuarios.has('emailVerificado') && { emailVerificado: true }),
+              ...(columnasUsuarios.has('activo') && { activo: true }),
+            } as Prisma.UsuarioUncheckedCreateInput,
+            select: { id: true },
           });
           usuarioCreadoId = nuevoUsuario.id;
 
@@ -848,13 +897,17 @@ export async function rutasAdmin(servidor: FastifyInstance): Promise<void> {
             fechaInicio: formatearFecha(fechaInicio),
             fechaVencimiento: formatearFecha(vencimiento),
             horario,
+            columnasEstudios,
           });
           estudioCreadoId = estudio.id;
 
-          await prisma.usuario.update({
+          if (columnasUsuarios.has('estudioId')) {
+            await prisma.usuario.update({
             where: { id: nuevoUsuario.id },
             data: { estudioId: estudio.id },
-          });
+            select: { id: true },
+            });
+          }
 
           if (personal.length > 0) {
             for (const persona of personal) {
@@ -867,7 +920,8 @@ export async function rutasAdmin(servidor: FastifyInstance): Promise<void> {
                   horaFin: persona.horaFin ?? null,
                   descansoInicio: persona.descansoInicio ?? null,
                   descansoFin: persona.descansoFin ?? null,
-                },
+                } as Prisma.PersonalUncheckedCreateInput,
+                select: construirSelectDesdeColumnas(columnasPersonal, ['id']) as Prisma.PersonalSelect,
               });
             }
           }
@@ -879,6 +933,7 @@ export async function rutasAdmin(servidor: FastifyInstance): Promise<void> {
               moneda: monedaInicial,
               concepto: `Suscripción mensual Beauty Time Pro (${monedaInicial})`,
               fecha: formatearFecha(fechaInicio),
+              columnasPago,
             });
           } catch (error) {
             solicitud.log.warn({ err: error, estudioId: estudio.id }, 'No se pudo registrar el pago inicial del salon');
@@ -899,10 +954,13 @@ export async function rutasAdmin(servidor: FastifyInstance): Promise<void> {
         }
 
         try {
+          if (columnasEstudios.has('plan')) {
           await prisma.estudio.update({
             where: { id: estudio.id },
             data: { plan: normalizarPlanEstudio(plan) },
+            select: { id: true },
           });
+          }
         } catch (error) {
           if (!esErrorCompatibilidadAdmin(error)) {
             throw error;

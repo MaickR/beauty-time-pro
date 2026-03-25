@@ -3,6 +3,7 @@ import type { Prisma } from '../generated/prisma/client.js';
 import bcrypt from 'bcrypt';
 import { z } from 'zod';
 import { resolverCategoriasSalon } from '../lib/categoriasSalon.js';
+import { construirSelectDesdeColumnas, obtenerColumnasTabla, obtenerTablasDisponibles } from '../lib/compatibilidadEsquema.js';
 import { env } from '../lib/env.js';
 import { obtenerSlotsDisponiblesBackend } from '../lib/programacion.js';
 import { prisma } from '../prismaCliente.js';
@@ -398,6 +399,10 @@ export async function rutasEstudios(servidor: FastifyInstance): Promise<void> {
         }
 
         const datos = resultado.data;
+        const [columnasEstudios, tablasDisponibles] = await Promise.all([
+          obtenerColumnasTabla('estudios'),
+          obtenerTablasDisponibles(),
+        ]);
         let estudioExistente: { categorias: unknown; servicios: unknown; serviciosCustom: unknown; plan?: string } | null;
         try {
           estudioExistente = await prisma.estudio.findUnique({
@@ -456,69 +461,48 @@ export async function rutasEstudios(servidor: FastifyInstance): Promise<void> {
           serviciosCustom: datos.serviciosCustom ?? estudioExistente?.serviciosCustom,
         });
 
-        let estudio: Record<string, unknown>;
-        try {
-          estudio = (await prisma.estudio.update({
-            where: { id },
-            data: {
-              ...(datos.nombre !== undefined && { nombre: datos.nombre }),
-              ...(datos.propietario !== undefined && { propietario: datos.propietario }),
-              ...(datos.telefono !== undefined && { telefono: datos.telefono }),
-              ...(datos.sitioWeb !== undefined && { sitioWeb: datos.sitioWeb }),
-              ...(datos.pais !== undefined && { pais: datos.pais }),
-              ...(datos.plan !== undefined && { plan: normalizarPlanEstudio(datos.plan) }),
-              ...(datos.sucursales !== undefined && { sucursales: datos.sucursales }),
-              ...(datos.horario !== undefined && { horario: datos.horario }),
-              ...(datos.servicios !== undefined && { servicios: datos.servicios as Prisma.InputJsonValue }),
-              ...(datos.serviciosCustom !== undefined && { serviciosCustom: datos.serviciosCustom as Prisma.InputJsonValue }),
-              ...(datos.festivos !== undefined && { festivos: datos.festivos }),
-              ...(datos.colorPrimario !== undefined && { colorPrimario: datos.colorPrimario }),
-              ...(datos.descripcion !== undefined && { descripcion: sanitizarTexto(datos.descripcion ?? '') }),
-              ...(datos.direccion !== undefined && { direccion: sanitizarTexto(datos.direccion ?? '') }),
-              ...(datos.emailContacto !== undefined && { emailContacto: datos.emailContacto }),
-              ...(datos.horarioApertura !== undefined && { horarioApertura: datos.horarioApertura }),
-              ...(datos.horarioCierre !== undefined && { horarioCierre: datos.horarioCierre }),
-              ...(datos.diasAtencion !== undefined && { diasAtencion: datos.diasAtencion }),
-              categorias,
-            },
-          })) as unknown as Record<string, unknown>;
-        } catch (error) {
-          if (!esErrorCompatibilidadEstudio(error)) {
-            throw error;
-          }
-          estudio = (await prisma.estudio.update({
-            where: { id },
-            data: {
-              ...(datos.nombre !== undefined && { nombre: datos.nombre }),
-              ...(datos.propietario !== undefined && { propietario: datos.propietario }),
-              ...(datos.telefono !== undefined && { telefono: datos.telefono }),
-              ...(datos.sitioWeb !== undefined && { sitioWeb: datos.sitioWeb }),
-              ...(datos.pais !== undefined && { pais: datos.pais }),
-              ...(datos.sucursales !== undefined && { sucursales: datos.sucursales }),
-              ...(datos.horario !== undefined && { horario: datos.horario }),
-              ...(datos.servicios !== undefined && { servicios: datos.servicios as Prisma.InputJsonValue }),
-              ...(datos.serviciosCustom !== undefined && { serviciosCustom: datos.serviciosCustom as Prisma.InputJsonValue }),
-              ...(datos.festivos !== undefined && { festivos: datos.festivos }),
-              ...(datos.colorPrimario !== undefined && { colorPrimario: datos.colorPrimario }),
-              ...(datos.descripcion !== undefined && { descripcion: sanitizarTexto(datos.descripcion ?? '') }),
-              ...(datos.direccion !== undefined && { direccion: sanitizarTexto(datos.direccion ?? '') }),
-              ...(datos.emailContacto !== undefined && { emailContacto: datos.emailContacto }),
-              ...(datos.horarioApertura !== undefined && { horarioApertura: datos.horarioApertura }),
-              ...(datos.horarioCierre !== undefined && { horarioCierre: datos.horarioCierre }),
-              ...(datos.diasAtencion !== undefined && { diasAtencion: datos.diasAtencion }),
-              categorias,
-            },
-          })) as unknown as Record<string, unknown>;
-        }
+        const dataActualizacion: Record<string, unknown> = {
+          ...(datos.nombre !== undefined && columnasEstudios.has('nombre') && { nombre: datos.nombre }),
+          ...(datos.propietario !== undefined && columnasEstudios.has('propietario') && { propietario: datos.propietario }),
+          ...(datos.telefono !== undefined && columnasEstudios.has('telefono') && { telefono: datos.telefono }),
+          ...(datos.sitioWeb !== undefined && columnasEstudios.has('sitioWeb') && { sitioWeb: datos.sitioWeb }),
+          ...(datos.pais !== undefined && columnasEstudios.has('pais') && { pais: datos.pais }),
+          ...(datos.plan !== undefined && columnasEstudios.has('plan') && { plan: normalizarPlanEstudio(datos.plan) }),
+          ...(datos.sucursales !== undefined && columnasEstudios.has('sucursales') && { sucursales: datos.sucursales }),
+          ...(datos.horario !== undefined && columnasEstudios.has('horario') && { horario: datos.horario }),
+          ...(datos.servicios !== undefined && columnasEstudios.has('servicios') && { servicios: datos.servicios as Prisma.InputJsonValue }),
+          ...(datos.serviciosCustom !== undefined && columnasEstudios.has('serviciosCustom') && { serviciosCustom: datos.serviciosCustom as Prisma.InputJsonValue }),
+          ...(datos.festivos !== undefined && columnasEstudios.has('festivos') && { festivos: datos.festivos }),
+          ...(datos.colorPrimario !== undefined && columnasEstudios.has('colorPrimario') && { colorPrimario: datos.colorPrimario }),
+          ...(datos.descripcion !== undefined && columnasEstudios.has('descripcion') && { descripcion: sanitizarTexto(datos.descripcion ?? '') }),
+          ...(datos.direccion !== undefined && columnasEstudios.has('direccion') && { direccion: sanitizarTexto(datos.direccion ?? '') }),
+          ...(datos.emailContacto !== undefined && columnasEstudios.has('emailContacto') && { emailContacto: datos.emailContacto }),
+          ...(datos.horarioApertura !== undefined && columnasEstudios.has('horarioApertura') && { horarioApertura: datos.horarioApertura }),
+          ...(datos.horarioCierre !== undefined && columnasEstudios.has('horarioCierre') && { horarioCierre: datos.horarioCierre }),
+          ...(datos.diasAtencion !== undefined && columnasEstudios.has('diasAtencion') && { diasAtencion: datos.diasAtencion }),
+          ...(columnasEstudios.has('categorias') && { categorias }),
+        };
 
-        if (datos.plan !== undefined && normalizarPlanEstudio(datos.plan) === 'STANDARD') {
+        const selectActualizacion = construirSelectDesdeColumnas(columnasEstudios, ['id']);
+
+        await prisma.estudio.update({
+          where: { id },
+          data: dataActualizacion as Prisma.EstudioUncheckedUpdateInput,
+          select: selectActualizacion as Prisma.EstudioSelect,
+        });
+
+        if (
+          datos.plan !== undefined &&
+          normalizarPlanEstudio(datos.plan) === 'STANDARD' &&
+          tablasDisponibles.has('config_fidelidad')
+        ) {
           await prisma.configFidelidad.updateMany({
             where: { estudioId: id },
             data: { activo: false },
           });
         }
 
-        return respuesta.send({ datos: estudio });
+        return respuesta.send({ datos: { id, actualizado: true } });
       } catch (error) {
         solicitud.log.error({ err: error }, 'Fallo al actualizar estudio');
         return respuesta.code(500).send({
@@ -613,6 +597,7 @@ export async function rutasEstudios(servidor: FastifyInstance): Promise<void> {
         }
 
         const { id } = solicitud.params;
+        const tablasDisponibles = await obtenerTablasDisponibles();
 
         const estudio = await prisma.estudio.findUnique({
           where: { id },
@@ -635,14 +620,21 @@ export async function rutasEstudios(servidor: FastifyInstance): Promise<void> {
         const reservaIds = reservas.map((reserva) => reserva.id);
         const pagoIds = pagos.map((pago) => pago.id);
 
-        if (usuarioIds.length > 0) {
+        if (usuarioIds.length > 0 && tablasDisponibles.has('suscripciones_push')) {
           await prisma.suscripcionPush.deleteMany({ where: { usuarioId: { in: usuarioIds } } });
+        }
+        if (usuarioIds.length > 0 && tablasDisponibles.has('tokens_reset')) {
           await prisma.tokenReset.deleteMany({ where: { usuarioId: { in: usuarioIds } } });
+        }
+        if (usuarioIds.length > 0 && tablasDisponibles.has('permisos_maestro')) {
           await prisma.permisosMaestro.deleteMany({ where: { usuarioId: { in: usuarioIds } } });
+        }
+        if (usuarioIds.length > 0 && tablasDisponibles.has('audit_log')) {
           await prisma.auditLog.deleteMany({ where: { usuarioId: { in: usuarioIds } } });
         }
 
-        await prisma.auditLog.deleteMany({
+        if (tablasDisponibles.has('audit_log')) {
+          await prisma.auditLog.deleteMany({
           where: {
             OR: [
               { entidadTipo: 'estudio', entidadId: id },
@@ -650,24 +642,31 @@ export async function rutasEstudios(servidor: FastifyInstance): Promise<void> {
             ],
           },
         });
+        }
 
-        if (reservaIds.length > 0) {
+        if (reservaIds.length > 0 && tablasDisponibles.has('reserva_servicios')) {
           await prisma.reservaServicio.deleteMany({ where: { reservaId: { in: reservaIds } } });
         }
 
-        if (personalIds.length > 0) {
+        if (personalIds.length > 0 && tablasDisponibles.has('empleados_acceso')) {
           await prisma.empleadoAcceso.deleteMany({ where: { personalId: { in: personalIds } } });
         }
 
         await prisma.personal.deleteMany({ where: { estudioId: id } });
         await prisma.reserva.deleteMany({ where: { estudioId: id } });
         await prisma.pago.deleteMany({ where: { estudioId: id } });
-        await prisma.cliente.deleteMany({ where: { estudioId: id } });
-        await prisma.puntosFidelidad.deleteMany({ where: { estudioId: id } });
-        await prisma.configFidelidad.deleteMany({ where: { estudioId: id } });
+        if (tablasDisponibles.has('clientes')) {
+          await prisma.cliente.deleteMany({ where: { estudioId: id } });
+        }
+        if (tablasDisponibles.has('puntos_fidelidad')) {
+          await prisma.puntosFidelidad.deleteMany({ where: { estudioId: id } });
+        }
+        if (tablasDisponibles.has('config_fidelidad')) {
+          await prisma.configFidelidad.deleteMany({ where: { estudioId: id } });
+        }
         await prisma.diaFestivo.deleteMany({ where: { estudioId: id } });
         await prisma.usuario.deleteMany({ where: { estudioId: id } });
-        await prisma.estudio.delete({ where: { id } });
+        await prisma.estudio.deleteMany({ where: { id } });
 
         return respuesta.code(200).send({ datos: { eliminado: true } });
       } catch (error) {
