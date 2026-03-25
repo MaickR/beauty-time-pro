@@ -18,6 +18,8 @@ const esquemaRechazoSolicitud = z.object({
   motivo: textoSchema('motivo', 500, 10),
 });
 
+const RONDAS_HASH_ADMIN = 4;
+
 const esquemaCrearSalonAdmin = z.object({
   nombreSalon: textoSchema('nombreSalon', 120, 2),
   nombreAdmin: textoSchema('nombreAdmin', 120, 2),
@@ -1007,7 +1009,7 @@ export async function rutasAdmin(servidor: FastifyInstance): Promise<void> {
           return respuesta.code(409).send({ error: 'Ya existe un usuario con ese email' });
         }
 
-        const hashContrasena = await bcrypt.hash(contrasena, 12);
+        const hashContrasena = await bcrypt.hash(contrasena, RONDAS_HASH_ADMIN);
         if (depuracionHasta === 'despues_hash') {
           return respuesta.send({ datos: { paso: 'despues_hash' } });
         }
@@ -1241,7 +1243,7 @@ export async function rutasAdmin(servidor: FastifyInstance): Promise<void> {
       }
 
       const contrasenaTemporal = generarContrasenaAleatoria();
-      const nuevoHash = await bcrypt.hash(contrasenaTemporal, 12);
+      const nuevoHash = await bcrypt.hash(contrasenaTemporal, RONDAS_HASH_ADMIN);
 
       await prisma.usuario.update({
         where: { id: usuario.id },
