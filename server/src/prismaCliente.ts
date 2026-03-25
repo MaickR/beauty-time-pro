@@ -1,6 +1,7 @@
 import 'dotenv/config';
 import { PrismaMariaDb } from '@prisma/adapter-mariadb';
-import { PrismaClient } from './generated/prisma/client.js';
+import { PrismaClient as PrismaClientEstandar } from '@prisma/client';
+import { PrismaClient as PrismaClientGenerado } from './generated/prisma/client.js';
 
 const usarAdaptadorMariaDb = process.env.PRISMA_USAR_ADAPTADOR_MARIADB === 'true';
 
@@ -18,7 +19,9 @@ function crearPrismaConAdaptador() {
 		allowPublicKeyRetrieval: true,
 	});
 
-	return new PrismaClient({ adapter: adaptador });
+	return new PrismaClientGenerado({ adapter: adaptador });
 }
 
-export const prisma = usarAdaptadorMariaDb ? crearPrismaConAdaptador() : new PrismaClient({});
+export const prisma = (
+	usarAdaptadorMariaDb ? crearPrismaConAdaptador() : new PrismaClientEstandar()
+) as unknown as PrismaClientGenerado;
