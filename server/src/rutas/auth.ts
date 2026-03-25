@@ -10,6 +10,15 @@ import { verificarJWT } from '../middleware/autenticacion.js';
 const REFRESH_EXPIRA = env.JWT_REFRESH_EXPIRA_EN;
 const COOKIE_REFRESH = 'refresh_token';
 
+function obtenerOpcionesCookieRefresh() {
+  return {
+    httpOnly: true,
+    secure: env.ENTORNO === 'production',
+    sameSite: env.ENTORNO === 'production' ? 'none' : 'strict',
+    path: '/auth/refrescar',
+  } as const;
+}
+
 const REGEX_CONTRASENA = /^(?=.*[A-Z])(?=.*[0-9]).{8,}$/;
 const esquemaCambioEmail = z.object({
   emailNuevo: z.string().trim().email('Ingresa un correo válido'),
@@ -543,12 +552,7 @@ export async function rutasAuth(servidor: FastifyInstance): Promise<void> {
    * POST /auth/cerrar-sesion
    */
   servidor.post('/auth/cerrar-sesion', async (_solicitud, respuesta) => {
-    respuesta.clearCookie(COOKIE_REFRESH, {
-      httpOnly: true,
-      secure: env.ENTORNO === 'production',
-      sameSite: 'strict',
-      path: '/auth/refrescar',
-    });
+    respuesta.clearCookie(COOKIE_REFRESH, obtenerOpcionesCookieRefresh());
     return respuesta.send({ datos: { mensaje: 'Sesión cerrada' } });
   });
 }
@@ -572,10 +576,7 @@ async function emitirTokens(
   const refreshToken = servidor.jwt.sign(payload, { expiresIn: REFRESH_EXPIRA });
 
   respuesta.setCookie(COOKIE_REFRESH, refreshToken, {
-    httpOnly: true,
-    secure: env.ENTORNO === 'production',
-    sameSite: 'strict',
-    path: '/auth/refrescar',
+    ...obtenerOpcionesCookieRefresh(),
     maxAge: 60 * 60 * 24 * 7,
   });
 
