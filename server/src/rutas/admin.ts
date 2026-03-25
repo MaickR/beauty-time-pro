@@ -36,7 +36,15 @@ const esquemaCrearSalonAdmin = z.object({
     descansoFin: z.string().optional(),
   })).optional().default([]),
   depuracionHasta: z
-    .enum(['antes_hash', 'despues_hash', 'despues_columnas', 'despues_estudio', 'despues_usuario'])
+    .enum([
+      'antes_hash',
+      'despues_hash',
+      'despues_columnas',
+      'despues_estudio',
+      'despues_usuario',
+      'despues_lectura_estudio',
+      'despues_pago',
+    ])
     .optional(),
 });
 
@@ -1109,6 +1117,11 @@ export async function rutasAdmin(servidor: FastifyInstance): Promise<void> {
           if (!estudio) {
             throw new Error('No se pudo recuperar el salon recien creado');
           }
+          if (depuracionHasta === 'despues_lectura_estudio') {
+            await eliminarRegistrosCompat('usuarios', 'id', usuarioCreadoId).catch(() => undefined);
+            await eliminarRegistrosCompat('estudios', 'id', estudioCreadoId).catch(() => undefined);
+            return respuesta.send({ datos: { paso: 'despues_lectura_estudio', estudio } });
+          }
 
           if (personal.length > 0) {
             for (const persona of personal) {
@@ -1141,6 +1154,12 @@ export async function rutasAdmin(servidor: FastifyInstance): Promise<void> {
               ...(columnasPagos.has('tipo') && { tipo: 'suscripcion' }),
               ...(columnasPagos.has('referencia') && { referencia: 'alta_inicial' }),
             });
+            if (depuracionHasta === 'despues_pago') {
+              await eliminarRegistrosCompat('pagos', 'estudioId', estudioCreadoId).catch(() => undefined);
+              await eliminarRegistrosCompat('usuarios', 'id', usuarioCreadoId).catch(() => undefined);
+              await eliminarRegistrosCompat('estudios', 'id', estudioCreadoId).catch(() => undefined);
+              return respuesta.send({ datos: { paso: 'despues_pago' } });
+            }
           } catch (error) {
             solicitud.log.warn({ err: error, estudioId: estudioCreadoId }, 'No se pudo registrar el pago inicial del salon');
           }
