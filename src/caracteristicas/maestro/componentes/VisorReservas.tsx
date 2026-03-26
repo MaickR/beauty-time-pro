@@ -505,8 +505,8 @@ export function VisorReservas({ estudio, reservas, onCerrar }: PropsVisorReserva
                 </div>
               </section>
 
-              <aside className="rounded-4xl border border-slate-200 bg-white p-6 shadow-sm">
-                <div className="mb-4 flex items-center justify-between gap-2">
+              <aside className="order-1 rounded-4xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6 xl:order-0">
+                <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                   <div>
                     <p className="inline-flex items-center gap-2 text-[11px] font-black uppercase tracking-[0.2em] text-slate-500">
                       <QrCode className="h-4 w-4" /> QR descargable
@@ -519,18 +519,18 @@ export function VisorReservas({ estudio, reservas, onCerrar }: PropsVisorReserva
                     type="button"
                     onClick={descargarQr}
                     disabled={!qrReserva}
-                    className="inline-flex items-center gap-2 rounded-full bg-slate-950 px-4 py-2 text-xs font-black uppercase text-white disabled:opacity-50"
+                    className="inline-flex items-center justify-center gap-2 rounded-full bg-slate-950 px-4 py-2 text-xs font-black uppercase text-white disabled:opacity-50"
                   >
                     <Download className="h-4 w-4" /> Descargar
                   </button>
                 </div>
 
-                <div className="flex min-h-70 items-center justify-center rounded-4xl border border-dashed border-slate-300 bg-slate-50 p-4">
+                <div className="flex min-h-56 items-center justify-center rounded-4xl border border-dashed border-slate-300 bg-slate-50 p-4 sm:min-h-70">
                   {qrReserva ? (
                     <img
                       src={qrReserva}
                       alt="QR de acceso a reservas"
-                      className="w-full max-w-60"
+                      className="w-full max-w-44 sm:max-w-60"
                     />
                   ) : (
                     <span className="text-sm font-semibold text-slate-400">Generando QR...</span>
@@ -538,11 +538,11 @@ export function VisorReservas({ estudio, reservas, onCerrar }: PropsVisorReserva
                 </div>
 
                 <div className="mt-4 rounded-3xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-700">
-                  <p>
+                  <p className="break-all">
                     <span className="font-black text-slate-900">ClaveClientes:</span>{' '}
                     {estudio.clientKey}
                   </p>
-                  <p className="mt-2 text-xs font-medium text-slate-500">
+                  <p className="mt-2 break-all text-xs font-medium text-slate-500">
                     La reserva pública usa {enlaceReservas} y respeta el entorno actual.
                   </p>
                 </div>

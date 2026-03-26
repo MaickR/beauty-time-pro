@@ -161,14 +161,14 @@ export function ModalEstudio({
         role="dialog"
         aria-modal="true"
         aria-labelledby="modal-estudio-titulo"
-        className="fixed inset-0 bg-black/80 backdrop-blur-xl z-60 flex items-center justify-center p-4"
+        className="fixed inset-0 z-60 flex items-start justify-center overflow-y-auto bg-black/80 p-3 backdrop-blur-xl sm:items-center sm:p-4"
       >
-        <div className="bg-white w-full max-w-3xl rounded-[3rem] overflow-hidden flex flex-col shadow-2xl">
-          <div className="p-8 border-b flex justify-between items-center bg-slate-50">
-            <div>
+        <div className="flex max-h-[calc(100vh-1.5rem)] w-full max-w-3xl flex-col overflow-hidden rounded-[2rem] bg-white shadow-2xl sm:max-h-[90vh] sm:rounded-[3rem]">
+          <div className="flex items-start justify-between gap-4 border-b bg-slate-50 p-4 sm:items-center sm:p-8">
+            <div className="min-w-0">
               <h2
                 id="modal-estudio-titulo"
-                className="text-2xl font-black italic uppercase tracking-tighter"
+                className="text-xl font-black italic uppercase tracking-tighter sm:text-2xl"
               >
                 Registro completado
               </h2>
@@ -182,9 +182,50 @@ export function ModalEstudio({
             </button>
           </div>
 
-          <div className="grid gap-8 p-8 md:grid-cols-[1.15fr_0.85fr]">
-            <div className="space-y-6">
-              <section className="rounded-4xl border border-slate-200 bg-slate-50 p-6">
+          <div className="grid flex-1 gap-5 overflow-y-auto p-4 sm:p-6 md:grid-cols-[0.85fr_1.15fr] md:gap-8 md:p-8">
+            <aside className="order-1 rounded-[2rem] border border-slate-200 bg-white p-5 shadow-sm sm:p-6 md:order-2">
+              <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                <div>
+                  <p className="text-[11px] font-black uppercase tracking-[0.2em] text-slate-500">
+                    QR descargable
+                  </p>
+                  <p className="mt-1 text-sm font-medium text-slate-500">
+                    El QR abre la reserva pública del salón.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={descargarQr}
+                  disabled={!qrReserva}
+                  className="inline-flex items-center justify-center gap-2 rounded-full bg-slate-950 px-4 py-2 text-xs font-black uppercase text-white disabled:opacity-50"
+                >
+                  <Download className="h-4 w-4" /> Descargar
+                </button>
+              </div>
+
+              <div className="flex min-h-56 items-center justify-center rounded-[2rem] border border-dashed border-slate-300 bg-slate-50 p-4 sm:min-h-70">
+                {qrReserva ? (
+                  <img
+                    src={qrReserva}
+                    alt="QR de acceso a reservas"
+                    className="w-full max-w-44 sm:max-w-60"
+                  />
+                ) : (
+                  <span className="text-sm font-semibold text-slate-400">Generando QR...</span>
+                )}
+              </div>
+
+              <button
+                type="button"
+                onClick={onCerrar}
+                className="mt-5 w-full rounded-3xl bg-pink-600 px-4 py-4 text-xs font-black uppercase text-white shadow-xl transition-colors hover:bg-pink-700 sm:mt-6"
+              >
+                Cerrar confirmación
+              </button>
+            </aside>
+
+            <div className="order-2 space-y-5 sm:space-y-6 md:order-1">
+              <section className="rounded-[2rem] border border-slate-200 bg-slate-50 p-5 sm:p-6">
                 <div className="mb-4 flex items-center gap-2 text-[11px] font-black uppercase tracking-[0.22em] text-pink-600">
                   <Mail className="h-4 w-4" /> Acceso del dueño
                 </div>
@@ -204,7 +245,7 @@ export function ModalEstudio({
                 </div>
 
                 <div className="mt-5 rounded-2xl border border-slate-200 bg-white p-4">
-                  <div className="mb-2 flex items-center justify-between gap-3">
+                  <div className="mb-2 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                     <span className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-500">
                       Contraseña inicial
                     </span>
@@ -217,8 +258,8 @@ export function ModalEstudio({
                       {copiado === 'contrasena' ? 'Copiada' : 'Copiar'}
                     </button>
                   </div>
-                  <div className="flex items-center justify-between gap-3 rounded-2xl bg-slate-950 px-4 py-3">
-                    <code className="font-mono text-sm font-black tracking-[0.25em] text-emerald-300">
+                  <div className="rounded-2xl bg-slate-950 px-4 py-3">
+                    <code className="block break-all font-mono text-xs font-black tracking-[0.16em] text-emerald-300 sm:text-sm sm:tracking-[0.25em]">
                       {confirmacionAlta.contrasenaDueno}
                     </code>
                   </div>
@@ -229,13 +270,13 @@ export function ModalEstudio({
                 </div>
               </section>
 
-              <section className="rounded-4xl border border-slate-900 bg-slate-950 p-6 text-white">
+              <section className="rounded-[2rem] border border-slate-900 bg-slate-950 p-5 text-white sm:p-6">
                 <div className="mb-4 flex items-center gap-2 text-[11px] font-black uppercase tracking-[0.22em] text-pink-400">
                   <KeyRound className="h-4 w-4" /> Acceso público a reservas
                 </div>
                 <div className="space-y-4">
                   <div className="rounded-2xl border border-slate-800 bg-slate-900 px-4 py-4">
-                    <div className="mb-2 flex items-center justify-between gap-3">
+                    <div className="mb-2 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                       <span className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">
                         ClaveClientes
                       </span>
@@ -250,13 +291,13 @@ export function ModalEstudio({
                         {copiado === 'clave-clientes' ? 'Copiada' : 'Copiar'}
                       </button>
                     </div>
-                    <code className="block font-mono text-xl font-black tracking-[0.25em] text-pink-300">
+                    <code className="block break-all font-mono text-base font-black tracking-[0.14em] text-pink-300 sm:text-xl sm:tracking-[0.25em]">
                       {confirmacionAlta.claveClientes}
                     </code>
                   </div>
 
                   <div className="rounded-2xl border border-slate-800 bg-slate-900 px-4 py-4">
-                    <div className="mb-2 flex items-center justify-between gap-3">
+                    <div className="mb-2 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                       <span className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">
                         URL para compartir
                       </span>
@@ -276,43 +317,6 @@ export function ModalEstudio({
                 </div>
               </section>
             </div>
-
-            <aside className="rounded-4xl border border-slate-200 bg-white p-6 shadow-sm">
-              <div className="mb-4 flex items-center justify-between gap-2">
-                <div>
-                  <p className="text-[11px] font-black uppercase tracking-[0.2em] text-slate-500">
-                    QR descargable
-                  </p>
-                  <p className="mt-1 text-sm font-medium text-slate-500">
-                    El QR abre la reserva pública del salón.
-                  </p>
-                </div>
-                <button
-                  type="button"
-                  onClick={descargarQr}
-                  disabled={!qrReserva}
-                  className="inline-flex items-center gap-2 rounded-full bg-slate-950 px-4 py-2 text-xs font-black uppercase text-white disabled:opacity-50"
-                >
-                  <Download className="h-4 w-4" /> Descargar
-                </button>
-              </div>
-
-              <div className="flex min-h-70 items-center justify-center rounded-4xl border border-dashed border-slate-300 bg-slate-50 p-4">
-                {qrReserva ? (
-                  <img src={qrReserva} alt="QR de acceso a reservas" className="w-full max-w-60" />
-                ) : (
-                  <span className="text-sm font-semibold text-slate-400">Generando QR...</span>
-                )}
-              </div>
-
-              <button
-                type="button"
-                onClick={onCerrar}
-                className="mt-6 w-full rounded-3xl bg-pink-600 px-4 py-4 text-xs font-black uppercase text-white shadow-xl transition-colors hover:bg-pink-700"
-              >
-                Cerrar confirmación
-              </button>
-            </aside>
           </div>
         </div>
       </div>
