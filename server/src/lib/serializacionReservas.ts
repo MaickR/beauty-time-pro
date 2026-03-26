@@ -186,6 +186,17 @@ export function serializarReservaApi(reserva: ReservaConServicios) {
 
 export const incluirServiciosDetalleReserva = {
   serviciosDetalle: {
+    select: {
+      id: true,
+      nombre: true,
+      duracion: true,
+      precio: true,
+      categoria: true,
+      orden: true,
+      estado: true,
+      motivo: true,
+      creadoEn: true,
+    },
     orderBy: { orden: 'asc' },
   },
 } satisfies Prisma.ReservaInclude;
@@ -196,6 +207,17 @@ export const incluirReservaConRelaciones = {
   cliente: true,
   clienteApp: true,
   serviciosDetalle: {
+    select: {
+      id: true,
+      nombre: true,
+      duracion: true,
+      precio: true,
+      categoria: true,
+      orden: true,
+      estado: true,
+      motivo: true,
+      creadoEn: true,
+    },
     orderBy: { orden: 'asc' },
   },
 } satisfies Prisma.ReservaInclude;
