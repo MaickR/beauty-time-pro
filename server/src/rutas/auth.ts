@@ -478,14 +478,53 @@ export async function rutasAuth(servidor: FastifyInstance): Promise<void> {
 
       let esMaestroTotal = false;
       let permisos = crearPermisosVacios();
+      const payloadActualizado: {
+        sub: string;
+        rol: string;
+        estudioId: string | null;
+        nombre: string;
+        email: string;
+        personalId?: string;
+        forzarCambioContrasena?: boolean;
+        esMaestroTotal?: boolean;
+        permisos?: PermisosJWT;
+      } = {
+        sub: payload.sub,
+        rol: payload.rol,
+        estudioId: payload.estudioId,
+        nombre: payload.nombre ?? '',
+        email: payload.email ?? '',
+        ...(payload.personalId !== undefined && { personalId: payload.personalId }),
+        ...(payload.forzarCambioContrasena !== undefined && {
+          forzarCambioContrasena: payload.forzarCambioContrasena,
+        }),
+      };
 
       if (payload.rol === 'empleado') {
         const acceso = await prisma.empleadoAcceso.findUnique({
           where: { id: payload.sub },
-          select: { activo: true },
+          select: {
+            activo: true,
+            email: true,
+            personalId: true,
+            forzarCambioContrasena: true,
+            personal: {
+              select: {
+                estudioId: true,
+                nombre: true,
+              },
+            },
+          },
         });
         if (!acceso) return respuesta.code(401).send({ error: 'No autenticado' });
         if (!acceso.activo) return respuesta.code(403).send({ error: 'Tu acceso ha sido desactivado. Contacta al dueño del salón.' });
+        if (!acceso.personal) return respuesta.code(401).send({ error: 'No autenticado' });
+
+        payloadActualizado.estudioId = acceso.personal.estudioId;
+        payloadActualizado.nombre = acceso.personal.nombre;
+        payloadActualizado.email = acceso.email;
+        payloadActualizado.personalId = acceso.personalId;
+        payloadActualizado.forzarCambioContrasena = acceso.forzarCambioContrasena ?? false;
       }
 
       if (payload.rol === 'maestro') {
@@ -526,22 +565,15 @@ export async function rutasAuth(servidor: FastifyInstance): Promise<void> {
               suspenderSalones: permisosActuales.suspenderSalones,
             }
           : permisos;
+
+        payloadActualizado.esMaestroTotal = esMaestroTotal;
+        payloadActualizado.permisos = permisos;
       }
 
-      const accessToken = servidor.jwt.sign({
-        sub: payload.sub,
-        rol: payload.rol,
-        estudioId: payload.estudioId,
-        nombre: payload.nombre ?? '',
-        email: payload.email ?? '',
-        esMaestroTotal,
-        permisos,
-        ...(payload.personalId !== undefined && { personalId: payload.personalId }),
-        ...(payload.forzarCambioContrasena !== undefined && {
-          forzarCambioContrasena: payload.forzarCambioContrasena,
-        }),
-      });
-      return respuesta.send({ datos: { token: accessToken, rol: payload.rol, estudioId: payload.estudioId, nombre: payload.nombre ?? '', email: payload.email ?? '', esMaestroTotal, permisos, personalId: payload.personalId ?? null, forzarCambioContrasena: payload.forzarCambioContrasena ?? false } });
+      payloadActualizado.esMaestroTotal = esMaestroTotal;
+      payloadActualizado.permisos = permisos;
+
+      return emitirTokens(servidor, respuesta, payloadActualizado);
     } catch {
       return respuesta.code(401).send({ error: 'Sesión expirada. Inicia sesión nuevamente.' });
     }

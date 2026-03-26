@@ -194,6 +194,16 @@ export function PaginaAgendaEmpleado() {
     setFechaSeleccionada(nuevaFecha);
   };
 
+  const irAHoy = () => {
+    const ahora = new Date();
+    setMesVisible(ahora);
+    setFechaSeleccionada(fechaHoy);
+  };
+
+  const horarioInicio = perfil?.horaInicio ?? perfil?.estudio.horarioApertura ?? '—';
+  const horarioFin = perfil?.horaFin ?? perfil?.estudio.horarioCierre ?? '—';
+  const estaEnHoy = fechaSeleccionada === fechaHoy;
+
   return (
     <div className="min-h-screen bg-slate-50 pb-20 md:pb-0">
       <NavegacionEmpleado />
@@ -209,8 +219,18 @@ export function PaginaAgendaEmpleado() {
                 {perfil?.nombre ?? 'Mi agenda'}
               </h1>
             </div>
-            <div className="rounded-2xl bg-slate-100 px-4 py-2 text-sm font-bold text-slate-600">
-              {perfil?.horaInicio ?? '—'} a {perfil?.horaFin ?? '—'}
+            <div className="flex items-center gap-3">
+              <button
+                type="button"
+                onClick={irAHoy}
+                disabled={estaEnHoy}
+                className="rounded-2xl border border-pink-200 bg-pink-50 px-4 py-2 text-sm font-bold text-pink-700 transition hover:bg-pink-100 disabled:cursor-default disabled:opacity-60"
+              >
+                Hoy
+              </button>
+              <div className="rounded-2xl bg-slate-100 px-4 py-2 text-sm font-bold text-slate-600">
+                {horarioInicio} a {horarioFin}
+              </div>
             </div>
           </div>
 

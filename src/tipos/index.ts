@@ -331,5 +331,8 @@ export interface PerfilEmpleado {
     logoUrl: string | null;
     direccion: string | null;
     telefono: string;
+    horarioApertura: string | null;
+    horarioCierre: string | null;
+    diasAtencion: string | null;
   };
 }

@@ -14,6 +14,59 @@ import { usarTiendaAuth } from '../../tienda/tiendaAuth';
 
 const DIAS_NOMBRES = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'];
 
+function normalizarTexto(valor: string): string {
+  return valor
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .trim();
+}
+
+function obtenerDiasTrabajoNormalizados(
+  diasTrabajo: unknown,
+  diasAtencion: string | null | undefined,
+): number[] {
+  if (Array.isArray(diasTrabajo)) {
+    const dias = diasTrabajo
+      .map((dia) => {
+        if (typeof dia === 'number' && dia >= 0 && dia <= 6) return dia;
+        if (typeof dia === 'string') {
+          const convertido = Number(dia);
+          return Number.isInteger(convertido) && convertido >= 0 && convertido <= 6
+            ? convertido
+            : null;
+        }
+        return null;
+      })
+      .filter((dia): dia is number => dia !== null);
+
+    if (dias.length > 0) {
+      return dias;
+    }
+  }
+
+  if (!diasAtencion) {
+    return [];
+  }
+
+  const mapaDias = new Map<string, number>([
+    ['domingo', 0],
+    ['lunes', 1],
+    ['martes', 2],
+    ['miercoles', 3],
+    ['miércoles', 3],
+    ['jueves', 4],
+    ['viernes', 5],
+    ['sabado', 6],
+    ['sábado', 6],
+  ]);
+
+  return diasAtencion
+    .split(',')
+    .map((dia) => mapaDias.get(normalizarTexto(dia)))
+    .filter((dia): dia is number => dia !== undefined);
+}
+
 const esquemaCambioContrasena = z
   .object({
     contrasenaActual: z.string().min(1, 'Ingresa tu contraseña actual'),
@@ -118,8 +171,13 @@ export function PaginaPerfilEmpleado() {
 
   const perfil = consultaPerfil.data;
   const fortaleza = evaluarFortaleza(formulario.watch('contrasenaNueva'));
-  const diasTrabajo = perfil?.diasTrabajo ?? [];
+  const diasTrabajo = obtenerDiasTrabajoNormalizados(
+    perfil?.diasTrabajo,
+    perfil?.estudio.diasAtencion,
+  );
   const inicial = perfil?.nombre.slice(0, 1).toUpperCase() ?? 'E';
+  const horarioInicio = perfil?.horaInicio ?? perfil?.estudio.horarioApertura ?? '—';
+  const horarioFin = perfil?.horaFin ?? perfil?.estudio.horarioCierre ?? '—';
 
   return (
     <div className="min-h-screen bg-slate-50 pb-20 md:pb-0">
@@ -215,9 +273,7 @@ export function PaginaPerfilEmpleado() {
                       {dia}
                     </span>
                     <span className={activo ? 'text-slate-700' : 'text-slate-400'}>
-                      {activo
-                        ? `${perfil.horaInicio ?? '—'} - ${perfil.horaFin ?? '—'}`
-                        : 'Descanso'}
+                      {activo ? `${horarioInicio} - ${horarioFin}` : 'Descanso'}
                     </span>
                   </div>
                 );
