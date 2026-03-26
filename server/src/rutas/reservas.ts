@@ -3,6 +3,7 @@ import bcrypt from 'bcrypt';
 import crypto from 'crypto';
 import { z } from 'zod';
 import type { Prisma } from '../generated/prisma/client.js';
+import { asegurarColumnaTabla } from '../lib/compatibilidadEsquema.js';
 import { canjearRecompensaFidelidad, obtenerConfigFidelidad, registrarVisitaFidelidad, revertirVisitaFidelidad } from '../lib/fidelidad.js';
 import {
   calcularResumenServicios,
@@ -25,6 +26,10 @@ import {
   notificarNuevaCita,
   obtenerReservaConRelacionesPorId,
 } from '../utils/notificarReserva.js';
+
+async function asegurarColumnaPinCancelacion(): Promise<boolean> {
+  return asegurarColumnaTabla('estudios', 'pinCancelacionHash', 'VARCHAR(191) NULL');
+}
 
 function serializarServiciosResumen(servicios: ReturnType<typeof obtenerServiciosNormalizados>): Prisma.InputJsonValue {
   return servicios.map((servicio) => ({
@@ -952,6 +957,11 @@ export async function rutasReservas(servidor: FastifyInstance): Promise<void> {
       if (!estadosValidos.includes(estado)) {
         return respuesta.code(400).send({ error: 'Estado inválido', campos: { estado: 'pending | confirmed | completed | cancelled' } });
       }
+      const columnaDisponible = await asegurarColumnaPinCancelacion();
+      if (!columnaDisponible) {
+        return respuesta.code(503).send({ error: 'No se pudo validar el PIN de cancelación en este momento' });
+      }
+
       const reservaExistente = await prisma.reserva.findUnique({
         where: { id: solicitud.params.id },
         select: {
@@ -1092,6 +1102,11 @@ export async function rutasReservas(servidor: FastifyInstance): Promise<void> {
           error: 'Estado inválido',
           campos: { estado: 'pending | confirmed | completed | cancelled | no_show' },
         });
+      }
+
+      const columnaDisponible = await asegurarColumnaPinCancelacion();
+      if (!columnaDisponible) {
+        return respuesta.code(503).send({ error: 'No se pudo validar el PIN de cancelación en este momento' });
       }
 
       const reservaExistente = await prisma.reserva.findUnique({

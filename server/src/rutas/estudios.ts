@@ -3,7 +3,7 @@ import type { Prisma } from '../generated/prisma/client.js';
 import bcrypt from 'bcrypt';
 import { z } from 'zod';
 import { resolverCategoriasSalon } from '../lib/categoriasSalon.js';
-import { construirSelectDesdeColumnas, obtenerColumnasTabla, obtenerTablasDisponibles } from '../lib/compatibilidadEsquema.js';
+import { asegurarColumnaTabla, construirSelectDesdeColumnas, obtenerColumnasTabla, obtenerTablasDisponibles } from '../lib/compatibilidadEsquema.js';
 import { env } from '../lib/env.js';
 import { obtenerSlotsDisponiblesBackend } from '../lib/programacion.js';
 import { prisma } from '../prismaCliente.js';
@@ -122,6 +122,10 @@ async function verificarAccesoDuenoAEstudio(usuarioId: string, estudioId: string
   });
 
   return Boolean(estudio);
+}
+
+async function asegurarColumnaPinCancelacion(): Promise<boolean> {
+  return asegurarColumnaTabla('estudios', 'pinCancelacionHash', 'VARCHAR(191) NULL');
 }
 
 function esErrorCompatibilidadEstudio(error: unknown): boolean {
@@ -704,6 +708,11 @@ export async function rutasEstudios(servidor: FastifyInstance): Promise<void> {
       }
       if (pin !== confirmacion) {
         return respuesta.code(400).send({ error: 'El PIN y la confirmación no coinciden' });
+      }
+
+      const columnaDisponible = await asegurarColumnaPinCancelacion();
+      if (!columnaDisponible) {
+        return respuesta.code(503).send({ error: 'No se pudo habilitar el PIN de cancelación en este momento' });
       }
 
       const pinCancelacionHash = await bcrypt.hash(pin, 12);

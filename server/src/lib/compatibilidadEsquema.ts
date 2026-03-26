@@ -46,6 +46,32 @@ export function construirSelectDesdeColumnas(
   );
 }
 
+export async function asegurarColumnaTabla(
+  tabla: string,
+  columna: string,
+  definicionSql: string,
+): Promise<boolean> {
+  const columnas = await obtenerColumnasTabla(tabla);
+  if (columnas.has(columna)) {
+    return true;
+  }
+
+  try {
+    await prisma.$executeRawUnsafe(
+      `ALTER TABLE \`${tabla}\` ADD COLUMN \`${columna}\` ${definicionSql}`,
+    );
+  } catch (error) {
+    const mensaje = error instanceof Error ? error.message : '';
+    if (!/Duplicate column name|already exists/i.test(mensaje)) {
+      throw error;
+    }
+  }
+
+  limpiarCacheCompatibilidadEsquema();
+  const columnasActualizadas = await obtenerColumnasTabla(tabla);
+  return columnasActualizadas.has(columna);
+}
+
 export function limpiarCacheCompatibilidadEsquema(): void {
   cacheColumnas.clear();
   cacheTablas = null;
