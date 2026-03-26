@@ -1,4 +1,5 @@
 import type { Prisma, PrismaClient } from '../generated/prisma/client.js';
+import { obtenerColumnasTabla } from './compatibilidadEsquema.js';
 import { prisma } from '../prismaCliente.js';
 import { normalizarPlanEstudio } from './planes.js';
 
@@ -37,6 +38,11 @@ export async function obtenerConfigFidelidad(
   tx?: ClientePrismaTransaccional,
 ): Promise<ConfigFidelidadPorDefecto> {
   const cliente = obtenerClientePrisma(tx);
+  const columnasEstudios = await obtenerColumnasTabla('estudios');
+  if (!columnasEstudios.has('plan')) {
+    return configFidelidadPorDefecto(estudioId);
+  }
+
   const estudio = await cliente.estudio.findUnique({
     where: { id: estudioId },
     select: { plan: true },

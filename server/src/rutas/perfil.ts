@@ -3,6 +3,9 @@ import fs from 'fs';
 import path from 'path';
 import sharp from 'sharp';
 import { z } from 'zod';
+import type { Prisma } from '../generated/prisma/client.js';
+import { construirSelectDesdeColumnas, obtenerColumnasTabla } from '../lib/compatibilidadEsquema.js';
+import { normalizarPlanEstudio } from '../lib/planes.js';
 import { prisma } from '../prismaCliente.js';
 import { verificarJWT } from '../middleware/autenticacion.js';
 import { detectarTipoImagen } from '../utils/validarImagen.js';
@@ -29,6 +32,32 @@ function dirLogos(): string {
   return path.join(process.cwd(), 'uploads', 'logos');
 }
 
+function serializarPerfilCompat(
+  estudio: Record<string, unknown> & { id: string },
+): {
+  id: string;
+  nombre: string;
+  descripcion: string | null;
+  direccion: string | null;
+  telefono: string;
+  emailContacto: string | null;
+  plan: 'STANDARD' | 'PRO';
+  colorPrimario: string;
+  logoUrl: string | null;
+} {
+  return {
+    id: estudio.id,
+    nombre: typeof estudio.nombre === 'string' ? estudio.nombre : '',
+    descripcion: typeof estudio.descripcion === 'string' ? estudio.descripcion : null,
+    direccion: typeof estudio.direccion === 'string' ? estudio.direccion : null,
+    telefono: typeof estudio.telefono === 'string' ? estudio.telefono : '',
+    emailContacto: typeof estudio.emailContacto === 'string' ? estudio.emailContacto : null,
+    plan: normalizarPlanEstudio(typeof estudio.plan === 'string' ? estudio.plan : null),
+    colorPrimario: typeof estudio.colorPrimario === 'string' ? estudio.colorPrimario : '#EC4899',
+    logoUrl: typeof estudio.logoUrl === 'string' ? estudio.logoUrl : null,
+  };
+}
+
 export async function rutasPerfil(servidor: FastifyInstance): Promise<void> {
   // GET /estudio/:id/perfil
   servidor.get<{ Params: { id: string } }>(
@@ -41,23 +70,26 @@ export async function rutasPerfil(servidor: FastifyInstance): Promise<void> {
         return respuesta.code(403).send({ error: 'Sin permisos para esta acción' });
       }
 
+      const columnasEstudios = await obtenerColumnasTabla('estudios');
+      const selectPerfil = construirSelectDesdeColumnas(columnasEstudios, [
+        'id',
+        'nombre',
+        'descripcion',
+        'direccion',
+        'telefono',
+        'emailContacto',
+        'plan',
+        'colorPrimario',
+        'logoUrl',
+      ]) as Prisma.EstudioSelect;
+
       const estudio = await prisma.estudio.findUnique({
         where: { id },
-        select: {
-          id: true,
-          nombre: true,
-          descripcion: true,
-          direccion: true,
-          telefono: true,
-          emailContacto: true,
-          plan: true,
-          colorPrimario: true,
-          logoUrl: true,
-        },
+        select: selectPerfil,
       });
       if (!estudio) return respuesta.code(404).send({ error: 'Estudio no encontrado' });
 
-      return respuesta.send({ datos: estudio });
+      return respuesta.send({ datos: serializarPerfilCompat(estudio as Record<string, unknown> & { id: string }) });
     },
   );
 
@@ -89,30 +121,35 @@ export async function rutasPerfil(servidor: FastifyInstance): Promise<void> {
 
       const { nombre, descripcion, direccion, telefono, emailContacto, colorPrimario } = resultado.data;
 
+      const columnasEstudios = await obtenerColumnasTabla('estudios');
+      const datosActualizacion: Prisma.EstudioUpdateInput = {
+        ...(nombre !== undefined && columnasEstudios.has('nombre') && { nombre }),
+        ...(descripcion !== undefined && columnasEstudios.has('descripcion') && { descripcion }),
+        ...(direccion !== undefined && columnasEstudios.has('direccion') && { direccion }),
+        ...(telefono !== undefined && columnasEstudios.has('telefono') && { telefono }),
+        ...(emailContacto !== undefined && columnasEstudios.has('emailContacto') && { emailContacto }),
+        ...(colorPrimario !== undefined && columnasEstudios.has('colorPrimario') && { colorPrimario }),
+      };
+
+      const selectPerfil = construirSelectDesdeColumnas(columnasEstudios, [
+        'id',
+        'nombre',
+        'descripcion',
+        'direccion',
+        'telefono',
+        'emailContacto',
+        'plan',
+        'colorPrimario',
+        'logoUrl',
+      ]) as Prisma.EstudioSelect;
+
       const estudio = await prisma.estudio.update({
         where: { id },
-        data: {
-          ...(nombre !== undefined && { nombre }),
-          ...(descripcion !== undefined && { descripcion }),
-          ...(direccion !== undefined && { direccion }),
-          ...(telefono !== undefined && { telefono }),
-          ...(emailContacto !== undefined && { emailContacto }),
-          ...(colorPrimario !== undefined && { colorPrimario }),
-        },
-        select: {
-          id: true,
-          nombre: true,
-          descripcion: true,
-          direccion: true,
-          telefono: true,
-          emailContacto: true,
-          plan: true,
-          colorPrimario: true,
-          logoUrl: true,
-        },
+        data: datosActualizacion,
+        select: selectPerfil,
       });
 
-      return respuesta.send({ datos: estudio });
+      return respuesta.send({ datos: serializarPerfilCompat(estudio as Record<string, unknown> & { id: string }) });
     },
   );
 
