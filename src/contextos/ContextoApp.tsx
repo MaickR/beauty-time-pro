@@ -34,7 +34,7 @@ export function ProveedorContextoApp({ children }: PropsWithChildren) {
   const recargar = useCallback(() => setContador((c) => c + 1), []);
 
   useEffect(() => {
-    if (!usuario || rol !== 'maestro') return;
+    if (!usuario || (rol !== 'maestro' && rol !== 'dueno')) return;
 
     const refrescarAlEnfocar = () => setContador((valor) => valor + 1);
     const refrescarAlVisibilizar = () => {
@@ -42,7 +42,7 @@ export function ProveedorContextoApp({ children }: PropsWithChildren) {
         refrescarAlEnfocar();
       }
     };
-    const refrescoPeriodico = window.setInterval(refrescarAlEnfocar, 15000);
+    const refrescoPeriodico = window.setInterval(refrescarAlEnfocar, 5000);
 
     window.addEventListener('focus', refrescarAlEnfocar);
     document.addEventListener('visibilitychange', refrescarAlVisibilizar);
