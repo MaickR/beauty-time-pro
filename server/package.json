@@ -6,6 +6,7 @@
     "dev": "tsx watch src/index.ts",
     "build": "prisma generate && tsc",
     "start": "node dist/index.js",
+    "start:railway": "npm run db:deploy && npm run start",
     "start:prod": "node dist/index.js",
     "verificar-tipos": "tsc --noEmit",
     "db:migrate": "prisma migrate dev",
