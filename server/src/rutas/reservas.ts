@@ -3,7 +3,7 @@ import bcrypt from 'bcrypt';
 import crypto from 'crypto';
 import { z } from 'zod';
 import type { Prisma } from '../generated/prisma/client.js';
-import { asegurarColumnaTabla } from '../lib/compatibilidadEsquema.js';
+import { asegurarColumnaTabla, limpiarCacheCompatibilidadEsquema, obtenerTablasDisponibles } from '../lib/compatibilidadEsquema.js';
 import { canjearRecompensaFidelidad, obtenerConfigFidelidad, registrarVisitaFidelidad, revertirVisitaFidelidad } from '../lib/fidelidad.js';
 import {
   calcularResumenServicios,
@@ -29,6 +29,78 @@ import {
 
 async function asegurarColumnaPinCancelacion(): Promise<boolean> {
   return asegurarColumnaTabla('estudios', 'pinCancelacionHash', 'VARCHAR(191) NULL');
+}
+
+async function asegurarInfraestructuraServiciosDetalle(): Promise<boolean> {
+  const tablasDisponibles = await obtenerTablasDisponibles();
+
+  if (!tablasDisponibles.has('reserva_servicios')) {
+    try {
+      await prisma.$executeRawUnsafe(`
+        CREATE TABLE \`reserva_servicios\` (
+          \`id\` VARCHAR(191) NOT NULL,
+          \`reservaId\` VARCHAR(191) NOT NULL,
+          \`nombre\` VARCHAR(191) NOT NULL,
+          \`duracion\` INTEGER NOT NULL,
+          \`precio\` DOUBLE NOT NULL DEFAULT 0,
+          \`categoria\` VARCHAR(191) NULL,
+          \`orden\` INTEGER NOT NULL DEFAULT 0,
+          \`estado\` VARCHAR(191) NOT NULL DEFAULT 'pending',
+          \`motivo\` VARCHAR(191) NULL,
+          \`creadoEn\` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+          PRIMARY KEY (\`id\`),
+          INDEX \`reserva_servicios_reservaId_idx\`(\`reservaId\`),
+          CONSTRAINT \`reserva_servicios_reservaId_fkey\` FOREIGN KEY (\`reservaId\`) REFERENCES \`reservas\`(\`id\`) ON DELETE CASCADE ON UPDATE CASCADE
+        ) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci
+      `);
+    } catch (error) {
+      const mensaje = error instanceof Error ? error.message : '';
+      if (!/Table .* already exists/i.test(mensaje)) {
+        throw error;
+      }
+    }
+
+    limpiarCacheCompatibilidadEsquema();
+  }
+
+  return asegurarColumnaTabla('reserva_servicios', 'motivo', 'VARCHAR(191) NULL');
+}
+
+type ReservaCompatParaBackfill = {
+  id: string;
+  servicios: unknown;
+  estado: string;
+  serviciosDetalle?: Array<{ id?: string }>;
+};
+
+async function sincronizarServiciosDetalleFaltantes(
+  reservas: ReservaCompatParaBackfill[],
+): Promise<void> {
+  for (const reserva of reservas) {
+    if (Array.isArray(reserva.serviciosDetalle) && reserva.serviciosDetalle.length > 0) {
+      continue;
+    }
+
+    const serviciosNormalizados = normalizarServiciosEntrada(reserva.servicios);
+    if (serviciosNormalizados.length === 0) {
+      continue;
+    }
+
+    await prisma.reservaServicio.createMany({
+      data: serviciosNormalizados.map((servicio, indice) => ({
+        id: crypto.randomUUID(),
+        reservaId: reserva.id,
+        nombre: servicio.name,
+        duracion: servicio.duration,
+        precio: servicio.price,
+        categoria: servicio.category ?? null,
+        orden: servicio.order ?? indice,
+        estado: servicio.status ?? reserva.estado,
+        motivo: null,
+      })),
+      skipDuplicates: true,
+    });
+  }
 }
 
 function serializarServiciosResumen(servicios: ReturnType<typeof obtenerServiciosNormalizados>): Prisma.InputJsonValue {
@@ -494,10 +566,19 @@ export async function rutasReservas(servidor: FastifyInstance): Promise<void> {
 
       // Si se piden todas (sin pagina), devolver lista plana para compatibilidad
       if (!solicitud.query.pagina) {
-        const reservas = await buscarReservasCompat({
+        await asegurarInfraestructuraServiciosDetalle();
+
+        let reservas = await buscarReservasCompat({
           where,
           orderBy: [{ fecha: 'asc' }, { horaInicio: 'asc' }],
         });
+
+        await sincronizarServiciosDetalleFaltantes(reservas as ReservaCompatParaBackfill[]);
+        reservas = await buscarReservasCompat({
+          where,
+          orderBy: [{ fecha: 'asc' }, { horaInicio: 'asc' }],
+        });
+
         return respuesta.send({ datos: reservas.map(serializarReservaApi) });
       }
 
@@ -505,7 +586,9 @@ export async function rutasReservas(servidor: FastifyInstance): Promise<void> {
       const limite = Math.min(100, Math.max(1, parseInt(solicitud.query.limite ?? '20', 10)));
       const saltar = (pagina - 1) * limite;
 
-      const [total, reservas] = await Promise.all([
+      await asegurarInfraestructuraServiciosDetalle();
+
+      const [total, reservasIniciales] = await Promise.all([
         prisma.reserva.count({ where }),
         buscarReservasCompat({
           where,
@@ -514,6 +597,14 @@ export async function rutasReservas(servidor: FastifyInstance): Promise<void> {
           take: limite,
         }),
       ]);
+
+      await sincronizarServiciosDetalleFaltantes(reservasIniciales as ReservaCompatParaBackfill[]);
+      const reservas = await buscarReservasCompat({
+        where,
+        orderBy: [{ fecha: 'desc' }, { horaInicio: 'asc' }],
+        skip: saltar,
+        take: limite,
+      });
 
       return respuesta.send({
         datos: reservas.map(serializarReservaApi),
@@ -789,21 +880,26 @@ export async function rutasReservas(servidor: FastifyInstance): Promise<void> {
           finMin,
         });
 
-        try {
-          await tx.reservaServicio.createMany({
-            data: serviciosNormalizados.map((servicio, indice) => ({
-              reservaId: nuevaReservaId,
-              nombre: servicio.name,
-              duracion: servicio.duration,
-              precio: servicio.price,
-              categoria: servicio.category ?? null,
-              orden: servicio.order ?? indice,
-              estado: servicio.status ?? estadoReserva,
-            })),
-          });
-        } catch (error) {
-          if (!esErrorCompatibilidadServiciosDetalle(error)) {
-            throw error;
+        const infraestructuraServiciosDisponible = await asegurarInfraestructuraServiciosDetalle();
+        if (infraestructuraServiciosDisponible) {
+          try {
+            await tx.reservaServicio.createMany({
+              data: serviciosNormalizados.map((servicio, indice) => ({
+                id: crypto.randomUUID(),
+                reservaId: nuevaReservaId,
+                nombre: servicio.name,
+                duracion: servicio.duration,
+                precio: servicio.price,
+                categoria: servicio.category ?? null,
+                orden: servicio.order ?? indice,
+                estado: servicio.status ?? estadoReserva,
+                motivo: null,
+              })),
+            });
+          } catch (error) {
+            if (!esErrorCompatibilidadServiciosDetalle(error)) {
+              throw error;
+            }
           }
         }
 
@@ -961,6 +1057,8 @@ export async function rutasReservas(servidor: FastifyInstance): Promise<void> {
       if (!columnaDisponible) {
         return respuesta.code(503).send({ error: 'No se pudo validar el PIN de cancelación en este momento' });
       }
+
+      await asegurarInfraestructuraServiciosDetalle();
 
       const reservaExistente = await prisma.reserva.findUnique({
         where: { id: solicitud.params.id },
