@@ -88,6 +88,10 @@ function crearPermisosVacios(): PermisosSesionMaestro {
   };
 }
 
+function esClaveClientePublica(clave: string) {
+  return /CLI[0-9A-F]{6}$/.test(clave.trim().toUpperCase());
+}
+
 export function obtenerRutaPorRol(
   rol: RolUsuario | null,
   estudioActual: string | null,
@@ -210,54 +214,36 @@ export const usarTiendaAuth = create<EstadoAuth>((set) => ({
 
   iniciarSesionConClave: async (clave) => {
     try {
-      try {
-        const datosReserva = await buscarAccesoSalonPorClaveAPI(clave);
-        limpiarToken();
-        guardarSesionReserva(datosReserva);
-        set({
-          estudioActual: datosReserva.estudioId,
-          claveClienteActual: datosReserva.claveSalon,
-        });
-        return {
-          exito: true,
-          ruta: `/reservar/${datosReserva.claveSalon}`,
-          estudioId: datosReserva.estudioId,
-        };
-      } catch {
-        const datos = await iniciarSesionConClaveAPI(clave);
-        const rol = datos.rol as RolUsuario;
+      const claveNormalizada = clave.trim().toUpperCase();
 
-        if (rol === 'cliente') {
-          const claveNormalizada = clave.trim().toUpperCase();
-          guardarSesionReserva({
-            estudioId: datos.estudioId ?? '',
-            nombreSalon: datos.nombre,
-            claveSalon: claveNormalizada,
-          });
+      if (esClaveClientePublica(claveNormalizada)) {
+        try {
+          const datosReserva = await buscarAccesoSalonPorClaveAPI(claveNormalizada);
+          limpiarToken();
+          guardarSesionReserva(datosReserva);
           set({
-            usuario: {
-              rol,
-              estudioId: datos.estudioId,
-              nombre: datos.nombre,
-              email: datos.email,
-              esMaestroTotal: datos.esMaestroTotal,
-              permisos: datos.permisos ?? crearPermisosVacios(),
-              personalId: datos.personalId ?? null,
-              forzarCambioContrasena: datos.forzarCambioContrasena ?? false,
-            },
-            rol,
-            estudioActual: datos.estudioId,
-            claveClienteActual: claveNormalizada,
+            estudioActual: datosReserva.estudioId,
+            claveClienteActual: datosReserva.claveSalon,
           });
           return {
             exito: true,
-            ruta: `/reservar/${claveNormalizada}`,
-            estudioId: datos.estudioId,
+            ruta: `/reservar/${datosReserva.claveSalon}`,
+            estudioId: datosReserva.estudioId,
           };
+        } catch {
+          // Si la clave parece pública pero no existe, el backend de auth resolverá el error final.
         }
+      }
 
-        localStorage.setItem(CLAVE_SESION, '1');
-        limpiarSesionReserva();
+      const datos = await iniciarSesionConClaveAPI(claveNormalizada);
+      const rol = datos.rol as RolUsuario;
+
+      if (rol === 'cliente') {
+        guardarSesionReserva({
+          estudioId: datos.estudioId ?? '',
+          nombreSalon: datos.nombre,
+          claveSalon: claveNormalizada,
+        });
         set({
           usuario: {
             rol,
@@ -271,17 +257,40 @@ export const usarTiendaAuth = create<EstadoAuth>((set) => ({
           },
           rol,
           estudioActual: datos.estudioId,
-          claveClienteActual: null,
+          claveClienteActual: claveNormalizada,
         });
-
-        const ruta = obtenerRutaPorRol(
-          rol,
-          datos.estudioId,
-          null,
-          datos.forzarCambioContrasena ?? false,
-        );
-        return { exito: true, ruta, estudioId: datos.estudioId };
+        return {
+          exito: true,
+          ruta: `/reservar/${claveNormalizada}`,
+          estudioId: datos.estudioId,
+        };
       }
+
+      localStorage.setItem(CLAVE_SESION, '1');
+      limpiarSesionReserva();
+      set({
+        usuario: {
+          rol,
+          estudioId: datos.estudioId,
+          nombre: datos.nombre,
+          email: datos.email,
+          esMaestroTotal: datos.esMaestroTotal,
+          permisos: datos.permisos ?? crearPermisosVacios(),
+          personalId: datos.personalId ?? null,
+          forzarCambioContrasena: datos.forzarCambioContrasena ?? false,
+        },
+        rol,
+        estudioActual: datos.estudioId,
+        claveClienteActual: null,
+      });
+
+      const ruta = obtenerRutaPorRol(
+        rol,
+        datos.estudioId,
+        null,
+        datos.forzarCambioContrasena ?? false,
+      );
+      return { exito: true, ruta, estudioId: datos.estudioId };
     } catch (error) {
       const mensajeError =
         error instanceof TypeError ||

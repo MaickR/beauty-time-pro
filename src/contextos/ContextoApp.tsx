@@ -42,13 +42,11 @@ export function ProveedorContextoApp({ children }: PropsWithChildren) {
         refrescarAlEnfocar();
       }
     };
-    const refrescoPeriodico = window.setInterval(refrescarAlEnfocar, 5000);
 
     window.addEventListener('focus', refrescarAlEnfocar);
     document.addEventListener('visibilitychange', refrescarAlVisibilizar);
 
     return () => {
-      window.clearInterval(refrescoPeriodico);
       window.removeEventListener('focus', refrescarAlEnfocar);
       document.removeEventListener('visibilitychange', refrescarAlVisibilizar);
     };
