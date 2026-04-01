@@ -51,6 +51,7 @@ function mapearEstudioBackend(estudio: EstudioBackend): Estudio {
 
   return {
     id: (estudio['id'] as string) ?? '',
+    slug: (estudio['slug'] as string) ?? '',
     name: (estudio['nombre'] as string) ?? '',
     owner: (estudio['propietario'] as string) ?? '',
     phone: (estudio['telefono'] as string) ?? '',

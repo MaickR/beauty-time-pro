@@ -27,6 +27,7 @@ interface ReservaConServicios {
   marcaTinte: string | null;
   tonalidad: string | null;
   notasMenorEdad?: string | null;
+  observaciones?: string | null;
   clienteAppId?: string | null;
   tokenCancelacion?: string;
   creadoEn: Date;
@@ -60,6 +61,14 @@ function normalizarTexto(valor: unknown): string {
   return typeof valor === 'string' ? valor.trim() : '';
 }
 
+function normalizarClaveServicio(valor: string): string {
+  return valor
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .trim()
+    .toLowerCase();
+}
+
 export function normalizarServiciosEntrada(servicios: unknown): ServicioReservaNormalizado[] {
   if (!Array.isArray(servicios)) return [];
 
@@ -89,6 +98,34 @@ export function normalizarServiciosEntrada(servicios: unknown): ServicioReservaN
       } satisfies ServicioReservaNormalizado;
     })
     .filter((servicio): servicio is ServicioReservaNormalizado => Boolean(servicio));
+}
+
+export function recalcularServiciosContraCatalogo(
+  serviciosSolicitados: unknown,
+  catalogoSalon: unknown,
+): ServicioReservaNormalizado[] {
+  const solicitados = normalizarServiciosEntrada(serviciosSolicitados);
+  const catalogo = normalizarServiciosEntrada(catalogoSalon);
+  const catalogoPorClave = new Map(
+    catalogo.map((servicio) => [normalizarClaveServicio(servicio.name), servicio]),
+  );
+
+  return solicitados.flatMap((servicioSolicitado, indice) => {
+    const servicioCatalogo = catalogoPorClave.get(normalizarClaveServicio(servicioSolicitado.name));
+    if (!servicioCatalogo) {
+      return [];
+    }
+
+    return {
+      id: servicioSolicitado.id,
+      name: servicioCatalogo.name,
+      duration: servicioCatalogo.duration,
+      price: servicioCatalogo.price,
+      category: servicioCatalogo.category,
+      status: servicioSolicitado.status,
+      order: servicioSolicitado.order ?? indice,
+    } satisfies ServicioReservaNormalizado;
+  });
 }
 
 export function obtenerServiciosNormalizados(reserva: {
@@ -177,6 +214,7 @@ export function serializarReservaApi(reserva: ReservaConServicios) {
     sucursal: reserva.sucursal,
     marcaTinte: reserva.marcaTinte,
     tonalidad: reserva.tonalidad,
+    observaciones: reserva.observaciones ?? null,
     notasMenorEdad: reserva.notasMenorEdad ?? null,
     clienteAppId: reserva.clienteAppId ?? null,
     tokenCancelacion: reserva.tokenCancelacion,

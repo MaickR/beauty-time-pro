@@ -1,6 +1,7 @@
 import type { FastifyRequest, FastifyReply } from 'fastify';
 import { prisma } from '../prismaCliente.js';
 import { env } from '../lib/env.js';
+import { obtenerErrorAccesoSalon, salonEstaDisponible } from '../lib/estadoSalon.js';
 
 export interface PayloadJWT {
   sub: string;
@@ -51,7 +52,20 @@ export async function verificarJWT(
     if (payload.rol === 'empleado') {
       const acceso = await prisma.empleadoAcceso.findUnique({
         where: { id: payload.sub },
-        select: { activo: true },
+        select: {
+          activo: true,
+          personal: {
+            select: {
+              activo: true,
+              estudio: {
+                select: {
+                  activo: true,
+                  estado: true,
+                },
+              },
+            },
+          },
+        },
       });
       if (!acceso) {
         await respuesta.code(401).send({ error: 'No autenticado' });
@@ -64,24 +78,62 @@ export async function verificarJWT(
         });
         return;
       }
+      if (!acceso.personal?.activo) {
+        await respuesta.code(403).send({
+          error: 'Tu perfil de especialista fue dado de baja',
+          codigo: 'PERSONAL_INACTIVO',
+        });
+        return;
+      }
+      if (!salonEstaDisponible(acceso.personal.estudio ?? {})) {
+        const errorSalon = obtenerErrorAccesoSalon(acceso.personal.estudio ?? {});
+        await respuesta.code(403).send({
+          error: errorSalon.error,
+          codigo: errorSalon.codigo,
+        });
+        return;
+      }
       return;
     }
 
     if (payload.rol === 'cliente') {
-      const cliente = await prisma.clienteApp.findUnique({
-        where: { id: payload.sub },
-        select: { activo: true },
+      if (payload.estudioId === null) {
+        const cliente = await prisma.clienteApp.findUnique({
+          where: { id: payload.sub },
+          select: { activo: true },
+        });
+
+        if (!cliente) {
+          await respuesta.code(401).send({ error: 'No autenticado' });
+          return;
+        }
+
+        if (!cliente.activo) {
+          await respuesta.code(403).send({
+            error: 'Tu cuenta ha sido desactivada',
+            codigo: 'CUENTA_DESACTIVADA',
+          });
+          return;
+        }
+
+        return;
+      }
+
+      const estudio = await prisma.estudio.findUnique({
+        where: { id: payload.estudioId },
+        select: { activo: true, estado: true },
       });
 
-      if (!cliente) {
+      if (!estudio) {
         await respuesta.code(401).send({ error: 'No autenticado' });
         return;
       }
 
-      if (!cliente.activo) {
+      if (!salonEstaDisponible(estudio)) {
+        const errorSalon = obtenerErrorAccesoSalon(estudio);
         await respuesta.code(403).send({
-          error: 'Tu cuenta ha sido desactivada',
-          codigo: 'CUENTA_DESACTIVADA',
+          error: errorSalon.error,
+          codigo: errorSalon.codigo,
         });
         return;
       }
@@ -96,6 +148,7 @@ export async function verificarJWT(
           activo: true,
           estudio: {
             select: {
+              activo: true,
               estado: true,
               fechaVencimiento: true,
             },
@@ -108,10 +161,11 @@ export async function verificarJWT(
         return;
       }
 
-      if (usuario.estudio?.estado === 'suspendido') {
+      if (!usuario.estudio || !salonEstaDisponible(usuario.estudio)) {
+        const errorSalon = obtenerErrorAccesoSalon(usuario.estudio ?? {});
         await respuesta.code(403).send({
-          error: 'Tu salón está suspendido',
-          codigo: 'SALON_SUSPENDIDO',
+          error: errorSalon.error,
+          codigo: errorSalon.codigo,
         });
         return;
       }

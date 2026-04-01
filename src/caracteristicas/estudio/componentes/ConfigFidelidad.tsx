@@ -1,11 +1,10 @@
 import { useEffect, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Gift, Percent, Sparkles } from 'lucide-react';
+import { Gift, MessageCircle, Percent, Sparkles } from 'lucide-react';
 import { usarToast } from '../../../componentes/ui/ProveedorToast';
 import {
   guardarConfigFidelidad,
   obtenerConfigFidelidad,
-  obtenerRankingFidelidad,
   type ConfiguracionFidelidad,
 } from '../../../servicios/servicioFidelidad';
 import type { PlanEstudio } from '../../../tipos';
@@ -27,14 +26,6 @@ export function ConfigFidelidad({ estudioId, plan }: PropsConfigFidelidad) {
     staleTime: 2 * 60 * 1000,
     enabled: planPermiteFidelidad,
   });
-  const { data: ranking = [] } = useQuery({
-    queryKey: ['fidelidad-ranking', estudioId],
-    queryFn: () => obtenerRankingFidelidad(estudioId, 10),
-    staleTime: 10 * 1000,
-    refetchInterval: 10000,
-    enabled: planPermiteFidelidad,
-  });
-
   const [formulario, setFormulario] = useState<ConfiguracionFidelidad | null>(null);
 
   useEffect(() => {
@@ -53,16 +44,23 @@ export function ConfigFidelidad({ estudioId, plan }: PropsConfigFidelidad) {
 
   if (!planPermiteFidelidad) {
     return (
-      <section className="max-w-4xl rounded-[2.5rem] border border-amber-200 bg-amber-50 p-8 shadow-sm">
-        <p className="text-xs font-black uppercase tracking-widest text-amber-700">
-          Función disponible solo en Pro
-        </p>
+      <section className="max-w-4xl rounded-[2.5rem] border border-amber-200 bg-amber-50 p-8 shadow-sm space-y-6">
+        <p className="text-xs font-black uppercase tracking-widest text-amber-700">PRO Feature</p>
         <h3 className="mt-3 text-2xl font-black tracking-tight text-slate-900">
-          El programa de fidelidad no está incluido en el plan {definicionPlan.nombre}
+          The loyalty program is not included in the {definicionPlan.nombre} plan
         </h3>
         <p className="mt-3 text-sm font-medium leading-relaxed text-slate-600">
           {MENSAJE_FUNCION_PRO}
         </p>
+        <a
+          href="https://wa.me/525512345678?text=Hola%2C%20quiero%20información%20sobre%20el%20plan%20Pro"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="inline-flex items-center gap-2 px-6 py-3 rounded-2xl bg-green-600 hover:bg-green-700 text-white text-sm font-black uppercase tracking-widest transition-colors shadow-sm"
+        >
+          <MessageCircle className="w-4 h-4" />
+          Upgrade to Pro via WhatsApp
+        </a>
       </section>
     );
   }
@@ -179,15 +177,15 @@ export function ConfigFidelidad({ estudioId, plan }: PropsConfigFidelidad) {
                   <input
                     id="porcentajeDescuento"
                     type="range"
-                    min={10}
-                    max={100}
-                    step={10}
-                    value={formulario.porcentajeDescuento ?? 100}
+                    min={5}
+                    max={50}
+                    step={5}
+                    value={formulario.porcentajeDescuento ?? 10}
                     onChange={(e) => actualizar('porcentajeDescuento', Number(e.target.value))}
                     className="flex-1"
                   />
                   <span className="min-w-12 text-center font-black text-slate-800">
-                    {formulario.porcentajeDescuento ?? 100}%
+                    {formulario.porcentajeDescuento ?? 10}%
                   </span>
                 </div>
               </div>
@@ -238,61 +236,6 @@ export function ConfigFidelidad({ estudioId, plan }: PropsConfigFidelidad) {
             </button>
           </div>
         )}
-      </section>
-
-      <section className="bg-white rounded-[2.5rem] p-8 border border-slate-200 shadow-sm max-w-4xl overflow-x-hidden">
-        <h3 className="text-xl font-black uppercase tracking-tight mb-6">
-          Ranking de clientes fieles
-        </h3>
-        <div className="space-y-4">
-          {ranking.map((cliente) => (
-            <div key={cliente.id} className="rounded-2xl border border-slate-200 p-5">
-              <div className="flex items-start justify-between gap-4 mb-3 flex-wrap">
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-full bg-pink-100 text-pink-700 flex items-center justify-center font-black text-sm shrink-0">
-                    {cliente.nombre.charAt(0).toUpperCase()}
-                  </div>
-                  <div>
-                    <p className="font-black text-slate-900">{cliente.nombre}</p>
-                    <p className="text-sm text-slate-500">{cliente.telefono}</p>
-                    {cliente.ultimaVisita && (
-                      <p className="text-xs text-slate-400 mt-0.5">
-                        Última visita:{' '}
-                        {new Date(cliente.ultimaVisita).toLocaleDateString('es-MX', {
-                          day: 'numeric',
-                          month: 'short',
-                          year: 'numeric',
-                        })}
-                      </p>
-                    )}
-                  </div>
-                </div>
-                <div className="flex items-center gap-2 flex-wrap">
-                  {cliente.recompensasDisponibles > 0 && (
-                    <span className="px-3 py-1 rounded-full bg-emerald-100 text-emerald-700 text-xs font-black">
-                      🎁{' '}
-                      {cliente.recompensasDisponibles === 1
-                        ? '1 recompensa disponible'
-                        : `${cliente.recompensasDisponibles} recompensas disponibles`}
-                    </span>
-                  )}
-                </div>
-              </div>
-              <progress
-                className="w-full h-3 [&::-webkit-progress-bar]:rounded-full [&::-webkit-progress-bar]:bg-slate-100 [&::-webkit-progress-value]:rounded-full [&::-webkit-progress-value]:bg-(--color-primario)"
-                max={cliente.visitasRequeridas}
-                value={Math.min(cliente.visitasAcumuladas, cliente.visitasRequeridas)}
-              />
-              <p className="text-xs text-slate-500 mt-2">
-                {cliente.visitasAcumuladas} visitas acumuladas de {cliente.visitasRequeridas}{' '}
-                requeridas
-              </p>
-            </div>
-          ))}
-          {ranking.length === 0 && (
-            <p className="text-sm text-slate-400">Aún no hay clientes con progreso de fidelidad.</p>
-          )}
-        </div>
       </section>
     </div>
   );

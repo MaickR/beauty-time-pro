@@ -1,7 +1,8 @@
 import { createContext, useContext, useState, type PropsWithChildren } from 'react';
+import { generarIdSeguro } from '../../utils/seguridad';
 
 interface ToastActivo {
-  id: number;
+  id: string;
   mensaje: string;
   variante: 'exito' | 'error' | 'info';
   icono: string;
@@ -35,7 +36,7 @@ export function ProveedorToast({ children }: PropsWithChildren) {
               (entrada.variante === 'exito' ? '✓' : entrada.variante === 'error' ? '✗' : '•'),
             duracionMs: entrada.duracionMs ?? 4000,
           };
-    const id = Date.now() + Math.floor(Math.random() * 1000);
+    const id = generarIdSeguro();
     setToasts((actuales) => [
       ...actuales,
       { id, mensaje: opciones.mensaje, variante: opciones.variante, icono: opciones.icono },

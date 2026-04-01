@@ -2,10 +2,17 @@ import 'dotenv/config';
 import { PrismaMariaDb } from '@prisma/adapter-mariadb';
 import { PrismaClient as PrismaClientGenerado } from './generated/prisma/client.js';
 
+function obtenerDatabaseUrl(): string {
+	const urlBaseDatos = process.env.DATABASE_URL?.trim();
+	if (!urlBaseDatos) {
+		throw new Error('DATABASE_URL es obligatoria para inicializar Prisma.');
+	}
+
+	return urlBaseDatos;
+	}
+
 function crearPrismaConAdaptador() {
-	const urlBaseDatos = new URL(
-		process.env.DATABASE_URL ?? 'mysql://root:1234@localhost:3306/beauty_time_pro',
-	);
+	const urlBaseDatos = new URL(obtenerDatabaseUrl());
 
 	const adaptador = new PrismaMariaDb({
 		host: urlBaseDatos.hostname,

@@ -1,4 +1,8 @@
+import { Prisma } from '../generated/prisma/client.js';
 import { prisma } from '../prismaCliente.js';
+
+const REGEX_IDENTIFICADOR_SQL = /^[A-Za-z0-9_]+$/;
+const REGEX_DEFINICION_COLUMNA = /^[A-Za-z0-9_(),.'`\s-]+$/;
 
 const cacheColumnas = new Map<string, Set<string>>();
 let cacheTablas: Set<string> | null = null;
@@ -57,8 +61,16 @@ export async function asegurarColumnaTabla(
   }
 
   try {
-    await prisma.$executeRawUnsafe(
-      `ALTER TABLE \`${tabla}\` ADD COLUMN \`${columna}\` ${definicionSql}`,
+    if (!REGEX_IDENTIFICADOR_SQL.test(tabla) || !REGEX_IDENTIFICADOR_SQL.test(columna)) {
+      throw new Error('Identificador SQL inválido');
+    }
+
+    if (!REGEX_DEFINICION_COLUMNA.test(definicionSql)) {
+      throw new Error('Definición SQL inválida');
+    }
+
+    await prisma.$executeRaw(
+      Prisma.raw(`ALTER TABLE \`${tabla}\` ADD COLUMN \`${columna}\` ${definicionSql}`),
     );
   } catch (error) {
     const mensaje = error instanceof Error ? error.message : '';

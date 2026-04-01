@@ -1,4 +1,5 @@
-import type { Prisma, PrismaClient } from '../generated/prisma/client.js';
+import { Prisma } from '../generated/prisma/client.js';
+import type { PrismaClient } from '../generated/prisma/client.js';
 import { obtenerColumnasTabla } from './compatibilidadEsquema.js';
 import { prisma } from '../prismaCliente.js';
 import { normalizarPlanEstudio } from './planes.js';
@@ -7,8 +8,65 @@ type ClientePrismaTransaccional = Prisma.TransactionClient;
 
 type ClientePrismaDisponible = PrismaClient | ClientePrismaTransaccional;
 
+interface PuntosFidelidadBloqueados {
+  id: string;
+  visitasAcumuladas: number;
+  visitasUsadas: number;
+  recompensasGanadas: number;
+  recompensasUsadas: number;
+}
+
 function obtenerClientePrisma(tx?: ClientePrismaTransaccional): ClientePrismaDisponible {
   return tx ?? prisma;
+}
+
+async function ejecutarOperacionFidelidad<T>(
+  operacion: (tx: ClientePrismaTransaccional) => Promise<T>,
+  tx?: ClientePrismaTransaccional,
+): Promise<T> {
+  if (tx) {
+    return operacion(tx);
+  }
+
+  return prisma.$transaction(async (nuevoTx) => operacion(nuevoTx));
+}
+
+async function bloquearPuntosFidelidad(
+  cliente: ClientePrismaTransaccional,
+  clienteId: string,
+  estudioId: string,
+): Promise<PuntosFidelidadBloqueados> {
+  await cliente.puntosFidelidad.upsert({
+    where: { clienteId_estudioId: { clienteId, estudioId } },
+    update: {},
+    create: {
+      clienteId,
+      estudioId,
+      visitasAcumuladas: 0,
+      visitasUsadas: 0,
+      recompensasGanadas: 0,
+      recompensasUsadas: 0,
+    },
+  });
+
+  const filas = await cliente.$queryRaw<PuntosFidelidadBloqueados[]>(Prisma.sql`
+    SELECT
+      id,
+      visitasAcumuladas,
+      visitasUsadas,
+      recompensasGanadas,
+      recompensasUsadas
+    FROM puntos_fidelidad
+    WHERE clienteId = ${clienteId} AND estudioId = ${estudioId}
+    FOR UPDATE
+  `);
+
+  const puntos = filas[0];
+  if (!puntos) {
+    throw new Error('No se pudo bloquear el registro de fidelidad');
+  }
+
+  return puntos;
 }
 
 export interface ConfigFidelidadPorDefecto {
@@ -28,7 +86,7 @@ export function configFidelidadPorDefecto(estudioId: string): ConfigFidelidadPor
     activo: false,
     visitasRequeridas: 5,
     tipoRecompensa: 'descuento',
-    porcentajeDescuento: 100,
+    porcentajeDescuento: 10,
     descripcionRecompensa: 'Servicio gratis en tu próxima visita',
   };
 }
@@ -70,43 +128,39 @@ export async function registrarVisitaFidelidad(
   recompensaGanada: boolean;
   descripcion: string | null;
 }> {
-  const cliente = obtenerClientePrisma(tx);
-  const config = await obtenerConfigFidelidad(estudioId, tx);
-  if (!config.activo) {
-    return { recompensaGanada: false, descripcion: null };
-  }
+  return ejecutarOperacionFidelidad(async (cliente) => {
+    const config = await obtenerConfigFidelidad(estudioId, cliente);
+    if (!config.activo) {
+      return { recompensaGanada: false, descripcion: null };
+    }
 
-  const puntos = await cliente.puntosFidelidad.upsert({
-    where: { clienteId_estudioId: { clienteId, estudioId } },
-    update: {
-      visitasAcumuladas: { increment: 1 },
-      ultimaVisita: new Date(),
-    },
-    create: {
-      clienteId,
-      estudioId,
-      visitasAcumuladas: 1,
-      ultimaVisita: new Date(),
-    },
-  });
+    const puntos = await bloquearPuntosFidelidad(cliente, clienteId, estudioId);
+    const visitasAcumuladasActualizadas = puntos.visitasAcumuladas + 1;
+    const visitasDisponibles = visitasAcumuladasActualizadas - puntos.visitasUsadas;
 
-  const visitasDisponibles = puntos.visitasAcumuladas - puntos.visitasUsadas;
-  if (visitasDisponibles < config.visitasRequeridas) {
-    return { recompensaGanada: false, descripcion: null };
-  }
+    await cliente.puntosFidelidad.update({
+      where: { id: puntos.id },
+      data: {
+        visitasAcumuladas: visitasAcumuladasActualizadas,
+        ultimaVisita: new Date(),
+        ...(visitasDisponibles >= config.visitasRequeridas
+          ? {
+              visitasUsadas: { increment: config.visitasRequeridas },
+              recompensasGanadas: { increment: 1 },
+            }
+          : {}),
+      },
+    });
 
-  await cliente.puntosFidelidad.update({
-    where: { id: puntos.id },
-    data: {
-      visitasUsadas: { increment: config.visitasRequeridas },
-      recompensasGanadas: { increment: 1 },
-    },
-  });
+    if (visitasDisponibles < config.visitasRequeridas) {
+      return { recompensaGanada: false, descripcion: null };
+    }
 
-  return {
-    recompensaGanada: true,
-    descripcion: config.descripcionRecompensa,
-  };
+    return {
+      recompensaGanada: true,
+      descripcion: config.descripcionRecompensa,
+    };
+  }, tx);
 }
 
 export async function canjearRecompensaFidelidad(
@@ -116,22 +170,21 @@ export async function canjearRecompensaFidelidad(
 ): Promise<{
   descripcion: string;
 }> {
-  const cliente = obtenerClientePrisma(tx);
-  const config = await obtenerConfigFidelidad(estudioId, tx);
-  const puntos = await cliente.puntosFidelidad.findUnique({
-    where: { clienteId_estudioId: { clienteId, estudioId } },
-  });
+  return ejecutarOperacionFidelidad(async (cliente) => {
+    const config = await obtenerConfigFidelidad(estudioId, cliente);
+    const puntos = await bloquearPuntosFidelidad(cliente, clienteId, estudioId);
 
-  if (!puntos || calcularRecompensasDisponibles(puntos) < 1) {
-    throw new Error('El cliente no tiene recompensas disponibles');
-  }
+    if (calcularRecompensasDisponibles(puntos) < 1) {
+      throw new Error('El cliente no tiene recompensas disponibles');
+    }
 
-  await cliente.puntosFidelidad.update({
-    where: { id: puntos.id },
-    data: { recompensasUsadas: { increment: 1 } },
-  });
+    await cliente.puntosFidelidad.update({
+      where: { id: puntos.id },
+      data: { recompensasUsadas: { increment: 1 } },
+    });
 
-  return { descripcion: config.descripcionRecompensa };
+    return { descripcion: config.descripcionRecompensa };
+  }, tx);
 }
 
 /**
@@ -139,27 +192,29 @@ export async function canjearRecompensaFidelidad(
  * Decrementa visitasAcumuladas y ajusta recompensasGanadas si el conteo
  * de visitas ya no alcanza para sostenerlas.
  */
-export async function revertirVisitaFidelidad(clienteId: string, estudioId: string): Promise<void> {
-  const config = await obtenerConfigFidelidad(estudioId);
-  if (!config.activo) return;
+export async function revertirVisitaFidelidad(
+  clienteId: string,
+  estudioId: string,
+  tx?: ClientePrismaTransaccional,
+): Promise<void> {
+  await ejecutarOperacionFidelidad(async (cliente) => {
+    const config = await obtenerConfigFidelidad(estudioId, cliente);
+    if (!config.activo) return;
 
-  const puntos = await prisma.puntosFidelidad.findUnique({
-    where: { clienteId_estudioId: { clienteId, estudioId } },
-  });
-  if (!puntos || puntos.visitasAcumuladas <= 0) return;
+    const puntos = await bloquearPuntosFidelidad(cliente, clienteId, estudioId);
+    if (puntos.visitasAcumuladas <= 0) return;
 
-  const visitasNuevas = puntos.visitasAcumuladas - 1;
-  // Máximo de recompensas alcanzables con visitasNuevas
-  const maxRecompensas = Math.floor(visitasNuevas / config.visitasRequeridas);
-  const recompensasNuevas = Math.min(puntos.recompensasGanadas, maxRecompensas);
+    const visitasNuevas = puntos.visitasAcumuladas - 1;
+    const maxRecompensas = Math.floor(visitasNuevas / config.visitasRequeridas);
+    const recompensasNuevas = Math.min(puntos.recompensasGanadas, maxRecompensas);
 
-  await prisma.puntosFidelidad.update({
-    where: { id: puntos.id },
-    data: {
-      visitasAcumuladas: visitasNuevas,
-      recompensasGanadas: recompensasNuevas,
-      // visitasUsadas no puede superar las visitas acumuladas nuevas
-      visitasUsadas: Math.min(puntos.visitasUsadas, visitasNuevas),
-    },
-  });
+    await cliente.puntosFidelidad.update({
+      where: { id: puntos.id },
+      data: {
+        visitasAcumuladas: visitasNuevas,
+        recompensasGanadas: recompensasNuevas,
+        visitasUsadas: Math.min(puntos.visitasUsadas, visitasNuevas),
+      },
+    });
+  }, tx);
 }

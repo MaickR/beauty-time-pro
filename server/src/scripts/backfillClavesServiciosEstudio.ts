@@ -1,8 +1,6 @@
 import 'dotenv/config';
 import { prisma } from '../prismaCliente.js';
-import { generarClavesSalonUnicas, sanitizarClaveSalon } from '../lib/clavesSalon.js';
-
-const CLAVE_SALON_REGEX = /^[A-Z0-9]+$/;
+import { esClaveSalonSegura, generarClavesSalonUnicas, sanitizarClaveSalon } from '../lib/clavesSalon.js';
 
 function normalizarServicios(servicios: unknown): { servicios: unknown; cambios: boolean } {
 	if (!Array.isArray(servicios)) {
@@ -20,14 +18,14 @@ function normalizarServicios(servicios: unknown): { servicios: unknown; cambios:
 			? servicioActual.price
 			: Number(servicioActual.price ?? 0);
 
-		if (Number.isFinite(precioActual) && precioActual >= 1) {
+		if (Number.isFinite(precioActual) && precioActual >= 100) {
 			return servicio;
 		}
 
 		cambios = true;
 		return {
 			...servicioActual,
-			price: 1,
+			price: 100,
 		};
 	});
 
@@ -55,8 +53,8 @@ async function ejecutar(): Promise<void> {
 		const requiereClavesNuevas =
 			claveDuenoNormalizada !== estudio.claveDueno ||
 			claveClienteNormalizada !== estudio.claveCliente ||
-			!CLAVE_SALON_REGEX.test(estudio.claveDueno) ||
-			!CLAVE_SALON_REGEX.test(estudio.claveCliente);
+			!esClaveSalonSegura(estudio.claveDueno, 'dueno') ||
+			!esClaveSalonSegura(estudio.claveCliente, 'cliente');
 
 		if (requiereClavesNuevas) {
 			const nuevasClaves = await generarClavesSalonUnicas(estudio.nombre);

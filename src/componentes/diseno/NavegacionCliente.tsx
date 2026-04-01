@@ -79,7 +79,7 @@ export function NavegacionCliente() {
       {/* Header desktop */}
       <header className="bg-white border-b border-slate-100 sticky top-0 z-50 hidden md:block">
         <div className="max-w-5xl mx-auto px-8 h-16 flex items-center justify-between">
-          <Link to="/inicio" className="flex items-center gap-2 select-none">
+          <Link to="/cliente/inicio" className="flex items-center gap-2 select-none">
             <span
               className="w-8 h-8 rounded-full bg-pink-600 flex items-center justify-center text-white font-black text-sm"
               aria-hidden="true"
@@ -125,7 +125,7 @@ export function NavegacionCliente() {
                 className="absolute right-0 top-full mt-2 w-48 bg-white border border-slate-100 rounded-2xl shadow-xl overflow-hidden z-50"
               >
                 <Link
-                  to="/mi-perfil"
+                  to="/cliente/perfil"
                   role="menuitem"
                   onClick={() => setMenuAbierto(false)}
                   className="flex items-center gap-3 px-4 py-3 text-sm text-slate-700 hover:bg-slate-50 font-medium transition-colors"
@@ -133,7 +133,7 @@ export function NavegacionCliente() {
                   <User className="w-4 h-4 text-slate-400" aria-hidden="true" /> Mi perfil
                 </Link>
                 <Link
-                  to="/mi-perfil#reservas"
+                  to="/cliente/historial"
                   role="menuitem"
                   onClick={() => setMenuAbierto(false)}
                   className="flex items-center gap-3 px-4 py-3 text-sm text-slate-700 hover:bg-slate-50 font-medium transition-colors"
@@ -157,7 +157,7 @@ export function NavegacionCliente() {
       {/* Header móvil */}
       <header className="bg-white border-b border-slate-100 sticky top-0 z-50 md:hidden">
         <div className="px-4 h-14 flex items-center justify-between">
-          <Link to="/inicio" className="flex items-center gap-2">
+          <Link to="/cliente/inicio" className="flex items-center gap-2">
             <span
               className="w-7 h-7 rounded-full bg-pink-600 flex items-center justify-center text-white font-black text-xs"
               aria-hidden="true"
@@ -166,7 +166,7 @@ export function NavegacionCliente() {
             </span>
             <span className="font-black text-slate-900">Beauty Time Pro</span>
           </Link>
-          <Link to="/mi-perfil" aria-label="Mi perfil">
+          <Link to="/cliente/perfil" aria-label="Mi perfil">
             {avatarUrl ? (
               <img
                 src={avatarUrl}
@@ -189,21 +189,21 @@ export function NavegacionCliente() {
       >
         <div className="flex">
           <Link
-            to="/inicio"
+            to="/cliente/inicio"
             className="flex-1 flex flex-col items-center gap-1 py-3 text-slate-400 hover:text-pink-600 transition-colors"
           >
             <Home className="w-5 h-5" aria-hidden="true" />
             <span className="text-[10px] font-bold">Inicio</span>
           </Link>
           <Link
-            to="/mi-perfil#reservas"
+            to="/cliente/historial"
             className="flex-1 flex flex-col items-center gap-1 py-3 text-slate-400 hover:text-pink-600 transition-colors"
           >
             <Star className="w-5 h-5" aria-hidden="true" />
             <span className="text-[10px] font-bold">Mis reservas</span>
           </Link>
           <Link
-            to="/mi-perfil"
+            to="/cliente/perfil"
             className="flex-1 flex flex-col items-center gap-1 py-3 text-slate-400 hover:text-pink-600 transition-colors"
           >
             <User className="w-5 h-5" aria-hidden="true" />

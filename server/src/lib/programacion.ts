@@ -1,3 +1,5 @@
+import { obtenerFechaISOEnZona, obtenerMinutosActualesEnZona } from '../utils/zonasHorarias.js';
+
 /** Convierte "HH:mm" a minutos desde medianoche. Devuelve null si la entrada está vacía. */
 function tiempoAMinutos(tiempo: string | null | undefined): number | null {
   if (!tiempo) return null;
@@ -77,6 +79,7 @@ interface ParametrosSlotsBackend {
   fecha: string; // "YYYY-MM-DD"
   duracionMin: number;
   reservas: ReservaBreve[];
+  zonaHoraria?: string | null;
 }
 
 export interface SlotDisponible {
@@ -90,6 +93,7 @@ export function obtenerSlotsDisponiblesBackend({
   fecha,
   duracionMin,
   reservas,
+  zonaHoraria,
 }: ParametrosSlotsBackend): SlotDisponible[] {
   const fechaObj = new Date(`${fecha}T12:00:00`);
   const indiceDia = fechaObj.getDay();
@@ -114,8 +118,8 @@ export function obtenerSlotsDisponiblesBackend({
 
   // Filtrar slots pasados si es hoy
   const ahora = new Date();
-  const hoy = `${ahora.getFullYear()}-${String(ahora.getMonth() + 1).padStart(2, '0')}-${String(ahora.getDate()).padStart(2, '0')}`;
-  const minutosAhora = fecha === hoy ? ahora.getHours() * 60 + ahora.getMinutes() : -1;
+  const hoy = obtenerFechaISOEnZona(ahora, zonaHoraria);
+  const minutosAhora = fecha === hoy ? obtenerMinutosActualesEnZona(ahora, zonaHoraria) : -1;
 
   const slots: SlotDisponible[] = [];
 

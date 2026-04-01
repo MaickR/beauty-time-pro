@@ -1,5 +1,5 @@
 import { useEffect, useRef } from 'react';
-import { Sparkles, CalendarDays, Users, Settings, CheckCircle2 } from 'lucide-react';
+import { Sparkles, CalendarDays, Users, CheckCircle2 } from 'lucide-react';
 import { peticion } from '../../../lib/clienteHTTP';
 import { usarToast } from '../../../componentes/ui/ProveedorToast';
 
@@ -10,11 +10,6 @@ interface PropsModalBienvenidaSalon {
 }
 
 const PASOS = [
-  {
-    icono: <Settings className="w-5 h-5 text-pink-600" aria-hidden="true" />,
-    titulo: 'Configura tu perfil',
-    descripcion: 'Agrega logo, descripción, dirección y horario de atención.',
-  },
   {
     icono: <Users className="w-5 h-5 text-pink-600" aria-hidden="true" />,
     titulo: 'Añade a tu equipo',
@@ -85,7 +80,7 @@ export function ModalBienvenidaSalon({
             ¡Bienvenido, <span className="text-pink-600">{nombreSalon}</span>!
           </h2>
           <p className="text-slate-500 font-medium mt-2 text-sm">
-            Tu solicitud fue aprobada. Aquí tienes los primeros pasos para comenzar.
+            Aquí tienes los primeros pasos para comenzar.
           </p>
         </div>
 

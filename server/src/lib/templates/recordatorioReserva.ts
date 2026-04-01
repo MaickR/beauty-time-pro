@@ -28,8 +28,8 @@ function escaparHtml(texto: string): string {
 
 export function crearTemplateRecordatorioReserva(datos: DatosTemplateRecordatorio): string {
   const color = datos.salon.colorPrimario ?? '#C2185B';
-  const enlaceCancelar = `${env.FRONTEND_URL}/cancelar-reserva/${datos.reservaId}/${datos.tokenCancelacion}`;
-  const enlaceDetalles = `${env.FRONTEND_URL}/cancelar-reserva/${datos.reservaId}/${datos.tokenCancelacion}`;
+  const enlaceCancelar = `${env.FRONTEND_URL}/cancelar-reserva?id=${datos.reservaId}&t=${datos.tokenCancelacion}`;
+  const enlaceDetalles = `${env.FRONTEND_URL}/cancelar-reserva?id=${datos.reservaId}&t=${datos.tokenCancelacion}`;
   const enlaceReagendar = `${env.FRONTEND_URL}/reservar/${datos.salon.claveCliente}`;
   const logoHtml = datos.salon.logoUrl
     ? `<img src="${datos.salon.logoUrl}" alt="Logo ${escaparHtml(datos.salon.nombre)}" style="max-height:56px; max-width:180px; display:block; margin:0 auto 12px;" />`

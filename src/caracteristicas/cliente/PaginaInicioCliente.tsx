@@ -109,7 +109,7 @@ function TarjetaSalon({ salon }: PropsTarjetaSalon) {
 
         {/* Botón */}
         <button
-          onClick={() => navegar(`/salones/${salon.id}`)}
+          onClick={() => navegar(`/cliente/salon/${salon.id}`)}
           className="mt-auto w-full py-3 rounded-2xl font-black text-xs text-white flex items-center justify-center gap-1.5 hover:brightness-110 transition-all"
           style={{ backgroundColor: color }}
         >

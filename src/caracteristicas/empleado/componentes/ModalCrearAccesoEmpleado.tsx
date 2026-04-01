@@ -3,6 +3,7 @@ import { X, Eye, EyeOff, RefreshCw } from 'lucide-react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { crearAccesoEmpleado } from '../../../servicios/servicioEmpleados';
 import { usarToast } from '../../../componentes/ui/ProveedorToast';
+import { generarContrasenaSegura } from '../../../utils/seguridad';
 
 interface PropsModalCrearAccesoEmpleado {
   estudioId: string;
@@ -10,28 +11,6 @@ interface PropsModalCrearAccesoEmpleado {
   nombreEmpleado: string;
   abierto: boolean;
   alCerrar: () => void;
-}
-
-function generarContrasenaSegura(): string {
-  const mayusculas = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
-  const minusculas = 'abcdefghijklmnopqrstuvwxyz';
-  const numeros = '0123456789';
-  const simbolos = '!@#$%&*';
-  const todos = mayusculas + minusculas + numeros + simbolos;
-
-  let contrasena =
-    mayusculas[Math.floor(Math.random() * mayusculas.length)] +
-    numeros[Math.floor(Math.random() * numeros.length)] +
-    simbolos[Math.floor(Math.random() * simbolos.length)];
-
-  for (let i = 3; i < 12; i++) {
-    contrasena += todos[Math.floor(Math.random() * todos.length)];
-  }
-
-  return contrasena
-    .split('')
-    .sort(() => Math.random() - 0.5)
-    .join('');
 }
 
 export function ModalCrearAccesoEmpleado({

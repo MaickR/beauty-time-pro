@@ -19,6 +19,7 @@ import { formatearDinero } from '../../../utils/formato';
 import {
   actualizarEstadoReserva,
   actualizarEstadoServicioReserva,
+  agregarServicioAReserva,
 } from '../../../servicios/servicioReservas';
 import type {
   Estudio,
@@ -56,6 +57,7 @@ const BADGE_ESTADO: Record<EstadoReserva, ColorBadge> = {
   confirmed: { fondo: 'bg-green-100', texto: 'text-green-700', etiqueta: 'Confirmada' },
   completed: { fondo: 'bg-slate-100', texto: 'text-slate-600', etiqueta: 'Completada' },
   cancelled: { fondo: 'bg-red-100', texto: 'text-red-600', etiqueta: 'Cancelada' },
+  no_show: { fondo: 'bg-orange-100', texto: 'text-orange-700', etiqueta: 'No se presentó' },
 };
 
 const BADGE_ESTADO_SERVICIO: Record<string, ColorBadge> = {
@@ -226,9 +228,17 @@ interface PropsTarjetaCita {
   onCompletar: (id: string) => void;
   onCancelar: (id: string) => void;
   onNoShow: (reservaId: string, servicioId: string, nombre: string) => void;
+  onAgregarServicio: (reservaId: string) => void;
 }
 
-function TarjetaCita({ reserva: b, moneda, onCompletar, onCancelar, onNoShow }: PropsTarjetaCita) {
+function TarjetaCita({
+  reserva: b,
+  moneda,
+  onCompletar,
+  onCancelar,
+  onNoShow,
+  onAgregarServicio,
+}: PropsTarjetaCita) {
   const horaFin = calcularHoraFin(b.time, b.totalDuration);
   const estaCompletada = b.status === 'completed';
   const estaCancelada = b.status === 'cancelled';
@@ -249,73 +259,82 @@ function TarjetaCita({ reserva: b, moneda, onCompletar, onCancelar, onNoShow }: 
       ? 'bg-red-50 border-red-100 opacity-70'
       : 'bg-white border-slate-100 hover:border-pink-200';
 
+  // Nombres de servicios para la línea compacta
+  const nombresServicios =
+    detallesServicio.length > 0
+      ? detallesServicio
+          .filter((s) => s.status !== 'cancelled')
+          .map((s) => s.name)
+          .join(', ')
+      : serviciosReserva.map((s) => s.name).join(', ');
+
   return (
     <div className={`rounded-2xl border p-4 relative transition-all ${cardBg}`}>
       <div className={`absolute left-1.5 top-3 bottom-3 w-1 rounded-full ${franjaColor}`} />
 
-      {/* Encabezado: hora + precio */}
-      <div className="flex items-start justify-between gap-2 pl-5 mb-3">
-        <div>
-          <div className="flex items-center gap-1.5 mb-1">
+      {/* Layout desktop: grid 2 columnas / Móvil: columna */}
+      <div className="pl-5 flex flex-col md:grid md:grid-cols-[1fr_auto] md:gap-4">
+        {/* Columna izquierda */}
+        <div className="space-y-1.5">
+          {/* Hora */}
+          <div className="flex items-center gap-1.5">
             <span className="text-xl font-black text-slate-900">{b.time}</span>
-            <span className="text-xs text-slate-400 font-bold">→ {horaFin}</span>
+            <span className="text-xs text-slate-400 font-bold">— {horaFin}</span>
           </div>
-          <BadgeEstado estado={b.status} />
-        </div>
-        <div className="rounded-xl bg-pink-50 border border-pink-100 px-3 py-2 text-right shrink-0">
-          <p className="text-base font-black text-pink-700">
-            {formatearDinero(b.totalPrice, moneda)}
+          {/* Cliente · Teléfono */}
+          <p className="text-sm text-slate-800">
+            <span className="font-black">{b.clientName}</span>
+            <span className="text-slate-400 mx-1.5">·</span>
+            <span className="text-slate-500 inline-flex items-center gap-1">
+              <Phone className="w-3 h-3 text-pink-400 inline" aria-hidden="true" />
+              {b.clientPhone}
+            </span>
           </p>
-          <p className="text-[9px] text-slate-400">{b.totalDuration} min</p>
+          {/* Servicios en línea */}
+          {nombresServicios && (
+            <p className="text-xs text-slate-500 font-medium leading-snug">{nombresServicios}</p>
+          )}
+          {/* Especialista badge */}
+          <span className="inline-flex items-center gap-1.5 bg-slate-100 rounded-full px-2.5 py-1 text-[10px] font-black text-slate-600 w-fit">
+            <Users className="w-3 h-3" aria-hidden="true" /> {b.staffName}
+          </span>
         </div>
-      </div>
 
-      {/* Info cliente */}
-      <div className="pl-5">
-        <p className="font-black text-base text-slate-900 leading-tight">{b.clientName}</p>
-        <p className="text-xs text-slate-500 flex items-center gap-1 mt-0.5">
-          <Phone className="w-3 h-3 text-pink-400" aria-hidden="true" /> {b.clientPhone}
-        </p>
-      </div>
-
-      {/* Servicios — detalle con badge cuando hay serviceDetails, lista simple si no */}
-      <div className="pl-5 mt-3">
-        {detallesServicio.length > 0 ? (
-          <div className="space-y-0">
-            {detallesServicio
-              .filter((s) => s.status !== 'cancelled')
-              .map((s) => (
-                <ItemServicio
-                  key={s.id ?? s.name}
-                  servicio={s}
-                  moneda={moneda}
-                  puedeMarcarNoShow={
-                    !estaCompletada &&
-                    !estaCancelada &&
-                    (s.status === 'pending' || s.status === 'confirmed')
-                  }
-                  onNoShow={() => onNoShow(b.id, s.id ?? '', s.name)}
-                />
-              ))}
+        {/* Columna derecha */}
+        <div className="flex flex-row md:flex-col items-start md:items-end justify-between md:justify-start gap-2 mt-3 md:mt-0">
+          <BadgeEstado estado={b.status} />
+          <div className="text-right">
+            <p className="text-base font-black text-pink-700">
+              {formatearDinero(b.totalPrice, moneda)}
+            </p>
+            <p className="text-[9px] text-slate-400">{b.totalDuration} min</p>
           </div>
-        ) : (
-          <div className="space-y-1.5">
-            {serviciosReserva.map((s, idx) => (
-              <div key={idx} className="flex justify-between items-center text-xs">
-                <span className="flex items-center gap-1.5 text-slate-700 font-medium">
-                  <CheckCircle2
-                    className={`w-3 h-3 shrink-0 ${estaCompletada ? 'text-slate-400' : 'text-pink-400'}`}
-                    aria-hidden="true"
-                  />
-                  {s.name}
-                </span>
-                <span className="text-slate-500 font-bold shrink-0">
-                  {formatearDinero(s.price, moneda)} · {s.duration}m
-                </span>
-              </div>
-            ))}
-          </div>
-        )}
+          {!estaCompletada && !estaCancelada && (
+            <div className="flex items-center gap-1.5">
+              <button
+                type="button"
+                onClick={() => onAgregarServicio(b.id)}
+                className="rounded-xl bg-blue-100 px-3 py-1.5 text-[10px] font-black text-blue-700 hover:bg-blue-200 transition-colors"
+              >
+                + Extra
+              </button>
+              <button
+                type="button"
+                onClick={() => onCompletar(b.id)}
+                className="rounded-xl bg-green-100 px-3 py-1.5 text-[10px] font-black text-green-700 hover:bg-green-200 transition-colors"
+              >
+                Completar
+              </button>
+              <button
+                type="button"
+                onClick={() => onCancelar(b.id)}
+                className="rounded-xl bg-red-100 px-3 py-1.5 text-[10px] font-black text-red-600 hover:bg-red-200 transition-colors"
+              >
+                Cancelar
+              </button>
+            </div>
+          )}
+        </div>
       </div>
 
       {/* Info color / tinte */}
@@ -330,30 +349,53 @@ function TarjetaCita({ reserva: b, moneda, onCompletar, onCancelar, onNoShow }: 
         </div>
       )}
 
-      {/* Pie: especialista (izquierda) + acciones (derecha) */}
-      <div className="pl-5 mt-3 flex items-center justify-between gap-2 flex-wrap">
-        <span className="flex items-center gap-1.5 bg-slate-100 rounded-full px-2.5 py-1 text-[10px] font-black text-slate-600">
-          <Users className="w-3 h-3" aria-hidden="true" /> {b.staffName}
-        </span>
-        {!estaCompletada && !estaCancelada && (
-          <div className="flex items-center gap-1.5">
-            <button
-              type="button"
-              onClick={() => onCompletar(b.id)}
-              className="rounded-xl bg-green-100 px-3 py-1.5 text-[10px] font-black text-green-700 hover:bg-green-200 transition-colors"
-            >
-              Completar
-            </button>
-            <button
-              type="button"
-              onClick={() => onCancelar(b.id)}
-              className="rounded-xl bg-red-100 px-3 py-1.5 text-[10px] font-black text-red-600 hover:bg-red-200 transition-colors"
-            >
-              Cancelar
-            </button>
-          </div>
-        )}
-      </div>
+      {/* Observaciones del cliente */}
+      {b.observaciones && (
+        <div className="pl-5 mt-3 bg-amber-50 border border-amber-100 p-2.5 rounded-xl">
+          <p className="text-[10px] font-black text-amber-700 uppercase">Notes</p>
+          <p className="text-xs text-amber-900 mt-0.5">{b.observaciones}</p>
+        </div>
+      )}
+
+      {/* Servicios detallados expandibles — solo cuando hay serviceDetails con estados */}
+      {detallesServicio.length > 0 && detallesServicio.some((s) => s.status === 'no_show') && (
+        <div className="pl-5 mt-3 space-y-0">
+          {detallesServicio
+            .filter((s) => s.status !== 'cancelled')
+            .map((s) => (
+              <ItemServicio
+                key={s.id ?? s.name}
+                servicio={s}
+                moneda={moneda}
+                puedeMarcarNoShow={false}
+                onNoShow={() => {}}
+              />
+            ))}
+        </div>
+      )}
+
+      {/* Botón "No realizó" para servicios individuales cuando la cita está activa */}
+      {!estaCompletada && !estaCancelada && detallesServicio.length > 0 && (
+        <div className="pl-5 mt-2 space-y-0">
+          {detallesServicio
+            .filter(
+              (s) =>
+                s.status !== 'cancelled' && (s.status === 'pending' || s.status === 'confirmed'),
+            )
+            .map((s) => (
+              <div key={s.id ?? s.name} className="flex items-center justify-between py-1 text-xs">
+                <span className="text-slate-600">{s.name}</span>
+                <button
+                  type="button"
+                  onClick={() => onNoShow(b.id, s.id ?? '', s.name)}
+                  className="rounded-lg bg-red-50 px-2 py-0.5 text-[9px] font-black uppercase text-red-600 hover:bg-red-100 transition-colors"
+                >
+                  No realizó
+                </button>
+              </div>
+            ))}
+        </div>
+      )}
     </div>
   );
 }
@@ -387,6 +429,10 @@ export function AgendaDiaria({
     nombre: string;
   } | null>(null);
   const [mensajeErrorNoShow, setMensajeErrorNoShow] = useState<string | null>(null);
+  const [modalAdicional, setModalAdicional] = useState<string | null>(null);
+  const [servicioAdicionalSeleccionado, setServicioAdicionalSeleccionado] = useState('');
+
+  const serviciosCatalogo = estudio.selectedServices ?? [];
 
   const { mutate: cambiarEstado, isPending: actualizando } = useMutation({
     mutationFn: ({ id, estado, pin }: { id: string; estado: EstadoReserva; pin?: string }) =>
@@ -433,6 +479,28 @@ export function AgendaDiaria({
           error instanceof Error
             ? error.message
             : 'No se pudo marcar el servicio como no realizado',
+        variante: 'error',
+      });
+    },
+  });
+
+  const { mutate: agregarAdicional, isPending: agregandoAdicional } = useMutation({
+    mutationFn: ({
+      reservaId,
+      servicio,
+    }: {
+      reservaId: string;
+      servicio: { nombre: string; duracion: number; precio: number; categoria?: string };
+    }) => agregarServicioAReserva(reservaId, servicio),
+    onSuccess: async () => {
+      setModalAdicional(null);
+      setServicioAdicionalSeleccionado('');
+      mostrarToast({ mensaje: 'Extra added successfully', variante: 'exito' });
+      await recargar();
+    },
+    onError: (error: unknown) => {
+      mostrarToast({
+        mensaje: error instanceof Error ? error.message : 'Could not add extra service',
         variante: 'error',
       });
     },
@@ -576,6 +644,7 @@ export function AgendaDiaria({
                   onNoShow={(reservaId, servicioId, nombre) =>
                     setModalNoShow({ reservaId, servicioId, nombre })
                   }
+                  onAgregarServicio={(reservaId) => setModalAdicional(reservaId)}
                 />
               ))}
             </div>
@@ -632,6 +701,7 @@ export function AgendaDiaria({
                       onNoShow={(reservaId, servicioId, nombre) =>
                         setModalNoShow({ reservaId, servicioId, nombre })
                       }
+                      onAgregarServicio={(reservaId) => setModalAdicional(reservaId)}
                     />
                   ))
                 )}
@@ -660,6 +730,81 @@ export function AgendaDiaria({
             setModalNoShow(null);
           }}
         />
+      )}
+
+      {/* ── MODAL AGREGAR ADICIONAL ──────────────────────────────── */}
+      {modalAdicional && (
+        <div
+          className="fixed inset-0 z-210 bg-slate-950/70 p-4 backdrop-blur-sm flex items-center justify-center"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="titulo-adicional"
+        >
+          <div className="w-full max-w-md rounded-3xl bg-white p-6 shadow-2xl">
+            <h3 id="titulo-adicional" className="text-lg font-black text-slate-900 mb-4">
+              Add Extra Service
+            </h3>
+            {serviciosCatalogo.length === 0 ? (
+              <p className="text-sm text-slate-400 italic">No services available in catalog.</p>
+            ) : (
+              <div className="space-y-2 max-h-60 overflow-y-auto mb-4">
+                {serviciosCatalogo.map((srv) => {
+                  const activo = servicioAdicionalSeleccionado === srv.name;
+                  return (
+                    <button
+                      key={srv.name}
+                      type="button"
+                      onClick={() => setServicioAdicionalSeleccionado(srv.name)}
+                      className={`w-full flex items-center justify-between rounded-2xl border px-4 py-3 text-left transition-colors ${
+                        activo
+                          ? 'border-blue-500 bg-blue-50 text-blue-700'
+                          : 'border-slate-200 bg-white text-slate-700 hover:border-blue-200'
+                      }`}
+                    >
+                      <span className="font-bold text-sm">{srv.name}</span>
+                      <span className="text-xs font-black">
+                        {formatearDinero(srv.price, moneda)} · {srv.duration} min
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+            <div className="flex gap-3">
+              <button
+                type="button"
+                onClick={() => {
+                  setModalAdicional(null);
+                  setServicioAdicionalSeleccionado('');
+                }}
+                className="flex-1 rounded-2xl bg-slate-100 px-4 py-3 text-sm font-black text-slate-700 hover:bg-slate-200 transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={!servicioAdicionalSeleccionado || agregandoAdicional}
+                onClick={() => {
+                  const srv = serviciosCatalogo.find(
+                    (s) => s.name === servicioAdicionalSeleccionado,
+                  );
+                  if (!srv || !modalAdicional) return;
+                  agregarAdicional({
+                    reservaId: modalAdicional,
+                    servicio: {
+                      nombre: srv.name,
+                      duracion: srv.duration,
+                      precio: srv.price,
+                    },
+                  });
+                }}
+                className="flex-1 rounded-2xl bg-blue-600 px-4 py-3 text-sm font-black text-white hover:bg-blue-700 transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
+              >
+                {agregandoAdicional ? 'Adding...' : 'Add'}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
 
       <DialogoConfirmacion

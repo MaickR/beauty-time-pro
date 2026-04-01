@@ -5,10 +5,12 @@ import type { PlanEstudio } from '../tipos';
 export interface PerfilEstudio {
   id: string;
   nombre: string;
+  propietario: string;
   descripcion: string | null;
   direccion: string | null;
   telefono: string;
   emailContacto: string | null;
+  emailCuenta: string | null;
   plan: PlanEstudio;
   colorPrimario: string;
   logoUrl: string | null;

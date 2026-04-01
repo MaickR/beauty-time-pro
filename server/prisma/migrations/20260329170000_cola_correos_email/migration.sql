@@ -1,0 +1,21 @@
+CREATE TABLE `correos_pendientes` (
+  `id` VARCHAR(191) NOT NULL,
+  `destinatario` VARCHAR(191) NOT NULL,
+  `asunto` VARCHAR(191) NOT NULL,
+  `html` TEXT NOT NULL,
+  `estado` VARCHAR(191) NOT NULL DEFAULT 'pending',
+  `intentos` INTEGER NOT NULL DEFAULT 0,
+  `maxIntentos` INTEGER NOT NULL DEFAULT 5,
+  `ultimoError` TEXT NULL,
+  `procesarEn` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+  `enviadoEn` DATETIME(3) NULL,
+  `tipoEvento` VARCHAR(191) NULL,
+  `referenciaId` VARCHAR(191) NULL,
+  `claveUnica` VARCHAR(191) NULL,
+  `creadoEn` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+  `actualizadoEn` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+  UNIQUE INDEX `correos_pendientes_claveUnica_key`(`claveUnica`),
+  INDEX `correos_pendientes_estado_procesarEn_idx`(`estado`, `procesarEn`),
+  INDEX `correos_pendientes_tipoEvento_referenciaId_idx`(`tipoEvento`, `referenciaId`),
+  PRIMARY KEY (`id`)
+) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;

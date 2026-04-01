@@ -60,9 +60,11 @@ export function PanelPersonal({ estudio, reservas, fechaVista }: PropsPanelPerso
     },
     onSuccess: (personalActualizado) => {
       setPersonalVisual((actual) =>
-        actual.map((item) =>
-          item.id === personalActualizado.id ? { ...item, ...personalActualizado } : item,
-        ),
+        personalActualizado.active
+          ? actual.map((item) =>
+              item.id === personalActualizado.id ? { ...item, ...personalActualizado } : item,
+            )
+          : actual.filter((item) => item.id !== personalActualizado.id),
       );
     },
     onSettled: (_resultado, _error, variables) => {

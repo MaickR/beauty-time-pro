@@ -37,6 +37,7 @@ function serializarPerfilCompat(
 ): {
   id: string;
   nombre: string;
+  propietario: string;
   descripcion: string | null;
   direccion: string | null;
   telefono: string;
@@ -48,6 +49,7 @@ function serializarPerfilCompat(
   return {
     id: estudio.id,
     nombre: typeof estudio.nombre === 'string' ? estudio.nombre : '',
+    propietario: typeof estudio.propietario === 'string' ? estudio.propietario : '',
     descripcion: typeof estudio.descripcion === 'string' ? estudio.descripcion : null,
     direccion: typeof estudio.direccion === 'string' ? estudio.direccion : null,
     telefono: typeof estudio.telefono === 'string' ? estudio.telefono : '',
@@ -74,6 +76,7 @@ export async function rutasPerfil(servidor: FastifyInstance): Promise<void> {
       const selectPerfil = construirSelectDesdeColumnas(columnasEstudios, [
         'id',
         'nombre',
+        'propietario',
         'descripcion',
         'direccion',
         'telefono',
@@ -89,7 +92,17 @@ export async function rutasPerfil(servidor: FastifyInstance): Promise<void> {
       });
       if (!estudio) return respuesta.code(404).send({ error: 'Estudio no encontrado' });
 
-      return respuesta.send({ datos: serializarPerfilCompat(estudio as Record<string, unknown> & { id: string }) });
+      const usuarioDueno = await prisma.usuario.findFirst({
+        where: { estudioId: id, rol: 'dueno', activo: true },
+        select: { email: true },
+      });
+
+      return respuesta.send({
+        datos: {
+          ...serializarPerfilCompat(estudio as Record<string, unknown> & { id: string }),
+          emailCuenta: usuarioDueno?.email ?? null,
+        },
+      });
     },
   );
 
@@ -156,7 +169,18 @@ export async function rutasPerfil(servidor: FastifyInstance): Promise<void> {
   // POST /estudio/:id/logo
   servidor.post<{ Params: { id: string } }>(
     '/estudio/:id/logo',
-    { preHandler: verificarJWT },
+    {
+      preHandler: verificarJWT,
+      config: {
+        rateLimit: {
+          max: 10,
+          timeWindow: '1 hour',
+          errorResponseBuilder: () => ({
+            error: 'Demasiados uploads. Espera 1 hora.',
+          }),
+        },
+      },
+    },
     async (solicitud, respuesta) => {
       const payload = solicitud.user as { rol: string; estudioId: string | null };
       const { id } = solicitud.params;
@@ -215,6 +239,29 @@ export async function rutasPerfil(servidor: FastifyInstance): Promise<void> {
       await prisma.estudio.update({ where: { id }, data: { logoUrl } });
 
       return respuesta.code(201).send({ datos: { logoUrl } });
+    },
+  );
+
+  // GET /estudio/:id/contrato
+  servidor.get<{ Params: { id: string } }>(
+    '/estudio/:id/contrato',
+    { preHandler: verificarJWT },
+    async (solicitud, respuesta) => {
+      const payload = solicitud.user as { rol: string; estudioId: string | null };
+      const { id } = solicitud.params;
+      if (payload.rol !== 'maestro' && payload.estudioId !== id) {
+        return respuesta.code(403).send({ error: 'Sin permisos para esta acción' });
+      }
+
+      const estudio = await prisma.estudio.findUnique({
+        where: { id },
+        select: { id: true },
+      });
+      if (!estudio) return respuesta.code(404).send({ error: 'Estudio no encontrado' });
+
+      return respuesta.send({
+        datos: { disponible: false, mensaje: 'Service contract will be available soon.' },
+      });
     },
   );
 }

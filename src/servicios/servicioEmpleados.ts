@@ -70,7 +70,7 @@ export async function obtenerMiAgendaMes(mes: string): Promise<ReservaEmpleado[]
 
 export async function actualizarEstadoReservaEmpleado(
   reservaId: string,
-  estado: 'confirmed' | 'completed',
+  estado: 'confirmed' | 'completed' | 'no_show',
 ): Promise<ReservaEmpleado> {
   const respuesta = await peticion<{ datos: ReservaEmpleado }>(
     `/empleados/reservas/${reservaId}/estado`,
@@ -84,6 +84,17 @@ export async function actualizarEstadoReservaEmpleado(
 
 export async function obtenerMiPerfilEmpleado(): Promise<PerfilEmpleado> {
   const respuesta = await peticion<RespuestaPerfil>('/empleados/mi-perfil');
+  return respuesta.datos;
+}
+
+export interface MetricasEmpleado {
+  citasHoy: number;
+  citasSemana: number;
+  citasMes: number;
+}
+
+export async function obtenerMisMetricas(): Promise<MetricasEmpleado> {
+  const respuesta = await peticion<{ datos: MetricasEmpleado }>('/empleados/mis-metricas');
   return respuesta.datos;
 }
 

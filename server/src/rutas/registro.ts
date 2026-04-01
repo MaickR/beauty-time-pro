@@ -9,10 +9,12 @@ import { enviarEmailVerificacionCliente } from '../servicios/servicioEmail.js';
 import { esEmailValido } from '../utils/validarEmail.js';
 import { sanitizarTexto } from '../utils/sanitizar.js';
 import { colorHexSchema, fechaIsoSchema, horaSchema, obtenerMensajeValidacion, telefonoSchema, textoSchema, urlOpcionalSchema } from '../lib/validacion.js';
+import { validarCantidadServiciosPlan } from '../lib/planes.js';
+import { obtenerFechaISOEnZona, obtenerZonaHorariaPorPais } from '../utils/zonasHorarias.js';
 
-const REGEX_CONTRASENA = /^(?=.*[A-Z])(?=.*[0-9]).{8,}$/;
+const REGEX_CONTRASENA = /^(?=.*[A-Z])(?=.*[a-z])(?=.*[0-9])(?=.*[^A-Za-z0-9]).{8,}$/;
 const ERROR_DOMINIO = 'Solo se aceptan correos personales válidos y no temporales de Gmail, Hotmail, Outlook, Yahoo, iCloud o Proton';
-const ERROR_CONTRASENA = 'La contraseña debe tener al menos 8 caracteres, una mayúscula y un número';
+const ERROR_CONTRASENA = 'The password must have at least 8 characters, one uppercase, one lowercase, one number, and one special character';
 
 const esquemaHorarioRegistro = z.record(
 	z.string(),
@@ -34,7 +36,7 @@ const esquemaHorarioRegistro = z.record(
 const esquemaServicioRegistro = z.object({
 	name: textoSchema('servicio', 80),
 	duration: z.number().int().min(5, 'La duración mínima es 5 minutos').max(720, 'La duración máxima es 720 minutos'),
-	price: z.number().min(1, 'El precio debe ser mayor a 0').max(10000000, 'El precio excede el máximo permitido'),
+	price: z.number().int().min(100, 'El precio debe ser mayor a 0').max(1000000000, 'El precio excede el máximo permitido'),
 	category: textoSchema('categoria', 80).optional(),
 });
 
@@ -88,6 +90,7 @@ const esquemaRegistroCliente = z.object({
 	fechaNacimiento: fechaIsoSchema,
 	pais: z.enum(['Mexico', 'Colombia']),
 	telefono: z.union([z.literal(''), telefonoSchema]).optional().transform((valor) => (valor === '' ? null : valor)),
+	ciudad: z.string().trim().max(80, 'La ciudad no puede superar 80 caracteres').optional().transform((valor) => valor || null),
 });
 
 const esquemaVerificarEmailCliente = z.object({
@@ -199,7 +202,7 @@ export async function rutasRegistro(servidor: FastifyInstance): Promise<void> {
 			]);
 
 			if (existeCliente ?? existeUsuario) {
-				return respuesta.code(409).send({ error: 'Este correo ya está registrado', codigo: 'EMAIL_DUPLICADO' });
+				return respuesta.send({ disponible: true });
 			}
 
 			return respuesta.send({ disponible: true });
@@ -218,6 +221,7 @@ export async function rutasRegistro(servidor: FastifyInstance): Promise<void> {
 			fechaNacimiento: string;
 			pais: 'Mexico' | 'Colombia';
 			telefono?: string;
+			ciudad?: string;
 		};
 	}>(  '/registro/cliente',
 	  {
@@ -237,7 +241,7 @@ export async function rutasRegistro(servidor: FastifyInstance): Promise<void> {
 			return respuesta.code(400).send({ error: obtenerMensajeValidacion(resultado.error) });
 		}
 
-		const { email, contrasena, nombre, apellido, fechaNacimiento, pais, telefono } = resultado.data;
+		const { email, contrasena, nombre, apellido, fechaNacimiento, pais, telefono, ciudad } = resultado.data;
 
 		const emailNorm = email.trim().toLowerCase();
 
@@ -255,7 +259,7 @@ export async function rutasRegistro(servidor: FastifyInstance): Promise<void> {
 		]);
 
 		if (existeCliente ?? existeUsuario) {
-			return respuesta.code(409).send({ error: 'Este correo ya está registrado' });
+			return respuesta.send({ datos: { mensaje: 'Si este correo no está registrado, recibirás un email de confirmación.' } });
 		}
 
 		const hashContrasena = await bcrypt.hash(contrasena, 12);
@@ -269,6 +273,7 @@ export async function rutasRegistro(servidor: FastifyInstance): Promise<void> {
 				fechaNacimiento: new Date(fechaNacimiento),
 				pais,
 				telefono: telefono?.trim() ?? null,
+				ciudad: ciudad ?? null,
 				emailVerificado: false,
 			},
 		});
@@ -504,8 +509,16 @@ export async function rutasRegistro(servidor: FastifyInstance): Promise<void> {
 			obtenerUsuarioBloqueante(emailNorm),
 		]);
 
+		const errorServiciosPlan = validarCantidadServiciosPlan({
+			plan: 'STANDARD',
+			cantidadNueva: servicios.length,
+		});
+		if (errorServiciosPlan) {
+			return respuesta.code(400).send({ error: errorServiciosPlan, codigo: 'LIMITE_PLAN' });
+		}
+
 		if (existeCliente ?? existeUsuario) {
-			return respuesta.code(409).send({ error: 'Este correo ya está registrado' });
+			return respuesta.send({ datos: { mensaje: 'Si este correo no está registrado, recibirás un email de confirmación.' } });
 		}
 
 		const hashContrasena = await bcrypt.hash(contrasena, 12);
@@ -515,8 +528,9 @@ export async function rutasRegistro(servidor: FastifyInstance): Promise<void> {
 		const hoy = new Date();
 		const vencimiento = new Date(hoy);
 		vencimiento.setMonth(vencimiento.getMonth() + 1);
-		const vencimientoStr = vencimiento.toISOString().split('T')[0]!;
-		const hoyStr = hoy.toISOString().split('T')[0]!;
+		const zonaHorariaSalon = obtenerZonaHorariaPorPais(pais);
+		const vencimientoStr = obtenerFechaISOEnZona(vencimiento, zonaHorariaSalon, pais);
+		const hoyStr = obtenerFechaISOEnZona(hoy, zonaHorariaSalon, pais);
 
 		const [_usuario, _estudio] = await prisma.$transaction(async (tx) => {
 			const nuevoUsuario = await tx.usuario.create({
@@ -537,6 +551,7 @@ export async function rutasRegistro(servidor: FastifyInstance): Promise<void> {
 					telefono: telefono.trim(),
 					sitioWeb: sitioWeb ?? null,
 					pais,
+					zonaHoraria: obtenerZonaHorariaPorPais(pais),
 					sucursales,
 					claveDueno,
 					claveCliente,

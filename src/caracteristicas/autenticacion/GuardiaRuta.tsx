@@ -10,7 +10,8 @@ interface PropsGuardiaRuta {
 export function GuardiaRuta({ rolesPermitidos }: PropsGuardiaRuta) {
   const ubicacion = useLocation();
   const { mostrarToast } = usarToast();
-  const { iniciando, rol, estudioActual, claveClienteActual, usuario } = usarTiendaAuth();
+  const { iniciando, rol, estudioActual, slugEstudioActual, claveClienteActual, usuario } =
+    usarTiendaAuth();
   const yaMostroToast = useRef(false);
 
   useEffect(() => {
@@ -38,6 +39,7 @@ export function GuardiaRuta({ rolesPermitidos }: PropsGuardiaRuta) {
         to={obtenerRutaPorRol(
           rol,
           estudioActual,
+          slugEstudioActual,
           claveClienteActual,
           usuario?.forzarCambioContrasena ?? false,
         )}

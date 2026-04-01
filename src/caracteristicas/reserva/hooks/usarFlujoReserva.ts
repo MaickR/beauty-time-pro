@@ -8,6 +8,7 @@ interface DatosContactoFormulario {
   telefonoCliente: string;
   fechaNacimiento: string;
   email?: string;
+  observaciones?: string;
   usarRecompensa?: boolean;
 }
 
@@ -176,6 +177,7 @@ export function usarFlujoReserva(): Omit<HookFlujoReserva, 'slots'> {
         staffName: estudio.staff.find((s) => s.id === personalSeleccionado)?.name ?? '',
         colorBrand: requiereColor ? marcaTinte : null,
         colorNumber: requiereColor ? numeroTinte : null,
+        observaciones: datos.observaciones || null,
         date: fechaStr,
         time: horaSeleccionada,
         createdAt: new Date().toISOString(),

@@ -220,6 +220,7 @@ export function PaginaReserva() {
 function mapearSalonDetalleAEstudio(salon: SalonDetalle, claveSalon: string): Estudio {
   return {
     id: salon.id,
+    slug: '',
     name: salon.nombre,
     owner: '',
     phone: salon.telefono,

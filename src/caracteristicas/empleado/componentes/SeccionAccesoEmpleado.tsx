@@ -9,18 +9,12 @@ import {
 } from '../../../servicios/servicioEmpleados';
 import { usarToast } from '../../../componentes/ui/ProveedorToast';
 import { ModalCrearAccesoEmpleado } from './ModalCrearAccesoEmpleado';
+import { generarContrasenaSegura } from '../../../utils/seguridad';
 
 interface PropsSeccionAccesoEmpleado {
   estudioId: string;
   personalId: string;
   nombreEmpleado: string;
-}
-
-function generarContrasenaSegura(): string {
-  const chars = 'ABCDEFGHJKMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789!@#$%';
-  let c = '';
-  for (let i = 0; i < 12; i++) c += chars[Math.floor(Math.random() * chars.length)];
-  return c;
 }
 
 export function SeccionAccesoEmpleado({

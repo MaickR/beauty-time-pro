@@ -1,7 +1,19 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Search, X, Users, Phone, Mail, StickyNote, Calendar, ChevronRight, Save } from 'lucide-react';
+import {
+  Search,
+  X,
+  Users,
+  Phone,
+  Mail,
+  StickyNote,
+  Calendar,
+  ChevronRight,
+  ChevronDown,
+  Save,
+} from 'lucide-react';
 import { Spinner } from '../../../componentes/ui/Spinner';
+import { formatearDinero } from '../../../utils/formato';
 import {
   obtenerClientesEstudio,
   obtenerDetalleCliente,
@@ -89,7 +101,9 @@ function PanelDetalleCliente({ clienteId, onCerrar }: PropsPanelCliente) {
               </span>
             )}
           </div>
-          <p className="text-sm text-slate-500 font-bold">{calcularEdadTexto(cliente.edad)} · {cliente.telefono}</p>
+          <p className="text-sm text-slate-500 font-bold">
+            {calcularEdadTexto(cliente.edad)} · {cliente.telefono}
+          </p>
           {cliente.email && <p className="text-xs text-slate-400 mt-0.5">{cliente.email}</p>}
         </div>
         <button
@@ -103,7 +117,10 @@ function PanelDetalleCliente({ clienteId, onCerrar }: PropsPanelCliente) {
 
       <div className="mb-6">
         <div className="flex items-center justify-between mb-2">
-          <label htmlFor="notas-cliente" className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-1">
+          <label
+            htmlFor="notas-cliente"
+            className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-1"
+          >
             <StickyNote className="w-3 h-3" /> Notas del salón
           </label>
           <button
@@ -132,26 +149,38 @@ function PanelDetalleCliente({ clienteId, onCerrar }: PropsPanelCliente) {
           <Calendar className="w-3 h-3" /> Historial de visitas ({cliente.reservas.length})
         </h4>
         {cliente.reservas.length === 0 ? (
-          <p className="text-slate-400 text-sm text-center py-8 font-bold">Sin visitas registradas aún</p>
+          <p className="text-slate-400 text-sm text-center py-8 font-bold">
+            Sin visitas registradas aún
+          </p>
         ) : (
           <ul className="space-y-3 overflow-y-auto max-h-80">
             {cliente.reservas.map((r) => (
               <li key={r.id} className="bg-slate-50 rounded-2xl p-4 border border-slate-100">
                 <div className="flex justify-between items-start">
                   <div>
-                    <p className="font-black text-sm">{formatearFecha(r.fecha)} — {r.horaInicio}</p>
+                    <p className="font-black text-sm">
+                      {formatearFecha(r.fecha)} — {r.horaInicio}
+                    </p>
                     <p className="text-xs text-slate-400 mt-0.5">{r.sucursal}</p>
                   </div>
                   <div className="text-right">
-                    <span className={`text-[10px] font-black uppercase px-2 py-0.5 rounded-full ${
-                      r.estado === 'completed' ? 'bg-green-100 text-green-700' :
-                      r.estado === 'cancelled' ? 'bg-red-100 text-red-700' :
-                      'bg-yellow-100 text-yellow-700'
-                    }`}>
-                      {r.estado === 'completed' ? 'Completada' : r.estado === 'cancelled' ? 'Cancelada' : 'Pendiente'}
+                    <span
+                      className={`text-[10px] font-black uppercase px-2 py-0.5 rounded-full ${
+                        r.estado === 'completed'
+                          ? 'bg-green-100 text-green-700'
+                          : r.estado === 'cancelled'
+                            ? 'bg-red-100 text-red-700'
+                            : 'bg-yellow-100 text-yellow-700'
+                      }`}
+                    >
+                      {r.estado === 'completed'
+                        ? 'Completada'
+                        : r.estado === 'cancelled'
+                          ? 'Cancelada'
+                          : 'Pendiente'}
                     </span>
                     <p className="text-xs font-black text-slate-700 mt-1">
-                      ${r.precioTotal.toLocaleString('es-MX')}
+                      {formatearDinero(r.precioTotal)}
                     </p>
                   </div>
                 </div>
@@ -168,6 +197,7 @@ export function DirectorioClientes({ estudioId }: PropsDirectorioClientes) {
   const [busqueda, setBusqueda] = useState('');
   const busquedaDebounced = usarDebounce(busqueda, 300);
   const [clienteSeleccionado, setClienteSeleccionado] = useState<string | null>(null);
+  const [filaExpandida, setFilaExpandida] = useState<string | null>(null);
 
   const { data, isLoading } = useQuery<ClienteResumen[]>({
     queryKey: ['clientes-estudio', estudioId, busquedaDebounced],
@@ -176,13 +206,22 @@ export function DirectorioClientes({ estudioId }: PropsDirectorioClientes) {
 
   const clientes = data ?? [];
 
+  const alternarFila = (id: string) => {
+    setFilaExpandida((prev) => (prev === id ? null : id));
+  };
+
   return (
     <div className="flex gap-6">
       {/* Lista */}
-      <div className={`flex-1 min-w-0 transition-all ${clienteSeleccionado ? 'hidden md:flex md:flex-col' : 'flex flex-col'}`}>
+      <div className="flex-1 min-w-0 flex flex-col">
         <div className="relative mb-6">
-          <label htmlFor="buscar-clientes" className="sr-only">Buscar clientes por nombre o teléfono</label>
-          <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" aria-hidden="true" />
+          <label htmlFor="buscar-clientes" className="sr-only">
+            Buscar clientes por nombre o teléfono
+          </label>
+          <Search
+            className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400"
+            aria-hidden="true"
+          />
           <input
             id="buscar-clientes"
             type="search"
@@ -220,64 +259,131 @@ export function DirectorioClientes({ estudioId }: PropsDirectorioClientes) {
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-slate-100">
-                  <th scope="col" className="text-left px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">Nombre</th>
-                  <th scope="col" className="text-left px-4 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest hidden sm:table-cell">Teléfono</th>
-                  <th scope="col" className="text-left px-4 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest hidden md:table-cell">Edad</th>
-                  <th scope="col" className="text-left px-4 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest hidden lg:table-cell">Visitas</th>
-                  <th scope="col" className="text-left px-4 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest hidden lg:table-cell">Última visita</th>
-                  <th scope="col" className="px-4 py-4"><span className="sr-only">Acciones</span></th>
+                  <th
+                    scope="col"
+                    className="text-left px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest"
+                  >
+                    Nombre
+                  </th>
+                  <th
+                    scope="col"
+                    className="text-left px-4 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest hidden sm:table-cell"
+                  >
+                    Teléfono
+                  </th>
+                  <th
+                    scope="col"
+                    className="text-left px-4 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest hidden md:table-cell"
+                  >
+                    Edad
+                  </th>
+                  <th
+                    scope="col"
+                    className="text-left px-4 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest hidden lg:table-cell"
+                  >
+                    Visitas
+                  </th>
+                  <th
+                    scope="col"
+                    className="text-left px-4 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest hidden lg:table-cell"
+                  >
+                    Última visita
+                  </th>
+                  <th scope="col" className="px-4 py-4">
+                    <span className="sr-only">Acciones</span>
+                  </th>
                 </tr>
               </thead>
               <tbody>
-                {clientes.map((c) => (
-                  <tr
-                    key={c.id}
-                    className={`border-b border-slate-50 hover:bg-slate-50 transition-colors cursor-pointer ${clienteSeleccionado === c.id ? 'bg-pink-50' : ''}`}
-                    onClick={() => setClienteSeleccionado(c.id)}
-                    role="button"
-                    tabIndex={0}
-                    onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') setClienteSeleccionado(c.id); }}
-                    aria-label={`Ver detalle de ${c.nombre}`}
-                  >
-                    <td className="px-6 py-4">
-                      <div className="flex items-center gap-2">
-                        <span className="font-black text-slate-800">{c.nombre}</span>
-                        {c.edad < 18 && (
-                          <span className="px-2 py-0.5 bg-yellow-100 text-yellow-800 text-[9px] font-black uppercase rounded-full shrink-0">
-                            Menor
+                {clientes.map((c) => {
+                  const expandida = filaExpandida === c.id;
+                  return (
+                    <tr
+                      key={c.id}
+                      className={`border-b border-slate-50 hover:bg-slate-50 transition-colors cursor-pointer ${clienteSeleccionado === c.id ? 'bg-pink-50' : ''}`}
+                      onClick={() => {
+                        if (window.innerWidth < 768) {
+                          alternarFila(c.id);
+                        } else {
+                          setClienteSeleccionado(c.id);
+                        }
+                      }}
+                      role="button"
+                      tabIndex={0}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' || e.key === ' ') {
+                          if (window.innerWidth < 768) {
+                            alternarFila(c.id);
+                          } else {
+                            setClienteSeleccionado(c.id);
+                          }
+                        }
+                      }}
+                      aria-label={`Ver detalle de ${c.nombre}`}
+                      aria-expanded={expandida}
+                    >
+                      <td className="px-6 py-4" colSpan={expandida ? 6 : 1}>
+                        <div className="flex items-center gap-2">
+                          <span className="font-black text-slate-800">{c.nombre}</span>
+                          {c.edad < 18 && (
+                            <span className="px-2 py-0.5 bg-yellow-100 text-yellow-800 text-[9px] font-black uppercase rounded-full shrink-0">
+                              Menor
+                            </span>
+                          )}
+                        </div>
+                        <div className="flex items-center gap-3 mt-0.5 sm:hidden">
+                          <span className="text-xs text-slate-400 flex items-center gap-1">
+                            <Phone className="w-3 h-3" aria-hidden="true" />
+                            {c.telefono}
                           </span>
+                        </div>
+
+                        {expandida && (
+                          <div className="mt-4 md:hidden">
+                            <PanelDetalleCliente
+                              clienteId={c.id}
+                              onCerrar={() => setFilaExpandida(null)}
+                            />
+                          </div>
                         )}
-                      </div>
-                      <div className="flex items-center gap-3 mt-0.5 sm:hidden">
-                        <span className="text-xs text-slate-400 flex items-center gap-1">
-                          <Phone className="w-3 h-3" aria-hidden="true" />{c.telefono}
-                        </span>
-                      </div>
-                    </td>
-                    <td className="px-4 py-4 hidden sm:table-cell">
-                      <span className="flex items-center gap-1 text-slate-600 font-medium">
-                        <Phone className="w-3 h-3 text-slate-400" aria-hidden="true" /> {c.telefono}
-                      </span>
-                      {c.email && (
-                        <span className="flex items-center gap-1 text-xs text-slate-400 mt-0.5">
-                          <Mail className="w-3 h-3" aria-hidden="true" /> {c.email}
-                        </span>
+                      </td>
+                      {!expandida && (
+                        <>
+                          <td className="px-4 py-4 hidden sm:table-cell">
+                            <span className="flex items-center gap-1 text-slate-600 font-medium">
+                              <Phone className="w-3 h-3 text-slate-400" aria-hidden="true" />{' '}
+                              {c.telefono}
+                            </span>
+                            {c.email && (
+                              <span className="flex items-center gap-1 text-xs text-slate-400 mt-0.5">
+                                <Mail className="w-3 h-3" aria-hidden="true" /> {c.email}
+                              </span>
+                            )}
+                          </td>
+                          <td className="px-4 py-4 hidden md:table-cell text-slate-600 font-medium">
+                            {calcularEdadTexto(c.edad)}
+                          </td>
+                          <td className="px-4 py-4 hidden lg:table-cell text-slate-600 font-bold">
+                            {c.totalReservas}
+                          </td>
+                          <td className="px-4 py-4 hidden lg:table-cell text-slate-400 text-xs font-medium">
+                            {c.ultimaVisita ? formatearFecha(c.ultimaVisita) : '—'}
+                          </td>
+                          <td className="px-4 py-4 text-right">
+                            <ChevronDown
+                              className="w-4 h-4 text-slate-300 ml-auto md:hidden"
+                              aria-hidden="true"
+                            />
+                            <ChevronRight
+                              className="w-4 h-4 text-slate-300 ml-auto hidden md:block"
+                              aria-hidden="true"
+                            />
+                          </td>
+                        </>
                       )}
-                    </td>
-                    <td className="px-4 py-4 hidden md:table-cell text-slate-600 font-medium">
-                      {calcularEdadTexto(c.edad)}
-                    </td>
-                    <td className="px-4 py-4 hidden lg:table-cell text-slate-600 font-bold">
-                      {c.totalReservas}
-                    </td>
-                    <td className="px-4 py-4 hidden lg:table-cell text-slate-400 text-xs font-medium">
-                      {c.ultimaVisita ? formatearFecha(c.ultimaVisita) : '—'}
-                    </td>
-                    <td className="px-4 py-4 text-right">
-                      <ChevronRight className="w-4 h-4 text-slate-300 ml-auto" aria-hidden="true" />
-                    </td>
-                  </tr>
-                ))}
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>
@@ -286,7 +392,7 @@ export function DirectorioClientes({ estudioId }: PropsDirectorioClientes) {
 
       {/* Panel lateral */}
       {clienteSeleccionado && (
-        <div className="w-full md:w-96 shrink-0 bg-white rounded-3xl border border-slate-200 p-6 shadow-sm">
+        <div className="hidden md:block w-96 shrink-0 bg-white rounded-3xl border border-slate-200 p-6 shadow-sm">
           <PanelDetalleCliente
             clienteId={clienteSeleccionado}
             onCerrar={() => setClienteSeleccionado(null)}

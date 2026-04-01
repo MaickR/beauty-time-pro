@@ -181,6 +181,7 @@ function mapearEstudios(datos: Estudio[]): Estudio[] {
     const personalRaw = (d['personal'] as Record<string, unknown>[]) ?? [];
     return {
       ...e,
+      slug: (d['slug'] as string) ?? '',
       name: (d['nombre'] as string) ?? '',
       owner: (d['propietario'] as string) ?? '',
       phone: (d['telefono'] as string) ?? '',
@@ -238,6 +239,7 @@ function mapearReservas(datos: unknown[], estudiosMap: Map<string, Estudio>): Re
       time: (d['horaInicio'] as string) ?? '',
       colorBrand: (d['marcaTinte'] as string | null) ?? null,
       colorNumber: (d['tonalidad'] as string | null) ?? null,
+      observaciones: (d['observaciones'] as string | null) ?? null,
       createdAt: (d['creadoEn'] as string) ?? '',
     };
   });

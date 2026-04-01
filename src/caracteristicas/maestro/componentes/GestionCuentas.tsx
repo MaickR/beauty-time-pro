@@ -18,6 +18,7 @@ import { peticion } from '../../../lib/clienteHTTP';
 import { SelectorFecha } from '../../../componentes/ui/SelectorFecha';
 import { Tooltip } from '../../../componentes/ui/Tooltip';
 import { usarToast } from '../../../componentes/ui/ProveedorToast';
+import { generarContrasenaSegura } from '../../../utils/seguridad';
 
 // ─── Tipos ────────────────────────────────────────────────────────────────────
 
@@ -77,29 +78,7 @@ type CamposCrear = z.infer<typeof esquemaCrear>;
 // ─── Utilidades ──────────────────────────────────────────────────────────────
 
 function generarContrasena(): string {
-  const mayusculas = 'ABCDEFGHJKLMNPQRSTUVWXYZ';
-  const minusculas = 'abcdefghijkmnpqrstuvwxyz';
-  const numeros = '23456789';
-  const especiales = '!@#$%&*';
-  const mezcla = `${mayusculas}${minusculas}${numeros}${especiales}`;
-
-  const chars = [
-    mayusculas[Math.floor(Math.random() * mayusculas.length)]!,
-    minusculas[Math.floor(Math.random() * minusculas.length)]!,
-    numeros[Math.floor(Math.random() * numeros.length)]!,
-    especiales[Math.floor(Math.random() * especiales.length)]!,
-  ];
-
-  for (let i = 0; i < 8; i++) {
-    chars.push(mezcla[Math.floor(Math.random() * mezcla.length)]!);
-  }
-
-  for (let i = chars.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
-    [chars[i], chars[j]] = [chars[j], chars[i]];
-  }
-
-  return chars.join('');
+  return generarContrasenaSegura();
 }
 
 function formatearFecha(fechaISO: string | null): string {

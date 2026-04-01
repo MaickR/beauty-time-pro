@@ -30,6 +30,11 @@ const PaginaRegistroSalon = lazy(() =>
     default: m.PaginaRegistroSalon,
   })),
 );
+const PaginaRegistroCliente = lazy(() =>
+  import('../caracteristicas/autenticacion/PaginaRegistroCliente').then((m) => ({
+    default: m.PaginaRegistroCliente,
+  })),
+);
 const PaginaEsperaAprobacion = lazy(() =>
   import('../caracteristicas/autenticacion/PaginaEsperaAprobacion').then((m) => ({
     default: m.PaginaEsperaAprobacion,
@@ -74,6 +79,36 @@ const PaginaPerfilEmpleado = lazy(() =>
     default: m.PaginaPerfilEmpleado,
   })),
 );
+const PaginaInicioCliente = lazy(() =>
+  import('../caracteristicas/cliente/PaginaInicioCliente').then((m) => ({
+    default: m.PaginaInicioCliente,
+  })),
+);
+const PaginaPerfilCliente = lazy(() =>
+  import('../caracteristicas/cliente/PaginaPerfilCliente').then((m) => ({
+    default: m.PaginaPerfilCliente,
+  })),
+);
+const PaginaHistorialCliente = lazy(() =>
+  import('../caracteristicas/cliente/PaginaHistorialCliente').then((m) => ({
+    default: m.PaginaHistorialCliente,
+  })),
+);
+const PaginaDetalleSalon = lazy(() =>
+  import('../caracteristicas/cliente/PaginaDetalleSalon').then((m) => ({
+    default: m.PaginaDetalleSalon,
+  })),
+);
+const PaginaReservaCliente = lazy(() =>
+  import('../caracteristicas/cliente/PaginaReservaCliente').then((m) => ({
+    default: m.PaginaReservaCliente,
+  })),
+);
+const PaginaVendedor = lazy(() =>
+  import('../caracteristicas/vendedor/PaginaVendedor').then((m) => ({
+    default: m.PaginaVendedor,
+  })),
+);
 
 function PantallaCargaRuta() {
   return (
@@ -84,7 +119,8 @@ function PantallaCargaRuta() {
 }
 
 function RedireccionRaiz() {
-  const { iniciando, rol, estudioActual, claveClienteActual, usuario } = usarTiendaAuth();
+  const { iniciando, rol, estudioActual, slugEstudioActual, claveClienteActual, usuario } =
+    usarTiendaAuth();
 
   if (iniciando) {
     return <PantallaCargaRuta />;
@@ -102,6 +138,7 @@ function RedireccionRaiz() {
       to={obtenerRutaPorRol(
         rol,
         estudioActual,
+        slugEstudioActual,
         claveClienteActual,
         usuario?.forzarCambioContrasena ?? false,
       )}
@@ -118,14 +155,14 @@ export function Enrutador() {
         <Route path="/iniciar-sesion" element={<PaginaInicioSesion />} />
         <Route path="/recuperar-contrasena" element={<PaginaRecuperarContrasena />} />
         <Route path="/reset-contrasena" element={<PaginaResetContrasena />} />
-        <Route path="/cancelar-reserva/:reservaId/:token" element={<PaginaCancelarReserva />} />
-        <Route path="/registro/cliente" element={<Navigate to="/" replace />} />
+        <Route path="/cancelar-reserva" element={<PaginaCancelarReserva />} />
+        <Route path="/registro/cliente" element={<PaginaRegistroCliente />} />
         <Route path="/registro/salon" element={<PaginaRegistroSalon />} />
         <Route path="/espera-aprobacion" element={<PaginaEsperaAprobacion />} />
         <Route path="/email-enviado" element={<PaginaEmailEnviado />} />
         <Route path="/verificar-email" element={<PaginaVerificarEmail />} />
 
-        <Route element={<GuardiaRuta rolesPermitidos={['maestro']} />}>
+        <Route element={<GuardiaRuta rolesPermitidos={['maestro', 'supervisor']} />}>
           <Route
             path="/maestro"
             element={
@@ -144,9 +181,20 @@ export function Enrutador() {
           />
         </Route>
 
+        <Route element={<GuardiaRuta rolesPermitidos={['vendedor']} />}>
+          <Route
+            path="/vendedor"
+            element={
+              <LimiteError>
+                <PaginaVendedor />
+              </LimiteError>
+            }
+          />
+        </Route>
+
         <Route element={<GuardiaRuta rolesPermitidos={['dueno']} />}>
           <Route
-            path="/estudio/:estudioId/agenda"
+            path="/estudio/:slug/agenda"
             element={
               <LimiteError>
                 <PaginaAgenda />
@@ -154,7 +202,7 @@ export function Enrutador() {
             }
           />
           <Route
-            path="/estudio/:estudioId/admin"
+            path="/estudio/:slug/admin"
             element={
               <LimiteError>
                 <PaginaAdminEstudio />
@@ -166,9 +214,52 @@ export function Enrutador() {
         <Route path="/salones" element={<Navigate to="/" replace />} />
         <Route path="/salones/:id" element={<Navigate to="/" replace />} />
         <Route path="/salones/:id/reservar" element={<Navigate to="/" replace />} />
-        <Route path="/inicio" element={<Navigate to="/" replace />} />
-        <Route path="/mi-perfil" element={<Navigate to="/" replace />} />
+        <Route path="/inicio" element={<Navigate to="/cliente/inicio" replace />} />
+        <Route path="/mi-perfil" element={<Navigate to="/cliente/perfil" replace />} />
         <Route path="/administracion" element={<Navigate to="/" replace />} />
+
+        <Route element={<GuardiaRuta rolesPermitidos={['cliente']} />}>
+          <Route
+            path="/cliente/inicio"
+            element={
+              <LimiteError>
+                <PaginaInicioCliente />
+              </LimiteError>
+            }
+          />
+          <Route
+            path="/cliente/perfil"
+            element={
+              <LimiteError>
+                <PaginaPerfilCliente />
+              </LimiteError>
+            }
+          />
+          <Route
+            path="/cliente/historial"
+            element={
+              <LimiteError>
+                <PaginaHistorialCliente />
+              </LimiteError>
+            }
+          />
+          <Route
+            path="/cliente/salon/:id"
+            element={
+              <LimiteError>
+                <PaginaDetalleSalon />
+              </LimiteError>
+            }
+          />
+          <Route
+            path="/cliente/salon/:id/reservar"
+            element={
+              <LimiteError>
+                <PaginaReservaCliente />
+              </LimiteError>
+            }
+          />
+        </Route>
 
         <Route
           path="/reservar/:claveEstudio"

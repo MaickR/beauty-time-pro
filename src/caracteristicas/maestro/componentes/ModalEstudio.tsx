@@ -20,6 +20,7 @@ import { SeccionPersonalFormulario } from './SeccionPersonalFormulario';
 import type { Personal } from '../../../tipos';
 import type { ConfirmacionAltaSalon, FormularioEstudio } from '../hooks/usarFormularioEstudio';
 import { obtenerDefinicionPlan } from '../../../lib/planes';
+import { convertirCentavosAMoneda, formatearDinero } from '../../../utils/formato';
 
 interface PropsCatalogo {
   alternarServicio: (nombre: string) => void;
@@ -140,19 +141,10 @@ export function ModalEstudio({
 
   const formatearPrecioVisual = (precio: number, claveServicio: string) => {
     if (preciosEnEdicion[claveServicio]) {
-      return String(precio ?? '');
+      return String(convertirCentavosAMoneda(precio ?? 0));
     }
 
-    const formateador = new Intl.NumberFormat(
-      formulario.country === 'Colombia' ? 'es-CO' : 'es-MX',
-      {
-        style: 'currency',
-        currency: formulario.country === 'Colombia' ? 'COP' : 'MXN',
-        maximumFractionDigits: 0,
-      },
-    );
-
-    return formateador.format(precio ?? 0);
+    return formatearDinero(precio ?? 0, formulario.country === 'Colombia' ? 'COP' : 'MXN');
   };
 
   if (modo === 'CONFIRMACION' && confirmacionAlta) {

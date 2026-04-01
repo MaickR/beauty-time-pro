@@ -1,6 +1,10 @@
 import { useState } from 'react';
 import { PlusCircle } from 'lucide-react';
 import type { Moneda, Servicio } from '../../../tipos';
+import { convertirCentavosAMoneda, convertirMonedaACentavos } from '../../../utils/formato';
+import { CATALOGO_SERVICIOS, type CategoriaServicio } from '../../../lib/constantes';
+
+const CATEGORIAS_FORMULARIO = Object.keys(CATALOGO_SERVICIOS) as CategoriaServicio[];
 
 const obtenerLocaleMoneda = (moneda: Moneda) => (moneda === 'COP' ? 'es-CO' : 'es-MX');
 
@@ -15,7 +19,7 @@ const formatearMontoEditable = (valor: string, moneda: Moneda) => {
 
   return `$${new Intl.NumberFormat(obtenerLocaleMoneda(moneda), {
     maximumFractionDigits: 0,
-  }).format(parseInt(valor, 10))}`;
+  }).format(convertirCentavosAMoneda(parseInt(valor, 10)))}`;
 };
 
 interface PropsFormularioNuevoServicio {
@@ -33,7 +37,8 @@ export function FormularioNuevoServicio({
 }: PropsFormularioNuevoServicio) {
   const [nombre, setNombre] = useState('');
   const [duracion, setDuracion] = useState('60');
-  const [precio, setPrecio] = useState('350');
+  const [precio, setPrecio] = useState(String(convertirMonedaACentavos(350)));
+  const [categoria, setCategoria] = useState<CategoriaServicio>('Otros');
   const [mensajeError, setMensajeError] = useState('');
 
   const manejarAgregar = () => {
@@ -43,7 +48,7 @@ export function FormularioNuevoServicio({
     }
 
     const precioNumerico = parseInt(precio, 10) || 0;
-    if (precioNumerico < 1) {
+    if (precioNumerico < 100) {
       setMensajeError('El precio debe ser mayor a 0.');
       return;
     }
@@ -52,10 +57,12 @@ export function FormularioNuevoServicio({
       name: nombreLimpio,
       duration: Math.max(5, parseInt(duracion, 10) || 0),
       price: precioNumerico,
+      category: categoria,
     });
     setNombre('');
     setDuracion('60');
-    setPrecio('350');
+    setPrecio(String(convertirMonedaACentavos(350)));
+    setCategoria('Otros');
     setMensajeError('');
   };
 
@@ -65,12 +72,13 @@ export function FormularioNuevoServicio({
 
   const manejarCambioPrecio = (valor: string) => {
     setMensajeError('');
-    setPrecio(limpiarDigitos(valor));
+    const montoVisible = parseInt(limpiarDigitos(valor) || '0', 10);
+    setPrecio(String(convertirMonedaACentavos(montoVisible)));
   };
 
   return (
     <div className="rounded-3xl border border-slate-200 bg-slate-50 p-4">
-      <div className="grid gap-3 md:grid-cols-[1.6fr_0.8fr_0.8fr_auto] md:items-end">
+      <div className="grid gap-3 md:grid-cols-[1.4fr_0.8fr_0.7fr_0.7fr_auto] md:items-end">
         <div>
           <label
             htmlFor="nuevo-servicio"
@@ -85,6 +93,26 @@ export function FormularioNuevoServicio({
             placeholder="Ej. Balayage premium"
             className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-medium text-slate-800 outline-none transition focus:ring-2 focus:ring-pink-400"
           />
+        </div>
+        <div>
+          <label
+            htmlFor="categoria-servicio"
+            className="mb-1 block text-[10px] font-black uppercase tracking-widest text-slate-500"
+          >
+            Categoría
+          </label>
+          <select
+            id="categoria-servicio"
+            value={categoria}
+            onChange={(evento) => setCategoria(evento.target.value as CategoriaServicio)}
+            className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-medium text-slate-800 outline-none transition focus:ring-2 focus:ring-pink-400"
+          >
+            {CATEGORIAS_FORMULARIO.map((cat) => (
+              <option key={cat} value={cat}>
+                {cat}
+              </option>
+            ))}
+          </select>
         </div>
         <div>
           <label

@@ -7,19 +7,24 @@ import { Eye, EyeOff, KeyRound, Lock, Scissors } from 'lucide-react';
 import { usarTiendaAuth } from '../../tienda/tiendaAuth';
 import { usarTituloPagina } from '../../hooks/usarTituloPagina';
 
+function esTelefono(valor: string) {
+  return /^\d{10}$/.test(valor.trim());
+}
+
 const esquema = z
   .object({
-    acceso: z.string().trim().min(3, 'Ingresa tu clave de acceso o correo electrónico'),
+    acceso: z.string().trim().min(3, 'Ingresa tu clave, correo o teléfono'),
     contrasena: z.string().optional(),
   })
   .superRefine((datos, contexto) => {
     const esCorreo = datos.acceso.includes('@');
+    const esTel = esTelefono(datos.acceso);
 
-    if (!esCorreo) {
+    if (!esCorreo && !esTel) {
       return;
     }
 
-    if (!z.string().email().safeParse(datos.acceso).success) {
+    if (esCorreo && !z.string().email().safeParse(datos.acceso).success) {
       contexto.addIssue({
         code: z.ZodIssueCode.custom,
         path: ['acceso'],
@@ -74,14 +79,18 @@ export function PaginaInicioSesion() {
 
   const accesoActual = watch('acceso') ?? '';
   const esCorreo = useMemo(() => accesoActual.includes('@'), [accesoActual]);
+  const esTel = useMemo(() => esTelefono(accesoActual), [accesoActual]);
+  const requiereContrasena = esCorreo || esTel;
 
   const alEnviar = async (datos: CamposFormulario) => {
     setCodigoBloqueo(null);
     setMotivoRechazo(null);
 
     const accesoEsCorreo = datos.acceso.includes('@');
+    const accesoEsTelefono = esTelefono(datos.acceso);
+    const usarCredenciales = accesoEsCorreo || accesoEsTelefono;
 
-    const resultado = accesoEsCorreo
+    const resultado = usarCredenciales
       ? await iniciarSesion(datos.acceso.trim(), datos.contrasena?.trim() ?? '')
       : await iniciarSesionConClave(datos.acceso.trim());
 
@@ -97,7 +106,9 @@ export function PaginaInicioSesion() {
       return;
     }
 
-    const destino = accesoEsCorreo ? (rutaDesde ?? resultado.ruta ?? '/') : (resultado.ruta ?? '/');
+    const destino = usarCredenciales
+      ? (rutaDesde ?? resultado.ruta ?? '/')
+      : (resultado.ruta ?? '/');
     navegar(destino);
   };
 
@@ -164,13 +175,13 @@ export function PaginaInicioSesion() {
 
           <h2 className="text-3xl font-black text-slate-900 mb-1">Acceso Beauty Time Pro</h2>
           <p className="text-slate-500 text-sm mb-8">
-            Escribe la clave del salón o el correo del panel administrativo
+            Escribe la clave del salón, tu correo o tu teléfono
           </p>
 
           <form onSubmit={handleSubmit(alEnviar)} noValidate className="space-y-5">
             <div>
               <label htmlFor="acceso" className="block text-sm font-semibold text-slate-700 mb-1.5">
-                Clave de acceso o correo electrónico
+                Clave, correo o teléfono
               </label>
               <div className="relative">
                 <KeyRound
@@ -182,15 +193,15 @@ export function PaginaInicioSesion() {
                   type="text"
                   autoComplete="username"
                   className="w-full pl-10 pr-4 py-3 bg-white border border-slate-200 rounded-xl text-slate-900 text-sm outline-none focus:ring-2 focus:ring-pink-500 focus:border-transparent transition-all"
-                  placeholder="Ej. MIKELOVCLI2026 o hola@salon.com"
+                  placeholder="Ej. MIKELOVCLI2026, hola@salon.com o 5512345678"
                   aria-describedby={errors.acceso ? 'error-acceso' : 'ayuda-acceso'}
                   aria-invalid={!!errors.acceso}
                   {...register('acceso')}
                 />
               </div>
               <p id="ayuda-acceso" className="mt-1 text-xs text-slate-500">
-                Si escribes un correo se pedirá contraseña. Si escribes una clave válida entrarás
-                directo a reservar.
+                Si escribes un correo o teléfono se pedirá contraseña. Si escribes una clave válida
+                entrarás directo a reservar.
               </p>
               {errors.acceso && (
                 <p id="error-acceso" role="alert" className="mt-1 text-xs text-red-500 font-medium">
@@ -199,7 +210,7 @@ export function PaginaInicioSesion() {
               )}
             </div>
 
-            {esCorreo && (
+            {requiereContrasena && (
               <div>
                 <label
                   htmlFor="contrasena"
@@ -246,7 +257,7 @@ export function PaginaInicioSesion() {
               </div>
             )}
 
-            {esCorreo && (
+            {requiereContrasena && (
               <div className="flex items-center justify-end">
                 <Link
                   to="/recuperar-contrasena"
@@ -367,7 +378,7 @@ export function PaginaInicioSesion() {
                   />
                   Validando acceso...
                 </span>
-              ) : esCorreo ? (
+              ) : requiereContrasena ? (
                 'Entrar al panel'
               ) : (
                 'Ir a reservar'

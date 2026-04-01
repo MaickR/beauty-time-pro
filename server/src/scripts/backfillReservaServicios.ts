@@ -17,7 +17,16 @@ const { PrismaClient } = require('../generated/prisma/client.js') as {
   };
 };
 
-const urlBaseDatos = new URL(process.env.DATABASE_URL ?? 'mysql://root:1234@localhost:3306/beauty_time_pro');
+function obtenerDatabaseUrl(): string {
+  const urlBaseDatos = process.env.DATABASE_URL?.trim();
+  if (!urlBaseDatos) {
+    throw new Error('DATABASE_URL es obligatoria para ejecutar el backfill de reserva_servicios.');
+  }
+
+  return urlBaseDatos;
+}
+
+const urlBaseDatos = new URL(obtenerDatabaseUrl());
 
 const adaptador = new PrismaMariaDb({
   host: urlBaseDatos.hostname,

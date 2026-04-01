@@ -1,14 +1,18 @@
 import { useEffect, useState } from 'react';
 import { Check, Clock, DollarSign, Pencil, Trash2, X } from 'lucide-react';
 import { useMutation } from '@tanstack/react-query';
-import { formatearDinero } from '../../../utils/formato';
+import {
+  convertirCentavosAMoneda,
+  convertirMonedaACentavos,
+  formatearDinero,
+} from '../../../utils/formato';
 import { actualizarPreciosServicios } from '../../../servicios/servicioEstudios';
 import { usarToast } from '../../../componentes/ui/ProveedorToast';
 import { DialogoConfirmacion } from '../../../componentes/ui/DialogoConfirmacion';
 import { usarContextoApp } from '../../../contextos/ContextoApp';
 import { FormularioNuevoServicio } from './FormularioNuevoServicio';
 import type { Estudio, Moneda, Servicio } from '../../../tipos';
-import { CATALOGO_SERVICIOS } from '../../../lib/constantes';
+import { CATALOGO_SERVICIOS, type CategoriaServicio } from '../../../lib/constantes';
 import { MENSAJE_FUNCION_PRO, obtenerDefinicionPlan } from '../../../lib/planes';
 
 const obtenerLocaleMoneda = (moneda: Moneda) => (moneda === 'COP' ? 'es-CO' : 'es-MX');
@@ -20,8 +24,20 @@ const normalizarEnteroEditable = (valor: string) => limpiarDigitos(valor).replac
 const formatearMontoEditable = (valor: number, moneda: Moneda) =>
   `$${new Intl.NumberFormat(obtenerLocaleMoneda(moneda), {
     maximumFractionDigits: 0,
-  }).format(Math.max(0, valor || 0))}`;
+  }).format(Math.max(0, convertirCentavosAMoneda(valor || 0)))}`;
 
+const CATEGORIAS = Object.keys(CATALOGO_SERVICIOS) as CategoriaServicio[];
+
+function inferirCategoria(nombreServicio: string): string {
+  for (const [categoria, servicios] of Object.entries(CATALOGO_SERVICIOS)) {
+    if (
+      (servicios as readonly string[]).some((s) => s.toLowerCase() === nombreServicio.toLowerCase())
+    ) {
+      return categoria;
+    }
+  }
+  return 'Otros';
+}
 interface PropsCatalogoServicios {
   estudio: Estudio;
 }
@@ -34,6 +50,7 @@ export function CatalogoServicios({ estudio }: PropsCatalogoServicios) {
   const [serviciosLocales, setServiciosLocales] = useState(estudio.selectedServices);
   const [servicioEditando, setServicioEditando] = useState<string | null>(null);
   const [borrandoServicio, setBorrandoServicio] = useState<string | null>(null);
+  const [categoriaFiltro, setCategoriaFiltro] = useState<string>('Todos');
   const serviciosBaseDisponibles = Array.from(
     new Set(Object.values(CATALOGO_SERVICIOS).flat()),
   ).sort((a, b) => a.localeCompare(b, 'es'));
@@ -54,11 +71,7 @@ export function CatalogoServicios({ estudio }: PropsCatalogoServicios) {
     },
   });
 
-  const actualizarCampoLocal = (
-    nombreServicio: string,
-    campo: 'price' | 'duration',
-    valor: string,
-  ) => {
+  const actualizarCampoLocal = (nombreServicio: string, campo: 'duration', valor: string) => {
     setServiciosLocales((actuales) =>
       actuales.map((servicio) =>
         servicio.name === nombreServicio
@@ -69,7 +82,15 @@ export function CatalogoServicios({ estudio }: PropsCatalogoServicios) {
   };
 
   const actualizarPrecioLocal = (nombreServicio: string, valor: string) => {
-    actualizarCampoLocal(nombreServicio, 'price', limpiarDigitos(valor));
+    const montoVisible = parseInt(limpiarDigitos(valor) || '0', 10);
+    const precioCentavos = convertirMonedaACentavos(montoVisible);
+    setServiciosLocales((actuales) =>
+      actuales.map((servicio) =>
+        servicio.name === nombreServicio
+          ? { ...servicio, price: Math.max(0, precioCentavos) }
+          : servicio,
+      ),
+    );
   };
 
   const actualizarDuracionLocal = (nombreServicio: string, valor: string) => {
@@ -83,7 +104,7 @@ export function CatalogoServicios({ estudio }: PropsCatalogoServicios) {
 
   const confirmarEdicion = (nombreServicio: string) => {
     const servicioEditado = serviciosLocales.find((servicio) => servicio.name === nombreServicio);
-    if ((servicioEditado?.price ?? 0) < 1) {
+    if ((servicioEditado?.price ?? 0) < 100) {
       mostrarToast({ mensaje: 'El precio debe ser mayor a 0', variante: 'error' });
       return;
     }
@@ -93,7 +114,7 @@ export function CatalogoServicios({ estudio }: PropsCatalogoServicios) {
         ? {
             ...servicio,
             duration: Math.max(5, servicio.duration || 0),
-            price: Math.max(1, servicio.price || 0),
+            price: Math.max(100, servicio.price || 0),
           }
         : servicio,
     );
@@ -128,7 +149,21 @@ export function CatalogoServicios({ estudio }: PropsCatalogoServicios) {
     setBorrandoServicio(nombreServicio);
   };
 
-  const serviciosOrdenados = [...serviciosLocales].sort((a, b) =>
+  const serviciosConCategoria = serviciosLocales.map((s) => ({
+    ...s,
+    category: s.category || inferirCategoria(s.name),
+  }));
+
+  const categoriasConServicios = CATEGORIAS.filter((cat) =>
+    serviciosConCategoria.some((s) => s.category === cat),
+  );
+
+  const serviciosFiltrados =
+    categoriaFiltro === 'Todos'
+      ? serviciosConCategoria
+      : serviciosConCategoria.filter((s) => s.category === categoriaFiltro);
+
+  const serviciosOrdenados = [...serviciosFiltrados].sort((a, b) =>
     a.name.localeCompare(b.name, 'es'),
   );
 
@@ -164,7 +199,8 @@ export function CatalogoServicios({ estudio }: PropsCatalogoServicios) {
     agregarServicio({
       name: nombreServicio,
       duration: 60,
-      price: 1,
+      price: 100,
+      category: inferirCategoria(nombreServicio),
     });
   };
 
@@ -236,6 +272,25 @@ export function CatalogoServicios({ estudio }: PropsCatalogoServicios) {
         </p>
       </div>
 
+      {categoriasConServicios.length > 1 && (
+        <div className="mb-4 flex flex-wrap gap-2">
+          {['Todos', ...categoriasConServicios].map((cat) => (
+            <button
+              key={cat}
+              type="button"
+              onClick={() => setCategoriaFiltro(cat)}
+              className={`rounded-full px-3 py-1.5 text-xs font-black transition ${
+                categoriaFiltro === cat
+                  ? 'bg-pink-600 text-white shadow-sm'
+                  : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+              }`}
+            >
+              {cat}
+            </button>
+          ))}
+        </div>
+      )}
+
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
         {serviciosOrdenados.map((s) => {
           const editando = servicioEditando === s.name;
@@ -254,6 +309,9 @@ export function CatalogoServicios({ estudio }: PropsCatalogoServicios) {
                     style={{ color: 'var(--color-texto)' }}
                   >
                     {s.name}
+                  </span>
+                  <span className="mt-0.5 block text-[10px] font-bold uppercase tracking-wider text-pink-500">
+                    {s.category || inferirCategoria(s.name)}
                   </span>
                 </div>
 
@@ -363,6 +421,11 @@ export function CatalogoServicios({ estudio }: PropsCatalogoServicios) {
             </div>
           );
         })}
+        {serviciosOrdenados.length === 0 && serviciosLocales.length > 0 && (
+          <p className="col-span-full text-center text-slate-400 italic font-bold py-8">
+            No hay servicios en esta categoría.
+          </p>
+        )}
         {serviciosLocales.length === 0 && (
           <p className="col-span-full text-center text-slate-400 italic font-bold py-8">
             No hay servicios configurados.

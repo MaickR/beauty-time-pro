@@ -34,10 +34,10 @@ export function GestorFestivos({ estudio }: PropsGestorFestivos) {
   return (
     <div className="bg-white rounded-[3rem] p-6 md:p-8 border border-slate-200 shadow-sm">
       <h3 className="text-sm font-black text-slate-900 uppercase tracking-widest mb-2 flex items-center gap-2">
-        <Calendar className="w-4 h-4 text-pink-600" /> Días Inhábiles
+        <Calendar className="w-4 h-4 text-pink-600" /> Días de descanso
       </h3>
       <p className="text-[10px] text-slate-400 font-bold mb-6">
-        Bloquea fechas (festivos, descanso) para que no haya reservas.
+        Fechas en las que el salón no presta atención ni acepta reservas.
       </p>
 
       <div className="flex flex-col sm:flex-row gap-2 mb-6">

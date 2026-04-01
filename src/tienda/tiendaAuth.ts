@@ -6,10 +6,11 @@ import {
   refrescarSesion,
   cerrarSesionAPI,
   type PermisosSesionMaestro,
+  type PermisosSesionSupervisor,
 } from '../servicios/servicioAuth';
 import { ErrorAPI, limpiarToken, registrarCallbackSesionExpirada } from '../lib/clienteHTTP';
 
-export type RolUsuario = 'maestro' | 'dueno' | 'cliente' | 'empleado';
+export type RolUsuario = 'maestro' | 'supervisor' | 'vendedor' | 'dueno' | 'cliente' | 'empleado';
 
 interface ResultadoInicioSesion {
   exito: boolean;
@@ -28,11 +29,13 @@ interface EstadoAuth {
     email: string;
     esMaestroTotal: boolean;
     permisos: PermisosSesionMaestro;
+    permisosSupervisor: PermisosSesionSupervisor;
     personalId: string | null;
     forzarCambioContrasena: boolean;
   } | null;
   rol: RolUsuario | null;
   estudioActual: string | null;
+  slugEstudioActual: string | null;
   claveClienteActual: string | null;
   iniciando: boolean;
   inicializarAutenticacion: () => () => void;
@@ -88,22 +91,45 @@ function crearPermisosVacios(): PermisosSesionMaestro {
   };
 }
 
+function crearPermisosSupervisorVacios(): PermisosSesionSupervisor {
+  return {
+    verTotalSalones: false,
+    verControlSalones: false,
+    verReservas: false,
+    verVentas: false,
+    verDirectorio: false,
+    editarDirectorio: false,
+    verControlCobros: false,
+    accionRecordatorio: false,
+    accionRegistroPago: false,
+    accionSuspension: false,
+    activarSalones: false,
+    verPreregistros: false,
+  };
+}
+
 function esClaveClientePublica(clave: string) {
-  return /CLI[0-9A-F]{6}$/.test(clave.trim().toUpperCase());
+  return /^CLI[0-9A-F]{20}$/.test(clave.trim().toUpperCase());
 }
 
 export function obtenerRutaPorRol(
   rol: RolUsuario | null,
   estudioActual: string | null,
+  slugEstudioActual: string | null,
   claveClienteActual: string | null,
-  forzarCambioContrasena = false,
+  _forzarCambioContrasena = false,
 ) {
-  if (rol === 'maestro') return '/maestro';
-  if (rol === 'dueno' && estudioActual) return `/estudio/${estudioActual}/agenda`;
-  if (rol === 'cliente')
-    return claveClienteActual ? `/reservar/${claveClienteActual}` : '/iniciar-sesion';
-  if (rol === 'empleado')
-    return forzarCambioContrasena ? '/empleado/cambiar-contrasena' : '/empleado/agenda';
+  if (rol === 'maestro' || rol === 'supervisor') return '/maestro';
+  if (rol === 'vendedor') return '/vendedor';
+  if (rol === 'dueno' && estudioActual) {
+    const identificadorRuta = slugEstudioActual ?? estudioActual;
+    return `/estudio/${identificadorRuta}/agenda`;
+  }
+  if (rol === 'cliente') {
+    if (claveClienteActual) return `/reservar/${claveClienteActual}`;
+    return estudioActual ? `/reservar/${estudioActual}` : '/cliente/inicio';
+  }
+  if (rol === 'empleado') return '/empleado/agenda';
   return '/iniciar-sesion';
 }
 
@@ -111,6 +137,7 @@ export const usarTiendaAuth = create<EstadoAuth>((set) => ({
   usuario: null,
   rol: null,
   estudioActual: null,
+  slugEstudioActual: null,
   claveClienteActual: null,
   iniciando: true,
 
@@ -141,11 +168,13 @@ export const usarTiendaAuth = create<EstadoAuth>((set) => ({
               email: datos.email ?? '',
               esMaestroTotal: datos.esMaestroTotal ?? false,
               permisos: datos.permisos ?? crearPermisosVacios(),
+              permisosSupervisor: datos.permisosSupervisor ?? crearPermisosSupervisorVacios(),
               personalId: datos.personalId ?? null,
               forzarCambioContrasena: datos.forzarCambioContrasena ?? false,
             },
             rol,
             estudioActual: datos.estudioId,
+            slugEstudioActual: datos.slugEstudio ?? null,
             claveClienteActual: rol === 'cliente' ? datos.estudioId : null,
             iniciando: false,
           });
@@ -163,14 +192,6 @@ export const usarTiendaAuth = create<EstadoAuth>((set) => ({
     try {
       const datos = await iniciarSesionConEmailAPI(email, contrasena);
       const rol = datos.rol as RolUsuario;
-      if (rol === 'cliente') {
-        limpiarToken();
-        limpiarSesionReserva();
-        return {
-          exito: false,
-          mensaje: 'Para reservar una cita debes ingresar con la clave del salón.',
-        };
-      }
       localStorage.setItem(CLAVE_SESION, '1');
       limpiarSesionReserva();
       set({
@@ -181,16 +202,19 @@ export const usarTiendaAuth = create<EstadoAuth>((set) => ({
           email: datos.email ?? '',
           esMaestroTotal: datos.esMaestroTotal ?? false,
           permisos: datos.permisos ?? crearPermisosVacios(),
+          permisosSupervisor: datos.permisosSupervisor ?? crearPermisosSupervisorVacios(),
           personalId: datos.personalId ?? null,
           forzarCambioContrasena: datos.forzarCambioContrasena ?? false,
         },
         rol,
         estudioActual: datos.estudioId,
+        slugEstudioActual: datos.slugEstudio ?? null,
         claveClienteActual: null,
       });
       const ruta = obtenerRutaPorRol(
         rol,
         datos.estudioId,
+        datos.slugEstudio ?? null,
         null,
         datos.forzarCambioContrasena ?? false,
       );
@@ -252,11 +276,13 @@ export const usarTiendaAuth = create<EstadoAuth>((set) => ({
             email: datos.email,
             esMaestroTotal: datos.esMaestroTotal,
             permisos: datos.permisos ?? crearPermisosVacios(),
+            permisosSupervisor: datos.permisosSupervisor ?? crearPermisosSupervisorVacios(),
             personalId: datos.personalId ?? null,
             forzarCambioContrasena: datos.forzarCambioContrasena ?? false,
           },
           rol,
           estudioActual: datos.estudioId,
+          slugEstudioActual: datos.slugEstudio ?? null,
           claveClienteActual: claveNormalizada,
         });
         return {
@@ -276,17 +302,20 @@ export const usarTiendaAuth = create<EstadoAuth>((set) => ({
           email: datos.email,
           esMaestroTotal: datos.esMaestroTotal,
           permisos: datos.permisos ?? crearPermisosVacios(),
+          permisosSupervisor: datos.permisosSupervisor ?? crearPermisosSupervisorVacios(),
           personalId: datos.personalId ?? null,
           forzarCambioContrasena: datos.forzarCambioContrasena ?? false,
         },
         rol,
         estudioActual: datos.estudioId,
+        slugEstudioActual: datos.slugEstudio ?? null,
         claveClienteActual: null,
       });
 
       const ruta = obtenerRutaPorRol(
         rol,
         datos.estudioId,
+        datos.slugEstudio ?? null,
         null,
         datos.forzarCambioContrasena ?? false,
       );

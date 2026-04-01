@@ -1,16 +1,33 @@
 import type { FastifyInstance } from 'fastify';
+import { z } from 'zod';
 import { prisma } from '../prismaCliente.js';
 import { verificarJWT } from '../middleware/autenticacion.js';
 import { requierePermiso } from '../middleware/verificarPermiso.js';
 import { registrarAuditoria } from '../utils/auditoria.js';
+import { normalizarZonaHorariaEstudio, obtenerFechaISOEnZona } from '../utils/zonasHorarias.js';
+import { enviarEmailPagoConfirmado } from '../servicios/servicioEmail.js';
 
 type PaisPago = 'Mexico' | 'Colombia';
 type MonedaPago = 'MXN' | 'COP';
 
-function obtenerFechaISOActual(): string {
-  const hoy = new Date();
-  hoy.setHours(0, 0, 0, 0);
-  return hoy.toISOString().split('T')[0]!;
+const esquemaCrearPago = z.object({
+  estudioId: z.string().trim().min(1, 'estudioId es requerido'),
+  monto: z.number().int().min(1, 'monto debe ser un entero positivo en centavos').max(1_000_000_000),
+  moneda: z.string().trim().optional(),
+  concepto: z.string().trim().max(160).optional(),
+  fecha: z.string().trim().regex(/^\d{4}-\d{2}-\d{2}$/, 'fecha debe usar formato YYYY-MM-DD'),
+  tipo: z.string().trim().max(60).optional(),
+  referencia: z.string().trim().max(120).optional(),
+  extenderSuscripcion: z.boolean().optional(),
+  meses: z.number().int().min(1).max(24).optional(),
+});
+
+function obtenerFechaISOActual(zonaHoraria?: string | null, pais?: string | null): string {
+  return obtenerFechaISOEnZona(
+    new Date(),
+    normalizarZonaHorariaEstudio(zonaHoraria, pais),
+    pais,
+  );
 }
 
 function crearFechaDesdeISO(fechaISO: string): Date {
@@ -82,12 +99,14 @@ function calcularNuevaFechaVencimiento(params: {
   fechaVencimiento?: string | null;
   inicioSuscripcion?: string | null;
   meses: number;
+  zonaHoraria?: string | null;
+  pais?: string | null;
 }): {
   fechaBase: string;
   nuevaFechaVencimiento: string;
   estrategia: 'desde_vencimiento_actual' | 'desde_hoy';
 } {
-  const hoy = obtenerFechaISOActual();
+  const hoy = obtenerFechaISOActual(params.zonaHoraria, params.pais);
   const fechaReferencia = params.fechaVencimiento || params.inicioSuscripcion || hoy;
   const fechaBase = fechaReferencia >= hoy ? fechaReferencia : hoy;
   const fechaCalculada = crearFechaDesdeISO(fechaBase);
@@ -208,12 +227,15 @@ export async function rutasPagos(servidor: FastifyInstance): Promise<void> {
     if (payload.rol !== 'maestro') {
       return respuesta.code(403).send({ error: 'Sin permisos para esta acción' });
     }
-    const { estudioId, monto, moneda, concepto, fecha, tipo, referencia, extenderSuscripcion, meses } =
-      solicitud.body;
 
-    if (!estudioId || !monto || !fecha) {
-      return respuesta.code(400).send({ error: 'Campos requeridos: estudioId, monto, fecha' });
+    const resultado = esquemaCrearPago.safeParse(solicitud.body);
+    if (!resultado.success) {
+      return respuesta.code(400).send({ error: resultado.error.issues[0]?.message ?? 'Datos inválidos' });
     }
+
+    const { estudioId, monto, moneda, concepto, fecha, tipo, referencia, extenderSuscripcion, meses } =
+      resultado.data;
+
 
     const estudio = await prisma.estudio.findUnique({
       where: { id: estudioId },
@@ -221,8 +243,13 @@ export async function rutasPagos(servidor: FastifyInstance): Promise<void> {
         id: true,
         nombre: true,
         pais: true,
+        zonaHoraria: true,
         fechaVencimiento: true,
         inicioSuscripcion: true,
+        estado: true,
+        activo: true,
+        emailContacto: true,
+        propietario: true,
       },
     });
 
@@ -237,6 +264,8 @@ export async function rutasPagos(servidor: FastifyInstance): Promise<void> {
           fechaVencimiento: estudio.fechaVencimiento,
           inicioSuscripcion: estudio.inicioSuscripcion,
           meses: mesesAplicados,
+          zonaHoraria: estudio.zonaHoraria,
+          pais: estudio.pais,
         })
       : null;
 
@@ -276,6 +305,60 @@ export async function rutasPagos(servidor: FastifyInstance): Promise<void> {
       },
       ip: solicitud.ip,
     });
+
+    // Si el salón estaba suspendido y se extendió la suscripción, reactivar automáticamente
+    if (renovacion && estudio.estado === 'suspendido') {
+      await prisma.estudio.update({
+        where: { id: estudioId },
+        data: {
+          estado: 'aprobado',
+          activo: true,
+          fechaSuspension: null,
+        },
+      });
+
+      await registrarAuditoria({
+        usuarioId: payload.sub,
+        accion: 'reactivar_salon_por_pago',
+        entidadTipo: 'estudio',
+        entidadId: estudioId,
+        detalles: {
+          estudioNombre: estudio.nombre,
+          nuevaFechaVencimiento: renovacion.nuevaFechaVencimiento,
+        },
+        ip: solicitud.ip,
+      });
+    }
+
+    // Crear notificación in-app de pago confirmado
+    if (renovacion) {
+      try {
+        await prisma.notificacionEstudio.create({
+          data: {
+            estudioId,
+            tipo: 'pago_confirmado',
+            titulo: 'Pago confirmado',
+            mensaje: `Tu suscripción está activa hasta el ${renovacion.nuevaFechaVencimiento}.`,
+          },
+        });
+      } catch (errNotif) {
+        solicitud.log.warn({ err: errNotif, estudioId }, 'No se pudo crear notificación de pago confirmado');
+      }
+    }
+
+    // Enviar email de confirmación al dueño del salón
+    if (renovacion && estudio.emailContacto) {
+      try {
+        await enviarEmailPagoConfirmado({
+          email: estudio.emailContacto,
+          nombreDueno: estudio.propietario ?? estudio.nombre,
+          nombreSalon: estudio.nombre,
+          nuevaFechaVencimiento: renovacion.nuevaFechaVencimiento,
+        });
+      } catch (errEmail) {
+        solicitud.log.warn({ err: errEmail, estudioId }, 'No se pudo enviar email de confirmación de pago');
+      }
+    }
 
     return respuesta.code(201).send({
       datos: {

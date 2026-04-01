@@ -46,6 +46,7 @@ const esquema = z
     apellido: z.string().min(2, 'Mínimo 2 caracteres'),
     email: z.string().email('Correo inválido').refine(esDominioPermitido, DOMINIOS_MSG),
     pais: z.enum(['Mexico', 'Colombia']),
+    ciudad: z.string().max(80, 'Máximo 80 caracteres').optional().or(z.literal('')),
     contrasena: z
       .string()
       .min(8, 'Mínimo 8 caracteres')
@@ -139,6 +140,7 @@ export function PaginaRegistroCliente() {
     resolver: zodResolver(esquema),
     defaultValues: {
       pais: 'Mexico',
+      ciudad: '',
       telefono: '',
       fechaNacimiento: '',
     },
@@ -157,6 +159,7 @@ export function PaginaRegistroCliente() {
         nombre: datos.nombre,
         apellido: datos.apellido,
         pais: datos.pais,
+        ciudad: datos.ciudad || undefined,
         fechaNacimiento: datos.fechaNacimiento,
         telefono: datos.telefono || undefined,
       });
@@ -332,6 +335,27 @@ export function PaginaRegistroCliente() {
               {errors.pais && (
                 <p role="alert" className="mt-1 text-xs text-red-500">
                   {errors.pais.message}
+                </p>
+              )}
+            </div>
+
+            {/* Ciudad */}
+            <div>
+              <label htmlFor="ciudad" className="block text-sm font-semibold text-slate-700 mb-1">
+                Ciudad <span className="font-normal text-slate-400">(optional)</span>
+              </label>
+              <input
+                id="ciudad"
+                type="text"
+                autoComplete="address-level2"
+                className="w-full px-3.5 py-3 bg-white border border-slate-200 rounded-xl text-sm outline-none focus:ring-2 focus:ring-pink-500 focus:border-transparent"
+                placeholder="Ej. Ciudad de México"
+                aria-invalid={!!errors.ciudad}
+                {...register('ciudad')}
+              />
+              {errors.ciudad && (
+                <p role="alert" className="mt-1 text-xs text-red-500">
+                  {errors.ciudad.message}
                 </p>
               )}
             </div>

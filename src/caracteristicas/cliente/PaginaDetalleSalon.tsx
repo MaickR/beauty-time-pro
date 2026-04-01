@@ -5,6 +5,7 @@ import { MapPin, Phone, Mail, Clock, Calendar, ChevronRight, Users, Tag } from '
 import { obtenerSalonPublico } from '../../servicios/servicioClienteApp';
 import { NavegacionCliente } from '../../componentes/diseno/NavegacionCliente';
 import { Spinner } from '../../componentes/ui/Spinner';
+import { formatearDinero } from '../../utils/formato';
 import type { SalonDetalle } from '../../tipos';
 
 function iniciales(nombre: string): string {
@@ -78,7 +79,10 @@ export function PaginaDetalleSalon() {
     return (
       <div className="min-h-screen bg-slate-50 font-sans flex flex-col items-center justify-center gap-4">
         <p className="font-black text-slate-900 text-xl">Salón no encontrado</p>
-        <button onClick={() => navegar('/inicio')} className="text-pink-600 font-bold underline">
+        <button
+          onClick={() => navegar('/cliente/inicio')}
+          className="text-pink-600 font-bold underline"
+        >
           Volver al inicio
         </button>
       </div>
@@ -258,7 +262,7 @@ export function PaginaDetalleSalon() {
                           </span>
                           {s.price > 0 && (
                             <span className="text-xs font-bold px-2 py-1 bg-green-50 text-green-700 rounded-lg">
-                              ${s.price.toLocaleString('es-MX')}
+                              {formatearDinero(s.price, salon.pais === 'Colombia' ? 'COP' : 'MXN')}
                             </span>
                           )}
                         </div>
@@ -275,7 +279,7 @@ export function PaginaDetalleSalon() {
       {/* Botón flotante */}
       <div className="fixed bottom-0 left-0 right-0 p-4 bg-white/80 backdrop-blur-md border-t border-slate-100 flex justify-center z-40">
         <button
-          onClick={() => navegar(`/salones/${salon.id}/reservar`)}
+          onClick={() => navegar(`/cliente/salon/${salon.id}/reservar`)}
           className="w-full max-w-md py-4 rounded-2xl font-black text-white flex items-center justify-center gap-2 shadow-xl hover:brightness-110 transition-all text-base"
           style={{ backgroundColor: color }}
         >

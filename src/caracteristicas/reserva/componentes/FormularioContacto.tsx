@@ -28,11 +28,12 @@ const esquema = z.object({
       return d >= hace100;
     }, 'Fecha no puede ser mayor a 100 años'),
   email: z.string().email('Correo electrónico inválido').or(z.literal('')).optional(),
+  observaciones: z.string().max(500, 'Máximo 500 caracteres').optional(),
 });
 
 type CamposContacto = z.infer<typeof esquema>;
 
-type DatosEnvioContacto = CamposContacto & { usarRecompensa?: boolean };
+type DatosEnvioContacto = CamposContacto & { usarRecompensa?: boolean; observaciones?: string };
 
 interface PropsFormularioContacto {
   estudio: Estudio;
@@ -181,7 +182,12 @@ export function FormularioContacto({
         </div>
       )}
 
-      <form onSubmit={handleSubmit((datos) => onEnviar({ ...datos, usarRecompensa }))} noValidate>
+      <form
+        onSubmit={handleSubmit((datos) =>
+          onEnviar({ ...datos, usarRecompensa, observaciones: datos.observaciones }),
+        )}
+        noValidate
+      >
         <div className="space-y-6 mb-10">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <div>
@@ -364,6 +370,28 @@ export function FormularioContacto({
               </select>
             </div>
           )}
+
+          <div>
+            <label
+              htmlFor="observaciones"
+              className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3 ml-2"
+            >
+              Notes <span className="text-slate-600 text-[9px] normal-case">(optional)</span>
+            </label>
+            <textarea
+              id="observaciones"
+              rows={3}
+              maxLength={500}
+              placeholder="Allergies, preferences, special requests..."
+              {...register('observaciones')}
+              className="w-full px-6 py-4 bg-slate-800 border border-slate-700 rounded-2xl font-bold text-white outline-none focus:border-pink-500 transition-all resize-none"
+            />
+            {errors.observaciones && (
+              <p className="mt-2 ml-2 text-red-400 text-xs font-bold">
+                {errors.observaciones.message}
+              </p>
+            )}
+          </div>
         </div>
 
         <button

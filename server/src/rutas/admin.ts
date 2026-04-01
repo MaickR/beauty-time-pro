@@ -1,6 +1,6 @@
 import type { FastifyInstance } from 'fastify';
 import type { Prisma } from '../generated/prisma/client.js';
-import { randomBytes, randomUUID } from 'node:crypto';
+import { randomBytes, randomInt, randomUUID } from 'node:crypto';
 import { z } from 'zod';
 import { prisma } from '../prismaCliente.js';
 import { verificarJWT } from '../middleware/autenticacion.js';
@@ -12,7 +12,11 @@ import { enviarEmailBienvenidaSalon, enviarEmailRechazoSalon, enviarEmailCancela
 import { generarHashContrasena } from '../utils/contrasenas.js';
 import { registrarAuditoria } from '../utils/auditoria.js';
 import { emailSchema, fechaIsoSchema, obtenerMensajeValidacion, telefonoSchema, textoSchema } from '../lib/validacion.js';
-import { normalizarPlanEstudio } from '../lib/planes.js';
+import { normalizarPlanEstudio, validarCantidadServiciosPlan } from '../lib/planes.js';
+import { generarClavesSalonUnicas } from '../lib/clavesSalon.js';
+import { convertirMonedaACentavos } from '../utils/moneda.js';
+import { obtenerFechaISOEnZona, obtenerZonaHorariaPorPais } from '../utils/zonasHorarias.js';
+import { generarSlugUnico } from '../utils/generarSlug.js';
 
 const esquemaRechazoSolicitud = z.object({
   motivo: textoSchema('motivo', 500, 10),
@@ -30,7 +34,7 @@ const esquemaCrearSalonAdmin = z.object({
   servicios: z.array(z.object({
     name: textoSchema('name', 120, 1),
     duration: z.number().int().min(1).max(480),
-    price: z.number().int().min(0).max(9_999_999),
+    price: z.number().int().min(100).max(999_999_999),
     category: z.string().trim().min(1).max(80).optional(),
   })).optional().default([]),
   serviciosCustom: z.array(z.object({
@@ -50,10 +54,10 @@ const esquemaCrearSalonAdmin = z.object({
 function generarContrasenaAleatoria(): string {
   const chars = 'abcdefghijkmnpqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXYZ23456789';
   let result = '';
-  result += 'ABCDEFGH'[Math.floor(Math.random() * 8)];
-  result += '23456789'[Math.floor(Math.random() * 8)];
+  result += 'ABCDEFGH'[randomInt(8)]!;
+  result += '23456789'[randomInt(8)]!;
   for (let i = 0; i < 8; i++) {
-    result += chars[Math.floor(Math.random() * chars.length)];
+    result += chars[randomInt(chars.length)]!;
   }
   return result;
 }
@@ -62,10 +66,8 @@ function diasDesde(fecha: Date): number {
   return Math.floor((Date.now() - fecha.getTime()) / (1000 * 60 * 60 * 24));
 }
 
-function obtenerFechaISOActual(): string {
-  const hoy = new Date();
-  hoy.setHours(0, 0, 0, 0);
-  return hoy.toISOString().split('T')[0]!;
+function obtenerFechaISOActual(zonaHoraria?: string | null, pais?: string | null): string {
+  return obtenerFechaISOEnZona(new Date(), zonaHoraria ?? obtenerZonaHorariaPorPais(pais), pais);
 }
 
 function crearFechaDesdeISO(fechaISO: string): Date {
@@ -99,19 +101,23 @@ function obtenerMonedaPorPais(pais?: string | null): 'MXN' | 'COP' {
 }
 
 function obtenerMontoPlanPorPais(pais?: string | null): number {
-  return obtenerMonedaPorPais(pais) === 'COP' ? 200000 : 1000;
+  return obtenerMonedaPorPais(pais) === 'COP'
+    ? convertirMonedaACentavos(200000)
+    : convertirMonedaACentavos(1000);
 }
 
 function calcularNuevaFechaVencimiento(params: {
   fechaVencimiento?: string | null;
   inicioSuscripcion?: string | null;
   meses: number;
+  zonaHoraria?: string | null;
+  pais?: string | null;
 }): {
   fechaBase: string;
   nuevaFechaVencimiento: string;
   estrategia: 'desde_vencimiento_actual' | 'desde_hoy';
 } {
-  const hoy = obtenerFechaISOActual();
+  const hoy = obtenerFechaISOActual(params.zonaHoraria, params.pais);
   const fechaReferencia = params.fechaVencimiento || params.inicioSuscripcion || hoy;
   const fechaBase = fechaReferencia >= hoy ? fechaReferencia : hoy;
   const fechaCalculada = crearFechaDesdeISO(fechaBase);
@@ -125,11 +131,11 @@ function calcularNuevaFechaVencimiento(params: {
 }
 
 function clasificarEstadoSalon(params: {
-  estado: 'pendiente' | 'aprobado' | 'rechazado' | 'suspendido';
+  estado: 'pendiente' | 'aprobado' | 'rechazado' | 'suspendido' | 'bloqueado';
   activo: boolean;
   duenoActivo?: boolean;
-}): 'pendiente' | 'aprobado' | 'rechazado' | 'suspendido' {
-  if (params.estado === 'rechazado' || params.estado === 'pendiente') {
+}): 'pendiente' | 'aprobado' | 'rechazado' | 'suspendido' | 'bloqueado' {
+  if (params.estado === 'rechazado' || params.estado === 'pendiente' || params.estado === 'bloqueado') {
     return params.estado;
   }
 
@@ -283,7 +289,7 @@ function obtenerDuenoSalon(estudio: Record<string, unknown>) {
 
 function normalizarEstadoSalonDesdeRegistro(
   estudio: Record<string, unknown>,
-): 'pendiente' | 'aprobado' | 'rechazado' | 'suspendido' {
+): 'pendiente' | 'aprobado' | 'rechazado' | 'suspendido' | 'bloqueado' {
   const dueno = obtenerDuenoSalon(estudio);
   const estado = estudio['estado'];
 
@@ -291,7 +297,8 @@ function normalizarEstadoSalonDesdeRegistro(
     estado === 'pendiente' ||
     estado === 'aprobado' ||
     estado === 'rechazado' ||
-    estado === 'suspendido'
+    estado === 'suspendido' ||
+    estado === 'bloqueado'
   ) {
     return clasificarEstadoSalon({
       estado,
@@ -470,33 +477,30 @@ async function crearPagoAdminCompat(
   }
 }
 
-function escaparIdentificadorSQL(nombre: string): string {
-  return `\`${nombre.replace(/`/g, '')}\``;
-}
-
-function serializarValorSQL(valor: unknown): unknown {
-  if (valor == null) return valor;
-  if (typeof valor === 'object') {
-    return JSON.stringify(valor);
-  }
-
-  return valor;
-}
-
 async function insertarRegistroCompat(tabla: string, datos: Record<string, unknown>) {
-  const entradas = Object.entries(datos).filter(([, valor]) => valor !== undefined);
-  if (entradas.length === 0) {
+  const datosLimpios = Object.fromEntries(
+    Object.entries(datos).filter(([, valor]) => valor !== undefined),
+  );
+  if (Object.keys(datosLimpios).length === 0) {
     throw new Error(`No hay datos para insertar en ${tabla}`);
   }
 
-  const columnas = entradas.map(([columna]) => escaparIdentificadorSQL(columna)).join(', ');
-  const marcadores = entradas.map(() => '?').join(', ');
-  const valores = entradas.map(([, valor]) => serializarValorSQL(valor));
-
-  await prisma.$executeRawUnsafe(
-    `INSERT INTO ${escaparIdentificadorSQL(tabla)} (${columnas}) VALUES (${marcadores})`,
-    ...valores,
-  );
+  switch (tabla) {
+    case 'estudios':
+      await prisma.estudio.create({ data: datosLimpios as Prisma.EstudioCreateInput });
+      return;
+    case 'usuarios':
+      await prisma.usuario.create({ data: datosLimpios as Prisma.UsuarioCreateInput });
+      return;
+    case 'personal':
+      await prisma.personal.create({ data: datosLimpios as Prisma.PersonalCreateInput });
+      return;
+    case 'pagos':
+      await prisma.pago.create({ data: datosLimpios as Prisma.PagoCreateInput });
+      return;
+    default:
+      throw new Error(`Tabla no soportada en inserción compat: ${tabla}`);
+  }
 }
 
 async function actualizarRegistroCompat(
@@ -505,37 +509,65 @@ async function actualizarRegistroCompat(
   whereValor: unknown,
   datos: Record<string, unknown>,
 ) {
-  const entradas = Object.entries(datos).filter(([, valor]) => valor !== undefined);
-  if (entradas.length === 0) {
+  const datosLimpios = Object.fromEntries(
+    Object.entries(datos).filter(([, valor]) => valor !== undefined),
+  );
+  if (Object.keys(datosLimpios).length === 0) {
     return;
   }
 
-  const asignaciones = entradas
-    .map(([columna]) => `${escaparIdentificadorSQL(columna)} = ?`)
-    .join(', ');
-  const valores = entradas.map(([, valor]) => serializarValorSQL(valor));
+  switch (tabla) {
+    case 'estudios':
+      if (whereCampo !== 'id' || typeof whereValor !== 'string') break;
+      await prisma.estudio.update({
+        where: { id: whereValor },
+        data: datosLimpios as Prisma.EstudioUpdateInput,
+      });
+      return;
+    case 'usuarios':
+      if (whereCampo !== 'id' || typeof whereValor !== 'string') break;
+      await prisma.usuario.update({
+        where: { id: whereValor },
+        data: datosLimpios as Prisma.UsuarioUpdateInput,
+      });
+      return;
+    default:
+      break;
+  }
 
-  await prisma.$executeRawUnsafe(
-    `UPDATE ${escaparIdentificadorSQL(tabla)} SET ${asignaciones} WHERE ${escaparIdentificadorSQL(whereCampo)} = ?`,
-    ...valores,
-    serializarValorSQL(whereValor),
-  );
+  throw new Error(`Actualización compat no soportada: ${tabla}.${whereCampo}`);
 }
 
 async function eliminarRegistrosCompat(tabla: string, whereCampo: string, whereValor: unknown) {
-  await prisma.$executeRawUnsafe(
-    `DELETE FROM ${escaparIdentificadorSQL(tabla)} WHERE ${escaparIdentificadorSQL(whereCampo)} = ?`,
-    serializarValorSQL(whereValor),
-  );
+  switch (tabla) {
+    case 'personal':
+      if (whereCampo !== 'estudioId' || typeof whereValor !== 'string') break;
+      await prisma.personal.deleteMany({ where: { estudioId: whereValor } });
+      return;
+    case 'pagos':
+      if (whereCampo !== 'estudioId' || typeof whereValor !== 'string') break;
+      await prisma.pago.deleteMany({ where: { estudioId: whereValor } });
+      return;
+    case 'estudios':
+      if (whereCampo !== 'id' || typeof whereValor !== 'string') break;
+      await prisma.estudio.deleteMany({ where: { id: whereValor } });
+      return;
+    case 'usuarios':
+      if (whereCampo !== 'id' || typeof whereValor !== 'string') break;
+      await prisma.usuario.deleteMany({ where: { id: whereValor } });
+      return;
+    default:
+      break;
+  }
+
+  throw new Error(`Eliminación compat no soportada: ${tabla}.${whereCampo}`);
 }
 
 async function buscarUsuarioPorEmailCompat(email: string) {
-  const filas = await prisma.$queryRawUnsafe<Array<{ id: string }>>(
-    `SELECT ${escaparIdentificadorSQL('id')} FROM ${escaparIdentificadorSQL('usuarios')} WHERE ${escaparIdentificadorSQL('email')} = ? LIMIT 1`,
-    email,
-  );
-
-  return filas[0] ?? null;
+  return prisma.usuario.findFirst({
+    where: { email },
+    select: { id: true },
+  });
 }
 
 async function buscarDuenoSalonCompat(estudioId: string, emailContacto?: string | null) {
@@ -548,62 +580,33 @@ async function buscarDuenoSalonCompat(estudioId: string, emailContacto?: string 
     return null;
   }
 
-  const seleccion = columnasBase.map((columna) => escaparIdentificadorSQL(columna)).join(', ');
-  const filtroRol = columnasUsuarios.has('rol')
-    ? ` AND ${escaparIdentificadorSQL('rol')} = 'dueno'`
-    : '';
+  const seleccion = construirSelectDesdeColumnas(columnasUsuarios, columnasBase);
 
-  const porEstudio = await prisma.$queryRawUnsafe<Array<Record<string, unknown>>>(
-    `SELECT ${seleccion} FROM ${escaparIdentificadorSQL('usuarios')} WHERE ${escaparIdentificadorSQL('estudioId')} = ?${filtroRol} LIMIT 1`,
-    estudioId,
-  );
+  const porEstudio = await prisma.usuario.findFirst({
+    where: {
+      estudioId,
+      ...(columnasUsuarios.has('rol') ? { rol: 'dueno' } : {}),
+    },
+    select: seleccion as Prisma.UsuarioSelect,
+  });
 
-  if (porEstudio[0]) {
-    return porEstudio[0];
+  if (porEstudio) {
+    return porEstudio as Record<string, unknown>;
   }
 
   if (!emailContacto || !columnasUsuarios.has('email')) {
     return null;
   }
 
-  const porEmail = await prisma.$queryRawUnsafe<Array<Record<string, unknown>>>(
-    `SELECT ${seleccion} FROM ${escaparIdentificadorSQL('usuarios')} WHERE ${escaparIdentificadorSQL('email')} = ?${filtroRol} LIMIT 1`,
-    emailContacto,
-  );
+  const porEmail = await prisma.usuario.findFirst({
+    where: {
+      email: emailContacto,
+      ...(columnasUsuarios.has('rol') ? { rol: 'dueno' } : {}),
+    },
+    select: seleccion as Prisma.UsuarioSelect,
+  });
 
-  return porEmail[0] ?? null;
-}
-
-function normalizarPrefijoClaveAdmin(nombreSalon: string): string {
-  const base = nombreSalon
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '')
-    .toUpperCase()
-    .replace(/[^A-Z0-9]/g, '')
-    .slice(0, 8);
-
-  return base || 'SALON';
-}
-
-async function generarClavesSalonCompat(nombreSalon: string) {
-  const prefijo = normalizarPrefijoClaveAdmin(nombreSalon);
-
-  for (let intento = 0; intento < 20; intento += 1) {
-    const sufijo = randomBytes(3).toString('hex').toUpperCase();
-    const claveDueno = `${prefijo}${sufijo}`;
-    const claveCliente = `${prefijo}CLI${sufijo}`;
-    const filas = await prisma.$queryRawUnsafe<Array<{ id: string }>>(
-      `SELECT ${escaparIdentificadorSQL('id')} FROM ${escaparIdentificadorSQL('estudios')} WHERE ${escaparIdentificadorSQL('claveDueno')} = ? OR ${escaparIdentificadorSQL('claveCliente')} = ? LIMIT 1`,
-      claveDueno,
-      claveCliente,
-    );
-
-    if (filas.length === 0) {
-      return { claveDueno, claveCliente };
-    }
-  }
-
-  throw new Error('No se pudieron generar claves únicas para el salón');
+  return (porEmail as Record<string, unknown> | null) ?? null;
 }
 
 function normalizarCampoJSON(valor: unknown): unknown {
@@ -644,12 +647,11 @@ async function obtenerEstudioCreadoCompat(id: string, columnasEstudios: Set<stri
     return { id };
   }
 
-  const seleccion = columnas.map((columna) => escaparIdentificadorSQL(columna)).join(', ');
-  const filas = await prisma.$queryRawUnsafe<Array<Record<string, unknown>>>(
-    `SELECT ${seleccion} FROM ${escaparIdentificadorSQL('estudios')} WHERE ${escaparIdentificadorSQL('id')} = ? LIMIT 1`,
-    id,
-  );
-  const estudio = filas[0];
+  const seleccion = construirSelectDesdeColumnas(columnasEstudios, columnas);
+  const estudio = (await prisma.estudio.findUnique({
+    where: { id },
+    select: seleccion as Prisma.EstudioSelect,
+  })) as Record<string, unknown> | null;
 
   if (!estudio) {
     return null;
@@ -683,10 +685,10 @@ export async function rutasAdmin(servidor: FastifyInstance): Promise<void> {
       const limite = Math.min(100, Math.max(1, parseInt(limiteStr ?? '50', 10)));
       const saltar = (pagina - 1) * limite;
 
-      const estadosValidos = ['pendiente', 'aprobado', 'rechazado', 'suspendido'];
+      const estadosValidos = ['pendiente', 'aprobado', 'rechazado', 'suspendido', 'bloqueado'];
       const estadoSolicitado =
         estado && estadosValidos.includes(estado)
-          ? (estado as 'pendiente' | 'aprobado' | 'rechazado' | 'suspendido')
+          ? (estado as 'pendiente' | 'aprobado' | 'rechazado' | 'suspendido' | 'bloqueado')
           : null;
 
       const estudios = await listarSalonesAdmin();
@@ -1069,6 +1071,14 @@ export async function rutasAdmin(servidor: FastifyInstance): Promise<void> {
           serviciosCustom,
           personal,
         } = resultado.data;
+        const planNormalizado = normalizarPlanEstudio(plan);
+        const errorServiciosPlan = validarCantidadServiciosPlan({
+          plan: planNormalizado,
+          cantidadNueva: servicios.length,
+        });
+        if (errorServiciosPlan) {
+          return respuesta.code(400).send({ error: errorServiciosPlan, codigo: 'LIMITE_PLAN' });
+        }
 
         const emailNorm = email.trim().toLowerCase();
         const existente = await buscarUsuarioPorEmailCompat(emailNorm);
@@ -1078,7 +1088,8 @@ export async function rutasAdmin(servidor: FastifyInstance): Promise<void> {
 
         const hashContrasena = await generarHashContrasena(contrasena);
 
-        const { claveDueno, claveCliente } = await generarClavesSalonCompat(nombreSalon);
+        const { claveDueno, claveCliente } = await generarClavesSalonUnicas(nombreSalon);
+        const slugEstudio = await generarSlugUnico(nombreSalon);
 
         const fechaInicio = inicioSuscripcion ? crearFechaDesdeISO(inicioSuscripcion) : new Date();
         fechaInicio.setHours(0, 0, 0, 0);
@@ -1092,7 +1103,8 @@ export async function rutasAdmin(servidor: FastifyInstance): Promise<void> {
         const vencimiento = new Date(fechaInicio);
         vencimiento.setMonth(vencimiento.getMonth() + 1);
 
-        const formatearFecha = (d: Date) => d.toISOString().split('T')[0]!;
+        const formatearFecha = (d: Date) =>
+          obtenerFechaISOEnZona(d, obtenerZonaHorariaPorPais(pais), pais);
 
         const diasSemana = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado', 'Domingo'];
         const horario = Object.fromEntries(
@@ -1117,10 +1129,12 @@ export async function rutasAdmin(servidor: FastifyInstance): Promise<void> {
           await insertarRegistroCompat('estudios', {
             id: estudioCreadoId,
             nombre: nombreSalon,
+            slug: slugEstudio,
             propietario: nombreAdmin,
             telefono,
             sitioWeb: null,
             pais,
+            ...(columnasEstudios.has('zonaHoraria') && { zonaHoraria: obtenerZonaHorariaPorPais(pais) }),
             sucursales: [nombreSalon],
             claveDueno,
             claveCliente,
@@ -1132,7 +1146,7 @@ export async function rutasAdmin(servidor: FastifyInstance): Promise<void> {
             servicios,
             serviciosCustom,
             festivos: [],
-            ...(columnasEstudios.has('plan') && { plan: normalizarPlanEstudio(plan) }),
+            ...(columnasEstudios.has('plan') && { plan: planNormalizado }),
             ...(columnasEstudios.has('estado') && { estado: 'aprobado' }),
             ...(columnasEstudios.has('emailContacto') && { emailContacto: emailNorm }),
             ...(columnasEstudios.has('fechaSolicitud') && { fechaSolicitud: marcaTiempoActual }),
@@ -1259,6 +1273,8 @@ export async function rutasAdmin(servidor: FastifyInstance): Promise<void> {
         await actualizarRegistroCompat('estudios', 'id', id, {
           activo: nuevoActivo,
           ...(columnasEstudios.has('estado') && { estado: nuevoEstado }),
+          ...(columnasEstudios.has('fechaSuspension') && !nuevoActivo && { fechaSuspension: new Date() }),
+          ...(columnasEstudios.has('fechaSuspension') && nuevoActivo && { fechaSuspension: null }),
           ...(columnasEstudios.has('actualizadoEn') && { actualizadoEn: formatearFechaHoraSQL(new Date()) }),
         });
 
@@ -1362,12 +1378,16 @@ export async function rutasAdmin(servidor: FastifyInstance): Promise<void> {
       const inicioSuscripcionActual =
         typeof estudio['inicioSuscripcion'] === 'string' ? estudio['inicioSuscripcion'] : null;
       const nombreSalon = typeof estudio['nombre'] === 'string' ? estudio['nombre'] : id;
+      const paisSalon = typeof estudio['pais'] === 'string' ? estudio['pais'] : null;
+      const zonaHorariaSalon = typeof estudio['zonaHoraria'] === 'string' ? estudio['zonaHoraria'] : null;
 
       const renovacion = meses && meses > 0
         ? calcularNuevaFechaVencimiento({
             fechaVencimiento: fechaVencimientoActual,
             inicioSuscripcion: inicioSuscripcionActual,
             meses,
+            zonaHoraria: zonaHorariaSalon,
+            pais: paisSalon,
           })
         : null;
 
@@ -1407,8 +1427,11 @@ export async function rutasAdmin(servidor: FastifyInstance): Promise<void> {
     },
   );
 
+  /**
+   * POST /admin/salones/:id/recordatorio — envía recordatorio de pago (≤10 días)
+   */
   servidor.post<{ Params: { id: string } }>(
-    '/admin/salones/:id/recordatorio-pago',
+    '/admin/salones/:id/recordatorio',
     { preHandler: [verificarJWT, requierePermiso('gestionarPagos')] },
     async (solicitud, respuesta) => {
       const payload = solicitud.user as { rol: string; sub: string };
@@ -1431,6 +1454,17 @@ export async function rutasAdmin(servidor: FastifyInstance): Promise<void> {
         return respuesta.code(404).send({ error: 'Salón no encontrado' });
       }
 
+      // Calcular días restantes
+      const hoy = new Date();
+      hoy.setHours(0, 0, 0, 0);
+      const partesFecha = estudio.fechaVencimiento.split('-').map(Number);
+      const fechaVencimiento = new Date(partesFecha[0]!, partesFecha[1]! - 1, partesFecha[2]!);
+      const diasRestantes = Math.ceil((fechaVencimiento.getTime() - hoy.getTime()) / (1000 * 60 * 60 * 24));
+
+      if (diasRestantes > 10) {
+        return respuesta.code(400).send({ error: 'El recordatorio solo se puede enviar cuando faltan 10 días o menos para el corte' });
+      }
+
       const dueno = estudio.usuarios[0];
       if (!dueno?.email) {
         return respuesta.code(400).send({ error: 'El salón no tiene correo de contacto del dueño' });
@@ -1441,6 +1475,17 @@ export async function rutasAdmin(servidor: FastifyInstance): Promise<void> {
         nombreDueno: dueno.nombre || 'equipo del salón',
         nombreSalon: estudio.nombre,
         fechaVencimiento: estudio.fechaVencimiento,
+        diasRestantes: Math.max(0, diasRestantes),
+      });
+
+      // Crear notificación interna para el dashboard del salón
+      await prisma.notificacionEstudio.create({
+        data: {
+          estudioId: estudio.id,
+          tipo: 'recordatorio_pago',
+          titulo: 'Tu suscripción está por vencer',
+          mensaje: `Quedan ${Math.max(0, diasRestantes)} día${diasRestantes !== 1 ? 's' : ''}. Comunícate con nosotros para renovar.`,
+        },
       });
 
       await registrarAuditoria({
@@ -1451,12 +1496,105 @@ export async function rutasAdmin(servidor: FastifyInstance): Promise<void> {
         detalles: {
           nombre: estudio.nombre,
           fechaVencimiento: estudio.fechaVencimiento,
+          diasRestantes,
           emailDestino: dueno.email,
         },
         ip: solicitud.ip,
       });
 
       return respuesta.send({ datos: { mensaje: 'Recordatorio enviado correctamente' } });
+    },
+  );
+
+  /**
+   * POST /admin/salones/:id/aviso-suspension — suspende el salón y notifica al dueño
+   */
+  servidor.post<{ Params: { id: string } }>(
+    '/admin/salones/:id/aviso-suspension',
+    { preHandler: [verificarJWT, requierePermiso('suspenderSalones')] },
+    async (solicitud, respuesta) => {
+      const payload = solicitud.user as { rol: string; sub: string };
+      if (payload.rol !== 'maestro') {
+        return respuesta.code(403).send({ error: 'Sin permisos para esta acción' });
+      }
+
+      const { id } = solicitud.params;
+
+      const estudio = await prisma.estudio.findUnique({
+        where: { id },
+        include: {
+          usuarios: {
+            where: { rol: 'dueno' },
+            take: 1,
+            select: { id: true, email: true, nombre: true },
+          },
+        },
+      });
+
+      if (!estudio) {
+        return respuesta.code(404).send({ error: 'Salón no encontrado' });
+      }
+
+      if (estudio.estado === 'suspendido') {
+        return respuesta.code(400).send({ error: 'El salón ya se encuentra suspendido' });
+      }
+
+      // Suspender el salón y su usuario dueño
+      await prisma.estudio.update({
+        where: { id },
+        data: {
+          estado: 'suspendido',
+          activo: false,
+          fechaSuspension: new Date(),
+        },
+      });
+
+      const dueno = estudio.usuarios[0];
+      if (dueno) {
+        await prisma.usuario.update({
+          where: { id: dueno.id },
+          data: { activo: false },
+        });
+      }
+
+      // Crear notificación interna de suspensión
+      await prisma.notificacionEstudio.create({
+        data: {
+          estudioId: id,
+          tipo: 'suspension',
+          titulo: 'Tu cuenta ha sido suspendida',
+          mensaje: 'Tu suscripción fue suspendida por falta de pago. Contacta al equipo de Beauty Time Pro para reactivar tu cuenta.',
+        },
+      });
+
+      // Enviar email de suspensión al dueño
+      if (dueno?.email) {
+        try {
+          await enviarEmailRecordatorioPagoSalon({
+            email: dueno.email,
+            nombreDueno: dueno.nombre || 'equipo del salón',
+            nombreSalon: estudio.nombre,
+            fechaVencimiento: estudio.fechaVencimiento,
+          });
+        } catch (errEmail) {
+          solicitud.log.warn({ err: errEmail, estudioId: id }, 'No se pudo enviar email de suspensión');
+        }
+      }
+
+      await registrarAuditoria({
+        usuarioId: payload.sub,
+        accion: 'suspender_salon',
+        entidadTipo: 'estudio',
+        entidadId: id,
+        detalles: {
+          nombre: estudio.nombre,
+          motivo: 'falta_de_pago',
+          fechaVencimiento: estudio.fechaVencimiento,
+        },
+        ip: solicitud.ip,
+      });
+
+      return respuesta.send({ datos: { mensaje: `Salón "${estudio.nombre}" suspendido correctamente` } });
     },
   );
 
@@ -1764,6 +1902,261 @@ export async function rutasAdmin(servidor: FastifyInstance): Promise<void> {
     },
   );
 
+  // ── GET /admin/preregistros ───────────────────────────────────────────────
+  // Lista todos los preregistros de vendedores. Filtrable por estado.
+  servidor.get<{
+    Querystring: { estado?: string; pagina?: string; limite?: string };
+  }>(
+    '/admin/preregistros',
+    { preHandler: [verificarJWT, requierePermiso('aprobarSalones')] },
+    async (solicitud, respuesta) => {
+      const { estado, pagina = '1', limite = '20' } = solicitud.query;
+      const paginaNum = Math.max(1, parseInt(pagina, 10) || 1);
+      const limiteNum = Math.min(100, Math.max(1, parseInt(limite, 10) || 20));
+
+      const where: Prisma.PreregistroSalonWhereInput = {};
+      if (estado && ['pendiente', 'aprobado', 'rechazado'].includes(estado)) {
+        where.estado = estado;
+      }
+
+      const [preregistros, total] = await Promise.all([
+        prisma.preregistroSalon.findMany({
+          where,
+          orderBy: { creadoEn: 'desc' },
+          skip: (paginaNum - 1) * limiteNum,
+          take: limiteNum,
+          include: {
+            vendedor: { select: { id: true, nombre: true, email: true } },
+          },
+        }),
+        prisma.preregistroSalon.count({ where }),
+      ]);
+
+      return respuesta.send({
+        datos: preregistros.map((pr) => ({
+          id: pr.id,
+          nombreSalon: pr.nombreSalon,
+          propietario: pr.propietario,
+          emailPropietario: pr.emailPropietario,
+          telefonoPropietario: pr.telefonoPropietario,
+          pais: pr.pais,
+          direccion: pr.direccion,
+          descripcion: pr.descripcion,
+          categorias: pr.categorias,
+          plan: pr.plan,
+          estado: pr.estado,
+          motivoRechazo: pr.motivoRechazo,
+          estudioCreadoId: pr.estudioCreadoId,
+          notas: pr.notas,
+          vendedor: pr.vendedor,
+          creadoEn: pr.creadoEn,
+          actualizadoEn: pr.actualizadoEn,
+        })),
+        total,
+        pagina: paginaNum,
+        limite: limiteNum,
+      });
+    },
+  );
+
+  // ── POST /admin/preregistros/:id/aprobar ─────────────────────────────────
+  // Aprueba un preregistro de vendedor → crea estudio + usuario dueño
+  servidor.post<{ Params: { id: string }; Body: { contrasena?: string; inicioSuscripcion?: string } }>(
+    '/admin/preregistros/:id/aprobar',
+    { preHandler: [verificarJWT, requierePermiso('aprobarSalones')] },
+    async (solicitud, respuesta) => {
+      const payload = solicitud.user as { sub: string; rol: string };
+      const { id } = solicitud.params;
+      const { contrasena: contrasenaManual, inicioSuscripcion } = solicitud.body ?? {};
+
+      const preregistro = await prisma.preregistroSalon.findUnique({ where: { id } });
+      if (!preregistro) {
+        return respuesta.code(404).send({ error: 'Preregistro no encontrado' });
+      }
+      if (preregistro.estado !== 'pendiente') {
+        return respuesta.code(400).send({ error: 'Solo se pueden aprobar preregistros pendientes' });
+      }
+
+      // Verificar que el email no exista ya como usuario
+      const emailNorm = preregistro.emailPropietario.trim().toLowerCase();
+      const existente = await buscarUsuarioPorEmailCompat(emailNorm);
+      if (existente) {
+        return respuesta.code(409).send({ error: 'Ya existe un usuario con ese email' });
+      }
+
+      const contrasenaFinal = contrasenaManual && contrasenaManual.length >= 8
+        ? contrasenaManual
+        : generarContrasenaAleatoria();
+      const hashContrasena = await generarHashContrasena(contrasenaFinal);
+      const { claveDueno, claveCliente } = await generarClavesSalonUnicas(preregistro.nombreSalon);
+      const slugEstudio = await generarSlugUnico(preregistro.nombreSalon);
+
+      const fechaInicio = inicioSuscripcion ? crearFechaDesdeISO(inicioSuscripcion) : new Date();
+      fechaInicio.setHours(0, 0, 0, 0);
+      const vencimiento = new Date(fechaInicio);
+      vencimiento.setMonth(vencimiento.getMonth() + 1);
+
+      const formatearFecha = (d: Date) =>
+        obtenerFechaISOEnZona(d, obtenerZonaHorariaPorPais(preregistro.pais), preregistro.pais);
+
+      const diasSemana = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado', 'Domingo'];
+      const horario = Object.fromEntries(
+        diasSemana.map((dia) => [dia, { isOpen: dia !== 'Domingo', openTime: '09:00', closeTime: '19:00' }]),
+      );
+
+      const monedaInicial = obtenerMonedaPorPais(preregistro.pais);
+      const montoInicial = obtenerMontoPlanPorPais(preregistro.pais);
+      const planNormalizado = normalizarPlanEstudio(preregistro.plan);
+      const [columnasEstudios, columnasUsuarios, columnasPagos] = await Promise.all([
+        obtenerColumnasTabla('estudios'),
+        obtenerColumnasTabla('usuarios'),
+        obtenerColumnasTabla('pagos'),
+      ]);
+
+      const estudioCreadoId = randomUUID();
+      const usuarioCreadoId = randomUUID();
+      const marcaTiempoActual = formatearFechaHoraSQL(new Date());
+
+      try {
+        await insertarRegistroCompat('estudios', {
+          id: estudioCreadoId,
+          nombre: preregistro.nombreSalon,
+          slug: slugEstudio,
+          propietario: preregistro.propietario,
+          telefono: preregistro.telefonoPropietario,
+          sitioWeb: null,
+          pais: preregistro.pais,
+          ...(columnasEstudios.has('zonaHoraria') && { zonaHoraria: obtenerZonaHorariaPorPais(preregistro.pais) }),
+          sucursales: [preregistro.nombreSalon],
+          claveDueno,
+          claveCliente,
+          activo: true,
+          suscripcion: 'mensual',
+          inicioSuscripcion: formatearFecha(fechaInicio),
+          fechaVencimiento: formatearFecha(vencimiento),
+          horario,
+          servicios: [],
+          serviciosCustom: [],
+          festivos: [],
+          ...(columnasEstudios.has('plan') && { plan: planNormalizado }),
+          ...(columnasEstudios.has('estado') && { estado: 'aprobado' }),
+          ...(columnasEstudios.has('emailContacto') && { emailContacto: emailNorm }),
+          ...(columnasEstudios.has('fechaSolicitud') && { fechaSolicitud: marcaTiempoActual }),
+          ...(columnasEstudios.has('fechaAprobacion') && { fechaAprobacion: marcaTiempoActual }),
+          ...(columnasEstudios.has('actualizadoEn') && { actualizadoEn: marcaTiempoActual }),
+          ...(columnasEstudios.has('vendedorId') && { vendedorId: preregistro.vendedorId }),
+        });
+
+        await insertarRegistroCompat('usuarios', {
+          id: usuarioCreadoId,
+          email: emailNorm,
+          hashContrasena,
+          rol: 'dueno',
+          estudioId: estudioCreadoId,
+          ...(columnasUsuarios.has('nombre') && { nombre: preregistro.propietario }),
+          ...(columnasUsuarios.has('activo') && { activo: true }),
+          ...(columnasUsuarios.has('emailVerificado') && { emailVerificado: true }),
+          ...(columnasUsuarios.has('actualizadoEn') && { actualizadoEn: marcaTiempoActual }),
+        });
+
+        try {
+          await insertarRegistroCompat('pagos', {
+            id: randomUUID(),
+            estudioId: estudioCreadoId,
+            monto: montoInicial,
+            moneda: monedaInicial,
+            concepto: `Suscripción mensual Beauty Time Pro (${monedaInicial})`,
+            fecha: formatearFecha(fechaInicio),
+            ...(columnasPagos.has('tipo') && { tipo: 'suscripcion' }),
+            ...(columnasPagos.has('referencia') && { referencia: 'alta_inicial' }),
+          });
+        } catch (error) {
+          solicitud.log.warn({ err: error, estudioId: estudioCreadoId }, 'No se pudo registrar pago inicial del preregistro');
+        }
+
+        // Actualizar preregistro como aprobado
+        await prisma.preregistroSalon.update({
+          where: { id },
+          data: { estado: 'aprobado', estudioCreadoId },
+        });
+
+        cacheSalonesPublicos.flushAll();
+
+        await registrarAuditoria({
+          usuarioId: payload.sub,
+          accion: 'aprobar_preregistro',
+          entidadTipo: 'PreregistroSalon',
+          entidadId: id,
+          detalles: { estudioCreadoId, vendedorId: preregistro.vendedorId, nombreSalon: preregistro.nombreSalon },
+        });
+
+        return respuesta.code(201).send({
+          datos: {
+            mensaje: 'Preregistro aprobado. Salón creado exitosamente.',
+            estudioId: estudioCreadoId,
+            acceso: {
+              emailDueno: emailNorm,
+              contrasena: contrasenaFinal,
+              claveDueno,
+              claveClientes: claveCliente,
+            },
+          },
+        });
+      } catch (error) {
+        // Rollback manual
+        await prisma.pago.deleteMany({ where: { estudioId: estudioCreadoId } }).catch(() => undefined);
+        await prisma.estudio.delete({ where: { id: estudioCreadoId } }).catch(() => undefined);
+        await prisma.usuario.delete({ where: { id: usuarioCreadoId } }).catch(() => undefined);
+
+        solicitud.log.error({ err: error }, 'Fallo al aprobar preregistro');
+        return respuesta.code(500).send({ error: 'No se pudo completar la aprobación' });
+      }
+    },
+  );
+
+  // ── POST /admin/preregistros/:id/rechazar ────────────────────────────────
+  // Rechaza un preregistro con motivo obligatorio.
+  servidor.post<{ Params: { id: string }; Body: { motivo: string } }>(
+    '/admin/preregistros/:id/rechazar',
+    { preHandler: [verificarJWT, requierePermiso('aprobarSalones')] },
+    async (solicitud, respuesta) => {
+      const payload = solicitud.user as { sub: string; rol: string };
+      const { id } = solicitud.params;
+
+      const resultado = esquemaRechazoSolicitud.safeParse(solicitud.body);
+      if (!resultado.success) {
+        return respuesta.code(400).send({
+          error: obtenerMensajeValidacion(resultado.error),
+        });
+      }
+
+      const preregistro = await prisma.preregistroSalon.findUnique({ where: { id } });
+      if (!preregistro) {
+        return respuesta.code(404).send({ error: 'Preregistro no encontrado' });
+      }
+      if (preregistro.estado !== 'pendiente') {
+        return respuesta.code(400).send({ error: 'Solo se pueden rechazar preregistros pendientes' });
+      }
+
+      await prisma.preregistroSalon.update({
+        where: { id },
+        data: { estado: 'rechazado', motivoRechazo: resultado.data.motivo },
+      });
+
+      await registrarAuditoria({
+        usuarioId: payload.sub,
+        accion: 'rechazar_preregistro',
+        entidadTipo: 'PreregistroSalon',
+        entidadId: id,
+        detalles: { motivoRechazo: resultado.data.motivo, vendedorId: preregistro.vendedorId, nombreSalon: preregistro.nombreSalon },
+      });
+
+      return respuesta.send({
+        datos: { mensaje: 'Preregistro rechazado correctamente.' },
+      });
+    },
+  );
+
   // ── GET /admin/clientes/todos ─────────────────────────────────────────────
   // Solo maestro con permiso verMetricas. Devuelve clientes de todos los salones
   // con estadísticas de visitas calculadas a partir de reservas completadas.
@@ -1816,7 +2209,7 @@ export async function rutasAdmin(servidor: FastifyInstance): Promise<void> {
     { preHandler: [verificarJWT, requierePermiso('verMetricas')] },
     async (solicitud, respuesta) => {
       const payload = solicitud.user as { rol: string };
-      if (payload.rol !== 'maestro') {
+      if (!['maestro', 'supervisor'].includes(payload.rol)) {
         return respuesta.code(403).send({ error: 'Sin permisos para esta acción' });
       }
 
@@ -1828,6 +2221,874 @@ export async function rutasAdmin(servidor: FastifyInstance): Promise<void> {
         servidor.log.error({ error }, 'Error al exportar base de clientes');
         return respuesta.code(500).send({ error: 'Error al exportar la base de clientes' });
       }
+    },
+  );
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // FASE 1 — Endpoints de métricas y control de salones
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  /**
+   * GET /admin/metricas/total-salones — lista paginada de todos los salones
+   */
+  servidor.get<{
+    Querystring: {
+      buscar?: string;
+      plan?: string;
+      pais?: string;
+      vendedor?: string;
+      pagina?: string;
+      limite?: string;
+    };
+  }>(
+    '/admin/metricas/total-salones',
+    { preHandler: [verificarJWT, requierePermiso('verMetricas')] },
+    async (solicitud, respuesta) => {
+      const payload = solicitud.user as { rol: string };
+      if (payload.rol !== 'maestro') {
+        return respuesta.code(403).send({ error: 'Sin permisos para esta acción' });
+      }
+
+      const { buscar, plan, pais, vendedor, pagina: paginaStr, limite: limiteStr } = solicitud.query;
+      const pagina = Math.max(1, parseInt(paginaStr ?? '1', 10));
+      const limite = Math.min(100, Math.max(1, parseInt(limiteStr ?? '10', 10)));
+      const saltar = (pagina - 1) * limite;
+
+      const where: Prisma.EstudioWhereInput = {};
+
+      if (plan) {
+        const planes = plan.split(',').filter((p) => p === 'STANDARD' || p === 'PRO');
+        if (planes.length > 0) where.plan = { in: planes as ('STANDARD' | 'PRO')[] };
+      }
+      if (pais) {
+        const paises = pais.split(',').filter((p) => p === 'Mexico' || p === 'Colombia');
+        if (paises.length > 0) where.pais = { in: paises };
+      }
+      if (vendedor) {
+        where.vendedorAsociado = { contains: vendedor };
+      }
+
+      // Búsqueda por nombre o propietario directamente en la DB
+      if (buscar) {
+        const buscNorm = buscar.trim();
+        where.OR = [
+          { nombre: { contains: buscNorm } },
+          { propietario: { contains: buscNorm } },
+        ];
+      }
+
+      const [total, salones] = await Promise.all([
+        prisma.estudio.count({ where }),
+        prisma.estudio.findMany({
+          where,
+          select: {
+            id: true,
+            nombre: true,
+            creadoEn: true,
+            plan: true,
+            pais: true,
+            propietario: true,
+            vendedorAsociado: true,
+            usuarios: {
+              where: { rol: 'dueno' },
+              take: 1,
+              select: { nombre: true, email: true },
+            },
+          },
+          orderBy: { creadoEn: 'desc' },
+          skip: saltar,
+          take: limite,
+        }),
+      ]);
+
+      const datos = salones.map((s) => ({
+        id: s.id,
+        nombre: s.nombre,
+        fechaCreacion: s.creadoEn.toISOString(),
+        plan: s.plan,
+        pais: s.pais,
+        dueno: s.usuarios[0]?.nombre ?? s.propietario,
+        vendedor: s.vendedorAsociado ?? null,
+      }));
+
+      return respuesta.send({
+        datos,
+        total,
+        pagina,
+        totalPaginas: Math.ceil(total / limite),
+      });
+    },
+  );
+
+  /**
+   * GET /admin/salones/activos — salones con estado aprobado y activos
+   */
+  servidor.get<{
+    Querystring: { pagina?: string; limite?: string };
+  }>(
+    '/admin/salones/activos',
+    { preHandler: [verificarJWT, requierePermiso('suspenderSalones')] },
+    async (solicitud, respuesta) => {
+      const payload = solicitud.user as { rol: string };
+      if (payload.rol !== 'maestro') {
+        return respuesta.code(403).send({ error: 'Sin permisos para esta acción' });
+      }
+
+      const pagina = Math.max(1, parseInt(solicitud.query.pagina ?? '1', 10));
+      const limite = Math.min(100, Math.max(1, parseInt(solicitud.query.limite ?? '10', 10)));
+      const saltar = (pagina - 1) * limite;
+
+      const where: Prisma.EstudioWhereInput = { estado: 'aprobado', activo: true };
+
+      const [total, salones] = await Promise.all([
+        prisma.estudio.count({ where }),
+        prisma.estudio.findMany({
+          where,
+          select: {
+            id: true,
+            nombre: true,
+            propietario: true,
+            plan: true,
+            claveDueno: true,
+            inicioSuscripcion: true,
+            fechaVencimiento: true,
+            usuarios: {
+              where: { rol: 'dueno' },
+              take: 1,
+              select: { id: true, nombre: true, email: true, hashContrasena: false },
+            },
+          },
+          orderBy: { creadoEn: 'desc' },
+          skip: saltar,
+          take: limite,
+        }),
+      ]);
+
+      const datos = salones.map((s) => {
+        const dueno = s.usuarios[0];
+        return {
+          id: s.id,
+          nombre: s.nombre,
+          dueno: dueno?.nombre ?? s.propietario,
+          correo: dueno?.email ?? null,
+          periodo: { inicio: s.inicioSuscripcion, fin: s.fechaVencimiento },
+          plan: s.plan,
+          claveDueno: s.claveDueno,
+        };
+      });
+
+      return respuesta.send({ datos, total, pagina, totalPaginas: Math.ceil(total / limite) });
+    },
+  );
+
+  /**
+   * GET /admin/salones/suspendidos — salones con estado suspendido
+   */
+  servidor.get<{
+    Querystring: { pagina?: string; limite?: string };
+  }>(
+    '/admin/salones/suspendidos',
+    { preHandler: [verificarJWT, requierePermiso('suspenderSalones')] },
+    async (solicitud, respuesta) => {
+      const payload = solicitud.user as { rol: string };
+      if (payload.rol !== 'maestro') {
+        return respuesta.code(403).send({ error: 'Sin permisos para esta acción' });
+      }
+
+      const pagina = Math.max(1, parseInt(solicitud.query.pagina ?? '1', 10));
+      const limite = Math.min(100, Math.max(1, parseInt(solicitud.query.limite ?? '10', 10)));
+      const saltar = (pagina - 1) * limite;
+
+      const where: Prisma.EstudioWhereInput = { estado: 'suspendido' };
+
+      const [total, salones] = await Promise.all([
+        prisma.estudio.count({ where }),
+        prisma.estudio.findMany({
+          where,
+          select: {
+            id: true,
+            nombre: true,
+            plan: true,
+            claveDueno: true,
+            fechaSuspension: true,
+            usuarios: {
+              where: { rol: 'dueno' },
+              take: 1,
+              select: { email: true },
+            },
+          },
+          orderBy: { fechaSuspension: 'desc' },
+          skip: saltar,
+          take: limite,
+        }),
+      ]);
+
+      const datos = salones.map((s) => ({
+        id: s.id,
+        nombre: s.nombre,
+        correo: s.usuarios[0]?.email ?? null,
+        fechaSuspension: s.fechaSuspension?.toISOString() ?? null,
+        plan: s.plan,
+        claveDueno: s.claveDueno,
+      }));
+
+      return respuesta.send({ datos, total, pagina, totalPaginas: Math.ceil(total / limite) });
+    },
+  );
+
+  /**
+   * GET /admin/salones/bloqueados — salones con estado bloqueado
+   */
+  servidor.get<{
+    Querystring: { pagina?: string; limite?: string };
+  }>(
+    '/admin/salones/bloqueados',
+    { preHandler: [verificarJWT, requierePermiso('suspenderSalones')] },
+    async (solicitud, respuesta) => {
+      const payload = solicitud.user as { rol: string };
+      if (payload.rol !== 'maestro') {
+        return respuesta.code(403).send({ error: 'Sin permisos para esta acción' });
+      }
+
+      const pagina = Math.max(1, parseInt(solicitud.query.pagina ?? '1', 10));
+      const limite = Math.min(100, Math.max(1, parseInt(solicitud.query.limite ?? '10', 10)));
+      const saltar = (pagina - 1) * limite;
+
+      const where: Prisma.EstudioWhereInput = { estado: 'bloqueado' };
+
+      const [total, salones] = await Promise.all([
+        prisma.estudio.count({ where }),
+        prisma.estudio.findMany({
+          where,
+          select: {
+            id: true,
+            nombre: true,
+            claveDueno: true,
+            motivoBloqueo: true,
+            fechaBloqueo: true,
+            usuarios: {
+              where: { rol: 'dueno' },
+              take: 1,
+              select: { email: true },
+            },
+          },
+          orderBy: { fechaBloqueo: 'desc' },
+          skip: saltar,
+          take: limite,
+        }),
+      ]);
+
+      const datos = salones.map((s) => ({
+        id: s.id,
+        nombre: s.nombre,
+        correo: s.usuarios[0]?.email ?? null,
+        fechaBloqueo: s.fechaBloqueo?.toISOString() ?? null,
+        motivoBloqueo: s.motivoBloqueo,
+        claveDueno: s.claveDueno,
+      }));
+
+      return respuesta.send({ datos, total, pagina, totalPaginas: Math.ceil(total / limite) });
+    },
+  );
+
+  /**
+   * PUT /admin/salones/:id/bloquear — bloquear un salón con motivo
+   */
+  servidor.put<{ Params: { id: string }; Body: { motivo: string } }>(
+    '/admin/salones/:id/bloquear',
+    { preHandler: [verificarJWT, requierePermiso('suspenderSalones')] },
+    async (solicitud, respuesta) => {
+      const payload = solicitud.user as { rol: string; sub: string };
+      if (payload.rol !== 'maestro') {
+        return respuesta.code(403).send({ error: 'Sin permisos para esta acción' });
+      }
+
+      const { id } = solicitud.params;
+      const { motivo } = solicitud.body;
+
+      const motivosValidos = [
+        'Se cierra el salón',
+        'Incumple normas',
+        'Ya no desea usar la app',
+      ];
+
+      if (!motivo || !motivosValidos.includes(motivo)) {
+        return respuesta.code(400).send({ error: 'Motivo de bloqueo inválido', campos: { motivo: 'Seleccione un motivo válido' } });
+      }
+
+      const estudio = await prisma.estudio.findUnique({ where: { id }, select: { id: true, nombre: true, estado: true } });
+      if (!estudio) {
+        return respuesta.code(404).send({ error: 'Salón no encontrado' });
+      }
+
+      await prisma.$transaction(async (tx) => {
+        await tx.estudio.update({
+          where: { id },
+          data: {
+            estado: 'bloqueado',
+            activo: false,
+            motivoBloqueo: motivo,
+            fechaBloqueo: new Date(),
+          },
+        });
+
+        await tx.usuario.updateMany({
+          where: { estudioId: id, rol: 'dueno' },
+          data: { activo: false },
+        });
+      });
+
+      await registrarAuditoria({
+        usuarioId: payload.sub,
+        accion: 'bloquear_salon',
+        entidadTipo: 'estudio',
+        entidadId: id,
+        detalles: { nombre: estudio.nombre, motivo },
+        ip: solicitud.ip,
+      });
+
+      return respuesta.send({ datos: { mensaje: 'Salón bloqueado correctamente' } });
+    },
+  );
+
+  /**
+   * PUT /admin/salones/:id/activar — reactivar un salón suspendido o bloqueado
+   */
+  servidor.put<{ Params: { id: string } }>(
+    '/admin/salones/:id/activar',
+    { preHandler: [verificarJWT, requierePermiso('suspenderSalones')] },
+    async (solicitud, respuesta) => {
+      const payload = solicitud.user as { rol: string; sub: string };
+      if (payload.rol !== 'maestro') {
+        return respuesta.code(403).send({ error: 'Sin permisos para esta acción' });
+      }
+
+      const { id } = solicitud.params;
+      const estudio = await prisma.estudio.findUnique({
+        where: { id },
+        select: { id: true, nombre: true, estado: true },
+      });
+
+      if (!estudio) {
+        return respuesta.code(404).send({ error: 'Salón no encontrado' });
+      }
+
+      if (estudio.estado !== 'suspendido' && estudio.estado !== 'bloqueado') {
+        return respuesta.code(400).send({ error: 'Solo se pueden activar salones suspendidos o bloqueados' });
+      }
+
+      const estadoAnterior = estudio.estado;
+
+      await prisma.$transaction(async (tx) => {
+        await tx.estudio.update({
+          where: { id },
+          data: {
+            estado: 'aprobado',
+            activo: true,
+            motivoBloqueo: null,
+            fechaSuspension: null,
+            fechaBloqueo: null,
+          },
+        });
+
+        await tx.usuario.updateMany({
+          where: { estudioId: id, rol: 'dueno' },
+          data: { activo: true },
+        });
+      });
+
+      await registrarAuditoria({
+        usuarioId: payload.sub,
+        accion: 'activar_salon',
+        entidadTipo: 'estudio',
+        entidadId: id,
+        detalles: { nombre: estudio.nombre, estadoAnterior },
+        ip: solicitud.ip,
+      });
+
+      return respuesta.send({ datos: { mensaje: 'Salón activado correctamente' } });
+    },
+  );
+
+  /**
+   * PUT /admin/salones/:id/editar-suscripcion — editar fechas, plan y contraseña
+   */
+  servidor.put<{
+    Params: { id: string };
+    Body: {
+      inicioSuscripcion?: string;
+      fechaVencimiento?: string;
+      plan?: 'STANDARD' | 'PRO';
+      contrasena?: string;
+      mensajesMasivosExtra?: number;
+    };
+  }>(
+    '/admin/salones/:id/editar-suscripcion',
+    { preHandler: [verificarJWT, requierePermiso('suspenderSalones')] },
+    async (solicitud, respuesta) => {
+      const payload = solicitud.user as { rol: string; sub: string };
+      if (payload.rol !== 'maestro') {
+        return respuesta.code(403).send({ error: 'Sin permisos para esta acción' });
+      }
+
+      const { id } = solicitud.params;
+      const { inicioSuscripcion, fechaVencimiento, plan, contrasena, mensajesMasivosExtra } = solicitud.body;
+
+      const estudio = await prisma.estudio.findUnique({
+        where: { id },
+        select: { id: true, nombre: true, plan: true, inicioSuscripcion: true, fechaVencimiento: true, mensajesMasivosExtra: true },
+      });
+
+      if (!estudio) {
+        return respuesta.code(404).send({ error: 'Salón no encontrado' });
+      }
+
+      const actualizacion: Prisma.EstudioUpdateInput = {};
+      const detallesAudit: Record<string, unknown> = { nombre: estudio.nombre };
+
+      if (inicioSuscripcion) {
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(inicioSuscripcion)) {
+          return respuesta.code(400).send({ error: 'Formato de fecha inválido para inicioSuscripcion' });
+        }
+        detallesAudit.inicioSuscripcionAnterior = estudio.inicioSuscripcion;
+        actualizacion.inicioSuscripcion = inicioSuscripcion;
+      }
+
+      if (fechaVencimiento) {
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(fechaVencimiento)) {
+          return respuesta.code(400).send({ error: 'Formato de fecha inválido para fechaVencimiento' });
+        }
+        detallesAudit.fechaVencimientoAnterior = estudio.fechaVencimiento;
+        actualizacion.fechaVencimiento = fechaVencimiento;
+      }
+
+      if (plan && (plan === 'STANDARD' || plan === 'PRO')) {
+        detallesAudit.planAnterior = estudio.plan;
+        actualizacion.plan = plan;
+      }
+
+      if (typeof mensajesMasivosExtra === 'number' && mensajesMasivosExtra >= 0 && Number.isInteger(mensajesMasivosExtra)) {
+        detallesAudit.mensajesMasivosExtraAnterior = estudio.mensajesMasivosExtra;
+        actualizacion.mensajesMasivosExtra = mensajesMasivosExtra;
+      }
+
+      if (Object.keys(actualizacion).length > 0) {
+        await prisma.estudio.update({ where: { id }, data: actualizacion });
+      }
+
+      if (contrasena && contrasena.length >= 8) {
+        const dueno = await prisma.usuario.findFirst({ where: { estudioId: id, rol: 'dueno' } });
+        if (dueno) {
+          const nuevoHash = await generarHashContrasena(contrasena);
+          await prisma.usuario.update({
+            where: { id: dueno.id },
+            data: { hashContrasena: nuevoHash },
+          });
+          detallesAudit.contrasenaModificada = true;
+        }
+      }
+
+      await registrarAuditoria({
+        usuarioId: payload.sub,
+        accion: 'editar_suscripcion_salon',
+        entidadTipo: 'estudio',
+        entidadId: id,
+        detalles: detallesAudit,
+        ip: solicitud.ip,
+      });
+
+      return respuesta.send({ datos: { mensaje: 'Suscripción actualizada correctamente' } });
+    },
+  );
+
+  /**
+   * GET /admin/metricas/reservas — reservas en un rango de fechas con filtros
+   */
+  servidor.get<{
+    Querystring: {
+      fechaInicio?: string;
+      fechaFin?: string;
+      estado?: string;
+      pais?: string;
+      pagina?: string;
+      limite?: string;
+    };
+  }>(
+    '/admin/metricas/reservas',
+    { preHandler: [verificarJWT, requierePermiso('verMetricas')] },
+    async (solicitud, respuesta) => {
+      const payload = solicitud.user as { rol: string };
+      if (payload.rol !== 'maestro') {
+        return respuesta.code(403).send({ error: 'Sin permisos para esta acción' });
+      }
+
+      const { fechaInicio, fechaFin, estado, pais, pagina: paginaStr, limite: limiteStr } = solicitud.query;
+      const pagina = Math.max(1, parseInt(paginaStr ?? '1', 10));
+      const limite = Math.min(100, Math.max(1, parseInt(limiteStr ?? '10', 10)));
+      const saltar = (pagina - 1) * limite;
+
+      const hoy = new Date().toISOString().split('T')[0]!;
+      const hace30Dias = new Date();
+      hace30Dias.setDate(hace30Dias.getDate() - 30);
+      const hace30DiasStr = hace30Dias.toISOString().split('T')[0]!;
+
+      const inicio = fechaInicio ?? hace30DiasStr;
+      const fin = fechaFin ?? hoy;
+
+      const whereReserva: Prisma.ReservaWhereInput = {
+        fecha: { gte: inicio, lte: fin },
+      };
+
+      if (estado) {
+        const estados = estado.split(',').filter(Boolean);
+        if (estados.length > 0) whereReserva.estado = { in: estados };
+      }
+
+      if (pais) {
+        const paises = pais.split(',').filter((p) => p === 'Mexico' || p === 'Colombia');
+        if (paises.length > 0) whereReserva.estudio = { pais: { in: paises } };
+      }
+
+      const [totalReservas, reservas] = await Promise.all([
+        prisma.reserva.count({ where: whereReserva }),
+        prisma.reserva.findMany({
+          where: whereReserva,
+          select: {
+            id: true,
+            fecha: true,
+            estado: true,
+            estudio: { select: { nombre: true, pais: true } },
+          },
+          orderBy: { fecha: 'desc' },
+          skip: saltar,
+          take: limite,
+        }),
+      ]);
+
+      // Total sin filtro de estado para el contador general
+      const totalSinFiltroEstado = await prisma.reserva.count({
+        where: {
+          fecha: { gte: inicio, lte: fin },
+          ...(pais
+            ? {
+                estudio: {
+                  pais: { in: pais.split(',').filter((p) => p === 'Mexico' || p === 'Colombia') },
+                },
+              }
+            : {}),
+        },
+      });
+
+      const datos = reservas.map((r) => ({
+        id: r.id,
+        salon: r.estudio.nombre,
+        fecha: r.fecha,
+        estado: r.estado,
+        pais: r.estudio.pais,
+      }));
+
+      return respuesta.send({
+        datos,
+        totalReservas: totalSinFiltroEstado,
+        total: totalReservas,
+        pagina,
+        totalPaginas: Math.ceil(totalReservas / limite),
+      });
+    },
+  );
+
+  /**
+   * GET /admin/metricas/ventas — ventas agrupadas por país y plan
+   */
+  servidor.get(
+    '/admin/metricas/ventas',
+    { preHandler: [verificarJWT, requierePermiso('verMetricas')] },
+    async (solicitud, respuesta) => {
+      const payload = solicitud.user as { rol: string };
+      if (payload.rol !== 'maestro') {
+        return respuesta.code(403).send({ error: 'Sin permisos para esta acción' });
+      }
+
+      // Obtener totales por moneda
+      const totalesPorMoneda = await prisma.pago.groupBy({
+        by: ['moneda'],
+        _sum: { monto: true },
+      });
+
+      const totalMXN = totalesPorMoneda.find((t) => t.moneda === 'MXN')?._sum.monto ?? 0;
+      const totalCOP = totalesPorMoneda.find((t) => t.moneda === 'COP')?._sum.monto ?? 0;
+
+      // Desglose por plan para México
+      const salonesMexico = await prisma.estudio.findMany({
+        where: { pais: 'Mexico' },
+        select: { id: true, plan: true },
+      });
+
+      const salonesColombia = await prisma.estudio.findMany({
+        where: { pais: 'Colombia' },
+        select: { id: true, plan: true },
+      });
+
+      const idsMexicoPro = salonesMexico.filter((s) => s.plan === 'PRO').map((s) => s.id);
+      const idsMexicoStd = salonesMexico.filter((s) => s.plan === 'STANDARD').map((s) => s.id);
+      const idsColPro = salonesColombia.filter((s) => s.plan === 'PRO').map((s) => s.id);
+      const idsColStd = salonesColombia.filter((s) => s.plan === 'STANDARD').map((s) => s.id);
+
+      const [ventasMxPro, ventasMxStd, ventasColPro, ventasColStd] = await Promise.all([
+        idsMexicoPro.length > 0
+          ? prisma.pago.aggregate({ where: { estudioId: { in: idsMexicoPro } }, _sum: { monto: true }, _count: true })
+          : { _sum: { monto: 0 }, _count: 0 },
+        idsMexicoStd.length > 0
+          ? prisma.pago.aggregate({ where: { estudioId: { in: idsMexicoStd } }, _sum: { monto: true }, _count: true })
+          : { _sum: { monto: 0 }, _count: 0 },
+        idsColPro.length > 0
+          ? prisma.pago.aggregate({ where: { estudioId: { in: idsColPro } }, _sum: { monto: true }, _count: true })
+          : { _sum: { monto: 0 }, _count: 0 },
+        idsColStd.length > 0
+          ? prisma.pago.aggregate({ where: { estudioId: { in: idsColStd } }, _sum: { monto: true }, _count: true })
+          : { _sum: { monto: 0 }, _count: 0 },
+      ]);
+
+      return respuesta.send({
+        datos: {
+          mexico: {
+            total: totalMXN,
+            moneda: 'MXN',
+            desglose: {
+              pro: { salones: idsMexicoPro.length, monto: ventasMxPro._sum.monto ?? 0 },
+              standard: { salones: idsMexicoStd.length, monto: ventasMxStd._sum.monto ?? 0 },
+            },
+          },
+          colombia: {
+            total: totalCOP,
+            moneda: 'COP',
+            desglose: {
+              pro: { salones: idsColPro.length, monto: ventasColPro._sum.monto ?? 0 },
+              standard: { salones: idsColStd.length, monto: ventasColStd._sum.monto ?? 0 },
+            },
+          },
+        },
+      });
+    },
+  );
+
+  /**
+   * GET /admin/directorio — directorio de acceso con búsqueda
+   */
+  servidor.get<{
+    Querystring: { buscar?: string; pagina?: string; limite?: string };
+  }>(
+    '/admin/directorio',
+    { preHandler: [verificarJWT, requierePermiso('suspenderSalones')] },
+    async (solicitud, respuesta) => {
+      const payload = solicitud.user as { rol: string };
+      if (payload.rol !== 'maestro') {
+        return respuesta.code(403).send({ error: 'Sin permisos para esta acción' });
+      }
+
+      const { buscar, pagina: paginaStr, limite: limiteStr } = solicitud.query;
+      const pagina = Math.max(1, parseInt(paginaStr ?? '1', 10));
+      const limite = Math.min(100, Math.max(1, parseInt(limiteStr ?? '10', 10)));
+      const saltar = (pagina - 1) * limite;
+
+      const where: Prisma.EstudioWhereInput = {};
+      if (buscar) {
+        const buscNorm = buscar.trim();
+        where.OR = [
+          { nombre: { contains: buscNorm } },
+          { propietario: { contains: buscNorm } },
+        ];
+      }
+
+      const [total, salones] = await Promise.all([
+        prisma.estudio.count({ where }),
+        prisma.estudio.findMany({
+          where,
+          select: {
+            id: true,
+            nombre: true,
+            propietario: true,
+            pais: true,
+            usuarios: {
+              where: { rol: 'dueno' },
+              take: 1,
+              select: { nombre: true, email: true },
+            },
+          },
+          orderBy: { creadoEn: 'desc' },
+          skip: saltar,
+          take: limite,
+        }),
+      ]);
+
+      const datos = salones.map((s) => ({
+        id: s.id,
+        nombre: s.nombre,
+        dueno: s.usuarios[0]?.nombre ?? s.propietario,
+        correo: s.usuarios[0]?.email ?? null,
+        pais: s.pais,
+      }));
+
+      return respuesta.send({ datos, total, pagina, totalPaginas: Math.ceil(total / limite) });
+    },
+  );
+
+  /**
+   * GET /admin/directorio/:id — detalle completo de un salón para el modal
+   */
+  servidor.get<{ Params: { id: string } }>(
+    '/admin/directorio/:id',
+    { preHandler: [verificarJWT, requierePermiso('suspenderSalones')] },
+    async (solicitud, respuesta) => {
+      const payload = solicitud.user as { rol: string };
+      if (payload.rol !== 'maestro') {
+        return respuesta.code(403).send({ error: 'Sin permisos para esta acción' });
+      }
+
+      const { id } = solicitud.params;
+      const estudio = await prisma.estudio.findUnique({
+        where: { id },
+        select: {
+          id: true,
+          nombre: true,
+          propietario: true,
+          telefono: true,
+          pais: true,
+          plan: true,
+          estado: true,
+          activo: true,
+          inicioSuscripcion: true,
+          fechaVencimiento: true,
+          emailContacto: true,
+          direccion: true,
+          descripcion: true,
+          colorPrimario: true,
+          logoUrl: true,
+          claveCliente: true,
+          creadoEn: true,
+          usuarios: {
+            where: { rol: 'dueno' },
+            take: 1,
+            select: { nombre: true, email: true },
+          },
+        },
+      });
+
+      if (!estudio) {
+        return respuesta.code(404).send({ error: 'Salón no encontrado' });
+      }
+
+      return respuesta.send({ datos: estudio });
+    },
+  );
+
+  /**
+   * PUT /admin/directorio/:id — actualizar datos del salón desde directorio de acceso
+   */
+  servidor.put<{
+    Params: { id: string };
+    Body: Record<string, unknown>;
+  }>(
+    '/admin/directorio/:id',
+    { preHandler: [verificarJWT, requierePermiso('suspenderSalones')] },
+    async (solicitud, respuesta) => {
+      const payload = solicitud.user as { rol: string; sub: string };
+      if (payload.rol !== 'maestro') {
+        return respuesta.code(403).send({ error: 'Sin permisos para esta acción' });
+      }
+
+      const { id } = solicitud.params;
+      const body = solicitud.body;
+
+      const estudio = await prisma.estudio.findUnique({ where: { id }, select: { id: true, nombre: true } });
+      if (!estudio) {
+        return respuesta.code(404).send({ error: 'Salón no encontrado' });
+      }
+
+      const camposPermitidos = [
+        'nombre', 'propietario', 'telefono', 'emailContacto', 'direccion',
+        'descripcion', 'colorPrimario', 'plan', 'inicioSuscripcion', 'fechaVencimiento',
+      ] as const;
+
+      const actualizacion: Record<string, unknown> = {};
+      for (const campo of camposPermitidos) {
+        if (campo in body && body[campo] !== undefined) {
+          actualizacion[campo] = body[campo];
+        }
+      }
+
+      if (Object.keys(actualizacion).length === 0) {
+        return respuesta.code(400).send({ error: 'No se proporcionaron campos para actualizar' });
+      }
+
+      await prisma.estudio.update({
+        where: { id },
+        data: actualizacion as Prisma.EstudioUpdateInput,
+      });
+
+      await registrarAuditoria({
+        usuarioId: payload.sub,
+        accion: 'editar_salon_directorio',
+        entidadTipo: 'estudio',
+        entidadId: id,
+        detalles: { nombre: estudio.nombre, campos: Object.keys(actualizacion) },
+        ip: solicitud.ip,
+      });
+
+      return respuesta.send({ datos: { mensaje: 'Salón actualizado correctamente' } });
+    },
+  );
+
+  /**
+   * GET /admin/directorio/:id/historial — historial de pagos del salón
+   */
+  servidor.get<{
+    Params: { id: string };
+    Querystring: { pagina?: string; limite?: string };
+  }>(
+    '/admin/directorio/:id/historial',
+    { preHandler: [verificarJWT, requierePermiso('suspenderSalones')] },
+    async (solicitud, respuesta) => {
+      const payload = solicitud.user as { rol: string };
+      if (payload.rol !== 'maestro') {
+        return respuesta.code(403).send({ error: 'Sin permisos para esta acción' });
+      }
+
+      const { id } = solicitud.params;
+      const pagina = Math.max(1, parseInt(solicitud.query.pagina ?? '1', 10));
+      const limite = Math.min(100, Math.max(1, parseInt(solicitud.query.limite ?? '10', 10)));
+      const saltar = (pagina - 1) * limite;
+
+      const [total, pagos] = await Promise.all([
+        prisma.pago.count({ where: { estudioId: id } }),
+        prisma.pago.findMany({
+          where: { estudioId: id },
+          select: {
+            id: true,
+            fecha: true,
+            monto: true,
+            moneda: true,
+            concepto: true,
+            creadoEn: true,
+            estudio: { select: { plan: true, creadoEn: true } },
+          },
+          orderBy: { creadoEn: 'desc' },
+          skip: saltar,
+          take: limite,
+        }),
+      ]);
+
+      const datos = pagos.map((p) => ({
+        id: p.id,
+        fechaPago: p.fecha,
+        fechaCreacionSalon: p.estudio.creadoEn.toISOString(),
+        plan: p.estudio.plan,
+        monto: p.monto,
+        moneda: p.moneda,
+        concepto: p.concepto,
+      }));
+
+      return respuesta.send({ datos, total, pagina, totalPaginas: Math.ceil(total / limite) });
     },
   );
 }

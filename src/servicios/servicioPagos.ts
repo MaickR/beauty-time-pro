@@ -3,7 +3,7 @@
  */
 import type { Estudio } from '../tipos/index';
 import { peticion } from '../lib/clienteHTTP';
-import { obtenerFechaLocalISO } from '../utils/formato';
+import { convertirMonedaACentavos, obtenerFechaLocalISO } from '../utils/formato';
 
 interface DatosPago {
   estudioId: string;
@@ -16,7 +16,10 @@ interface DatosPago {
 export async function registrarPago(datos: DatosPago): Promise<void> {
   await peticion('/pagos', {
     method: 'POST',
-    body: JSON.stringify(datos),
+    body: JSON.stringify({
+      ...datos,
+      monto: convertirMonedaACentavos(datos.monto),
+    }),
   });
 }
 
@@ -45,7 +48,7 @@ export async function confirmarPago(
     method: 'POST',
     body: JSON.stringify({
       estudioId: estudio.id,
-      monto,
+      monto: convertirMonedaACentavos(monto),
       moneda,
       fecha: obtenerFechaLocalISO(new Date()),
       extenderSuscripcion: true,

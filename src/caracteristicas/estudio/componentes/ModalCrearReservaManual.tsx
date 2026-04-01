@@ -18,6 +18,7 @@ const esquemaFormulario = z.object({
   email: z.string().email('Correo inválido').or(z.literal('')),
   sucursal: z.string().optional(),
   marcaTinte: z.string().optional(),
+  observaciones: z.string().max(500, 'Máximo 500 caracteres').optional(),
 });
 
 type DatosFormulario = z.infer<typeof esquemaFormulario>;
@@ -94,6 +95,7 @@ export function ModalCrearReservaManual({
       email: '',
       sucursal: estudio.branches[0] ?? '',
       marcaTinte: '',
+      observaciones: '',
     },
   });
 
@@ -119,6 +121,7 @@ export function ModalCrearReservaManual({
         staffName: miembro?.name ?? '',
         colorBrand: requiereColor ? datos.marcaTinte || null : null,
         colorNumber: null,
+        observaciones: datos.observaciones || null,
         date: fechaStr,
         time: horaSeleccionada,
         createdAt: new Date().toISOString(),
@@ -133,6 +136,7 @@ export function ModalCrearReservaManual({
         email: '',
         sucursal: estudio.branches[0] ?? '',
         marcaTinte: '',
+        observaciones: '',
       });
       setPersonalSeleccionado('');
       setServiciosSeleccionados([]);
@@ -420,6 +424,27 @@ export function ModalCrearReservaManual({
                 />
               </div>
             )}
+            <div>
+              <label
+                htmlFor="observaciones"
+                className="mb-1 block text-xs font-bold uppercase text-slate-500"
+              >
+                Notes (optional)
+              </label>
+              <textarea
+                id="observaciones"
+                rows={3}
+                maxLength={500}
+                placeholder="Allergies, preferences, special requests..."
+                {...formulario.register('observaciones')}
+                className="w-full resize-none rounded-2xl border border-slate-200 px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-pink-400"
+              />
+              {formulario.formState.errors.observaciones && (
+                <p className="mt-1 text-xs text-red-500">
+                  {formulario.formState.errors.observaciones.message}
+                </p>
+              )}
+            </div>
             <div className="flex gap-3 pt-2">
               <button
                 type="button"

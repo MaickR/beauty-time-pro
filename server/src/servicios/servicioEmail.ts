@@ -1,5 +1,5 @@
 import { env } from '../lib/env.js';
-import { enviarEmail } from '../lib/email.js';
+import { encolarCorreo, type ResultadoEncoladoCorreo } from '../lib/colaEmails.js';
 import { crearTemplateBienvenidaSalon } from '../lib/templates/bienvenidaSalon.js';
 import { obtenerConfigFidelidad } from '../lib/fidelidad.js';
 import { crearTemplateConfirmacionReserva } from '../lib/templates/confirmacionReserva.js';
@@ -12,6 +12,26 @@ import {
   obtenerServiciosNormalizados,
 } from '../lib/serializacionReservas.js';
 import { prisma } from '../prismaCliente.js';
+
+const TIPO_RECORDATORIO_RESERVA = 'recordatorio_reserva';
+
+async function encolarEmailRenderizado(params: {
+  destinatario: string;
+  asunto: string;
+  html: string;
+  tipoEvento?: string;
+  referenciaId?: string;
+  claveUnica?: string;
+}): Promise<ResultadoEncoladoCorreo> {
+  return encolarCorreo({
+    destinatario: params.destinatario,
+    asunto: params.asunto,
+    html: params.html,
+    tipoEvento: params.tipoEvento,
+    referenciaId: params.referenciaId,
+    claveUnica: params.claveUnica,
+  });
+}
 
 function obtenerOrigenBackend(): string {
   const url = new URL(env.FRONTEND_URL);
@@ -69,10 +89,19 @@ export async function enviarEmailConfirmacion(
     recompensaAplicada: opciones?.recompensaAplicada ? (opciones.descripcionRecompensa ?? undefined) : undefined,
   });
 
-  return enviarEmail(reserva.cliente.email, `Confirmación de cita — ${reserva.estudio.nombre}`, html);
+  await encolarEmailRenderizado({
+    destinatario: reserva.cliente.email,
+    asunto: `Confirmación de cita — ${reserva.estudio.nombre}`,
+    html,
+    claveUnica: `confirmacion_reserva:${reserva.id}`,
+  });
+
+  return true;
 }
 
-export async function enviarEmailRecordatorio(reservaId: string): Promise<boolean> {
+export async function programarEmailRecordatorioReserva(
+  reservaId: string,
+): Promise<ResultadoEncoladoCorreo | false> {
   const reserva = await obtenerReservaCompleta(reservaId);
   if (!reserva?.cliente.email) return false;
 
@@ -93,12 +122,28 @@ export async function enviarEmailRecordatorio(reservaId: string): Promise<boolea
     hora: reserva.horaInicio,
   });
 
-  return enviarEmail(reserva.cliente.email, '⏰ Recordatorio: tu cita es mañana', html);
+  return encolarEmailRenderizado({
+    destinatario: reserva.cliente.email,
+    asunto: '⏰ Recordatorio: tu cita es mañana',
+    html,
+    tipoEvento: TIPO_RECORDATORIO_RESERVA,
+    referenciaId: reserva.id,
+    claveUnica: `recordatorio_reserva:${reserva.id}`,
+  });
+}
+
+export async function enviarEmailRecordatorio(reservaId: string): Promise<boolean> {
+  return Boolean(await programarEmailRecordatorioReserva(reservaId));
 }
 
 export async function enviarEmailResetContrasena(emailDestino: string, token: string): Promise<void> {
   const html = crearTemplateResetContrasena({ token });
-  await enviarEmail(emailDestino, 'Restablece tu contraseña — Beauty Time Pro', html);
+  await encolarEmailRenderizado({
+    destinatario: emailDestino,
+    asunto: 'Restablece tu contraseña — Beauty Time Pro',
+    html,
+    claveUnica: `reset_contrasena:${token}`,
+  });
 }
 
 export async function enviarEmailVerificacionCliente(datos: {
@@ -107,7 +152,11 @@ export async function enviarEmailVerificacionCliente(datos: {
   enlaceVerificacion: string;
 }): Promise<void> {
   const html = crearTemplateVerificacionCliente(datos);
-  await enviarEmail(datos.emailDestino, 'Verifica tu correo — Beauty Time Pro', html);
+  await encolarEmailRenderizado({
+    destinatario: datos.emailDestino,
+    asunto: 'Verifica tu correo — Beauty Time Pro',
+    html,
+  });
 }
 
 export async function enviarEmailBienvenidaSalon(datos: {
@@ -117,7 +166,11 @@ export async function enviarEmailBienvenidaSalon(datos: {
   fechaVencimiento: string;
 }): Promise<void> {
   const html = crearTemplateBienvenidaSalon(datos);
-  await enviarEmail(datos.emailDestino, `Tu salón ${datos.nombreSalon} fue aprobado`, html);
+  await encolarEmailRenderizado({
+    destinatario: datos.emailDestino,
+    asunto: `Tu salón ${datos.nombreSalon} fue aprobado`,
+    html,
+  });
 }
 
 export async function enviarEmailBienvenidaEmpleado(params: {
@@ -163,7 +216,13 @@ export async function enviarEmailBienvenidaEmpleado(params: {
     </body>
     </html>
   `;
-  return enviarEmail(params.email, `Acceso a Beauty Time Pro — ${params.nombreSalon}`, html);
+  await encolarEmailRenderizado({
+    destinatario: params.email,
+    asunto: `Acceso a Beauty Time Pro — ${params.nombreSalon}`,
+    html,
+  });
+
+  return true;
 }
 
 export async function enviarEmailRecordatorioPagoSalon(params: {
@@ -171,7 +230,12 @@ export async function enviarEmailRecordatorioPagoSalon(params: {
   nombreDueno: string;
   nombreSalon: string;
   fechaVencimiento: string;
+  diasRestantes?: number;
 }): Promise<void> {
+  const diasTexto = params.diasRestantes != null && params.diasRestantes >= 0
+    ? `vence en ${params.diasRestantes} día${params.diasRestantes !== 1 ? 's' : ''}`
+    : 'requiere revisión de pago';
+
   const html = `
     <!DOCTYPE html>
     <html lang="es">
@@ -183,16 +247,15 @@ export async function enviarEmailRecordatorioPagoSalon(params: {
           <p style="margin:8px 0 0;color:rgba(255,255,255,.85);font-size:14px;">Recordatorio de pago</p>
         </div>
         <div style="padding:40px;">
-          <h2 style="margin:0 0 12px;font-size:22px;color:#0f172a;">Hola, ${params.nombreDueno}</h2>
           <p style="color:#475569;font-size:15px;line-height:1.6;margin:0 0 20px;">
-            Te recordamos que la suscripción de <strong>${params.nombreSalon}</strong> requiere revisión de pago.
+            Hola ${params.nombreDueno}, tu suscripción de Beauty Time Pro ${diasTexto}. Realiza tu pago para continuar disfrutando del servicio.
           </p>
           <div style="background:#fff7ed;border:1px solid #fdba74;border-radius:14px;padding:20px;margin-bottom:24px;">
             <p style="margin:0 0 8px;font-size:13px;color:#9a3412;font-weight:700;">Resumen de vigencia</p>
-            <p style="margin:0;font-size:15px;color:#0f172a;"><strong>Fecha registrada:</strong> ${params.fechaVencimiento}</p>
+            <p style="margin:0;font-size:15px;color:#0f172a;"><strong>Fecha de corte:</strong> ${params.fechaVencimiento}</p>
           </div>
           <p style="color:#64748b;font-size:14px;line-height:1.6;margin:0;">
-            Si ya realizaste el pago puedes ignorar este correo. Si todavía está pendiente, responde este mensaje o contacta al equipo administrador para mantener el salón activo.
+            Si ya realizaste el pago puedes ignorar este correo. Si todavía está pendiente, contacta al equipo administrador para mantener tu salón activo.
           </p>
         </div>
       </div>
@@ -200,7 +263,52 @@ export async function enviarEmailRecordatorioPagoSalon(params: {
     </html>
   `;
 
-  await enviarEmail(params.email, `Recordatorio de pago — ${params.nombreSalon}`, html);
+  await encolarEmailRenderizado({
+    destinatario: params.email,
+    asunto: `Recordatorio de pago — ${params.nombreSalon}`,
+    html,
+  });
+}
+
+export async function enviarEmailPagoConfirmado(params: {
+  email: string;
+  nombreDueno: string;
+  nombreSalon: string;
+  nuevaFechaVencimiento: string;
+}): Promise<void> {
+  const html = `
+    <!DOCTYPE html>
+    <html lang="es">
+    <head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"></head>
+    <body style="margin:0;padding:0;background:#f8fafc;font-family:system-ui,sans-serif;">
+      <div style="max-width:560px;margin:40px auto;background:#fff;border-radius:16px;overflow:hidden;box-shadow:0 2px 8px rgba(0,0,0,.08);">
+        <div style="background:#16a34a;padding:32px 40px;">
+          <h1 style="margin:0;color:#fff;font-size:22px;font-weight:800;">Beauty Time Pro</h1>
+          <p style="margin:8px 0 0;color:rgba(255,255,255,.85);font-size:14px;">Confirmación de pago</p>
+        </div>
+        <div style="padding:40px;">
+          <p style="color:#475569;font-size:15px;line-height:1.6;margin:0 0 20px;">
+            Hola ${params.nombreDueno}, tu pago fue confirmado. Tu suscripción de Beauty Time Pro está activa hasta el <strong>${params.nuevaFechaVencimiento}</strong>.
+          </p>
+          <div style="background:#f0fdf4;border:1px solid #86efac;border-radius:14px;padding:20px;margin-bottom:24px;">
+            <p style="margin:0 0 8px;font-size:13px;color:#166534;font-weight:700;">Detalle de suscripción</p>
+            <p style="margin:0;font-size:15px;color:#0f172a;"><strong>Salón:</strong> ${params.nombreSalon}</p>
+            <p style="margin:8px 0 0;font-size:15px;color:#0f172a;"><strong>Activa hasta:</strong> ${params.nuevaFechaVencimiento}</p>
+          </div>
+          <p style="color:#64748b;font-size:14px;line-height:1.6;margin:0;">
+            Gracias por confiar en Beauty Time Pro. Si tienes dudas, contacta al equipo administrador.
+          </p>
+        </div>
+      </div>
+    </body>
+    </html>
+  `;
+
+  await encolarEmailRenderizado({
+    destinatario: params.email,
+    asunto: `Pago confirmado — ${params.nombreSalon}`,
+    html,
+  });
 }
 
 export async function enviarEmailRechazoSalon(datos: {
@@ -210,7 +318,11 @@ export async function enviarEmailRechazoSalon(datos: {
   motivo: string;
 }): Promise<void> {
   const html = crearTemplateRechazoSalon(datos);
-  await enviarEmail(datos.emailDestino, `Actualización sobre ${datos.nombreSalon}`, html);
+  await encolarEmailRenderizado({
+    destinatario: datos.emailDestino,
+    asunto: `Actualización sobre ${datos.nombreSalon}`,
+    html,
+  });
 }
 
 export async function obtenerDescripcionRecompensa(estudioId: string): Promise<string> {
@@ -255,7 +367,11 @@ export async function enviarEmailSolicitudCancelacion(params: {
     </body>
     </html>
   `;
-  await enviarEmail(emailAdmin, `Solicitud de cancelación — ${params.nombreSalon}`, html);
+  await encolarEmailRenderizado({
+    destinatario: emailAdmin,
+    asunto: `Solicitud de cancelación — ${params.nombreSalon}`,
+    html,
+  });
 }
 
 export async function enviarEmailCancelacionProcesada(params: {
@@ -308,5 +424,9 @@ export async function enviarEmailCancelacionProcesada(params: {
     </body>
     </html>
   `;
-  await enviarEmail(params.email, asunto, html);
+  await encolarEmailRenderizado({
+    destinatario: params.email,
+    asunto,
+    html,
+  });
 }

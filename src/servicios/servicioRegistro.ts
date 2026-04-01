@@ -30,6 +30,7 @@ interface DatosRegistroCliente {
   apellido: string;
   fechaNacimiento: string;
   pais: Pais;
+  ciudad?: string;
   telefono?: string;
 }
 

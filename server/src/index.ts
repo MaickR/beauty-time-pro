@@ -1,4 +1,3 @@
-process.env.TZ = 'America/Mexico_City'; // normalizar timezone del servidor
 import './lib/env.js'; // validar entorno al arrancar
 import Fastify from 'fastify';
 import type { FastifyError } from 'fastify';
@@ -12,7 +11,9 @@ import rateLimit from '@fastify/rate-limit';
 import compress from '@fastify/compress';
 import path from 'path';
 import { env } from './lib/env.js';
+import { iniciarJobColaEmails } from './jobs/colaEmails.js';
 import { iniciarJobRecordatorios } from './jobs/recordatorios.js';
+import { iniciarJobCumpleanos } from './jobs/cumpleanos.js';
 import { rutasAuth } from './rutas/auth.js';
 import { rutasEstudios } from './rutas/estudios.js';
 import { rutasPersonal } from './rutas/personal.js';
@@ -28,6 +29,34 @@ import { rutasRegistro } from './rutas/registro.js';
 import { rutasClientesApp } from './rutas/clientesApp.js';
 import { rutasPush } from './rutas/push.js';
 import { rutasEmpleados } from './rutas/empleados.js';
+import { rutasMensajesMasivos } from './rutas/mensajesMasivos.js';
+import { rutasProductos } from './rutas/productos.js';
+import { rutasVendedor } from './rutas/vendedor.js';
+
+function obtenerContentTypeEstatico(rutaArchivo: string): string {
+  const extension = path.extname(rutaArchivo).toLowerCase();
+
+  switch (extension) {
+    case '.html':
+    case '.htm':
+      return 'text/plain';
+    case '.jpg':
+    case '.jpeg':
+      return 'image/jpeg';
+    case '.png':
+      return 'image/png';
+    case '.webp':
+      return 'image/webp';
+    case '.gif':
+      return 'image/gif';
+    case '.svg':
+      return 'image/svg+xml';
+    case '.pdf':
+      return 'application/pdf';
+    default:
+      return 'application/octet-stream';
+  }
+}
 
 function esOrigenLocal(origen: string): boolean {
   return (
@@ -119,6 +148,11 @@ void (async () => {
     root: path.join(process.cwd(), 'uploads'),
     prefix: '/uploads/',
     decorateReply: false,
+    setHeaders: (respuesta, rutaArchivo) => {
+      respuesta.setHeader('X-Content-Type-Options', 'nosniff');
+      respuesta.setHeader('Content-Disposition', 'inline');
+      respuesta.setHeader('Content-Type', obtenerContentTypeEstatico(rutaArchivo));
+    },
   });
 
   await servidor.register(rutasAuth);
@@ -136,6 +170,9 @@ void (async () => {
   await servidor.register(rutasClientesApp);
   await servidor.register(rutasPush);
   await servidor.register(rutasEmpleados);
+  await servidor.register(rutasMensajesMasivos);
+  await servidor.register(rutasProductos);
+  await servidor.register(rutasVendedor);
 
   servidor.get('/salud', async () => ({
     estado: 'ok',
@@ -162,7 +199,9 @@ void (async () => {
   try {
     await servidor.listen({ port: env.PUERTO, host: '0.0.0.0' });
     if (env.ENTORNO !== 'test') {
+      iniciarJobColaEmails();
       iniciarJobRecordatorios();
+      iniciarJobCumpleanos();
     }
   } catch (err) {
     servidor.log.error(err);

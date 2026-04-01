@@ -1,0 +1,45 @@
+import { peticion } from '../lib/clienteHTTP';
+
+export interface MensajeMasivo {
+  id: string;
+  estudioId: string;
+  titulo: string;
+  texto: string;
+  imagenUrl: string | null;
+  fechaEnvio: string;
+  enviado: boolean;
+  creadoEn: string;
+}
+
+export interface DatosMensajesMasivos {
+  mensajes: MensajeMasivo[];
+  usados: number;
+  limite: number;
+  extra: number;
+}
+
+export interface CrearMensajeMasivoPayload {
+  titulo: string;
+  texto: string;
+  imagenUrl?: string;
+}
+
+export async function obtenerMensajesMasivos(estudioId: string): Promise<DatosMensajesMasivos> {
+  const respuesta = await peticion<{ datos: DatosMensajesMasivos }>(
+    `/estudio/${estudioId}/mensajes-masivos`,
+  );
+  return respuesta.datos;
+}
+
+export async function enviarMensajeMasivo(
+  estudioId: string,
+  datos: CrearMensajeMasivoPayload,
+): Promise<{ mensaje: string; destinatarios: number; id: string }> {
+  const respuesta = await peticion<{
+    datos: { mensaje: string; destinatarios: number; id: string };
+  }>(`/estudio/${estudioId}/mensajes-masivos`, {
+    method: 'POST',
+    body: JSON.stringify(datos),
+  });
+  return respuesta.datos;
+}

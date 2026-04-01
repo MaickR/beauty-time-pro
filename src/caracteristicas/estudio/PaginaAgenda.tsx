@@ -12,8 +12,6 @@ import {
   ChevronLeft,
   ChevronRight,
   Wallet,
-  CheckCircle2,
-  AlertTriangle,
   Calendar,
 } from 'lucide-react';
 import { formatearDinero } from '../../utils/formato';
@@ -24,13 +22,16 @@ import { usarToast } from '../../componentes/ui/ProveedorToast';
 import { obtenerFechaLocalISO, obtenerEstadoSuscripcion } from '../../utils/formato';
 import { AgendaDiaria } from './componentes/AgendaDiaria';
 import { ModalCrearReservaManual } from './componentes/ModalCrearReservaManual';
-import { PanelPersonal } from './componentes/PanelPersonal';
 import { GestorFestivos } from './componentes/GestorFestivos';
 import { ModalBienvenidaSalon } from './componentes/ModalBienvenidaSalon';
+import { ModalSuspension } from './componentes/ModalSuspension';
+import { PanelNotificaciones } from './componentes/PanelNotificaciones';
+import { usarNotificacionesEstudio } from './hooks/usarNotificacionesEstudio';
 import { Spinner } from '../../componentes/ui/Spinner';
 import { BannerNotificacionesPush } from '../../componentes/ui/BannerNotificacionesPush';
 import { usarNotificacionesPush } from '../../hooks/usarNotificacionesPush';
 import { env } from '../../lib/env';
+import { obtenerDefinicionPlan } from '../../lib/planes';
 import { colorMasClaro } from '../../utils/color';
 import type { Moneda } from '../../tipos';
 
@@ -47,15 +48,15 @@ function obtenerOrigenReservas(): string {
 
 export function PaginaAgenda() {
   usarTituloPagina('Agenda');
-  const { estudioId } = useParams<{ estudioId: string }>();
+  const { slug } = useParams<{ slug: string }>();
   const navegar = useNavigate();
   const { estudios, reservas, cargando, recargar } = usarContextoApp();
   const { cerrarSesion, usuario } = usarTiendaAuth();
   const { mostrarToast } = usarToast();
   const [fechaVista, setFechaVista] = useState(new Date());
   const [mostrarBienvenida, setMostrarBienvenida] = useState(() => {
-    if (!estudioId) return true;
-    return localStorage.getItem(`bienvenida_salon_${estudioId}`) !== 'visto';
+    if (!slug) return true;
+    return localStorage.getItem(`bienvenida_salon_v2_${slug}`) !== 'visto';
   });
   const [mostrarModalCrearCita, setMostrarModalCrearCita] = useState(false);
   const [activandoPush, setActivandoPush] = useState(false);
@@ -64,7 +65,9 @@ export function PaginaAgenda() {
   const estudiosDisponibles = estudios ?? [];
   const reservasDisponibles = reservas ?? [];
 
-  const estudio = estudiosDisponibles.find((s) => s.id === estudioId);
+  const estudio = estudiosDisponibles.find((s) => s.slug === slug || s.id === slug);
+  const estudioId = estudio?.id;
+  const { notificaciones, marcarLeida } = usarNotificacionesEstudio(estudioId);
 
   const linkReservas = estudio ? `${obtenerOrigenReservas()}/reservar/${estudio.clientKey}` : null;
 
@@ -108,10 +111,23 @@ export function PaginaAgenda() {
     horaActual < 12 ? 'Buenos días' : horaActual < 18 ? 'Buenas tardes' : 'Buenas noches';
   const nombreSaludo = usuario?.nombre?.trim() || estudio.owner || estudio.name;
   const hoyStr = obtenerFechaLocalISO(ahora);
+  const mesPrefijo = hoyStr.substring(0, 7);
   const citasHoy = reservasEstudio.filter((r) => r.date === hoyStr && r.status !== 'cancelled');
-  const totalEstimadoHoy = citasHoy.reduce((sum, r) => sum + r.totalPrice, 0);
+  const citasMes = reservasEstudio.filter(
+    (r) => r.date.startsWith(mesPrefijo) && r.status !== 'cancelled',
+  );
+  const totalCompletadoMes = reservasEstudio
+    .filter((r) => r.date.startsWith(mesPrefijo) && r.status === 'completed')
+    .reduce((sum, r) => sum + (r.totalPrice ?? 0), 0);
+  const totalEstimadoMes = citasMes.reduce((sum, r) => sum + (r.totalPrice ?? 0), 0);
   const especialistasActivos = (estudio.staff ?? []).filter((s) => s.active).length;
   const colorPrimario = estudio.colorPrimario ?? '#C2185B';
+  const definicionPlan = obtenerDefinicionPlan(estudio.plan);
+  const precioSuscripcion = moneda === 'COP' ? '$200,000 COP' : '$1,000 MXN';
+  const estadoSub = obtenerEstadoSuscripcion(estudio);
+  const diasRestantes = estadoSub?.daysRemaining ?? 0;
+  const colorDiasRestantes =
+    diasRestantes > 15 ? 'text-green-400' : diasRestantes >= 8 ? 'text-yellow-300' : 'text-red-400';
 
   const copiarLink = () => {
     if (!linkReservas) return;
@@ -142,8 +158,6 @@ export function PaginaAgenda() {
     enlace.download = `${estudio.name.replace(/\s+/g, '_').toUpperCase()}_${fecha.replace(/\s+/g, '')}.png`;
     enlace.click();
   };
-  const subStatus = obtenerEstadoSuscripcion(estudio);
-  const subPrecio = moneda === 'COP' ? '$200,000 COP' : '$1,000 MXN';
 
   const cambiarMes = (offset: number) => {
     setFechaVista((prev) => new Date(prev.getFullYear(), prev.getMonth() + offset, 1));
@@ -186,13 +200,20 @@ export function PaginaAgenda() {
             </p>
           </div>
         </div>
-        <button
-          onClick={cerrarSesion}
-          aria-label="Cerrar sesión"
-          className="p-3 bg-slate-100 rounded-full hover:bg-slate-200 text-slate-400"
-        >
-          <LogOut />
-        </button>
+        <div className="flex items-center gap-3">
+          <PanelNotificaciones
+            notificaciones={notificaciones}
+            pais={estudio?.country ?? 'Mexico'}
+            onMarcarLeida={marcarLeida}
+          />
+          <button
+            onClick={cerrarSesion}
+            aria-label="Cerrar sesión"
+            className="p-3 bg-slate-100 rounded-full hover:bg-slate-200 text-slate-400"
+          >
+            <LogOut />
+          </button>
+        </div>
       </header>
 
       <main className="max-w-7xl mx-auto p-4 md:p-8 space-y-8">
@@ -207,9 +228,6 @@ export function PaginaAgenda() {
             <p className="text-sm font-bold opacity-80">
               {saludoTiempo}, {nombreSaludo}
             </p>
-            <h2 className="text-2xl md:text-3xl font-black uppercase leading-tight mt-1">
-              {estudio.name}
-            </h2>
             <p className="mt-2 text-sm opacity-70 capitalize">
               {ahora.toLocaleDateString('es-ES', {
                 weekday: 'long',
@@ -218,77 +236,59 @@ export function PaginaAgenda() {
               })}
             </p>
           </div>
-          <div className="mt-5 flex flex-wrap gap-3">
-            <div className="bg-white/20 rounded-2xl px-5 py-3 min-w-27.5 backdrop-blur-sm">
+          <div className="mt-5 grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+            <div className="bg-white/20 rounded-2xl px-4 py-3 backdrop-blur-sm">
               <p className="text-[10px] font-bold opacity-80 uppercase tracking-widest">
                 Citas hoy
               </p>
               <p className="text-2xl font-black">{citasHoy.length}</p>
             </div>
-            <div className="bg-white/20 rounded-2xl px-5 py-3 min-w-32.5 backdrop-blur-sm">
+            <div className="bg-white/20 rounded-2xl px-4 py-3 backdrop-blur-sm">
               <p className="text-[10px] font-bold opacity-80 uppercase tracking-widest">
-                Total estimado
+                Completado (mes)
               </p>
-              <p className="text-xl font-black">{formatearDinero(totalEstimadoHoy, moneda)}</p>
+              <p className="text-xl font-black">{formatearDinero(totalCompletadoMes, moneda)}</p>
             </div>
-            <div className="bg-white/20 rounded-2xl px-5 py-3 min-w-27.5 backdrop-blur-sm">
+            <div className="bg-white/20 rounded-2xl px-4 py-3 backdrop-blur-sm">
+              <p className="text-[10px] font-bold opacity-80 uppercase tracking-widest">
+                Estimado (mes)
+              </p>
+              <p className="text-xl font-black">{formatearDinero(totalEstimadoMes, moneda)}</p>
+            </div>
+            <div className="bg-white/20 rounded-2xl px-4 py-3 backdrop-blur-sm">
               <p className="text-[10px] font-bold opacity-80 uppercase tracking-widest">
                 Especialistas
               </p>
               <p className="text-2xl font-black">{especialistasActivos}</p>
+            </div>
+            <div className="bg-white/20 rounded-2xl px-4 py-3 backdrop-blur-sm">
+              <p className="text-[10px] font-bold opacity-80 uppercase tracking-widest">Plan</p>
+              <p className="text-lg font-black">{definicionPlan.nombre}</p>
+              <p className="text-[10px] font-bold opacity-70">{precioSuscripcion}/mes</p>
+            </div>
+            <div className="bg-white/20 rounded-2xl px-4 py-3 backdrop-blur-sm">
+              <p className="text-[10px] font-bold opacity-80 uppercase tracking-widest">
+                Días restantes
+              </p>
+              <p className={`text-2xl font-black ${colorDiasRestantes}`}>{diasRestantes}</p>
             </div>
           </div>
         </div>
 
         <div className="no-imprimir flex bg-slate-200/50 p-1 rounded-2xl w-fit border border-slate-200 mx-auto md:mx-0">
           <button
-            onClick={() => navegar(`/estudio/${estudio.id}/agenda`)}
+            onClick={() => navegar(`/estudio/${estudio.slug || estudio.id}/agenda`)}
             className="px-4 md:px-6 py-3 rounded-xl text-[10px] md:text-xs font-black transition-all flex items-center gap-2 bg-white shadow-sm text-slate-900"
           >
-            <Calendar className="w-4 h-4" /> Agenda & Personal
+            <Calendar className="w-4 h-4" /> Agenda
           </button>
           <button
-            onClick={() => navegar(`/estudio/${estudio.id}/admin`)}
+            onClick={() => navegar(`/estudio/${estudio.slug || estudio.id}/admin`)}
             className="px-4 md:px-6 py-3 rounded-xl text-[10px] md:text-xs font-black transition-all flex items-center gap-2 text-slate-500 hover:text-slate-800"
           >
             <Wallet className="w-4 h-4" /> Administración
           </button>
         </div>
-
-        {subStatus?.status === 'ACTIVE' && (
-          <div className="bg-green-50 rounded-2xl p-4 text-green-800 text-xs flex items-center gap-2 border border-green-200">
-            <CheckCircle2 className="w-5 h-5 text-green-500" />
-            <span>
-              <span className="font-black uppercase">Suscripción Activa.</span> Día de corte:{' '}
-              {subStatus.cutDay} de cada mes.
-            </span>
-          </div>
-        )}
-        {(subStatus?.status === 'WARNING' || subStatus?.status === 'OVERDUE') && (
-          <div
-            className={`border-2 p-6 rounded-4xl flex items-start gap-6 ${subStatus.status === 'OVERDUE' ? 'bg-red-50 border-red-400' : 'bg-yellow-50 border-yellow-400'}`}
-          >
-            <div
-              className={`p-4 rounded-full text-white shrink-0 ${subStatus.status === 'OVERDUE' ? 'bg-red-500' : 'bg-yellow-400'}`}
-            >
-              <AlertTriangle className="w-8 h-8" />
-            </div>
-            <div>
-              <h4
-                className={`font-black uppercase text-xl mb-1 ${subStatus.status === 'OVERDUE' ? 'text-red-800' : 'text-yellow-800'}`}
-              >
-                {subStatus.status === 'OVERDUE' ? 'Suscripción Vencida' : 'Aviso de Renovación'}
-              </h4>
-              <p
-                className={`text-sm font-medium ${subStatus.status === 'OVERDUE' ? 'text-red-900' : 'text-yellow-900'}`}
-              >
-                Tu membresía {subStatus.status === 'OVERDUE' ? 'venció el' : 'vence el'}{' '}
-                <strong>{subStatus.dueDateStr}</strong>. Deposita <strong>{subPrecio}</strong> a la
-                cuenta asignada.
-              </p>
-            </div>
-          </div>
-        )}
 
         {/*
           Grid aplanado: cada sección es un item directo del grid.
@@ -418,11 +418,6 @@ export function PaginaAgenda() {
           <div className="order-4 lg:col-span-5">
             <GestorFestivos estudio={estudio} />
           </div>
-
-          {/* 5 — Personal */}
-          <div className="order-5 lg:col-span-5">
-            <PanelPersonal estudio={estudio} reservas={reservasEstudio} fechaVista={fechaVista} />
-          </div>
         </div>
       </main>
 
@@ -439,10 +434,14 @@ export function PaginaAgenda() {
           nombreSalon={estudio.name}
           estudioId={estudio.id}
           onCerrar={() => {
-            if (estudioId) localStorage.setItem(`bienvenida_salon_${estudioId}`, 'visto');
+            if (estudioId) localStorage.setItem(`bienvenida_salon_v2_${slug}`, 'visto');
             setMostrarBienvenida(false);
           }}
         />
+      )}
+
+      {(estudio.estado === 'suspendido' || diasRestantes <= 0) && (
+        <ModalSuspension nombreSalon={estudio.name} pais={estudio.country ?? 'Mexico'} />
       )}
     </div>
   );

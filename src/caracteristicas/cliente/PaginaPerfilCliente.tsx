@@ -8,6 +8,7 @@ import { SelectorFecha } from '../../componentes/ui/SelectorFecha';
 import { usarTemaSalon } from '../../hooks/usarTemaSalon';
 import { usarNotificacionesPush } from '../../hooks/usarNotificacionesPush';
 import { usarPerfilCliente } from './hooks/usarPerfilCliente';
+import { formatearDinero } from '../../utils/formato';
 import type { Pais, ReservaCliente, FidelidadSalon } from '../../tipos';
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
@@ -301,9 +302,14 @@ function SeccionReservas({
                       <p className="text-sm font-medium text-slate-600">
                         {formatearFechaReservaNatural(r.fecha, r.horaInicio)}
                       </p>
-                      <p className="text-sm text-slate-500">
-                        Especialista: {r.especialista.nombre}
-                      </p>
+                      <div className="flex flex-wrap items-center gap-2 text-sm text-slate-500">
+                        <span>Especialista: {r.especialista.nombre}</span>
+                        {r.especialista.eliminado && (
+                          <span className="inline-flex items-center rounded-full border border-amber-200 bg-amber-50 px-2 py-1 text-[11px] font-black uppercase tracking-wide text-amber-700">
+                            Especialista eliminado
+                          </span>
+                        )}
+                      </div>
                       <ul className="space-y-1 text-sm text-slate-500">
                         {r.servicios.map((servicio) => (
                           <li key={`${r.id}-${servicio.name}`} className="flex items-start gap-2">
@@ -314,14 +320,14 @@ function SeccionReservas({
                       </ul>
                     </div>
                     <p className="shrink-0 text-sm font-black text-slate-900">
-                      ${r.precioTotal.toFixed(2)}
+                      {formatearDinero(r.precioTotal)}
                     </p>
                   </div>
                   {/* Fila footer: botón cancelar o aviso */}
                   {cancelable && (
                     <div className="border-t border-slate-100 pt-3">
                       <Link
-                        to={`/cancelar-reserva/${r.id}/${r.tokenCancelacion}`}
+                        to={`/cancelar-reserva?id=${r.id}&t=${r.tokenCancelacion}`}
                         className="inline-flex w-full items-center justify-center rounded-2xl border border-red-200 bg-red-50 px-4 py-2.5 text-sm font-black text-red-700 hover:bg-red-100 transition-colors sm:w-auto"
                       >
                         Cancelar cita
@@ -575,12 +581,12 @@ export function PaginaPerfilCliente() {
       return;
     }
 
-    navegar('/inicio');
+    navegar('/cliente/inicio');
   }
 
   function confirmarSalida() {
     setDialogoSalidaAbierto(false);
-    navegar('/inicio');
+    navegar('/cliente/inicio');
   }
 
   if (isLoading) {

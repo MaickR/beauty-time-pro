@@ -13,7 +13,7 @@ export type DiaFestivo = string;
 export type Moneda = 'MXN' | 'COP';
 export type Pais = 'Mexico' | 'Colombia';
 export type PlanEstudio = 'STANDARD' | 'PRO';
-export type EstadoReserva = 'pending' | 'confirmed' | 'completed' | 'cancelled';
+export type EstadoReserva = 'pending' | 'confirmed' | 'completed' | 'cancelled' | 'no_show';
 export type EstadoSlot = 'AVAILABLE' | 'OCCUPIED' | 'BREAK_TIME' | 'TOO_SHORT';
 
 export interface SlotTiempo {
@@ -24,7 +24,7 @@ export interface SlotTiempo {
 export interface Servicio {
   name: string;
   duration: number; // minutos
-  price: number;
+  price: number; // centavos
   category?: string;
 }
 
@@ -54,6 +54,7 @@ export interface Personal {
 
 export interface Estudio {
   id: string;
+  slug: string;
   name: string;
   owner: string;
   phone: string;
@@ -85,7 +86,7 @@ export interface Estudio {
   updatedAt: string; // ISO datetime
 }
 
-export type EstadoSalon = 'pendiente' | 'aprobado' | 'rechazado' | 'suspendido';
+export type EstadoSalon = 'pendiente' | 'aprobado' | 'rechazado' | 'suspendido' | 'bloqueado';
 
 /** Solicitud de alta de salón con datos del dueño */
 export interface SolicitudSalon {
@@ -137,7 +138,7 @@ export interface Reserva {
   services: Servicio[];
   serviceDetails?: DetalleServicioReserva[];
   totalDuration: number; // minutos
-  totalPrice: number;
+  totalPrice: number; // centavos
   status: EstadoReserva;
   branch: string;
   staffId: string;
@@ -146,6 +147,7 @@ export interface Reserva {
   time: string; // "HH:mm"
   colorBrand: string | null;
   colorNumber: string | null;
+  observaciones?: string | null;
   createdAt: string; // ISO datetime
 }
 
@@ -206,7 +208,7 @@ export interface ClienteAdmin {
   servicioMasFrecuente: string;
   ultimaVisita: string | null;
   totalVisitas: number;
-  totalGastado: number;
+  totalGastado: number; // centavos
 }
 
 export interface RespuestaBaseClientes {
@@ -238,10 +240,12 @@ export interface ReservaCliente {
   estado: EstadoReserva;
   servicios: Servicio[];
   serviciosDetalle?: DetalleServicioReserva[];
-  precioTotal: number;
+  precioTotal: number; // centavos
   tokenCancelacion: string;
+  reagendada: boolean;
+  reservaOriginalId: string | null;
   salon: { id: string; nombre: string; colorPrimario: string | null; logoUrl: string | null };
-  especialista: { id: string; nombre: string };
+  especialista: { id: string; nombre: string; eliminado: boolean };
 }
 
 export interface PerfilClienteApp {
@@ -252,7 +256,8 @@ export interface PerfilClienteApp {
   apellido: string;
   pais: Pais;
   telefono: string | null;
-  fechaNacimiento: string;
+  fechaNacimiento: string | null;
+  ciudad: string | null;
   avatarUrl: string | null;
   creadoEn: string;
   mensajeFidelidad: string | null;
@@ -264,7 +269,7 @@ export interface Pago {
   id: string;
   studioId: string;
   studioName: string;
-  amount: number;
+  amount: number; // centavos
   currency: Moneda;
   country?: Pais;
   date: string; // "YYYY-MM-DD"
@@ -305,7 +310,7 @@ export interface ReservaEmpleado {
   estado: EstadoReserva;
   servicios: Servicio[];
   serviciosDetalle?: DetalleServicioReserva[];
-  precioTotal: number;
+  precioTotal: number; // centavos
   nombreCliente: string;
   telefonoCliente: string;
   clienteAppId: string | null;
@@ -334,5 +339,9 @@ export interface PerfilEmpleado {
     horarioApertura: string | null;
     horarioCierre: string | null;
     diasAtencion: string | null;
+    estado: string | null;
+    pais: string | null;
+    claveCliente: string;
+    servicios: Servicio[];
   };
 }

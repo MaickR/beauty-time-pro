@@ -61,112 +61,155 @@ export function PanelMiEquipo({ estudio }: PropsPanelMiEquipo) {
       </div>
 
       {mostrarFormulario && (
-        <FormularioNuevoPersonal
-          estudioId={estudio.id}
-          serviciosDisponibles={estudio.selectedServices}
-          alCrearExitoso={async () => {
-            setMostrarFormulario(false);
-            await queryClient.invalidateQueries({ queryKey: ['personal-estudio', estudio.id] });
-          }}
-        />
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <FormularioNuevoPersonal
+            estudioId={estudio.id}
+            serviciosDisponibles={estudio.selectedServices}
+            alCrearExitoso={async () => {
+              setMostrarFormulario(false);
+              await queryClient.invalidateQueries({ queryKey: ['personal-estudio', estudio.id] });
+            }}
+          />
+        </div>
       )}
 
-      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-        {personal.map((miembro) => {
-          const guardando =
-            mutacionEstado.isPending && mutacionEstado.variables?.personalId === miembro.id;
-          return (
-            <article
-              key={miembro.id}
-              className="rounded-4xl border border-slate-200 bg-white p-5 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md"
-            >
-              <div className="mb-4 flex items-start justify-between gap-3">
-                <div className="flex items-center gap-3">
-                  {miembro.avatarUrl ? (
-                    <img
-                      src={miembro.avatarUrl}
-                      alt={`Foto de ${miembro.name}`}
-                      className="h-14 w-14 rounded-full border border-slate-200 object-cover"
-                    />
-                  ) : (
-                    <div className="flex h-14 w-14 items-center justify-center rounded-full bg-pink-100 text-lg font-black text-pink-700">
-                      {miembro.name.slice(0, 1).toUpperCase()}
+      <div className="overflow-x-auto rounded-3xl border border-slate-200 bg-white shadow-sm">
+        <table className="w-full text-sm">
+          <thead>
+            <tr className="border-b border-slate-100">
+              <th
+                scope="col"
+                className="text-left px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest"
+              >
+                Specialist
+              </th>
+              <th
+                scope="col"
+                className="text-left px-4 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest hidden sm:table-cell"
+              >
+                Schedule
+              </th>
+              <th
+                scope="col"
+                className="text-left px-4 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest hidden md:table-cell"
+              >
+                Specialties
+              </th>
+              <th
+                scope="col"
+                className="text-center px-4 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest"
+              >
+                Status
+              </th>
+              <th
+                scope="col"
+                className="px-4 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest text-right"
+              >
+                Actions
+              </th>
+            </tr>
+          </thead>
+          <tbody>
+            {personal.map((miembro) => {
+              const guardando =
+                mutacionEstado.isPending && mutacionEstado.variables?.personalId === miembro.id;
+              return (
+                <tr
+                  key={miembro.id}
+                  className="border-b border-slate-50 hover:bg-slate-50 transition-colors"
+                >
+                  <td className="px-6 py-4">
+                    <div className="flex items-center gap-3">
+                      {miembro.avatarUrl ? (
+                        <img
+                          src={miembro.avatarUrl}
+                          alt={`Foto de ${miembro.name}`}
+                          className="h-10 w-10 rounded-full border border-slate-200 object-cover shrink-0"
+                        />
+                      ) : (
+                        <div className="flex h-10 w-10 items-center justify-center rounded-full bg-pink-100 text-sm font-black text-pink-700 shrink-0">
+                          {miembro.name.slice(0, 1).toUpperCase()}
+                        </div>
+                      )}
+                      <span className="font-black text-slate-800">{miembro.name}</span>
                     </div>
-                  )}
-                  <div>
-                    <h4 className="text-base font-black text-slate-900">{miembro.name}</h4>
-                    <p className="text-xs font-bold uppercase tracking-wide text-slate-400">
-                      {miembro.active ? 'Activo' : 'Inactivo'}
+                  </td>
+                  <td className="px-4 py-4 hidden sm:table-cell text-slate-600 font-medium">
+                    <p>
+                      {miembro.shiftStart ?? '—'} – {miembro.shiftEnd ?? '—'}
                     </p>
-                  </div>
-                </div>
-                <span
-                  className={`rounded-full px-3 py-1 text-[10px] font-black uppercase ${miembro.active ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-500'}`}
-                >
-                  {miembro.active ? 'Disponible' : 'Oculto'}
-                </span>
-              </div>
-
-              <div className="mb-4 flex flex-wrap gap-2">
-                {miembro.specialties.map((especialidad) => (
-                  <span
-                    key={especialidad}
-                    className="rounded-full bg-pink-50 px-2.5 py-1 text-[11px] font-bold text-pink-700"
-                  >
-                    {especialidad}
-                  </span>
-                ))}
-                {miembro.specialties.length === 0 && (
-                  <span className="text-xs text-slate-400">Sin especialidades configuradas.</span>
-                )}
-              </div>
-
-              <div className="mb-5 rounded-3xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-600">
-                <p>
-                  <span className="font-black text-slate-900">Horario:</span>{' '}
-                  {miembro.shiftStart ?? '—'} a {miembro.shiftEnd ?? '—'}
-                </p>
-                {(miembro.breakStart || miembro.breakEnd) && (
-                  <p className="mt-1">
-                    <span className="font-black text-slate-900">Descanso:</span>{' '}
-                    {miembro.breakStart ?? '—'} a {miembro.breakEnd ?? '—'}
-                  </p>
-                )}
-              </div>
-
-              <div className="grid gap-2 sm:grid-cols-2">
-                <button
-                  type="button"
-                  onClick={() => setPersonalEditando(miembro)}
-                  className="inline-flex items-center justify-center gap-2 rounded-2xl border border-slate-200 px-4 py-2.5 text-xs font-black text-slate-700 transition hover:border-pink-200 hover:bg-pink-50 hover:text-pink-700"
-                >
-                  <Pencil className="h-4 w-4" /> Editar
-                </button>
-                <button
-                  type="button"
-                  disabled={guardando}
-                  onClick={() =>
-                    mutacionEstado.mutate({ personalId: miembro.id, activo: !miembro.active })
-                  }
-                  className={`inline-flex items-center justify-center gap-2 rounded-2xl px-4 py-2.5 text-xs font-black transition disabled:opacity-60 ${miembro.active ? 'bg-amber-50 text-amber-700 hover:bg-amber-100' : 'bg-emerald-50 text-emerald-700 hover:bg-emerald-100'}`}
-                >
-                  {miembro.active ? (
-                    <UserX className="h-4 w-4" />
-                  ) : (
-                    <UserCheck className="h-4 w-4" />
-                  )}
-                  {miembro.active ? 'Desactivar' : 'Activar'}
-                </button>
-              </div>
-
-              <SeccionAccesoEmpleado
-                estudioId={estudio.id}
-                personalId={miembro.id}
-                nombreEmpleado={miembro.name}
-              />
-            </article>
-          );
-        })}
+                    {(miembro.breakStart || miembro.breakEnd) && (
+                      <p className="text-xs text-slate-400 mt-0.5">
+                        Break: {miembro.breakStart ?? '—'} – {miembro.breakEnd ?? '—'}
+                      </p>
+                    )}
+                  </td>
+                  <td className="px-4 py-4 hidden md:table-cell">
+                    <div className="flex flex-wrap gap-1">
+                      {miembro.specialties.slice(0, 3).map((esp) => (
+                        <span
+                          key={esp}
+                          className="rounded-full bg-pink-50 px-2 py-0.5 text-[10px] font-bold text-pink-700"
+                        >
+                          {esp}
+                        </span>
+                      ))}
+                      {miembro.specialties.length > 3 && (
+                        <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-bold text-slate-500">
+                          +{miembro.specialties.length - 3}
+                        </span>
+                      )}
+                      {miembro.specialties.length === 0 && (
+                        <span className="text-xs text-slate-400 italic">None</span>
+                      )}
+                    </div>
+                  </td>
+                  <td className="px-4 py-4 text-center">
+                    <span
+                      className={`inline-block rounded-full px-3 py-1 text-[10px] font-black uppercase ${miembro.active ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-500'}`}
+                    >
+                      {miembro.active ? 'Active' : 'Inactive'}
+                    </span>
+                  </td>
+                  <td className="px-4 py-4">
+                    <div className="flex items-center justify-end gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setPersonalEditando(miembro)}
+                        className="rounded-xl p-2 text-pink-400 transition hover:bg-pink-50 hover:text-pink-600"
+                        aria-label={`Editar ${miembro.name}`}
+                      >
+                        <Pencil className="h-4 w-4" />
+                      </button>
+                      <button
+                        type="button"
+                        disabled={guardando}
+                        onClick={() =>
+                          mutacionEstado.mutate({ personalId: miembro.id, activo: !miembro.active })
+                        }
+                        className={`rounded-xl p-2 transition disabled:opacity-60 ${miembro.active ? 'text-amber-500 hover:bg-amber-50 hover:text-amber-600' : 'text-emerald-500 hover:bg-emerald-50 hover:text-emerald-600'}`}
+                        aria-label={
+                          miembro.active ? `Desactivar ${miembro.name}` : `Activar ${miembro.name}`
+                        }
+                      >
+                        {miembro.active ? (
+                          <UserX className="h-4 w-4" />
+                        ) : (
+                          <UserCheck className="h-4 w-4" />
+                        )}
+                      </button>
+                    </div>
+                    <SeccionAccesoEmpleado
+                      estudioId={estudio.id}
+                      personalId={miembro.id}
+                      nombreEmpleado={miembro.name}
+                    />
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
       </div>
 
       {personal.length === 0 && (

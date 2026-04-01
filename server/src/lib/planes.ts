@@ -3,12 +3,13 @@ import type { PlanEstudio } from '../generated/prisma/client.js';
 export const MENSAJE_FUNCION_PRO =
   'Esta función está disponible solo en el plan Pro. Actualiza tu plan para desbloquearla.';
 
-export const LIMITE_SERVICIOS_STANDARD = 4;
+export const LIMITE_SERVICIOS_STANDARD = 5;
+export const LIMITE_SERVICIOS_PRO = 15;
 
 interface DefinicionPlanEstudio {
   codigo: PlanEstudio;
   nombre: 'Standard' | 'Pro';
-  maxServicios: number | null;
+  maxServicios: number;
   fidelidad: boolean;
 }
 
@@ -22,7 +23,7 @@ const DEFINICIONES_PLAN: Record<PlanEstudio, DefinicionPlanEstudio> = {
   PRO: {
     codigo: 'PRO',
     nombre: 'Pro',
-    maxServicios: null,
+    maxServicios: LIMITE_SERVICIOS_PRO,
     fidelidad: true,
   },
 };
@@ -41,10 +42,6 @@ export function validarCantidadServiciosPlan(params: {
   cantidadActual?: number;
 }): string | null {
   const definicion = obtenerDefinicionPlan(params.plan);
-  if (definicion.maxServicios === null) {
-    return null;
-  }
-
   if (params.cantidadNueva <= definicion.maxServicios) {
     return null;
   }
@@ -54,5 +51,5 @@ export function validarCantidadServiciosPlan(params: {
     return null;
   }
 
-  return `El plan ${definicion.nombre} permite hasta ${definicion.maxServicios} servicios activos. Actualiza a Pro para agregar más.`;
+  return `Tu plan ${definicion.nombre} permite máximo ${definicion.maxServicios} servicios activos.`;
 }

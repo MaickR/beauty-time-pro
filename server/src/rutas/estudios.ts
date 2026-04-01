@@ -12,8 +12,10 @@ import { registrarAuditoria } from '../utils/auditoria.js';
 import { sanitizarTexto } from '../utils/sanitizar.js';
 import { enviarEmailSolicitudCancelacion } from '../servicios/servicioEmail.js';
 import { colorHexSchema, emailOpcionalONuloSchema, fechaIsoSchema, horaOpcionalONulaSchema, horaSchema, obtenerMensajeValidacion, telefonoSchema, textoOpcionalONuloSchema, textoSchema, urlOpcionalSchema } from '../lib/validacion.js';
-import { sanitizarClaveSalon } from '../lib/clavesSalon.js';
-import { normalizarPlanEstudio, validarCantidadServiciosPlan } from '../lib/planes.js';
+import { esClaveSalonSegura, sanitizarClaveSalon } from '../lib/clavesSalon.js';
+import { normalizarPlanEstudio, obtenerDefinicionPlan, validarCantidadServiciosPlan } from '../lib/planes.js';
+import { obtenerFechaISOEnZona, obtenerZonaHorariaPorPais, normalizarZonaHorariaEstudio } from '../utils/zonasHorarias.js';
+import { generarSlugUnico } from '../utils/generarSlug.js';
 
 const esquemaHorario = z.record(
   z.string(),
@@ -24,12 +26,10 @@ const esquemaHorario = z.record(
   }),
 );
 
-const CLAVE_SALON_REGEX = /^[A-Z0-9]+$/;
-
 const esquemaServicio = z.object({
   name: textoSchema('servicio', 80),
   duration: z.number().int().min(5, 'La duración mínima es 5 minutos').max(720, 'La duración máxima es 720 minutos'),
-  price: z.number().min(1, 'El precio debe ser mayor a 0').max(10000000, 'El precio excede el máximo permitido'),
+  price: z.number().int().min(100, 'El precio debe ser mayor a 0').max(1000000000, 'El precio excede el máximo permitido'),
   category: textoOpcionalONuloSchema('categoria', 80).transform((valor) => valor ?? undefined),
 });
 
@@ -40,8 +40,11 @@ const esquemaServicioPersonalizado = z.object({
 
 const claveSalonSchema = (campo: 'claveDueno' | 'claveCliente') =>
   textoSchema(campo, 32).transform((valor) => sanitizarClaveSalon(valor)).refine(
-    (valor) => CLAVE_SALON_REGEX.test(valor),
-    'La clave solo puede contener letras y números',
+    (valor) =>
+      esClaveSalonSegura(valor, campo === 'claveDueno' ? 'dueno' : 'cliente'),
+    campo === 'claveDueno'
+      ? 'La clave de dueño debe usar el formato seguro vigente'
+      : 'La clave de cliente debe usar el formato seguro vigente',
   );
 
 const esquemaEmailContactoOpcional = emailOpcionalONuloSchema('emailContacto');
@@ -162,6 +165,7 @@ const seleccionarPersonalEstudio = {
 const seleccionarEstudioPanelModerno = {
   id: true,
   nombre: true,
+  slug: true,
   propietario: true,
   telefono: true,
   sitioWeb: true,
@@ -196,6 +200,7 @@ const seleccionarEstudioPanelModerno = {
   creadoEn: true,
   actualizadoEn: true,
   personal: {
+    where: { activo: true },
     orderBy: { creadoEn: 'asc' },
     select: seleccionarPersonalEstudio,
   },
@@ -204,6 +209,7 @@ const seleccionarEstudioPanelModerno = {
 const seleccionarEstudioPanelCompat = {
   id: true,
   nombre: true,
+  slug: true,
   propietario: true,
   telefono: true,
   sitioWeb: true,
@@ -232,6 +238,7 @@ const seleccionarEstudioPanelCompat = {
   creadoEn: true,
   actualizadoEn: true,
   personal: {
+    where: { activo: true },
     orderBy: { creadoEn: 'asc' },
     select: seleccionarPersonalEstudio,
   },
@@ -346,20 +353,37 @@ export async function rutasEstudios(servidor: FastifyInstance): Promise<void> {
         servicios: datos.servicios,
         serviciosCustom: datos.serviciosCustom,
       });
+      const planNormalizado = normalizarPlanEstudio(datos.plan);
+      const cantidadServicios = Array.isArray(datos.servicios) ? datos.servicios.length : 0;
+      const errorServiciosPlan = validarCantidadServiciosPlan({
+        plan: planNormalizado,
+        cantidadNueva: cantidadServicios,
+      });
+      if (errorServiciosPlan) {
+        return respuesta.code(400).send({ error: errorServiciosPlan, codigo: 'LIMITE_PLAN' });
+      }
 
       const estudio = await prisma.estudio.create({
         data: {
           nombre: datos.nombre,
+          slug: await generarSlugUnico(datos.nombre),
           propietario: datos.propietario ?? '',
           telefono: datos.telefono,
           sitioWeb: datos.sitioWeb,
           pais: datos.pais ?? 'Mexico',
-          plan: normalizarPlanEstudio(datos.plan),
+          zonaHoraria: obtenerZonaHorariaPorPais(datos.pais ?? 'Mexico'),
+          plan: planNormalizado,
           sucursales: datos.sucursales ?? [],
           claveDueno: datos.claveDueno.toUpperCase(),
           claveCliente: datos.claveCliente.toUpperCase(),
           suscripcion: datos.suscripcion ?? 'mensual',
-          inicioSuscripcion: datos.inicioSuscripcion ?? new Date().toISOString().split('T')[0]!,
+          inicioSuscripcion:
+            datos.inicioSuscripcion ??
+            obtenerFechaISOEnZona(
+              new Date(),
+              obtenerZonaHorariaPorPais(datos.pais ?? 'Mexico'),
+              datos.pais ?? 'Mexico',
+            ),
           fechaVencimiento: datos.fechaVencimiento ?? '',
           horario: datos.horario ?? {},
           servicios: (datos.servicios ?? []) as Prisma.InputJsonValue,
@@ -444,17 +468,20 @@ export async function rutasEstudios(servidor: FastifyInstance): Promise<void> {
           cantidadActual: serviciosActuales,
         });
         if (errorServicios) {
-          return respuesta.code(400).send({ error: errorServicios });
+          return respuesta.code(400).send({ error: errorServicios, codigo: 'LIMITE_PLAN' });
         }
+
+        const limiteServiciosStandard = obtenerDefinicionPlan('STANDARD').maxServicios;
 
         if (
           datos.plan !== undefined &&
           normalizarPlanEstudio(datos.plan) === 'STANDARD' &&
-          serviciosNuevos > 4
+          serviciosNuevos > limiteServiciosStandard
         ) {
           return respuesta.code(400).send({
             error:
-              'Antes de cambiar a Standard debes dejar el catálogo con un máximo de 4 servicios activos.',
+              `Antes de cambiar a Standard debes dejar el catálogo con un máximo de ${limiteServiciosStandard} servicios activos.`,
+            codigo: 'LIMITE_PLAN',
           });
         }
         const categorias = resolverCategoriasSalon({
@@ -471,6 +498,7 @@ export async function rutasEstudios(servidor: FastifyInstance): Promise<void> {
           ...(datos.telefono !== undefined && columnasEstudios.has('telefono') && { telefono: datos.telefono }),
           ...(datos.sitioWeb !== undefined && columnasEstudios.has('sitioWeb') && { sitioWeb: datos.sitioWeb }),
           ...(datos.pais !== undefined && columnasEstudios.has('pais') && { pais: datos.pais }),
+          ...(datos.pais !== undefined && columnasEstudios.has('zonaHoraria') && { zonaHoraria: obtenerZonaHorariaPorPais(datos.pais) }),
           ...(datos.plan !== undefined && columnasEstudios.has('plan') && { plan: normalizarPlanEstudio(datos.plan) }),
           ...(datos.sucursales !== undefined && columnasEstudios.has('sucursales') && { sucursales: datos.sucursales }),
           ...(datos.horario !== undefined && columnasEstudios.has('horario') && { horario: datos.horario }),
@@ -544,7 +572,7 @@ export async function rutasEstudios(servidor: FastifyInstance): Promise<void> {
       const [salon, miembro, reservasExistentes] = await Promise.all([
         prisma.estudio.findUnique({
           where: { id },
-          select: { horario: true, festivos: true },
+          select: { horario: true, festivos: true, zonaHoraria: true, pais: true },
         }),
         prisma.personal.findFirst({
           where: { id: personalId, estudioId: id, activo: true },
@@ -583,6 +611,7 @@ export async function rutasEstudios(servidor: FastifyInstance): Promise<void> {
         fecha,
         duracionMin,
         reservas: reservasExistentes,
+        zonaHoraria: normalizarZonaHorariaEstudio(salon.zonaHoraria, salon.pais),
       });
 
       return respuesta.send({ datos: slots });
@@ -818,6 +847,62 @@ export async function rutasEstudios(servidor: FastifyInstance): Promise<void> {
       });
 
       return respuesta.send({ datos: { mensaje: 'Solicitud de cancelación retirada' } });
+    },
+  );
+
+  // ─── Notificaciones del estudio ──────────────────────────────────────────
+
+  /**
+   * GET /estudios/:id/notificaciones — notificaciones no leídas del estudio
+   */
+  servidor.get<{ Params: { id: string } }>(
+    '/estudios/:id/notificaciones',
+    { preHandler: [verificarJWT] },
+    async (solicitud, respuesta) => {
+      const payload = solicitud.user as { rol: string; sub: string; estudioId?: string };
+      const { id } = solicitud.params;
+
+      // Solo el dueño de ese estudio o un maestro pueden ver las notificaciones
+      if (payload.rol === 'dueno' && payload.estudioId !== id) {
+        return respuesta.code(403).send({ error: 'Sin permisos para esta acción' });
+      }
+      if (payload.rol !== 'maestro' && payload.rol !== 'dueno' && payload.rol !== 'empleado') {
+        return respuesta.code(403).send({ error: 'Sin permisos para esta acción' });
+      }
+
+      const notificaciones = await prisma.notificacionEstudio.findMany({
+        where: { estudioId: id, leida: false },
+        orderBy: { creadoEn: 'desc' },
+        take: 20,
+      });
+
+      return respuesta.send({ datos: notificaciones });
+    },
+  );
+
+  /**
+   * PUT /estudios/:id/notificaciones/:notifId/leer — marca una notificación como leída
+   */
+  servidor.put<{ Params: { id: string; notifId: string } }>(
+    '/estudios/:id/notificaciones/:notifId/leer',
+    { preHandler: [verificarJWT] },
+    async (solicitud, respuesta) => {
+      const payload = solicitud.user as { rol: string; estudioId?: string };
+      const { id, notifId } = solicitud.params;
+
+      if (payload.rol === 'dueno' && payload.estudioId !== id) {
+        return respuesta.code(403).send({ error: 'Sin permisos para esta acción' });
+      }
+      if (payload.rol !== 'maestro' && payload.rol !== 'dueno' && payload.rol !== 'empleado') {
+        return respuesta.code(403).send({ error: 'Sin permisos para esta acción' });
+      }
+
+      await prisma.notificacionEstudio.updateMany({
+        where: { id: notifId, estudioId: id },
+        data: { leida: true },
+      });
+
+      return respuesta.send({ datos: { mensaje: 'Notificación marcada como leída' } });
     },
   );
 }

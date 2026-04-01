@@ -66,6 +66,7 @@ export interface ReservaCancelable {
   estado: string;
   nombreCliente: string;
   especialista: string;
+  especialistaEliminado: boolean;
   salon: string;
   servicios: Array<{ name?: string } | string>;
 }
@@ -105,6 +106,7 @@ export async function crearReserva(datos: DatosCrearReserva): Promise<ResultadoC
       sucursal: datos.branch,
       marcaTinte: datos.colorBrand ?? null,
       tonalidad: datos.colorNumber ?? null,
+      observaciones: datos.observaciones ?? null,
       usarRecompensa: datos.usarRecompensa ?? false,
     }),
   });
@@ -144,6 +146,18 @@ export async function actualizarEstadoServicioReserva(
     method: 'PUT',
     body: JSON.stringify({ estado, pinCancelacion, ...(motivo ? { motivo } : {}) }),
   });
+}
+
+/** Agrega un servicio adicional a una reserva existente. */
+export async function agregarServicioAReserva(
+  reservaId: string,
+  servicio: { nombre: string; duracion: number; precio: number; categoria?: string },
+): Promise<Reserva> {
+  const respuesta = await peticion<{ datos: Reserva }>(`/reservas/${reservaId}/servicios`, {
+    method: 'POST',
+    body: JSON.stringify(servicio),
+  });
+  return respuesta.datos;
 }
 
 export async function obtenerDisponibilidadEstudio(

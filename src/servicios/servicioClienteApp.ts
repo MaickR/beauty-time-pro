@@ -213,3 +213,24 @@ export async function actualizarMiEmail(
   );
   return res.datos;
 }
+
+export async function cancelarMiReserva(reservaId: string): Promise<{ cancelada: boolean }> {
+  const res = await peticion<{ datos: { cancelada: boolean } }>(
+    `/clientes-app/reservas/${reservaId}/cancelar`,
+    { method: 'POST' },
+  );
+  return res.datos;
+}
+
+export async function reagendarMiReserva(
+  reservaId: string,
+  datos: { fecha: string; horaInicio: string },
+): Promise<{ id: string; fecha: string; horaInicio: string; reagendada: boolean }> {
+  const res = await peticion<{
+    datos: { id: string; fecha: string; horaInicio: string; reagendada: boolean };
+  }>(`/clientes-app/reservas/${reservaId}/reagendar`, {
+    method: 'POST',
+    body: JSON.stringify(datos),
+  });
+  return res.datos;
+}

@@ -3,7 +3,12 @@ import { actualizarEstudio, crearSalonAdmin } from '../../../servicios/servicioE
 import { sincronizarPersonalEstudio } from '../../../servicios/servicioPersonal';
 import { confirmarPago as _confirmarPago } from '../../../servicios/servicioPagos';
 import { ErrorAPI } from '../../../lib/clienteHTTP';
-import { obtenerFechaLocalISO, formatearFechaHumana } from '../../../utils/formato';
+import {
+  convertirMonedaACentavos,
+  obtenerFechaLocalISO,
+  formatearFechaHumana,
+} from '../../../utils/formato';
+import { generarContrasenaSegura } from '../../../utils/seguridad';
 import { DIAS_SEMANA, CATALOGO_SERVICIOS } from '../../../lib/constantes';
 import type { Estudio, Servicio, Personal, TurnoTrabajo } from '../../../tipos';
 
@@ -24,34 +29,11 @@ export interface ConfirmacionAltaSalon {
 }
 
 function generarContrasenaTemporal() {
-  const mayusculas = 'ABCDEFGHJKLMNPQRSTUVWXYZ';
-  const minusculas = 'abcdefghijkmnpqrstuvwxyz';
-  const numeros = '23456789';
-  const especiales = '!@#$%&*';
-  const mezcla = `${mayusculas}${minusculas}${numeros}${especiales}`;
-
-  // Garantizar al menos un carácter de cada categoría requerida
-  const chars = [
-    mayusculas[Math.floor(Math.random() * mayusculas.length)],
-    minusculas[Math.floor(Math.random() * minusculas.length)],
-    numeros[Math.floor(Math.random() * numeros.length)],
-    especiales[Math.floor(Math.random() * especiales.length)],
-  ];
-
-  for (let indice = 0; indice < 8; indice += 1) {
-    chars.push(mezcla[Math.floor(Math.random() * mezcla.length)]);
-  }
-
-  // Mezclar para que el orden no sea predecible
-  for (let i = chars.length - 1; i > 0; i -= 1) {
-    const j = Math.floor(Math.random() * (i + 1));
-    [chars[i], chars[j]] = [chars[j], chars[i]];
-  }
-
-  return chars.join('');
+  return generarContrasenaSegura();
 }
 
 const crearEstadoInicial = (): FormularioEstudio => ({
+  slug: '',
   name: '',
   owner: '',
   emailDueno: '',
@@ -118,7 +100,7 @@ export function usarFormularioEstudio() {
         ...prev,
         selectedServices: existe
           ? prev.selectedServices.filter((servicio) => servicio.name !== nombre)
-          : [...prev.selectedServices, { name: nombre, duration: 30, price: 1 }],
+          : [...prev.selectedServices, { name: nombre, duration: 30, price: 100 }],
       };
     });
   };
@@ -127,9 +109,11 @@ export function usarFormularioEstudio() {
     const valorSinCeros = valor.replace(/^0+/, '') || '';
     const numero = Number.parseInt(valorSinCeros, 10);
     const valorNormalizado = Number.isNaN(numero)
-      ? 1
+      ? campo === 'price'
+        ? 100
+        : 1
       : campo === 'price'
-        ? Math.min(9_999_999, Math.max(1, numero))
+        ? Math.min(999_999_999, Math.max(100, convertirMonedaACentavos(numero)))
         : Math.min(480, Math.max(1, numero));
 
     setFormulario((prev) => ({
@@ -148,7 +132,7 @@ export function usarFormularioEstudio() {
       ...prev,
       selectedServices: prev.selectedServices.some((servicio) => servicio.name === nombre)
         ? prev.selectedServices
-        : [...prev.selectedServices, { name: nombre, duration: 30, price: 1 }],
+        : [...prev.selectedServices, { name: nombre, duration: 30, price: 100 }],
       customServices:
         esCatalogoConocido &&
         !(prev.customServices ?? []).some((servicio) => servicio.name === nombre)

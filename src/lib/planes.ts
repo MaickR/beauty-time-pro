@@ -6,7 +6,7 @@ export const MENSAJE_FUNCION_PRO =
 interface DefinicionPlanEstudio {
   codigo: PlanEstudio;
   nombre: 'Standard' | 'Pro';
-  maxServicios: number | null;
+  maxServicios: number;
   fidelidad: boolean;
   resumen: string;
 }
@@ -15,16 +15,16 @@ const PLANES_ESTUDIO: Record<PlanEstudio, DefinicionPlanEstudio> = {
   STANDARD: {
     codigo: 'STANDARD',
     nombre: 'Standard',
-    maxServicios: 4,
+    maxServicios: 5,
     fidelidad: false,
-    resumen: 'Hasta 4 servicios activos y sin programa de fidelidad.',
+    resumen: 'Hasta 5 servicios activos y sin programa de fidelidad.',
   },
   PRO: {
     codigo: 'PRO',
     nombre: 'Pro',
-    maxServicios: null,
+    maxServicios: 15,
     fidelidad: true,
-    resumen: 'Servicios ilimitados y programa de fidelidad habilitado.',
+    resumen: 'Hasta 15 servicios activos y programa de fidelidad habilitado.',
   },
 };
 

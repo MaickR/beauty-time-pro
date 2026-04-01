@@ -6,10 +6,9 @@ import {
   obtenerBaseClientesAdmin,
   exportarBaseClientesAdmin,
 } from '../../../servicios/servicioAdmin';
-import { formatearDinero, obtenerMonedaPorPais } from '../../../utils/formato';
 import type { ClienteAdmin } from '../../../tipos';
 
-const LIMITE_PAGINA = 50;
+const LIMITE_PAGINA = 10;
 
 const PAISES = ['México', 'Colombia'];
 
@@ -27,18 +26,11 @@ export function BaseClientes() {
   const [buscarDebounced, setBuscarDebounced] = useState('');
   const [salonId, setSalonId] = useState('');
   const [pais, setPais] = useState('');
-  const [servicioFrecuente, setServicioFrecuente] = useState('');
-  const [servicioFrecuenteDebounced, setServicioFrecuenteDebounced] = useState('');
 
   useEffect(() => {
     const timer = setTimeout(() => setBuscarDebounced(buscar), 300);
     return () => clearTimeout(timer);
   }, [buscar]);
-
-  useEffect(() => {
-    const timer = setTimeout(() => setServicioFrecuenteDebounced(servicioFrecuente), 300);
-    return () => clearTimeout(timer);
-  }, [servicioFrecuente]);
 
   const cargarClientes = useCallback(async () => {
     setCargando(true);
@@ -50,7 +42,6 @@ export function BaseClientes() {
         buscar: buscarDebounced || undefined,
         salonId: salonId || undefined,
         pais: pais || undefined,
-        servicioFrecuente: servicioFrecuenteDebounced || undefined,
       });
       setClientes(res.clientes);
       setTotal(res.total);
@@ -60,7 +51,7 @@ export function BaseClientes() {
     } finally {
       setCargando(false);
     }
-  }, [pagina, buscarDebounced, salonId, pais, servicioFrecuenteDebounced]);
+  }, [pagina, buscarDebounced, salonId, pais]);
 
   useEffect(() => {
     void cargarClientes();
@@ -69,7 +60,7 @@ export function BaseClientes() {
   // Cuando cambian los filtros, volver a pág 1
   useEffect(() => {
     setPagina(1);
-  }, [buscarDebounced, salonId, pais, servicioFrecuenteDebounced]);
+  }, [buscarDebounced, salonId, pais]);
 
   const manejarExportar = async () => {
     setExportando(true);
@@ -78,37 +69,24 @@ export function BaseClientes() {
         buscar: buscarDebounced || undefined,
         salonId: salonId || undefined,
         pais: pais || undefined,
-        servicioFrecuente: servicioFrecuenteDebounced || undefined,
       });
 
       const filas = todos.map((c) => ({
         Nombre: c.nombre,
-        Teléfono: c.telefono,
+        Contacto: c.telefono,
         Correo: c.correo ?? '',
         Salón: c.nombreEstudio,
         País: c.paisEstudio,
-        'Servicio frecuente': c.servicioMasFrecuente,
-        'Última visita': c.ultimaVisita ?? '',
-        'Total visitas': c.totalVisitas,
-        'Total gastado': c.totalGastado,
       }));
 
       const encabezados = Object.keys(
         filas[0] ?? {
           Nombre: '',
-          Teléfono: '',
+          Contacto: '',
           Correo: '',
           Salón: '',
           País: '',
-          'Servicio frecuente': '',
-          'Última visita': '',
-          'Total visitas': '',
-          'Total gastado': '',
         },
-      );
-      const totalGastado = todos.reduce(
-        (acumulado, cliente) => acumulado + cliente.totalGastado,
-        0,
       );
       const datos = [
         ['Base de Clientes — Beauty Time Pro'],
@@ -121,7 +99,7 @@ export function BaseClientes() {
           encabezados.map((clave) => (fila as Record<string, unknown>)[clave] ?? ''),
         ),
         [],
-        ['Total clientes', todos.length, '', '', '', '', '', 'Suma total gastado', totalGastado],
+        ['Total clientes', todos.length],
       ];
 
       const hoja = XLSX.utils.aoa_to_sheet(datos);
@@ -266,14 +244,6 @@ export function BaseClientes() {
             </option>
           ))}
         </select>
-
-        <input
-          type="text"
-          value={servicioFrecuente}
-          onChange={(e) => setServicioFrecuente(e.target.value)}
-          placeholder="Servicio frecuente…"
-          className="text-sm border border-slate-200 rounded-xl px-3 py-2 focus:outline-none focus:ring-2 focus:ring-pink-300"
-        />
       </div>
 
       {error && (
@@ -299,17 +269,7 @@ export function BaseClientes() {
             <table className="w-full text-sm">
               <thead className="bg-slate-50 border-b border-slate-200">
                 <tr>
-                  {[
-                    'Nombre',
-                    'Teléfono',
-                    'Correo',
-                    'Salón',
-                    'País',
-                    'Servicio frecuente',
-                    'Última visita',
-                    'Visitas',
-                    'Total gastado',
-                  ].map((col) => (
+                  {['Nombre', 'Contacto', 'Correo', 'Salón', 'País'].map((col) => (
                     <th
                       key={col}
                       className="text-left px-4 py-3 text-xs font-black text-slate-600 uppercase tracking-wide whitespace-nowrap"
@@ -334,16 +294,6 @@ export function BaseClientes() {
                       {c.nombreEstudio}
                     </td>
                     <td className="px-4 py-3 text-slate-600">{c.paisEstudio}</td>
-                    <td className="px-4 py-3 text-slate-600">{c.servicioMasFrecuente || '—'}</td>
-                    <td className="px-4 py-3 text-slate-500 whitespace-nowrap">
-                      {c.ultimaVisita ?? '—'}
-                    </td>
-                    <td className="px-4 py-3 text-center font-semibold text-slate-900">
-                      {c.totalVisitas}
-                    </td>
-                    <td className="px-4 py-3 text-right font-semibold text-slate-900 whitespace-nowrap">
-                      {formatearDinero(c.totalGastado, obtenerMonedaPorPais(c.paisEstudio))}
-                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -354,11 +304,11 @@ export function BaseClientes() {
 
       {/* Paginación */}
       {!cargando && total > 0 && (
-        <div className="flex items-center justify-between mt-4 text-sm text-slate-600">
+        <div className="flex flex-col sm:flex-row items-center justify-between mt-4 gap-3 text-sm text-slate-600">
           <span className="font-medium">
             Mostrando {inicioRango}–{finRango} de {total.toLocaleString('es-MX')} clientes
           </span>
-          <div className="flex gap-2">
+          <div className="flex items-center gap-1">
             <button
               onClick={() => setPagina((p) => Math.max(1, p - 1))}
               disabled={pagina === 1}
@@ -367,9 +317,34 @@ export function BaseClientes() {
             >
               <ChevronLeft className="w-4 h-4" />
             </button>
-            <span className="px-4 py-2 rounded-lg border border-slate-200 font-black">
-              {pagina} / {totalPaginas}
-            </span>
+            {Array.from({ length: totalPaginas }, (_, i) => i + 1)
+              .filter((p) => p === 1 || p === totalPaginas || Math.abs(p - pagina) <= 1)
+              .reduce<(number | '...')[]>((acc, p, i, arr) => {
+                if (i > 0 && p - (arr[i - 1] ?? 0) > 1) acc.push('...');
+                acc.push(p);
+                return acc;
+              }, [])
+              .map((item, idx) =>
+                item === '...' ? (
+                  <span key={`dots-${idx}`} className="px-2 py-2 text-slate-400">
+                    …
+                  </span>
+                ) : (
+                  <button
+                    key={item}
+                    onClick={() => setPagina(item)}
+                    aria-label={`Página ${item}`}
+                    aria-current={pagina === item ? 'page' : undefined}
+                    className={`min-w-[36px] px-3 py-2 rounded-lg border text-xs font-black transition-all ${
+                      pagina === item
+                        ? 'bg-pink-600 text-white border-pink-600'
+                        : 'border-slate-200 hover:bg-slate-100'
+                    }`}
+                  >
+                    {item}
+                  </button>
+                ),
+              )}
             <button
               onClick={() => setPagina((p) => Math.min(totalPaginas, p + 1))}
               disabled={pagina === totalPaginas}

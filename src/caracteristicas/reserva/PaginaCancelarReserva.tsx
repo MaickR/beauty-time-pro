@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useMutation, useQuery } from '@tanstack/react-query';
-import { Link, useNavigate, useParams } from 'react-router-dom';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { AlertTriangle, CalendarX2, CheckCircle2 } from 'lucide-react';
 import { Spinner } from '../../componentes/ui/Spinner';
 import { usarTituloPagina } from '../../hooks/usarTituloPagina';
@@ -16,7 +16,9 @@ function obtenerNombreServicio(servicio: { name?: string } | string): string {
 
 export function PaginaCancelarReserva() {
   usarTituloPagina('Cancelar reserva');
-  const { reservaId, token } = useParams<{ reservaId: string; token: string }>();
+  const [parametros] = useSearchParams();
+  const reservaId = parametros.get('id');
+  const token = parametros.get('t');
   const [cancelada, setCancelada] = useState(false);
   const navegar = useNavigate();
 
@@ -93,7 +95,12 @@ export function PaginaCancelarReserva() {
             <strong>Salón:</strong> {consulta.data.salon}
           </p>
           <p className="text-sm">
-            <strong>Especialista:</strong> {consulta.data.especialista}
+            <strong>Especialista:</strong> {consulta.data.especialista}{' '}
+            {consulta.data.especialistaEliminado && (
+              <span className="inline-flex items-center rounded-full border border-amber-200 bg-amber-50 px-2 py-1 text-[11px] font-black uppercase tracking-wide text-amber-700">
+                Especialista eliminado
+              </span>
+            )}
           </p>
           <p className="text-sm">
             <strong>Fecha:</strong> {consulta.data.fecha}

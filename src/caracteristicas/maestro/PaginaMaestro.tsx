@@ -1,50 +1,85 @@
 import { useEffect, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { useLocation } from 'react-router-dom';
-import { ShieldCheck, LogOut, Store, PlusCircle, PieChart, Users, Database } from 'lucide-react';
+import {
+  ShieldCheck,
+  LogOut,
+  Store,
+  PlusCircle,
+  PieChart,
+  Users,
+  Database,
+  ClipboardList,
+} from 'lucide-react';
 import { usarContextoApp } from '../../contextos/ContextoApp';
 import { usarTiendaAuth } from '../../tienda/tiendaAuth';
 import { usarTituloPagina } from '../../hooks/usarTituloPagina';
 import { usarToast } from '../../componentes/ui/ProveedorToast';
 import { usarFormularioEstudio, confirmarPago } from './hooks/usarFormularioEstudio';
-import { DirectorioEstudios } from './componentes/DirectorioEstudios';
-import { SolicitudesPendientes } from './componentes/SolicitudesPendientes';
+import { DirectorioAcceso } from './componentes/DirectorioAcceso';
 import { SolicitudesCancelacion } from './componentes/SolicitudesCancelacion';
-import { HistorialSalones } from './componentes/HistorialSalones';
-import { VisorReservas } from './componentes/VisorReservas';
 import { ModalPago } from './componentes/ModalPago';
 import { ModalEstudio } from './componentes/ModalEstudio';
 import { GestionAdmins } from './componentes/GestionAdmins';
 import { MetricasGlobales } from './componentes/MetricasGlobales';
 import { PanelFinanciero } from './componentes/PanelFinanciero';
 import { BaseClientes } from './componentes/BaseClientes';
+import { PreregistrosAdmin } from './componentes/PreregistrosAdmin';
 import type { Estudio } from '../../tipos';
 
-type TabMaestro = 'directorio' | 'estado-cuenta' | 'administradores' | 'base-datos';
+type TabMaestro =
+  | 'directorio'
+  | 'estado-cuenta'
+  | 'administradores'
+  | 'preregistros'
+  | 'base-datos';
 
 export function PaginaMaestro() {
   usarTituloPagina('Panel Maestro');
   const ubicacion = useLocation();
-  const { estudios, reservas, pagos, recargar } = usarContextoApp();
+  const { estudios, recargar } = usarContextoApp();
   const { cerrarSesion, usuario } = usarTiendaAuth();
   const { mostrarToast } = usarToast();
   const clienteConsulta = useQueryClient();
-  const [verReservasEstudio, setVerReservasEstudio] = useState<Estudio | null>(null);
   const [pagoEstudio, setPagoEstudio] = useState<Estudio | null>(null);
   const [tabActiva, setTabActiva] = useState<TabMaestro>('directorio');
   const hook = usarFormularioEstudio();
 
-  const puedeVerMetricas = usuario?.esMaestroTotal || usuario?.permisos.verMetricas;
-  const puedeAprobarSalones = usuario?.esMaestroTotal || usuario?.permisos.aprobarSalones;
-  const puedeGestionarPagos = usuario?.esMaestroTotal || usuario?.permisos.gestionarPagos;
-  const puedeCrearAdmins = usuario?.esMaestroTotal || usuario?.permisos.crearAdmins;
-  const puedeSuspenderSalones = usuario?.esMaestroTotal || usuario?.permisos.suspenderSalones;
-  const puedeVerDirectorio = puedeAprobarSalones || puedeSuspenderSalones;
+  const esMaestro = usuario?.rol === 'maestro';
+  const esSupervisor = usuario?.rol === 'supervisor';
+  const ps = usuario?.permisosSupervisor;
+
+  const puedeVerMetricas =
+    usuario?.esMaestroTotal ||
+    usuario?.permisos.verMetricas ||
+    (esSupervisor && (ps?.verTotalSalones || ps?.verReservas || ps?.verVentas));
+  const puedeAprobarSalones =
+    usuario?.esMaestroTotal ||
+    usuario?.permisos.aprobarSalones ||
+    (esSupervisor && (ps?.verControlSalones || ps?.activarSalones || ps?.verPreregistros));
+  const puedeGestionarPagos =
+    usuario?.esMaestroTotal ||
+    usuario?.permisos.gestionarPagos ||
+    (esSupervisor && (ps?.verControlCobros || ps?.accionRecordatorio || ps?.accionRegistroPago));
+  const puedeCrearAdmins = esMaestro && (usuario?.esMaestroTotal || usuario?.permisos.crearAdmins);
+  const puedeSuspenderSalones =
+    usuario?.esMaestroTotal ||
+    usuario?.permisos.suspenderSalones ||
+    (esSupervisor && ps?.accionSuspension);
+  const puedeVerDirectorio =
+    puedeAprobarSalones ||
+    puedeSuspenderSalones ||
+    (esSupervisor && (ps?.verDirectorio || ps?.editarDirectorio));
+  const puedeVerPreregistros =
+    usuario?.esMaestroTotal ||
+    usuario?.permisos.aprobarSalones ||
+    (esSupervisor && ps?.verPreregistros);
 
   const tabsDisponibles: TabMaestro[] = [
     ...(puedeVerDirectorio ? ['directorio' as const] : []),
     ...(puedeGestionarPagos ? ['estado-cuenta' as const] : []),
     ...(puedeCrearAdmins ? ['administradores' as const] : []),
+    ...(puedeVerPreregistros ? ['preregistros' as const] : []),
     ...(puedeVerMetricas ? ['base-datos' as const] : []),
   ];
 
@@ -106,7 +141,7 @@ export function PaginaMaestro() {
                 onClick={() => setTabActiva('directorio')}
                 className={`px-6 py-3 rounded-xl text-xs font-black transition-all flex items-center gap-2 ${tabActiva === 'directorio' ? 'bg-white shadow-sm text-slate-900' : 'text-slate-500 hover:text-slate-800'}`}
               >
-                <Store className="w-4 h-4" /> Directorio de Red
+                <Store className="w-4 h-4" /> Panel Administrativo
               </button>
             )}
             {tabsDisponibles.includes('estado-cuenta') && (
@@ -114,7 +149,7 @@ export function PaginaMaestro() {
                 onClick={() => setTabActiva('estado-cuenta')}
                 className={`px-6 py-3 rounded-xl text-xs font-black transition-all flex items-center gap-2 ${tabActiva === 'estado-cuenta' ? 'bg-white shadow-sm text-slate-900' : 'text-slate-500 hover:text-slate-800'}`}
               >
-                <PieChart className="w-4 h-4" /> Estado de Cuenta
+                <PieChart className="w-4 h-4" /> Control de cobros
               </button>
             )}
             {tabsDisponibles.includes('administradores') && (
@@ -122,7 +157,15 @@ export function PaginaMaestro() {
                 onClick={() => setTabActiva('administradores')}
                 className={`px-6 py-3 rounded-xl text-xs font-black transition-all flex items-center gap-2 ${tabActiva === 'administradores' ? 'bg-white shadow-sm text-slate-900' : 'text-slate-500 hover:text-slate-800'}`}
               >
-                <Users className="w-4 h-4" /> Administradores
+                <Users className="w-4 h-4" /> Colaboradores
+              </button>
+            )}
+            {tabsDisponibles.includes('preregistros') && (
+              <button
+                onClick={() => setTabActiva('preregistros')}
+                className={`px-6 py-3 rounded-xl text-xs font-black transition-all flex items-center gap-2 ${tabActiva === 'preregistros' ? 'bg-white shadow-sm text-slate-900' : 'text-slate-500 hover:text-slate-800'}`}
+              >
+                <ClipboardList className="w-4 h-4" /> Pre-registros
               </button>
             )}
             {tabsDisponibles.includes('base-datos') && (
@@ -147,14 +190,19 @@ export function PaginaMaestro() {
 
         {tabActiva === 'directorio' && tabsDisponibles.includes('directorio') && (
           <>
-            {puedeVerMetricas && <MetricasGlobales />}
+            {puedeVerMetricas && (
+              <>
+                <h2 className="text-2xl font-black text-slate-900 mb-5">Métricas</h2>
+                <MetricasGlobales />
+              </>
+            )}
             <div className="flex flex-col md:flex-row md:justify-between md:items-center gap-6 mb-8">
               <div>
                 <h1 className="text-4xl font-black italic uppercase tracking-tighter">
-                  Directorio de Red
+                  Panel Administrativo
                 </h1>
                 <p className="text-slate-500 font-medium">
-                  Control total de studios, personal, servicios y citas
+                  Control total de salones, personal, servicios y citas
                 </p>
               </div>
               {puedeSuspenderSalones && (
@@ -168,24 +216,9 @@ export function PaginaMaestro() {
             </div>
 
             <div className="space-y-12">
-              {puedeAprobarSalones && <SolicitudesPendientes />}
               {puedeGestionarPagos && <SolicitudesCancelacion />}
-              {puedeSuspenderSalones && <HistorialSalones />}
 
-              {puedeSuspenderSalones && (
-                <section aria-labelledby="titulo-directorio">
-                  <h2 id="titulo-directorio" className="text-2xl font-black text-slate-900 mb-5">
-                    Directorio legacy
-                  </h2>
-                  <DirectorioEstudios
-                    estudios={estudios}
-                    reservas={reservas}
-                    onEditar={hook.abrirModalEdicion}
-                    onVerReservas={setVerReservasEstudio}
-                    onAbrirPago={setPagoEstudio}
-                  />
-                </section>
-              )}
+              {puedeSuspenderSalones && <DirectorioAcceso />}
             </div>
           </>
         )}
@@ -193,9 +226,13 @@ export function PaginaMaestro() {
         {tabActiva === 'estado-cuenta' && tabsDisponibles.includes('estado-cuenta') && (
           <>
             <h1 className="text-4xl font-black italic uppercase tracking-tighter mb-8">
-              Estado de Cuenta
+              Control de cobros
             </h1>
-            <PanelFinanciero estudios={estudios} pagos={pagos} onAbrirPago={setPagoEstudio} />
+            <PanelFinanciero
+              estudios={estudios}
+              onAbrirPago={setPagoEstudio}
+              onRecargar={recargar}
+            />
           </>
         )}
 
@@ -203,16 +240,12 @@ export function PaginaMaestro() {
           <GestionAdmins />
         )}
 
+        {tabActiva === 'preregistros' && tabsDisponibles.includes('preregistros') && (
+          <PreregistrosAdmin />
+        )}
+
         {tabActiva === 'base-datos' && tabsDisponibles.includes('base-datos') && <BaseClientes />}
       </main>
-
-      {verReservasEstudio && (
-        <VisorReservas
-          estudio={verReservasEstudio}
-          reservas={reservas.filter((r) => r.studioId === verReservasEstudio.id)}
-          onCerrar={() => setVerReservasEstudio(null)}
-        />
-      )}
 
       {pagoEstudio && (
         <ModalPago

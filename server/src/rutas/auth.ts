@@ -5,6 +5,7 @@ import { prisma } from '../prismaCliente.js';
 import { env } from '../lib/env.js';
 import { enviarEmailResetContrasena, enviarEmailVerificacionCliente } from '../servicios/servicioEmail.js';
 import { verificarJWT } from '../middleware/autenticacion.js';
+import { obtenerErrorAccesoSalon, salonEstaDisponible } from '../lib/estadoSalon.js';
 import { compararHashContrasena, generarHashContrasena } from '../utils/contrasenas.js';
 
 const REFRESH_EXPIRA = env.JWT_REFRESH_EXPIRA_EN;
@@ -14,12 +15,34 @@ function obtenerOpcionesCookieRefresh() {
   return {
     httpOnly: true,
     secure: env.ENTORNO === 'production',
-    sameSite: env.ENTORNO === 'production' ? 'none' : 'strict',
+    sameSite: env.ENTORNO === 'production' ? 'strict' : 'lax',
     path: '/auth/refrescar',
   } as const;
 }
 
-const REGEX_CONTRASENA = /^(?=.*[A-Z])(?=.*[0-9]).{8,}$/;
+function tieneOrigenPermitidoParaCookie(origen?: string, referer?: string): boolean {
+  if (env.ENTORNO !== 'production') {
+    return true;
+  }
+
+  const origenFrontend = new URL(env.FRONTEND_URL).origin;
+
+  if (origen) {
+    return origen === origenFrontend;
+  }
+
+  if (!referer) {
+    return false;
+  }
+
+  try {
+    return new URL(referer).origin === origenFrontend;
+  } catch {
+    return false;
+  }
+}
+
+const REGEX_CONTRASENA = /^(?=.*[A-Z])(?=.*[a-z])(?=.*[0-9])(?=.*[^A-Za-z0-9]).{8,}$/;
 const esquemaCambioEmail = z.object({
   emailNuevo: z.string().trim().email('Ingresa un correo válido'),
 });
@@ -33,6 +56,21 @@ interface PermisosJWT {
   suspenderSalones: boolean;
 }
 
+interface PermisosSupervisorJWT {
+  verTotalSalones: boolean;
+  verControlSalones: boolean;
+  verReservas: boolean;
+  verVentas: boolean;
+  verDirectorio: boolean;
+  editarDirectorio: boolean;
+  verControlCobros: boolean;
+  accionRecordatorio: boolean;
+  accionRegistroPago: boolean;
+  accionSuspension: boolean;
+  activarSalones: boolean;
+  verPreregistros: boolean;
+}
+
 function crearPermisosVacios(): PermisosJWT {
   return {
     aprobarSalones: false,
@@ -41,6 +79,23 @@ function crearPermisosVacios(): PermisosJWT {
     verAuditLog: false,
     verMetricas: false,
     suspenderSalones: false,
+  };
+}
+
+function crearPermisosSupervisorVacios(): PermisosSupervisorJWT {
+  return {
+    verTotalSalones: false,
+    verControlSalones: false,
+    verReservas: false,
+    verVentas: false,
+    verDirectorio: false,
+    editarDirectorio: false,
+    verControlCobros: false,
+    accionRecordatorio: false,
+    accionRegistroPago: false,
+    accionSuspension: false,
+    activarSalones: false,
+    verPreregistros: false,
   };
 }
 
@@ -74,6 +129,7 @@ export async function rutasAuth(servidor: FastifyInstance): Promise<void> {
           where: { claveDueno: claveNorm },
           select: {
             id: true,
+            slug: true,
             activo: true,
             estado: true,
             usuarios: {
@@ -86,10 +142,14 @@ export async function rutasAuth(servidor: FastifyInstance): Promise<void> {
         if (estudioDueno) {
           const usuarioDueno = estudioDueno.usuarios[0];
 
-          if (!estudioDueno.activo || estudioDueno.estado === 'suspendido') {
+          if (!salonEstaDisponible(estudioDueno)) {
+            const errorSalon = obtenerErrorAccesoSalon(estudioDueno);
             return respuesta.code(403).send({
-              error: 'Tu salón está suspendido. Contacta a Beauty Time Pro.',
-              codigo: 'SALON_SUSPENDIDO',
+              error:
+                errorSalon.codigo === 'SALON_SUSPENDIDO'
+                  ? 'Tu salón está suspendido. Contacta a Beauty Time Pro.'
+                  : errorSalon.error,
+              codigo: errorSalon.codigo,
             });
           }
 
@@ -104,15 +164,21 @@ export async function rutasAuth(servidor: FastifyInstance): Promise<void> {
             sub: usuarioDueno.id,
             rol: 'dueno',
             estudioId: estudioDueno.id,
+            slugEstudio: estudioDueno.slug,
             nombre: usuarioDueno.nombre,
             email: usuarioDueno.email,
           });
         }
         const estudioCliente = await prisma.estudio.findFirst({
           where: { claveCliente: claveNorm },
-          select: { id: true },
+          select: { id: true, activo: true, estado: true },
         });
         if (estudioCliente) {
+          if (!salonEstaDisponible(estudioCliente)) {
+            const errorSalon = obtenerErrorAccesoSalon(estudioCliente);
+            return respuesta.code(403).send(errorSalon);
+          }
+
           return emitirTokens(servidor, respuesta, {
             sub: estudioCliente.id,
             rol: 'cliente',
@@ -125,22 +191,28 @@ export async function rutasAuth(servidor: FastifyInstance): Promise<void> {
         return respuesta.code(401).send({ error: 'Credenciales incorrectas' });
       }
 
-      // ─── Modo email + contraseña ─────────────────────────────────────────
+      // ─── Modo email/teléfono + contraseña ────────────────────────────────
       if (!email || !contrasena) {
-        return respuesta.code(400).send({ error: 'Email y contraseña son requeridos' });
+        return respuesta.code(400).send({ error: 'Email/teléfono y contraseña son requeridos' });
       }
 
-      const emailNorm = email.trim().toLowerCase();
+      const credencial = email.trim().toLowerCase();
+      const esBusquedaPorEmail = credencial.includes('@');
 
       // ─── Verificar si es un ClienteApp (cliente final con cuenta) ──────────
-      const clienteApp = await prisma.clienteApp.findUnique({
-        where: { email: emailNorm },
-        select: { id: true, hashContrasena: true, emailVerificado: true, activo: true, nombre: true, apellido: true },
-      });
+      const clienteApp = esBusquedaPorEmail
+        ? await prisma.clienteApp.findUnique({
+            where: { email: credencial },
+            select: { id: true, email: true, hashContrasena: true, emailVerificado: true, activo: true, nombre: true, apellido: true },
+          })
+        : await prisma.clienteApp.findUnique({
+            where: { telefono: credencial },
+            select: { id: true, email: true, hashContrasena: true, emailVerificado: true, activo: true, nombre: true, apellido: true },
+          });
 
       if (clienteApp) {
         if (!(await compararHashContrasena(contrasena, clienteApp.hashContrasena))) {
-          return respuesta.code(401).send({ error: 'La contraseña es incorrecta.', codigo: 'CONTRASENA_INCORRECTA' });
+          return respuesta.code(401).send({ error: 'Credenciales incorrectas', codigo: 'CREDENCIALES_INVALIDAS' });
         }
         if (!clienteApp.activo) {
           return respuesta.code(403).send({ error: 'Cuenta suspendida. Contacta al administrador.' });
@@ -154,22 +226,52 @@ export async function rutasAuth(servidor: FastifyInstance): Promise<void> {
           rol: 'cliente',
           estudioId: null,
           nombre: `${clienteApp.nombre} ${clienteApp.apellido}`,
-          email: emailNorm,
+          email: clienteApp.email,
         });
+      }
+
+      // Si la credencial no contiene @, no buscar como empleado o usuario
+      if (!esBusquedaPorEmail) {
+        return respuesta.code(401).send({ error: 'Credenciales incorrectas' });
       }
 
       // ─── Verificar EmpleadoAcceso ─────────────────────────────────────────
       const empleadoAcceso = await prisma.empleadoAcceso.findUnique({
-        where: { email: emailNorm },
-        include: { personal: { select: { id: true, nombre: true, estudioId: true } } },
+        where: { email: credencial },
+        include: {
+          personal: {
+            select: {
+              id: true,
+              nombre: true,
+              estudioId: true,
+              activo: true,
+              estudio: {
+                select: {
+                  activo: true,
+                  estado: true,
+                },
+              },
+            },
+          },
+        },
       });
 
       if (empleadoAcceso) {
         if (!empleadoAcceso.activo) {
           return respuesta.code(403).send({ error: 'Tu acceso ha sido desactivado. Contacta al dueño del salón.' });
         }
+        if (!empleadoAcceso.personal.activo) {
+          return respuesta.code(403).send({ error: 'Tu perfil de especialista fue dado de baja. Contacta al dueño del salón.' });
+        }
+        if (!salonEstaDisponible(empleadoAcceso.personal.estudio)) {
+          const errorSalon = obtenerErrorAccesoSalon(empleadoAcceso.personal.estudio);
+          return respuesta.code(403).send({
+            error: `${errorSalon.error}. Contacta al dueño del salón.`,
+            codigo: errorSalon.codigo,
+          });
+        }
         if (!(await compararHashContrasena(contrasena, empleadoAcceso.hashContrasena))) {
-          return respuesta.code(401).send({ error: 'La contraseña es incorrecta.', codigo: 'CONTRASENA_INCORRECTA' });
+          return respuesta.code(401).send({ error: 'Credenciales incorrectas', codigo: 'CREDENCIALES_INVALIDAS' });
         }
         void prisma.empleadoAcceso.update({ where: { id: empleadoAcceso.id }, data: { ultimoAcceso: new Date() } });
         return emitirTokens(servidor, respuesta, {
@@ -185,19 +287,19 @@ export async function rutasAuth(servidor: FastifyInstance): Promise<void> {
 
       // ─── Verificar Usuario (dueño / maestro) ─────────────────────────────
       const usuario = await prisma.usuario.findUnique({
-        where: { email: emailNorm },
-        include: { estudio: { select: { id: true, estado: true, motivoRechazo: true } } },
+        where: { email: credencial },
+        include: { estudio: { select: { id: true, slug: true, activo: true, estado: true, motivoRechazo: true } } },
       });
 
       if (!usuario) {
-        return respuesta.code(404).send({
-          error: 'No existe ninguna cuenta registrada con ese correo.',
-          codigo: 'CUENTA_NO_EXISTE',
+        return respuesta.code(401).send({
+          error: 'Credenciales incorrectas',
+          codigo: 'CREDENCIALES_INVALIDAS',
         });
       }
 
       if (!(await compararHashContrasena(contrasena, usuario.hashContrasena))) {
-        return respuesta.code(401).send({ error: 'La contraseña es incorrecta.', codigo: 'CONTRASENA_INCORRECTA' });
+        return respuesta.code(401).send({ error: 'Credenciales incorrectas', codigo: 'CREDENCIALES_INVALIDAS' });
       }
 
       if (!usuario.activo) {
@@ -205,13 +307,6 @@ export async function rutasAuth(servidor: FastifyInstance): Promise<void> {
           return respuesta.code(410).send({
             error: 'Esta cuenta fue eliminada definitivamente del sistema. Puedes registrarla de nuevo con este correo.',
             codigo: 'CUENTA_ELIMINADA',
-          });
-        }
-
-        if (usuario.rol === 'dueno' && usuario.estudio?.estado === 'suspendido') {
-          return respuesta.code(403).send({
-            error: 'Tu salón está suspendido',
-            codigo: 'SALON_SUSPENDIDO',
           });
         }
 
@@ -234,11 +329,22 @@ export async function rutasAuth(servidor: FastifyInstance): Promise<void> {
         return respuesta.code(403).send({ error: 'Esta cuenta existe pero no tiene acceso activo. Contacta al administrador.' });
       }
 
-      if (usuario.rol === 'dueno' && usuario.estudio?.estado === 'suspendido') {
-        return respuesta.code(403).send({
-          error: 'Tu salón está suspendido',
-          codigo: 'SALON_SUSPENDIDO',
-        });
+      if (usuario.rol === 'dueno' && usuario.estudio && !salonEstaDisponible(usuario.estudio)) {
+        if (usuario.estudio.estado === 'pendiente') {
+          return respuesta.code(403).send({
+            error: 'Tu solicitud está siendo revisada',
+            codigo: 'PENDIENTE_APROBACION',
+          });
+        }
+        if (usuario.estudio.estado === 'rechazado') {
+          return respuesta.code(403).send({
+            error: 'Tu solicitud fue rechazada',
+            codigo: 'SOLICITUD_RECHAZADA',
+            motivo: usuario.estudio.motivoRechazo ?? '',
+          });
+        }
+
+        return respuesta.code(403).send(obtenerErrorAccesoSalon(usuario.estudio));
       }
 
       void prisma.usuario.update({
@@ -248,6 +354,8 @@ export async function rutasAuth(servidor: FastifyInstance): Promise<void> {
 
       let esMaestroTotal = false;
       let permisosJWT = crearPermisosVacios();
+      let permisosSupervisorJWT = crearPermisosSupervisorVacios();
+
       if (usuario.rol === 'maestro') {
         const permisos = await prisma.permisosMaestro.findUnique({
           where: { usuarioId: usuario.id },
@@ -285,16 +393,39 @@ export async function rutasAuth(servidor: FastifyInstance): Promise<void> {
             };
           }
         }
+      } else if (usuario.rol === 'supervisor') {
+        const permisosSup = await prisma.permisosSupervisor.findUnique({
+          where: { usuarioId: usuario.id },
+        });
+        if (permisosSup) {
+          permisosSupervisorJWT = {
+            verTotalSalones: permisosSup.verTotalSalones,
+            verControlSalones: permisosSup.verControlSalones,
+            verReservas: permisosSup.verReservas,
+            verVentas: permisosSup.verVentas,
+            verDirectorio: permisosSup.verDirectorio,
+            editarDirectorio: permisosSup.editarDirectorio,
+            verControlCobros: permisosSup.verControlCobros,
+            accionRecordatorio: permisosSup.accionRecordatorio,
+            accionRegistroPago: permisosSup.accionRegistroPago,
+            accionSuspension: permisosSup.accionSuspension,
+            activarSalones: permisosSup.activarSalones,
+            verPreregistros: permisosSup.verPreregistros,
+          };
+        }
       }
+      // vendedor no requiere permisos especiales
 
       return emitirTokens(servidor, respuesta, {
         sub: usuario.id,
         rol: usuario.rol,
         estudioId: usuario.estudioId,
+        slugEstudio: usuario.estudio?.slug ?? null,
         nombre: usuario.nombre,
         email: usuario.email,
         esMaestroTotal,
         permisos: permisosJWT,
+        permisosSupervisor: permisosSupervisorJWT,
       });
     },
   );
@@ -304,14 +435,25 @@ export async function rutasAuth(servidor: FastifyInstance): Promise<void> {
    */
   servidor.post<{ Body: { contrasenaActual: string; contrasenaNueva: string } }>(
     '/auth/cambiar-contrasena',
-    { preHandler: verificarJWT },
+    {
+      preHandler: verificarJWT,
+      config: {
+        rateLimit: {
+          max: 5,
+          timeWindow: '1 hour',
+          errorResponseBuilder: () => ({
+            error: 'Demasiados intentos. Espera 1 hora.',
+          }),
+        },
+      },
+    },
     async (solicitud, respuesta) => {
       const payload = solicitud.user as { sub: string };
       const { contrasenaActual, contrasenaNueva } = solicitud.body;
 
       if (!REGEX_CONTRASENA.test(contrasenaNueva)) {
         return respuesta.code(400).send({
-          error: 'La contraseña debe tener al menos 8 caracteres, una mayúscula y un número.',
+          error: 'The password must have at least 8 characters, one uppercase, one lowercase, one number, and one special character',
         });
       }
 
@@ -439,12 +581,23 @@ export async function rutasAuth(servidor: FastifyInstance): Promise<void> {
    */
   servidor.post<{ Body: { token: string; contrasenaNueva: string } }>(
     '/auth/confirmar-reset',
+    {
+      config: {
+        rateLimit: {
+          max: 5,
+          timeWindow: '15 minutes',
+          errorResponseBuilder: () => ({
+            error: 'Demasiados intentos. Espera unos minutos.',
+          }),
+        },
+      },
+    },
     async (solicitud, respuesta) => {
       const { token, contrasenaNueva } = solicitud.body;
 
       if (!REGEX_CONTRASENA.test(contrasenaNueva)) {
         return respuesta.code(400).send({
-          error: 'La contraseña debe tener al menos 8 caracteres, una mayúscula y un número.',
+          error: 'The password must have at least 8 characters, one uppercase, one lowercase, one number, and one special character',
         });
       }
 
@@ -467,7 +620,21 @@ export async function rutasAuth(servidor: FastifyInstance): Promise<void> {
   /**
    * POST /auth/refrescar
    */
-  servidor.post('/auth/refrescar', async (solicitud, respuesta) => {
+  servidor.post('/auth/refrescar', {
+    config: {
+      rateLimit: {
+        max: 60,
+        timeWindow: '1 hour',
+        errorResponseBuilder: () => ({
+          error: 'Demasiados intentos de refresco. Espera unos minutos.',
+        }),
+      },
+    },
+  }, async (solicitud, respuesta) => {
+    if (!tieneOrigenPermitidoParaCookie(solicitud.headers.origin, solicitud.headers.referer)) {
+      return respuesta.code(403).send({ error: 'Origen no permitido' });
+    }
+
     const refreshToken = solicitud.cookies[COOKIE_REFRESH];
     if (!refreshToken) return respuesta.code(401).send({ error: 'No autenticado' });
 
@@ -478,16 +645,19 @@ export async function rutasAuth(servidor: FastifyInstance): Promise<void> {
 
       let esMaestroTotal = false;
       let permisos = crearPermisosVacios();
+      let permisosSupervisor = crearPermisosSupervisorVacios();
       const payloadActualizado: {
         sub: string;
         rol: string;
         estudioId: string | null;
+        slugEstudio?: string | null;
         nombre: string;
         email: string;
         personalId?: string;
         forzarCambioContrasena?: boolean;
         esMaestroTotal?: boolean;
         permisos?: PermisosJWT;
+        permisosSupervisor?: PermisosSupervisorJWT;
       } = {
         sub: payload.sub,
         rol: payload.rol,
@@ -510,8 +680,15 @@ export async function rutasAuth(servidor: FastifyInstance): Promise<void> {
             forzarCambioContrasena: true,
             personal: {
               select: {
+                activo: true,
                 estudioId: true,
                 nombre: true,
+                estudio: {
+                  select: {
+                    activo: true,
+                    estado: true,
+                  },
+                },
               },
             },
           },
@@ -519,12 +696,93 @@ export async function rutasAuth(servidor: FastifyInstance): Promise<void> {
         if (!acceso) return respuesta.code(401).send({ error: 'No autenticado' });
         if (!acceso.activo) return respuesta.code(403).send({ error: 'Tu acceso ha sido desactivado. Contacta al dueño del salón.' });
         if (!acceso.personal) return respuesta.code(401).send({ error: 'No autenticado' });
+        if (!acceso.personal.activo) {
+          return respuesta.code(403).send({ error: 'Tu perfil de especialista fue dado de baja. Contacta al dueño del salón.' });
+        }
+        if (!salonEstaDisponible(acceso.personal.estudio)) {
+          const errorSalon = obtenerErrorAccesoSalon(acceso.personal.estudio);
+          return respuesta.code(403).send({ error: `${errorSalon.error}. Contacta al dueño del salón.`, codigo: errorSalon.codigo });
+        }
 
         payloadActualizado.estudioId = acceso.personal.estudioId;
         payloadActualizado.nombre = acceso.personal.nombre;
         payloadActualizado.email = acceso.email;
         payloadActualizado.personalId = acceso.personalId;
         payloadActualizado.forzarCambioContrasena = acceso.forzarCambioContrasena ?? false;
+      }
+
+      if (payload.rol === 'dueno') {
+        const usuario = await prisma.usuario.findUnique({
+          where: { id: payload.sub },
+          select: {
+            activo: true,
+            nombre: true,
+            email: true,
+            estudioId: true,
+            estudio: {
+              select: {
+                activo: true,
+                estado: true,
+                slug: true,
+              },
+            },
+          },
+        });
+
+        if (!usuario) {
+          return respuesta.code(401).send({ error: 'No autenticado' });
+        }
+
+        if (!usuario.activo || !usuario.estudio || !salonEstaDisponible(usuario.estudio)) {
+          const errorSalon = obtenerErrorAccesoSalon(usuario.estudio ?? {});
+          return respuesta.code(403).send({ error: !usuario.activo ? 'Tu sesión ya no está habilitada' : errorSalon.error, codigo: !usuario.activo ? 'CUENTA_DESACTIVADA' : errorSalon.codigo });
+        }
+
+        payloadActualizado.estudioId = usuario.estudioId ?? null;
+        payloadActualizado.slugEstudio = usuario.estudio?.slug ?? null;
+        payloadActualizado.nombre = usuario.nombre;
+        payloadActualizado.email = usuario.email;
+      }
+
+      if (payload.rol === 'cliente') {
+        if (payload.estudioId === null) {
+          const clienteApp = await prisma.clienteApp.findUnique({
+            where: { id: payload.sub },
+            select: {
+              activo: true,
+              nombre: true,
+              apellido: true,
+              email: true,
+            },
+          });
+
+          if (!clienteApp) {
+            return respuesta.code(401).send({ error: 'No autenticado' });
+          }
+
+          if (!clienteApp.activo) {
+            return respuesta.code(403).send({ error: 'Tu cuenta ha sido desactivada' });
+          }
+
+          payloadActualizado.nombre = `${clienteApp.nombre} ${clienteApp.apellido}`.trim();
+          payloadActualizado.email = clienteApp.email ?? payloadActualizado.email;
+        } else {
+          const estudioCliente = await prisma.estudio.findUnique({
+            where: { id: payload.estudioId },
+            select: {
+              activo: true,
+              estado: true,
+            },
+          });
+
+          if (!estudioCliente) {
+            return respuesta.code(401).send({ error: 'No autenticado' });
+          }
+
+          if (!salonEstaDisponible(estudioCliente)) {
+            return respuesta.code(403).send(obtenerErrorAccesoSalon(estudioCliente));
+          }
+        }
       }
 
       if (payload.rol === 'maestro') {
@@ -570,8 +828,47 @@ export async function rutasAuth(servidor: FastifyInstance): Promise<void> {
         payloadActualizado.permisos = permisos;
       }
 
+      if (payload.rol === 'supervisor' || payload.rol === 'vendedor') {
+        const usuario = await prisma.usuario.findUnique({
+          where: { id: payload.sub },
+          select: { activo: true },
+        });
+
+        if (!usuario) {
+          return respuesta.code(401).send({ error: 'No autenticado' });
+        }
+
+        if (!usuario.activo) {
+          return respuesta.code(403).send({ error: 'Tu cuenta ha sido desactivada. Contacta al administrador principal.' });
+        }
+
+        if (payload.rol === 'supervisor') {
+          const permisosSup = await prisma.permisosSupervisor.findUnique({
+            where: { usuarioId: payload.sub },
+          });
+          if (permisosSup) {
+            permisosSupervisor = {
+              verTotalSalones: permisosSup.verTotalSalones,
+              verControlSalones: permisosSup.verControlSalones,
+              verReservas: permisosSup.verReservas,
+              verVentas: permisosSup.verVentas,
+              verDirectorio: permisosSup.verDirectorio,
+              editarDirectorio: permisosSup.editarDirectorio,
+              verControlCobros: permisosSup.verControlCobros,
+              accionRecordatorio: permisosSup.accionRecordatorio,
+              accionRegistroPago: permisosSup.accionRegistroPago,
+              accionSuspension: permisosSup.accionSuspension,
+              activarSalones: permisosSup.activarSalones,
+              verPreregistros: permisosSup.verPreregistros,
+            };
+          }
+          payloadActualizado.permisosSupervisor = permisosSupervisor;
+        }
+      }
+
       payloadActualizado.esMaestroTotal = esMaestroTotal;
       payloadActualizado.permisos = permisos;
+      payloadActualizado.permisosSupervisor = permisosSupervisor;
 
       return emitirTokens(servidor, respuesta, payloadActualizado);
     } catch {
@@ -582,7 +879,11 @@ export async function rutasAuth(servidor: FastifyInstance): Promise<void> {
   /**
    * POST /auth/cerrar-sesion
    */
-  servidor.post('/auth/cerrar-sesion', async (_solicitud, respuesta) => {
+  servidor.post('/auth/cerrar-sesion', async (solicitud, respuesta) => {
+    if (!tieneOrigenPermitidoParaCookie(solicitud.headers.origin, solicitud.headers.referer)) {
+      return respuesta.code(403).send({ error: 'Origen no permitido' });
+    }
+
     respuesta.clearCookie(COOKIE_REFRESH, obtenerOpcionesCookieRefresh());
     return respuesta.send({ datos: { mensaje: 'Sesión cerrada' } });
   });
@@ -595,16 +896,20 @@ async function emitirTokens(
     sub: string;
     rol: string;
     estudioId: string | null;
+    slugEstudio?: string | null;
     nombre: string;
     email: string;
     esMaestroTotal?: boolean;
     permisos?: PermisosJWT;
+    permisosSupervisor?: PermisosSupervisorJWT;
     personalId?: string;
     forzarCambioContrasena?: boolean;
   },
 ): Promise<import('fastify').FastifyReply> {
-  const accessToken = servidor.jwt.sign(payload);
-  const refreshToken = servidor.jwt.sign(payload, { expiresIn: REFRESH_EXPIRA });
+  // El slug no se incluye en el JWT para mantenerlo liviano
+  const { slugEstudio, ...payloadJWT } = payload;
+  const accessToken = servidor.jwt.sign(payloadJWT);
+  const refreshToken = servidor.jwt.sign(payloadJWT, { expiresIn: REFRESH_EXPIRA });
 
   respuesta.setCookie(COOKIE_REFRESH, refreshToken, {
     ...obtenerOpcionesCookieRefresh(),
@@ -616,10 +921,12 @@ async function emitirTokens(
       token: accessToken,
       rol: payload.rol,
       estudioId: payload.estudioId,
+      slugEstudio: slugEstudio ?? null,
       nombre: payload.nombre,
       email: payload.email,
       esMaestroTotal: payload.esMaestroTotal ?? false,
       permisos: payload.permisos ?? crearPermisosVacios(),
+      permisosSupervisor: payload.permisosSupervisor ?? crearPermisosSupervisorVacios(),
       personalId: payload.personalId ?? null,
       forzarCambioContrasena: payload.forzarCambioContrasena ?? false,
     },

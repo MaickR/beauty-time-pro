@@ -9,12 +9,47 @@
 
 import { config } from 'dotenv';
 import bcrypt from 'bcrypt';
+import { randomInt } from 'node:crypto';
 import { PrismaMariaDb } from '@prisma/adapter-mariadb';
 import { PrismaClient } from '../server/src/generated/prisma/client.js';
 
 config({ path: 'server/.env' });
 
-const urlBaseDatos = new URL(process.env.DATABASE_URL ?? 'mysql://root:1234@localhost:3306/beauty_time_pro');
+function obtenerVariableEntornoObligatoria(nombre: string): string {
+  const valor = process.env[nombre]?.trim();
+  if (!valor) {
+    throw new Error(`La variable ${nombre} es obligatoria para ejecutar la semilla.`);
+  }
+
+  return valor;
+}
+
+function generarContrasenaTemporal(longitud: number = 16): string {
+  const mayusculas = 'ABCDEFGHJKLMNPQRSTUVWXYZ';
+  const minusculas = 'abcdefghijkmnpqrstuvwxyz';
+  const numeros = '23456789';
+  const simbolos = '!@#$%&*';
+  const mezcla = `${mayusculas}${minusculas}${numeros}${simbolos}`;
+  const caracteres = [
+    mayusculas[randomInt(mayusculas.length)]!,
+    minusculas[randomInt(minusculas.length)]!,
+    numeros[randomInt(numeros.length)]!,
+    simbolos[randomInt(simbolos.length)]!,
+  ];
+
+  while (caracteres.length < longitud) {
+    caracteres.push(mezcla[randomInt(mezcla.length)]!);
+  }
+
+  for (let indice = caracteres.length - 1; indice > 0; indice -= 1) {
+    const destino = randomInt(indice + 1);
+    [caracteres[indice], caracteres[destino]] = [caracteres[destino]!, caracteres[indice]!];
+  }
+
+  return caracteres.join('');
+}
+
+const urlBaseDatos = new URL(obtenerVariableEntornoObligatoria('DATABASE_URL'));
 
 const adaptador = new PrismaMariaDb({
   host: urlBaseDatos.hostname,
@@ -30,20 +65,23 @@ const ARGUMENTOS = new Set(process.argv.slice(2));
 const NOMBRE_SALON_MIKELOV = 'MIKELOV STUDIO';
 const CLAVE_DUENO_MIKELOV = 'MIKELOV123';
 const EMAIL_DUENO_MIKELOV = 'hola@mikelovstudio.com';
+const CONTRASENA_ADMIN_PRINCIPAL = process.env.ADMIN_PRINCIPAL_CONTRASENA?.trim() || generarContrasenaTemporal();
+const CONTRASENA_ADMIN_SECUNDARIO = process.env.ADMIN_SECUNDARIO_CONTRASENA?.trim() || generarContrasenaTemporal();
+const CONTRASENA_DUENO_DEMO = process.env.DEMO_CONTRASENA_DUENO?.trim() || generarContrasenaTemporal();
 const ADMINS_SEMILLA = [
   {
     email: 'miguel@beautytimepro.com',
     nombre: 'Miguel',
     apellido: 'Baigts',
     alias: 'Miguel Baigts',
-    contrasena: process.env.ADMIN_PRINCIPAL_CONTRASENA ?? 'Admin1234!',
+    contrasena: CONTRASENA_ADMIN_PRINCIPAL,
   },
   {
     email: 'admin.secundario@beautytimepro.com',
     nombre: 'Mike',
     apellido: 'Admin',
     alias: 'Mike Admin',
-    contrasena: process.env.ADMIN_SECUNDARIO_CONTRASENA ?? 'MikeVergas95*',
+    contrasena: CONTRASENA_ADMIN_SECUNDARIO,
   },
 ];
 const ADMINS_PROTEGIDOS = (process.env.ADMINS_PROTEGIDOS ?? ADMINS_SEMILLA.map((admin) => admin.email).join(','))
@@ -51,6 +89,14 @@ const ADMINS_PROTEGIDOS = (process.env.ADMINS_PROTEGIDOS ?? ADMINS_SEMILLA.map((
   .map((email) => email.trim().toLowerCase())
   .filter(Boolean);
 const ENTORNO_ACTUAL = process.env.ENTORNO ?? 'development';
+
+function informarCredencialesSemilla() {
+  console.log('🔐 Credenciales de semilla activas:');
+  console.log(`   Maestro principal: miguel@beautytimepro.com / ${CONTRASENA_ADMIN_PRINCIPAL}`);
+  console.log(`   Maestro secundario: admin.secundario@beautytimepro.com / ${CONTRASENA_ADMIN_SECUNDARIO}`);
+  console.log(`   Dueño demo MIKELOV: ${EMAIL_DUENO_MIKELOV} / ${CONTRASENA_DUENO_DEMO}`);
+}
+
 function obtenerFechaLocalISO(fecha: Date): string {
   const compensacion = fecha.getTimezoneOffset();
   const fechaLocal = new Date(fecha.getTime() - compensacion * 60 * 1000);
@@ -106,14 +152,14 @@ async function sembrarMikelovStudio(): Promise<void> {
     emailContacto: EMAIL_DUENO_MIKELOV,
     horario,
     servicios: [
-      { name: 'Corte Dama / Niña', duration: 60, price: 800 },
-      { name: 'Balayage', duration: 240, price: 3500 },
-      { name: 'Tinte Global', duration: 120, price: 1800 },
-      { name: 'Diseño de Ceja', duration: 30, price: 400 },
-      { name: 'Lash Lifting', duration: 90, price: 950 },
-      { name: 'Mani Spa', duration: 60, price: 600 },
-      { name: 'Pedi Spa', duration: 60, price: 700 },
-      { name: 'Gel Semi Permanente', duration: 60, price: 500 },
+      { name: 'Corte Dama / Niña', duration: 60, price: 80000 },
+      { name: 'Balayage', duration: 240, price: 350000 },
+      { name: 'Tinte Global', duration: 120, price: 180000 },
+      { name: 'Diseño de Ceja', duration: 30, price: 40000 },
+      { name: 'Lash Lifting', duration: 90, price: 95000 },
+      { name: 'Mani Spa', duration: 60, price: 60000 },
+      { name: 'Pedi Spa', duration: 60, price: 70000 },
+      { name: 'Gel Semi Permanente', duration: 60, price: 50000 },
     ],
     serviciosCustom: [],
   };
@@ -131,7 +177,7 @@ async function sembrarMikelovStudio(): Promise<void> {
     existe ? '🔄 Rehidratando datos de MIKELOV STUDIO...' : '🌱 Generando MIKELOV STUDIO...',
   );
 
-  const hashContrasenaDuenoMikelov = await bcrypt.hash('Demo1234!', 12);
+  const hashContrasenaDuenoMikelov = await bcrypt.hash(CONTRASENA_DUENO_DEMO, 12);
 
   await prisma.usuario.upsert({
     where: { email: EMAIL_DUENO_MIKELOV },
@@ -251,9 +297,9 @@ async function sembrarMikelovStudio(): Promise<void> {
         clienteId: carla.id,
         nombreCliente: 'Carla Ruiz',
         telefonoCliente: '5598765432',
-        servicios: [{ name: 'Corte Dama / Niña', duration: 60, price: 800 }],
+        servicios: [{ name: 'Corte Dama / Niña', duration: 60, price: 80000 }],
         duracion: 60,
-        precioTotal: 800,
+        precioTotal: 80000,
         estado: 'completed',
         sucursal: 'Av. Presidente Masaryk 123, Polanco, CDMX',
         fecha: todayStr,
@@ -267,9 +313,9 @@ async function sembrarMikelovStudio(): Promise<void> {
         clienteId: monica.id,
         nombreCliente: 'Mónica Hernández',
         telefonoCliente: '5511223344',
-        servicios: [{ name: 'Balayage', duration: 240, price: 3500 }],
+        servicios: [{ name: 'Balayage', duration: 240, price: 350000 }],
         duracion: 240,
-        precioTotal: 3500,
+        precioTotal: 350000,
         estado: 'pending',
         sucursal: 'Av. Presidente Masaryk 123, Polanco, CDMX',
         marcaTinte: "L'Oréal",
@@ -286,11 +332,11 @@ async function sembrarMikelovStudio(): Promise<void> {
         nombreCliente: 'Lucía Fernández',
         telefonoCliente: '5544556677',
         servicios: [
-          { name: 'Mani Spa', duration: 60, price: 600 },
-          { name: 'Gel Semi Permanente', duration: 60, price: 500 },
+          { name: 'Mani Spa', duration: 60, price: 60000 },
+          { name: 'Gel Semi Permanente', duration: 60, price: 50000 },
         ],
         duracion: 120,
-        precioTotal: 1100,
+        precioTotal: 110000,
         estado: 'pending',
         sucursal: 'Insurgentes Sur 456, Roma, CDMX',
         fecha: tomorrowStr,
@@ -479,7 +525,7 @@ async function limpiarPruebas(): Promise<void> {
       },
       create: {
         email: EMAIL_DUENO_MIKELOV,
-        hashContrasena: await bcrypt.hash('Salon1234!', 12),
+        hashContrasena: await bcrypt.hash(CONTRASENA_DUENO_DEMO, 12),
         nombre: 'Miguel Ángel Lovato',
         rol: 'dueno',
         activo: true,
@@ -495,6 +541,8 @@ async function limpiarPruebas(): Promise<void> {
 }
 
 async function main() {
+  informarCredencialesSemilla();
+
   if (ARGUMENTOS.has('--limpiar')) {
     await limpiarPruebas();
     process.exit(0);

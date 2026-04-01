@@ -27,6 +27,7 @@ import {
   verificarDisponibilidadEmail,
 } from '../../servicios/servicioRegistro';
 import { usarTituloPagina } from '../../hooks/usarTituloPagina';
+import { convertirCentavosAMoneda, convertirMonedaACentavos } from '../../utils/formato';
 import type { Pais, Personal, Servicio, ServicioPersonalizado, TurnoTrabajo } from '../../tipos';
 
 const DOMINIOS = [
@@ -173,8 +174,15 @@ function formatearPrecioInput(valor: string, paisActual: Pais): string {
   return numero.toLocaleString(paisActual === 'Colombia' ? 'es-CO' : 'es-MX');
 }
 
+function formatearPrecioCentavosInput(valor: number, paisActual: Pais): string {
+  if (valor <= 0) return '';
+  return convertirCentavosAMoneda(valor).toLocaleString(
+    paisActual === 'Colombia' ? 'es-CO' : 'es-MX',
+  );
+}
+
 function limpiarPrecio(valor: string): number {
-  return Math.max(1, Number(valor.replace(/[^\d]/g, '')) || 0);
+  return Math.max(100, convertirMonedaACentavos(Number(valor.replace(/[^\d]/g, '')) || 0));
 }
 
 function obtenerResumenHorario(horario: HorarioLocal) {
@@ -238,7 +246,7 @@ function validarServiciosSalon(servicios: Servicio[]) {
   if (servicioSinDuracion)
     return `El servicio ${servicioSinDuracion.name} debe tener una duración mayor a 0.`;
 
-  const servicioSinPrecioValido = servicios.find((servicio) => servicio.price < 1);
+  const servicioSinPrecioValido = servicios.find((servicio) => servicio.price < 100);
   if (servicioSinPrecioValido)
     return `El servicio ${servicioSinPrecioValido.name} debe tener un precio mayor a 0.`;
 
@@ -618,7 +626,7 @@ export function PaginaRegistroSalon() {
 
     setServiciosSeleccionados((actual) => [
       ...actual,
-      { name: nombreServicio, duration: 30, price: 1, category: categoria },
+      { name: nombreServicio, duration: 30, price: 100, category: categoria },
     ]);
   };
 
@@ -633,7 +641,7 @@ export function PaginaRegistroSalon() {
         return {
           ...servicio,
           [campo]:
-            campo === 'price' ? Math.max(1, Number(valor) || 0) : Math.max(5, Number(valor) || 0),
+            campo === 'price' ? Math.max(100, Number(valor) || 0) : Math.max(5, Number(valor) || 0),
         };
       }),
     );
@@ -651,7 +659,7 @@ export function PaginaRegistroSalon() {
 
     setServiciosSeleccionados((actual) => [
       ...actual,
-      { name: nombre, duration: 30, price: 1, category: categoria },
+      { name: nombre, duration: 30, price: 100, category: categoria },
     ]);
     setServiciosPersonalizados((actual) => [...actual, { name: nombre, category: categoria }]);
     setEntradaServicioPersonalizado((actual) => ({ ...actual, [categoria]: '' }));
@@ -1445,8 +1453,8 @@ export function PaginaRegistroSalon() {
                                               value={
                                                 preciosFormateados[nombreServicio] ??
                                                 (servicio.price > 0
-                                                  ? formatearPrecioInput(
-                                                      String(servicio.price),
+                                                  ? formatearPrecioCentavosInput(
+                                                      servicio.price,
                                                       pais,
                                                     )
                                                   : '')

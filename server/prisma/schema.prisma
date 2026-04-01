@@ -15,11 +15,20 @@ enum EstadoSalon {
   aprobado
   rechazado
   suspendido
+  bloqueado
 }
 
 enum PlanEstudio {
   STANDARD
   PRO
+}
+
+enum RolUsuario {
+  maestro
+  supervisor
+  vendedor
+  dueno
+  empleado
 }
 
 // ─────────────────────────────────────────
@@ -33,16 +42,21 @@ model Estudio {
   telefono          String
   sitioWeb          String?
   pais              String       @default("Mexico")
+  zonaHoraria       String       @default("America/Mexico_City")
   sucursales        Json         // string[]
   claveDueno           String       @unique
   claveCliente         String       @unique
+  slug                 String?      @unique
   activo               Boolean      @default(true)
   plan                 PlanEstudio  @default(STANDARD)
   pinCancelacionHash   String?
   estado            EstadoSalon  @default(pendiente)
   motivoRechazo     String?
+  motivoBloqueo     String?
   fechaSolicitud    DateTime     @default(now())
   fechaAprobacion   DateTime?
+  fechaSuspension   DateTime?
+  fechaBloqueo      DateTime?
   suscripcion       String       @default("mensual")
   inicioSuscripcion String       // "YYYY-MM-DD"
   fechaVencimiento  String       // "YYYY-MM-DD"
@@ -64,9 +78,12 @@ model Estudio {
   cancelacionSolicitada     Boolean   @default(false)
   fechaSolicitudCancelacion DateTime?
   motivoCancelacion         String?
+  vendedorAsociado  String?
+  vendedorId        String?
   creadoEn          DateTime     @default(now())
   actualizadoEn     DateTime     @updatedAt
 
+  vendedor          Usuario?     @relation("EstudioVendedor", fields: [vendedorId], references: [id])
   personal          Personal[]
   reservas          Reserva[]
   pagos             Pago[]
@@ -75,11 +92,49 @@ model Estudio {
   clientes          Cliente[]
   configFidelidad   ConfigFidelidad?
   puntosFidelidad   PuntosFidelidad[]
+  notificaciones    NotificacionEstudio[]
+  mensajesMasivos   MensajeMasivo[]
+  productos         Producto[]
+  mensajesMasivosUsados Int       @default(0)
+  mensajesMasivosExtra  Int       @default(0)
 
   @@map("estudios")
   @@index([estado, activo])
   @@index([pais, estado])
   @@index([fechaVencimiento])
+  @@index([vendedorAsociado])
+  @@index([vendedorId])
+}
+
+// ─── Preregistro de salón por vendedor ──────────────────
+model PreregistroSalon {
+  id                String   @id @default(cuid())
+  vendedorId        String
+  vendedor          Usuario  @relation(fields: [vendedorId], references: [id])
+
+  // Datos del salón
+  nombreSalon       String
+  propietario       String
+  emailPropietario  String
+  telefonoPropietario String
+  pais              String   @default("Mexico")
+  direccion         String?
+  descripcion       String?  @db.Text
+  categorias        String?
+  plan              PlanEstudio @default(STANDARD)
+
+  // Estado
+  estado            String   @default("pendiente")  // pendiente | aprobado | rechazado
+  motivoRechazo     String?  @db.Text
+  estudioCreadoId   String?  // ID del estudio generado al aprobar
+  notas             String?  @db.Text
+
+  creadoEn          DateTime @default(now())
+  actualizadoEn     DateTime @updatedAt
+
+  @@map("preregistros_salon")
+  @@index([vendedorId])
+  @@index([estado])
 }
 
 model ClienteApp {
@@ -89,9 +144,10 @@ model ClienteApp {
   hashContrasena    String
   nombre            String
   apellido          String
-  fechaNacimiento   DateTime
+  fechaNacimiento   DateTime?
   pais              String      @default("Mexico")
-  telefono          String?
+  telefono          String?     @unique
+  ciudad            String?
   avatarUrl         String?
   emailVerificado   Boolean     @default(false)
   activo            Boolean     @default(true)
@@ -121,6 +177,28 @@ model TokenVerificacionApp {
   @@map("tokens_verificacion_app")
 }
 
+model CorreoPendiente {
+  id          String   @id @default(cuid())
+  destinatario String
+  asunto      String
+  html        String   @db.Text
+  estado      String   @default("pending")
+  intentos    Int      @default(0)
+  maxIntentos Int      @default(5)
+  ultimoError String?  @db.Text
+  procesarEn  DateTime @default(now())
+  enviadoEn   DateTime?
+  tipoEvento  String?
+  referenciaId String?
+  claveUnica  String?  @unique
+  creadoEn    DateTime @default(now())
+  actualizadoEn DateTime @updatedAt
+
+  @@map("correos_pendientes")
+  @@index([estado, procesarEn])
+  @@index([tipoEvento, referenciaId])
+}
+
 model Personal {
   id             String    @id @default(cuid())
   estudioId      String
@@ -128,6 +206,7 @@ model Personal {
   avatarUrl      String?
   especialidades Json      // string[]
   activo         Boolean   @default(true)
+  eliminadoEn    DateTime?
   horaInicio     String?   // "HH:mm"
   horaFin        String?   // "HH:mm"
   descansoInicio String?   // "HH:mm"
@@ -222,7 +301,7 @@ model Reserva {
   horaInicio      String   // "HH:mm"
   duracion        Int      // minutos
   servicios       Json     // Servicio[]
-  precioTotal     Float    @default(0)
+  precioTotal     Int      @default(0)
   estado          String   @default("pending") // pending | confirmed | completed | cancelled
   sucursal        String   @default("")
   marcaTinte      String?
@@ -231,16 +310,23 @@ model Reserva {
   clienteAppId    String?
   recordatorioEnviado Boolean @default(false)
   tokenCancelacion String @unique @default(uuid())
+  observaciones    String? @db.Text
+  reagendada       Boolean @default(false)
+  reservaOriginalId String?
   creadoEn        DateTime @default(now())
 
   estudio         Estudio     @relation(fields: [estudioId], references: [id], onDelete: Cascade)
-  empleado        Personal    @relation(fields: [personalId], references: [id])
+  empleado        Personal    @relation(fields: [personalId], references: [id], onDelete: Restrict)
   cliente         Cliente     @relation(fields: [clienteId], references: [id])
   clienteApp      ClienteApp? @relation(fields: [clienteAppId], references: [id])
+  reservaOriginal Reserva?    @relation("Reagendamiento", fields: [reservaOriginalId], references: [id])
+  reagendamientos Reserva[]   @relation("Reagendamiento")
   serviciosDetalle ReservaServicio[]
 
   @@index([personalId, fecha])
   @@index([estudioId, fecha])
+  @@index([personalId, fecha, estado])
+  @@index([estudioId, fecha, estado])
   @@index([clienteAppId])
   @@map("reservas")
 }
@@ -250,7 +336,7 @@ model ReservaServicio {
   reservaId String
   nombre    String
   duracion  Int
-  precio    Float    @default(0)
+  precio    Int      @default(0)
   categoria String?
   orden     Int      @default(0)
   estado    String   @default("pending")
@@ -266,7 +352,7 @@ model ReservaServicio {
 model Pago {
   id          String   @id @default(cuid())
   estudioId   String
-  monto       Float
+  monto       Int
   moneda      String   @default("MXN")
   concepto    String
   fecha       String   // "YYYY-MM-DD"
@@ -297,7 +383,7 @@ model Usuario {
   email           String        @unique
   hashContrasena  String
   nombre          String        @default("")
-  rol             String        // "maestro" | "dueno"
+  rol             RolUsuario    @default(dueno)
   activo          Boolean       @default(true)
   emailVerificado Boolean       @default(false)
   estudioId       String?
@@ -308,8 +394,11 @@ model Usuario {
 
   tokensReset     TokenReset[]
   permisos        PermisosMaestro?
+  permisosSupervisor PermisosSupervisor?
   auditLogs       AuditLog[]
   suscripcionesPush SuscripcionPush[]
+  estudiosVendedor  Estudio[]    @relation("EstudioVendedor")
+  preregistros      PreregistroSalon[]
 
   @@map("usuarios")
 }
@@ -363,6 +452,62 @@ model PermisosMaestro {
   @@map("permisos_maestro")
 }
 
+model MensajeMasivo {
+  id          String   @id @default(uuid())
+  estudioId   String
+  estudio     Estudio  @relation(fields: [estudioId], references: [id], onDelete: Cascade)
+  titulo      String
+  texto       String   @db.VarChar(200)
+  imagenUrl   String?
+  fechaEnvio  DateTime
+  enviado     Boolean  @default(false)
+  creadoEn    DateTime @default(now())
+
+  @@map("mensajes_masivos")
+  @@index([estudioId])
+}
+
+model Producto {
+  id          String   @id @default(uuid())
+  estudioId   String
+  estudio     Estudio  @relation(fields: [estudioId], references: [id], onDelete: Cascade)
+  nombre      String
+  categoria   String   @default("General")
+  precio      Int      // centavos
+  activo      Boolean  @default(true)
+  creadoEn    DateTime @default(now())
+  actualizadoEn DateTime @updatedAt
+
+  @@map("productos")
+  @@index([estudioId])
+}
+
+model PermisosSupervisor {
+  id                   String  @id @default(uuid())
+  usuarioId            String  @unique
+  usuario              Usuario @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
+  // Métricas
+  verTotalSalones      Boolean @default(false)
+  verControlSalones    Boolean @default(false)
+  verReservas          Boolean @default(false)
+  verVentas            Boolean @default(false)
+  // Directorio
+  verDirectorio        Boolean @default(false)
+  editarDirectorio     Boolean @default(false)
+  // Control de cobros
+  verControlCobros     Boolean @default(false)
+  accionRecordatorio   Boolean @default(false)
+  accionRegistroPago   Boolean @default(false)
+  accionSuspension     Boolean @default(false)
+  // Vendedores
+  activarSalones       Boolean @default(false)
+  verPreregistros      Boolean @default(false)
+  creadoEn             DateTime @default(now())
+  actualizadoEn        DateTime @updatedAt
+
+  @@map("permisos_supervisor")
+}
+
 model AuditLog {
   id          String   @id @default(uuid())
   usuarioId   String
@@ -377,5 +522,20 @@ model AuditLog {
   @@map("audit_log")
   @@index([entidadId, creadoEn])
   @@index([usuarioId])
+}
+
+model NotificacionEstudio {
+  id          String   @id @default(uuid())
+  estudioId   String
+  tipo        String   // 'recordatorio_pago' | 'pago_confirmado' | 'suspension'
+  titulo      String
+  mensaje     String   @db.Text
+  leida       Boolean  @default(false)
+  creadoEn    DateTime @default(now())
+
+  estudio     Estudio  @relation(fields: [estudioId], references: [id], onDelete: Cascade)
+
+  @@map("notificaciones_estudio")
+  @@index([estudioId, leida])
 }
 

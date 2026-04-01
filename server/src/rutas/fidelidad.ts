@@ -68,6 +68,18 @@ export async function rutasFidelidad(servidor: FastifyInstance): Promise<void> {
       }
 
       const datos = solicitud.body;
+
+      // Validar porcentaje de descuento: 5-50 en pasos de 5
+      if (datos.porcentajeDescuento !== undefined && datos.porcentajeDescuento !== null) {
+        const pct = datos.porcentajeDescuento;
+        if (pct < 5 || pct > 50 || pct % 5 !== 0) {
+          return respuesta.code(400).send({
+            error: 'The discount percentage must be between 5% and 50% in 5% increments.',
+            campos: { porcentajeDescuento: 'Invalid value' },
+          });
+        }
+      }
+
       const config = await prisma.configFidelidad.upsert({
         where: { estudioId: id },
         create: {
@@ -75,7 +87,7 @@ export async function rutasFidelidad(servidor: FastifyInstance): Promise<void> {
           activo: datos.activo ?? false,
           visitasRequeridas: datos.visitasRequeridas ?? 5,
           tipoRecompensa: datos.tipoRecompensa ?? 'descuento',
-          porcentajeDescuento: datos.porcentajeDescuento ?? 100,
+          porcentajeDescuento: datos.porcentajeDescuento ?? 10,
           descripcionRecompensa: datos.descripcionRecompensa ?? 'Servicio gratis en tu próxima visita',
         },
         update: {

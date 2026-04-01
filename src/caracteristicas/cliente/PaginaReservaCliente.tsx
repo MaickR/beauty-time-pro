@@ -5,7 +5,7 @@ import { obtenerSalonPublico } from '../../servicios/servicioClienteApp';
 import { NavegacionCliente } from '../../componentes/diseno/NavegacionCliente';
 import { Spinner } from '../../componentes/ui/Spinner';
 import { usarToast } from '../../componentes/ui/ProveedorToast';
-import { obtenerFechaLocalISO } from '../../utils/formato';
+import { formatearDinero, obtenerFechaLocalISO } from '../../utils/formato';
 import { DIAS_SEMANA } from '../../lib/constantes';
 import { usarFlujoReservaCliente } from './hooks/usarFlujoReservaCliente';
 import type { SalonDetalle, Servicio, SlotTiempo } from '../../tipos';
@@ -104,7 +104,7 @@ function PasoServicios({
                 <span className="text-xs text-slate-400">{s.duration} min</span>
                 {s.price > 0 && (
                   <span className="text-xs font-bold" style={{ color }}>
-                    ${s.price.toLocaleString('es-MX')}
+                    {formatearDinero(s.price, salon.pais === 'Colombia' ? 'COP' : 'MXN')}
                   </span>
                 )}
               </button>
@@ -120,7 +120,7 @@ function PasoServicios({
           </div>
           {totalPrecio > 0 && (
             <span className="font-black text-slate-900">
-              ${totalPrecio.toLocaleString('es-MX')}
+              {formatearDinero(totalPrecio, salon.pais === 'Colombia' ? 'COP' : 'MXN')}
             </span>
           )}
         </div>
@@ -346,7 +346,7 @@ function PasoConfirmar({
                 <span className="text-slate-800">{s.name}</span>
                 {s.price > 0 && (
                   <span className="font-bold text-slate-600">
-                    ${s.price.toLocaleString('es-MX')}
+                    {formatearDinero(s.price, salon.pais === 'Colombia' ? 'COP' : 'MXN')}
                   </span>
                 )}
               </div>
@@ -354,7 +354,9 @@ function PasoConfirmar({
             {precioTotal > 0 && (
               <div className="flex justify-between text-sm font-black mt-2 pt-2 border-t border-slate-100">
                 <span>Total</span>
-                <span>${precioTotal.toLocaleString('es-MX')}</span>
+                <span>
+                  {formatearDinero(precioTotal, salon.pais === 'Colombia' ? 'COP' : 'MXN')}
+                </span>
               </div>
             )}
           </div>
@@ -410,7 +412,7 @@ function PasoExitosa({
       </p>
       <div className="flex flex-col gap-3 max-w-xs mx-auto">
         <button
-          onClick={() => navegar('/mi-perfil#reservas')}
+          onClick={() => navegar('/cliente/historial')}
           className="py-3 rounded-2xl font-black text-white"
           style={{ backgroundColor: color }}
         >
@@ -487,7 +489,7 @@ function ContenidoReserva({
           <button
             onClick={() => {
               if (flujo.paso === 'especialista' || flujo.paso === 'exitosa')
-                navegar(`/salones/${salon.id}`);
+                navegar(`/cliente/salon/${salon.id}`);
               else flujo.retroceder();
             }}
             aria-label="Volver"

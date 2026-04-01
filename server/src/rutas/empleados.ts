@@ -11,14 +11,9 @@ import type { PayloadJWT } from '../middleware/autenticacion.js';
 import { emailSchema, textoSchema } from '../lib/validacion.js';
 import { enviarEmailBienvenidaEmpleado } from '../servicios/servicioEmail.js';
 import { env } from '../lib/env.js';
+import { obtenerFechaISOEnZona, normalizarZonaHorariaEstudio } from '../utils/zonasHorarias.js';
 
 const REGEX_CONTRASENA_SEGURA = /^(?=.*[A-Z])(?=.*[0-9])(?=.*[^A-Za-z0-9]).{8,}$/;
-
-function obtenerFechaHoy(): string {
-  const hoy = new Date();
-  const compensacion = hoy.getTimezoneOffset();
-  return new Date(hoy.getTime() - compensacion * 60 * 1000).toISOString().split('T')[0]!;
-}
 
 export async function rutasEmpleados(servidor: FastifyInstance): Promise<void> {
   // ─── GET /empleados/mi-agenda (rol empleado) ─────────────────────────────
@@ -34,7 +29,30 @@ export async function rutasEmpleados(servidor: FastifyInstance): Promise<void> {
         return respuesta.code(400).send({ error: 'Token inválido: falta personalId' });
       }
 
-      const fecha = solicitud.query.fecha ?? obtenerFechaHoy();
+      const acceso = await prisma.empleadoAcceso.findUnique({
+        where: { id: payload.sub },
+        select: {
+          personal: {
+            select: {
+              estudio: {
+                select: {
+                  zonaHoraria: true,
+                  pais: true,
+                },
+              },
+            },
+          },
+        },
+      });
+
+      const fecha = solicitud.query.fecha ?? obtenerFechaISOEnZona(
+        new Date(),
+        normalizarZonaHorariaEstudio(
+          acceso?.personal?.estudio.zonaHoraria,
+          acceso?.personal?.estudio.pais,
+        ),
+        acceso?.personal?.estudio.pais,
+      );
       if (!/^\d{4}-\d{2}-\d{2}$/.test(fecha)) {
         return respuesta.code(400).send({ error: 'Formato de fecha inválido. Use YYYY-MM-DD' });
       }
@@ -86,6 +104,72 @@ export async function rutasEmpleados(servidor: FastifyInstance): Promise<void> {
     },
   );
 
+  // ─── GET /empleados/mis-metricas (rol empleado) ──────────────────────────
+  servidor.get(
+    '/empleados/mis-metricas',
+    { preHandler: verificarJWT },
+    async (solicitud, respuesta) => {
+      const payload = solicitud.user as PayloadJWT;
+      if (payload.rol !== 'empleado') {
+        return respuesta.code(403).send({ error: 'Sin permisos para esta acción' });
+      }
+      if (!payload.personalId) {
+        return respuesta.code(400).send({ error: 'Token inválido: falta personalId' });
+      }
+
+      const acceso = await prisma.empleadoAcceso.findUnique({
+        where: { id: payload.sub },
+        select: {
+          personal: {
+            select: {
+              estudio: {
+                select: { zonaHoraria: true, pais: true },
+              },
+            },
+          },
+        },
+      });
+
+      const zona = normalizarZonaHorariaEstudio(
+        acceso?.personal?.estudio.zonaHoraria,
+        acceso?.personal?.estudio.pais,
+      );
+      const hoyISO = obtenerFechaISOEnZona(new Date(), zona, acceso?.personal?.estudio.pais);
+      const partes = hoyISO.split('-').map(Number);
+      const anio = partes[0]!;
+      const mes = partes[1]!;
+      const dia = partes[2]!;
+      const fechaHoy = new Date(anio, mes - 1, dia);
+      const diaSemana = fechaHoy.getDay();
+      const inicioSemana = new Date(fechaHoy);
+      inicioSemana.setDate(fechaHoy.getDate() - diaSemana);
+      const finSemana = new Date(inicioSemana);
+      finSemana.setDate(inicioSemana.getDate() + 6);
+
+      const formatear = (d: Date) =>
+        `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+
+      const inicioSemanaISO = formatear(inicioSemana);
+      const finSemanaISO = formatear(finSemana);
+      const inicioMesISO = `${anio}-${String(mes).padStart(2, '0')}-01`;
+      const finMes = new Date(anio, mes, 0);
+      const finMesISO = formatear(finMes);
+
+      const condicionBase = {
+        personalId: payload.personalId,
+        estado: { not: 'cancelled' as const },
+      };
+
+      const [citasHoy, citasSemana, citasMes] = await Promise.all([
+        prisma.reserva.count({ where: { ...condicionBase, fecha: hoyISO } }),
+        prisma.reserva.count({ where: { ...condicionBase, fecha: { gte: inicioSemanaISO, lte: finSemanaISO } } }),
+        prisma.reserva.count({ where: { ...condicionBase, fecha: { gte: inicioMesISO, lte: finMesISO } } }),
+      ]);
+
+      return respuesta.send({ datos: { citasHoy, citasSemana, citasMes } });
+    },
+  );
+
   // ─── PUT /empleados/reservas/:id/estado (rol empleado) ───────────────────
   servidor.put<{ Params: { id: string }; Body: { estado: string } }>(
     '/empleados/reservas/:id/estado',
@@ -99,11 +183,11 @@ export async function rutasEmpleados(servidor: FastifyInstance): Promise<void> {
         return respuesta.code(400).send({ error: 'Token inválido: falta personalId' });
       }
 
-      const estadosPermitidos = ['completed', 'confirmed'];
+      const estadosPermitidos = ['completed', 'confirmed', 'no_show'];
       if (!estadosPermitidos.includes(solicitud.body.estado)) {
         return respuesta.code(400).send({
-          error: 'Solo puedes cambiar el estado a "confirmed" o "completed"',
-          campos: { estado: 'confirmed | completed' },
+          error: 'Estado no permitido para empleado',
+          campos: { estado: 'confirmed | completed | no_show' },
         });
       }
 
@@ -188,6 +272,10 @@ export async function rutasEmpleados(servidor: FastifyInstance): Promise<void> {
               horarioApertura: true,
               horarioCierre: true,
               diasAtencion: true,
+              estado: true,
+              pais: true,
+              claveCliente: true,
+              servicios: true,
             },
           },
         },

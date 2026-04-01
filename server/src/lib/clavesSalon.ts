@@ -1,19 +1,11 @@
 import { randomBytes } from 'node:crypto';
 import { prisma } from '../prismaCliente.js';
 
-const LONGITUD_PREFIJO = 8;
 const LONGITUD_INTENTOS = 20;
+const LONGITUD_SEGMENTO_ALEATORIO = 20;
 
-function normalizarPrefijoClaveSalon(nombreSalon: string): string {
-	const base = nombreSalon
-		.normalize('NFD')
-		.replace(/[\u0300-\u036f]/g, '')
-		.toUpperCase()
-		.replace(/[^A-Z0-9]/g, '')
-		.slice(0, LONGITUD_PREFIJO);
-
-	return base || 'SALON';
-}
+export const REGEX_CLAVE_DUENO_SEGURA = /^DUE[0-9A-F]{20}$/;
+export const REGEX_CLAVE_CLIENTE_SEGURA = /^CLI[0-9A-F]{20}$/;
 
 export function sanitizarClaveSalon(clave: string): string {
 	return clave
@@ -23,13 +15,25 @@ export function sanitizarClaveSalon(clave: string): string {
 		.replace(/[^A-Z0-9]/g, '');
 }
 
-export async function generarClavesSalonUnicas(nombreSalon: string) {
-	const prefijo = normalizarPrefijoClaveSalon(nombreSalon);
+export function esClaveSalonSegura(
+	clave: string,
+	tipo: 'dueno' | 'cliente',
+): boolean {
+	const claveNormalizada = sanitizarClaveSalon(clave);
+	return tipo === 'dueno'
+		? REGEX_CLAVE_DUENO_SEGURA.test(claveNormalizada)
+		: REGEX_CLAVE_CLIENTE_SEGURA.test(claveNormalizada);
+}
+
+function generarSegmentoAleatorio(): string {
+	return randomBytes(LONGITUD_SEGMENTO_ALEATORIO / 2).toString('hex').toUpperCase();
+}
+
+export async function generarClavesSalonUnicas(_nombreSalon: string) {
 
 	for (let intento = 0; intento < LONGITUD_INTENTOS; intento += 1) {
-		const sufijo = randomBytes(3).toString('hex').toUpperCase();
-		const claveDueno = `${prefijo}${sufijo}`;
-		const claveCliente = `${prefijo}CLI${sufijo}`;
+		const claveDueno = `DUE${generarSegmentoAleatorio()}`;
+		const claveCliente = `CLI${generarSegmentoAleatorio()}`;
 
 		const existente = await prisma.estudio.findFirst({
 			where: {

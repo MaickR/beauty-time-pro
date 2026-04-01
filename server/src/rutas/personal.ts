@@ -38,12 +38,31 @@ const esquemaActualizarPersonal = z.object({
 
 async function sincronizarNumeroEspecialistas(estudioId: string) {
   const totalPersonal = await prisma.personal.count({
-    where: { estudioId },
+    where: { estudioId, activo: true },
   });
 
   await prisma.estudio.update({
     where: { id: estudioId },
     data: { numeroEspecialistas: totalPersonal },
+  });
+}
+
+async function desactivarPersonal(personalId: string) {
+  return prisma.$transaction(async (tx) => {
+    const personalActualizado = await tx.personal.update({
+      where: { id: personalId },
+      data: {
+        activo: false,
+        eliminadoEn: new Date(),
+      },
+    });
+
+    await tx.empleadoAcceso.updateMany({
+      where: { personalId, activo: true },
+      data: { activo: false },
+    });
+
+    return personalActualizado;
   });
 }
 
@@ -59,7 +78,7 @@ export async function rutasPersonal(servidor: FastifyInstance): Promise<void> {
         return respuesta.code(403).send({ error: 'Sin permisos para esta acción' });
       }
       const personal = await prisma.personal.findMany({
-        where: { estudioId: id },
+        where: { estudioId: id, activo: true },
         orderBy: { creadoEn: 'asc' },
       });
       return respuesta.send({ datos: personal });
@@ -163,27 +182,88 @@ export async function rutasPersonal(servidor: FastifyInstance): Promise<void> {
 
       const datos = resultado.data;
 
-      const actualizado = await prisma.personal.update({
-        where: { id: solicitud.params.id },
-        data: {
-          ...(datos.nombre !== undefined && { nombre: datos.nombre }),
-          ...(datos.especialidades !== undefined && { especialidades: datos.especialidades }),
-          ...(datos.activo !== undefined && { activo: datos.activo }),
-          ...(datos.horaInicio !== undefined && { horaInicio: datos.horaInicio }),
-          ...(datos.horaFin !== undefined && { horaFin: datos.horaFin }),
-          ...(datos.descansoInicio !== undefined && { descansoInicio: datos.descansoInicio }),
-          ...(datos.descansoFin !== undefined && { descansoFin: datos.descansoFin }),
-          ...(datos.diasTrabajo !== undefined && { diasTrabajo: datos.diasTrabajo ?? Prisma.JsonNull }),
-        },
-      });
+      const actualizado = datos.activo === false
+        ? await desactivarPersonal(solicitud.params.id)
+        : await prisma.personal.update({
+            where: { id: solicitud.params.id },
+            data: {
+              ...(datos.nombre !== undefined && { nombre: datos.nombre }),
+              ...(datos.especialidades !== undefined && { especialidades: datos.especialidades }),
+              ...(datos.activo !== undefined && { activo: datos.activo }),
+              ...(datos.activo !== undefined && {
+                eliminadoEn: datos.activo ? null : new Date(),
+              }),
+              ...(datos.horaInicio !== undefined && { horaInicio: datos.horaInicio }),
+              ...(datos.horaFin !== undefined && { horaFin: datos.horaFin }),
+              ...(datos.descansoInicio !== undefined && { descansoInicio: datos.descansoInicio }),
+              ...(datos.descansoFin !== undefined && { descansoFin: datos.descansoFin }),
+              ...(datos.diasTrabajo !== undefined && { diasTrabajo: datos.diasTrabajo ?? Prisma.JsonNull }),
+            },
+          });
       await sincronizarNumeroEspecialistas(empleadoExistente.estudioId);
       return respuesta.send({ datos: actualizado });
     },
   );
 
+  // DELETE /personal/:id
+  servidor.delete<{ Params: { id: string } }>(
+    '/personal/:id',
+    { preHandler: verificarJWT },
+    async (solicitud, respuesta) => {
+      const payload = solicitud.user as { sub: string; rol: string; estudioId: string | null };
+      const empleadoExistente = await prisma.personal.findUnique({
+        where: { id: solicitud.params.id },
+        select: { estudioId: true, activo: true },
+      });
+
+      if (!empleadoExistente) {
+        return respuesta.code(404).send({ error: 'Personal no encontrado' });
+      }
+
+      if (payload.rol !== 'maestro' && payload.estudioId !== empleadoExistente.estudioId) {
+        return respuesta.code(403).send({ error: 'Sin permisos para esta acción' });
+      }
+
+      if (payload.rol === 'dueno') {
+        const personal = await prisma.personal.findFirst({
+          where: {
+            id: solicitud.params.id,
+            estudio: {
+              usuarios: { some: { id: payload.sub, rol: 'dueno' } },
+            },
+          },
+          select: { id: true },
+        });
+        if (!personal) {
+          return respuesta.code(403).send({ error: 'Sin acceso a este recurso' });
+        }
+      }
+
+      if (!empleadoExistente.activo) {
+        return respuesta.send({ datos: { eliminado: true } });
+      }
+
+      await desactivarPersonal(solicitud.params.id);
+      await sincronizarNumeroEspecialistas(empleadoExistente.estudioId);
+
+      return respuesta.send({ datos: { eliminado: true } });
+    },
+  );
+
   servidor.post<{ Params: { id: string; personalId: string } }>(
     '/estudio/:id/personal/:personalId/avatar',
-    { preHandler: verificarJWT },
+    {
+      preHandler: verificarJWT,
+      config: {
+        rateLimit: {
+          max: 10,
+          timeWindow: '1 hour',
+          errorResponseBuilder: () => ({
+            error: 'Demasiados uploads. Espera 1 hora.',
+          }),
+        },
+      },
+    },
     async (solicitud, respuesta) => {
       const payload = solicitud.user as { sub: string; rol: string; estudioId: string | null };
       const { id, personalId } = solicitud.params;

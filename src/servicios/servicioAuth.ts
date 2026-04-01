@@ -17,6 +17,21 @@ export interface PermisosSesionMaestro {
   suspenderSalones: boolean;
 }
 
+export interface PermisosSesionSupervisor {
+  verTotalSalones: boolean;
+  verControlSalones: boolean;
+  verReservas: boolean;
+  verVentas: boolean;
+  verDirectorio: boolean;
+  editarDirectorio: boolean;
+  verControlCobros: boolean;
+  accionRecordatorio: boolean;
+  accionRegistroPago: boolean;
+  accionSuspension: boolean;
+  activarSalones: boolean;
+  verPreregistros: boolean;
+}
+
 export interface DatosAccesoSalon {
   estudioId: string;
   nombreSalon: string;
@@ -27,10 +42,12 @@ export interface DatosSesion {
   token: string;
   rol: string;
   estudioId: string | null;
+  slugEstudio: string | null;
   nombre: string;
   email: string;
   esMaestroTotal: boolean;
   permisos?: PermisosSesionMaestro;
+  permisosSupervisor?: PermisosSesionSupervisor;
   personalId?: string | null;
   forzarCambioContrasena?: boolean;
 }
@@ -117,10 +134,12 @@ export async function refrescarSesion(): Promise<{
   token: string;
   rol: string;
   estudioId: string | null;
+  slugEstudio: string | null;
   nombre: string;
   email: string;
   esMaestroTotal: boolean;
   permisos?: PermisosSesionMaestro;
+  permisosSupervisor?: PermisosSesionSupervisor;
   personalId?: string | null;
   forzarCambioContrasena?: boolean;
 } | null> {
