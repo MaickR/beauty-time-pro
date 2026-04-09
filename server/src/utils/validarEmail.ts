@@ -8,17 +8,10 @@ const DOMINIOS_PERMITIDOS = [
 	'outlook.com',
 	'outlook.es',
 	'outlook.com.mx',
-	'live.com',
-	'live.com.mx',
-	'live.com.co',
 	'yahoo.com',
 	'yahoo.es',
 	'yahoo.com.mx',
 	'yahoo.com.co',
-	'icloud.com',
-	'me.com',
-	'protonmail.com',
-	'pm.me',
 ];
 
 export function esDominioPermitido(email: string): boolean {

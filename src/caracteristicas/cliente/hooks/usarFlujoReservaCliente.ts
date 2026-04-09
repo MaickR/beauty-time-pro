@@ -1,9 +1,9 @@
 import { useState } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { obtenerDisponibilidad } from '../../../servicios/servicioClienteApp';
+import { obtenerDisponibilidad, obtenerMiPerfil } from '../../../servicios/servicioClienteApp';
 import { peticion } from '../../../lib/clienteHTTP';
 import { obtenerFechaLocalISO } from '../../../utils/formato';
-import type { Servicio, SalonDetalle, SlotTiempo } from '../../../tipos';
+import type { PerfilClienteApp, Servicio, SalonDetalle, SlotTiempo } from '../../../tipos';
 
 export interface ResultadoReserva {
   id: string;
@@ -45,11 +45,25 @@ export function usarFlujoReservaCliente(salon: SalonDetalle) {
 
   const mutacionCrearReserva = useMutation({
     mutationFn: async () => {
+      const perfilCliente =
+        queryClient.getQueryData<PerfilClienteApp>(['mi-perfil']) ?? (await obtenerMiPerfil());
+
+      const nombreCliente = `${perfilCliente.nombre} ${perfilCliente.apellido}`.trim();
+      if (!nombreCliente || !perfilCliente.telefono || !perfilCliente.fechaNacimiento) {
+        throw new Error(
+          'Completa tu nombre, teléfono y fecha de nacimiento en Mi perfil antes de reservar.',
+        );
+      }
+
       const resultado = await peticion<{ datos: ResultadoReserva }>('/reservas', {
         method: 'POST',
         body: JSON.stringify({
           estudioId: salon.id,
           personalId: estado.personalId,
+          nombreCliente,
+          telefonoCliente: perfilCliente.telefono,
+          fechaNacimiento: perfilCliente.fechaNacimiento,
+          email: perfilCliente.email,
           fecha: obtenerFechaLocalISO(estado.fechaSeleccionada),
           horaInicio: estado.horaSeleccionada,
           duracion: duracionTotal,

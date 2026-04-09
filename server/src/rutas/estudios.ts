@@ -14,6 +14,7 @@ import { enviarEmailSolicitudCancelacion } from '../servicios/servicioEmail.js';
 import { colorHexSchema, emailOpcionalONuloSchema, fechaIsoSchema, horaOpcionalONulaSchema, horaSchema, obtenerMensajeValidacion, telefonoSchema, textoOpcionalONuloSchema, textoSchema, urlOpcionalSchema } from '../lib/validacion.js';
 import { esClaveSalonSegura, sanitizarClaveSalon } from '../lib/clavesSalon.js';
 import { normalizarPlanEstudio, obtenerDefinicionPlan, validarCantidadServiciosPlan } from '../lib/planes.js';
+import { asegurarPrecioActualSalon, obtenerPrecioPlanActual, resolverPrecioRenovacion } from '../lib/preciosPlanes.js';
 import { obtenerFechaISOEnZona, obtenerZonaHorariaPorPais, normalizarZonaHorariaEstudio } from '../utils/zonasHorarias.js';
 import { generarSlugUnico } from '../utils/generarSlug.js';
 
@@ -141,7 +142,7 @@ function esErrorCompatibilidadEstudio(error: unknown): boolean {
   return (
     codigo === 'P2022' ||
     /Unknown column/i.test(mensaje) ||
-    /(pinCancelacionHash|plan|primeraVez|cancelacionSolicitada|fechaSolicitudCancelacion|motivoCancelacion)/i.test(
+    /(pinCancelacionHash|plan|primeraVez|cancelacionSolicitada|fechaSolicitudCancelacion|motivoCancelacion|precioPlanActualId|precioPlanProximoId|fechaAplicacionPrecioProximo)/i.test(
       mensaje,
     )
   );
@@ -180,6 +181,9 @@ const seleccionarEstudioPanelModerno = {
   suscripcion: true,
   inicioSuscripcion: true,
   fechaVencimiento: true,
+  precioPlanActualId: true,
+  precioPlanProximoId: true,
+  fechaAplicacionPrecioProximo: true,
   horario: true,
   servicios: true,
   serviciosCustom: true,
@@ -199,6 +203,28 @@ const seleccionarEstudioPanelModerno = {
   motivoCancelacion: true,
   creadoEn: true,
   actualizadoEn: true,
+  precioPlanActual: {
+    select: {
+      id: true,
+      plan: true,
+      pais: true,
+      moneda: true,
+      monto: true,
+      version: true,
+      vigenteDesde: true,
+    },
+  },
+  precioPlanProximo: {
+    select: {
+      id: true,
+      plan: true,
+      pais: true,
+      moneda: true,
+      monto: true,
+      version: true,
+      vigenteDesde: true,
+    },
+  },
   personal: {
     where: { activo: true },
     orderBy: { creadoEn: 'asc' },
@@ -246,6 +272,34 @@ const seleccionarEstudioPanelCompat = {
 
 function serializarEstudioPanel(estudio: Record<string, unknown>) {
   const { pinCancelacionHash, ...resto } = estudio;
+  const precioActual = (estudio['precioPlanActual'] as Record<string, unknown> | null | undefined) ?? null;
+  const precioProximo = (estudio['precioPlanProximo'] as Record<string, unknown> | null | undefined) ?? null;
+  const precioRenovacion = resolverPrecioRenovacion({
+    fechaVencimiento: (estudio['fechaVencimiento'] as string) ?? '',
+    fechaAplicacionPrecioProximo: (estudio['fechaAplicacionPrecioProximo'] as string | null | undefined) ?? null,
+    precioPlanActual: precioActual
+      ? {
+          id: (precioActual['id'] as string) ?? '',
+          plan: ((precioActual['plan'] as string) ?? 'STANDARD') as 'STANDARD' | 'PRO',
+          pais: (precioActual['pais'] as string) ?? 'Mexico',
+          moneda: (precioActual['moneda'] as string) ?? 'MXN',
+          monto: (precioActual['monto'] as number) ?? 0,
+          version: (precioActual['version'] as number) ?? 1,
+          vigenteDesde: new Date((precioActual['vigenteDesde'] as string | Date | undefined) ?? new Date()),
+        }
+      : null,
+    precioPlanProximo: precioProximo
+      ? {
+          id: (precioProximo['id'] as string) ?? '',
+          plan: ((precioProximo['plan'] as string) ?? 'STANDARD') as 'STANDARD' | 'PRO',
+          pais: (precioProximo['pais'] as string) ?? 'Mexico',
+          moneda: (precioProximo['moneda'] as string) ?? 'MXN',
+          monto: (precioProximo['monto'] as number) ?? 0,
+          version: (precioProximo['version'] as number) ?? 1,
+          vigenteDesde: new Date((precioProximo['vigenteDesde'] as string | Date | undefined) ?? new Date()),
+        }
+      : null,
+  }, (estudio['fechaVencimiento'] as string) ?? '');
 
   return {
     ...resto,
@@ -255,6 +309,12 @@ function serializarEstudioPanel(estudio: Record<string, unknown>) {
     fechaSolicitudCancelacion:
       (estudio['fechaSolicitudCancelacion'] as Date | string | null | undefined) ?? null,
     motivoCancelacion: (estudio['motivoCancelacion'] as string | null | undefined) ?? null,
+    precioSuscripcionActual: (precioActual?.['monto'] as number | undefined) ?? null,
+    monedaSuscripcion: (precioActual?.['moneda'] as string | undefined) ?? null,
+    precioSuscripcionProximo: (precioProximo?.['monto'] as number | undefined) ?? null,
+    fechaAplicacionPrecioProximo:
+      (estudio['fechaAplicacionPrecioProximo'] as string | null | undefined) ?? null,
+    precioRenovacion: precioRenovacion.precioAplicado?.monto ?? (precioActual?.['monto'] as number | undefined) ?? null,
     pinCancelacionConfigurado:
       typeof pinCancelacionHash === 'string' && pinCancelacionHash.trim().length > 0,
   };
@@ -354,6 +414,13 @@ export async function rutasEstudios(servidor: FastifyInstance): Promise<void> {
         serviciosCustom: datos.serviciosCustom,
       });
       const planNormalizado = normalizarPlanEstudio(datos.plan);
+      const paisNormalizado = datos.pais ?? 'Mexico';
+      const precioPlanActual = await obtenerPrecioPlanActual(planNormalizado, paisNormalizado);
+      if (!precioPlanActual) {
+        return respuesta.code(500).send({
+          error: `No existe un precio configurado para el plan ${planNormalizado} en ${paisNormalizado}`,
+        });
+      }
       const cantidadServicios = Array.isArray(datos.servicios) ? datos.servicios.length : 0;
       const errorServiciosPlan = validarCantidadServiciosPlan({
         plan: planNormalizado,
@@ -370,8 +437,8 @@ export async function rutasEstudios(servidor: FastifyInstance): Promise<void> {
           propietario: datos.propietario ?? '',
           telefono: datos.telefono,
           sitioWeb: datos.sitioWeb,
-          pais: datos.pais ?? 'Mexico',
-          zonaHoraria: obtenerZonaHorariaPorPais(datos.pais ?? 'Mexico'),
+          pais: paisNormalizado,
+          zonaHoraria: obtenerZonaHorariaPorPais(paisNormalizado),
           plan: planNormalizado,
           sucursales: datos.sucursales ?? [],
           claveDueno: datos.claveDueno.toUpperCase(),
@@ -381,10 +448,11 @@ export async function rutasEstudios(servidor: FastifyInstance): Promise<void> {
             datos.inicioSuscripcion ??
             obtenerFechaISOEnZona(
               new Date(),
-              obtenerZonaHorariaPorPais(datos.pais ?? 'Mexico'),
-              datos.pais ?? 'Mexico',
+              obtenerZonaHorariaPorPais(paisNormalizado),
+              paisNormalizado,
             ),
           fechaVencimiento: datos.fechaVencimiento ?? '',
+          precioPlanActualId: precioPlanActual.id,
           horario: datos.horario ?? {},
           servicios: (datos.servicios ?? []) as Prisma.InputJsonValue,
           serviciosCustom: (datos.serviciosCustom ?? []) as Prisma.InputJsonValue,
@@ -431,11 +499,11 @@ export async function rutasEstudios(servidor: FastifyInstance): Promise<void> {
           obtenerColumnasTabla('estudios'),
           obtenerTablasDisponibles(),
         ]);
-        let estudioExistente: { categorias: unknown; servicios: unknown; serviciosCustom: unknown; plan?: string } | null;
+        let estudioExistente: { categorias: unknown; servicios: unknown; serviciosCustom: unknown; plan?: string; pais?: string } | null;
         try {
           estudioExistente = await prisma.estudio.findUnique({
             where: { id },
-            select: { categorias: true, servicios: true, serviciosCustom: true, plan: true },
+            select: { categorias: true, servicios: true, serviciosCustom: true, plan: true, pais: true },
           });
         } catch (error) {
           if (!esErrorCompatibilidadEstudio(error)) {
@@ -443,7 +511,7 @@ export async function rutasEstudios(servidor: FastifyInstance): Promise<void> {
           }
           estudioExistente = await prisma.estudio.findUnique({
             where: { id },
-            select: { categorias: true, servicios: true, serviciosCustom: true },
+            select: { categorias: true, servicios: true, serviciosCustom: true, pais: true },
           });
         }
 
@@ -522,6 +590,14 @@ export async function rutasEstudios(servidor: FastifyInstance): Promise<void> {
           data: dataActualizacion as Prisma.EstudioUncheckedUpdateInput,
           select: selectActualizacion as Prisma.EstudioSelect,
         });
+
+        if (datos.plan !== undefined || datos.pais !== undefined) {
+          await asegurarPrecioActualSalon({
+            estudioId: id,
+            plan: planSiguiente,
+            pais: datos.pais ?? estudioExistente.pais,
+          });
+        }
 
         if (
           datos.plan !== undefined &&

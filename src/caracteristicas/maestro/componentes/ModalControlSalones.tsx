@@ -1,6 +1,16 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { X, Download, AlertTriangle, Ban, CheckCircle, Pencil, Eye, EyeOff } from 'lucide-react';
+import {
+  X,
+  Download,
+  AlertTriangle,
+  Ban,
+  CheckCircle,
+  Pencil,
+  Eye,
+  EyeOff,
+  RefreshCw,
+} from 'lucide-react';
 import * as XLSX from 'xlsx';
 import {
   obtenerSalonesActivos,
@@ -17,6 +27,7 @@ import type {
   SalonBloqueado,
 } from '../../../servicios/servicioAdmin';
 import { formatearFechaHumana } from '../../../utils/formato';
+import { generarContrasenaSegura } from '../../../utils/seguridad';
 import { EsqueletoTarjeta } from '../../../componentes/ui/Esqueleto';
 import { usarToast } from '../../../componentes/ui/ProveedorToast';
 
@@ -102,7 +113,35 @@ export function ModalControlSalones({ onCerrar }: PropsModalControlSalones) {
   const mutEditar = useMutation({
     mutationFn: (params: { id: string; datos: Record<string, string> }) =>
       editarSuscripcionSalon(params.id, params.datos),
-    onSuccess: () => {
+    onSuccess: (_, variables) => {
+      clienteConsulta.setQueriesData<{
+        datos: SalonActivo[];
+        total: number;
+        pagina: number;
+        totalPaginas: number;
+      }>({ queryKey: ['admin', 'control-salones', 'activos'] }, (actual) => {
+        if (!actual) {
+          return actual;
+        }
+
+        return {
+          ...actual,
+          datos: actual.datos.map((salon) => {
+            if (salon.id !== variables.id) {
+              return salon;
+            }
+
+            return {
+              ...salon,
+              periodo: {
+                inicio: variables.datos.inicioSuscripcion ?? salon.periodo.inicio,
+                fin: variables.datos.fechaVencimiento ?? salon.periodo.fin,
+              },
+              plan: variables.datos.plan ?? salon.plan,
+            };
+          }),
+        };
+      });
       invalidar();
       setModalEditar(null);
       mostrarToast('Suscripción actualizada');
@@ -121,6 +160,14 @@ export function ModalControlSalones({ onCerrar }: PropsModalControlSalones) {
 
   const guardarEditar = () => {
     if (!modalEditar) return;
+    if (formEditar.contrasena && formEditar.contrasena.length < 8) {
+      mostrarToast({
+        mensaje: 'La nueva contraseña debe tener al menos 8 caracteres',
+        variante: 'error',
+      });
+      return;
+    }
+
     const datos: Record<string, string> = {};
     if (formEditar.inicioSuscripcion) datos.inicioSuscripcion = formEditar.inicioSuscripcion;
     if (formEditar.fechaVencimiento) datos.fechaVencimiento = formEditar.fechaVencimiento;
@@ -180,7 +227,7 @@ export function ModalControlSalones({ onCerrar }: PropsModalControlSalones) {
       role="dialog"
       aria-modal="true"
       aria-labelledby="modal-control-salones-titulo"
-      className="fixed inset-0 z-[200] flex items-center justify-center bg-black/70 backdrop-blur-sm p-4"
+      className="fixed inset-0 z-200 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4"
       onKeyDown={(e) => e.key === 'Escape' && onCerrar()}
     >
       <div className="bg-white rounded-3xl w-full max-w-5xl max-h-[90vh] overflow-hidden flex flex-col shadow-2xl">
@@ -250,7 +297,7 @@ export function ModalControlSalones({ onCerrar }: PropsModalControlSalones) {
                           Plan
                         </th>
                         <th className="text-left py-3 px-2 text-xs font-black text-slate-400 uppercase">
-                          Contraseña
+                          Clave del dueño
                         </th>
                         <th className="text-left py-3 px-2 text-xs font-black text-slate-400 uppercase">
                           Acciones
@@ -264,7 +311,8 @@ export function ModalControlSalones({ onCerrar }: PropsModalControlSalones) {
                           <td className="py-3 px-2 text-slate-600">{s.dueno}</td>
                           <td className="py-3 px-2 text-slate-600 text-xs">{s.correo}</td>
                           <td className="py-3 px-2 text-slate-600 text-xs">
-                            {s.periodo.inicio} — {s.periodo.fin}
+                            {formatearFechaHumana(s.periodo.inicio)} —{' '}
+                            {formatearFechaHumana(s.periodo.fin)}
                           </td>
                           <td className="py-3 px-2">
                             <span
@@ -335,8 +383,8 @@ export function ModalControlSalones({ onCerrar }: PropsModalControlSalones) {
                             Salón: s.nombre,
                             Dueño: s.dueno,
                             Correo: s.correo ?? '',
-                            Inicio: s.periodo.inicio,
-                            Fin: s.periodo.fin,
+                            Inicio: formatearFechaHumana(s.periodo.inicio),
+                            Fin: formatearFechaHumana(s.periodo.fin),
                             Plan: s.plan,
                           })),
                         );
@@ -385,7 +433,7 @@ export function ModalControlSalones({ onCerrar }: PropsModalControlSalones) {
                           Plan
                         </th>
                         <th className="text-left py-3 px-2 text-xs font-black text-slate-400 uppercase">
-                          Contraseña
+                          Clave del dueño
                         </th>
                         <th className="text-left py-3 px-2 text-xs font-black text-slate-400 uppercase">
                           Acciones
@@ -504,7 +552,7 @@ export function ModalControlSalones({ onCerrar }: PropsModalControlSalones) {
                           Motivo
                         </th>
                         <th className="text-left py-3 px-2 text-xs font-black text-slate-400 uppercase">
-                          Contraseña
+                          Clave del dueño
                         </th>
                         <th className="text-left py-3 px-2 text-xs font-black text-slate-400 uppercase">
                           Acciones
@@ -597,7 +645,7 @@ export function ModalControlSalones({ onCerrar }: PropsModalControlSalones) {
       {/* Mini-modal de bloqueo */}
       {modalBloqueo && (
         <div
-          className="fixed inset-0 z-[210] flex items-center justify-center bg-black/50 p-4"
+          className="fixed inset-0 z-210 flex items-center justify-center bg-black/50 p-4"
           onKeyDown={(e) => e.key === 'Escape' && setModalBloqueo(null)}
         >
           <div
@@ -640,7 +688,7 @@ export function ModalControlSalones({ onCerrar }: PropsModalControlSalones) {
       {/* Mini-modal de edición */}
       {modalEditar && (
         <div
-          className="fixed inset-0 z-[210] flex items-center justify-center bg-black/50 p-4"
+          className="fixed inset-0 z-210 flex items-center justify-center bg-black/50 p-4"
           onKeyDown={(e) => e.key === 'Escape' && setModalEditar(null)}
         >
           <div
@@ -651,6 +699,10 @@ export function ModalControlSalones({ onCerrar }: PropsModalControlSalones) {
             <h3 className="text-base font-black text-slate-900 mb-4">
               Editar suscripción — {modalEditar.nombre}
             </h3>
+            <p className="mb-4 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-600">
+              La tabla muestra la clave interna del dueño. Si cambias la contraseña, se guarda en el
+              backend, pero no se vuelve a exponer en pantalla.
+            </p>
             <div className="space-y-3">
               <div>
                 <label className="block text-xs font-bold text-slate-500 mb-1">
@@ -691,15 +743,28 @@ export function ModalControlSalones({ onCerrar }: PropsModalControlSalones) {
               </div>
               <div>
                 <label className="block text-xs font-bold text-slate-500 mb-1">
-                  Nueva contraseña (opcional, mín 8)
+                  Nueva contraseña del dueño (opcional, mín 8)
                 </label>
-                <input
-                  type="password"
-                  value={formEditar.contrasena}
-                  onChange={(e) => setFormEditar((f) => ({ ...f, contrasena: e.target.value }))}
-                  placeholder="Dejar vacío para mantener actual"
-                  className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-pink-500"
-                />
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    value={formEditar.contrasena}
+                    onChange={(e) => setFormEditar((f) => ({ ...f, contrasena: e.target.value }))}
+                    placeholder="Dejar vacío para mantener actual"
+                    className="flex-1 rounded-xl border border-slate-200 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-pink-500 font-mono"
+                  />
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setFormEditar((f) => ({ ...f, contrasena: generarContrasenaSegura(16) }))
+                    }
+                    title="Generar contraseña segura"
+                    aria-label="Generar contraseña segura"
+                    className="px-3 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 transition-colors"
+                  >
+                    <RefreshCw className="w-4 h-4 text-slate-600" />
+                  </button>
+                </div>
               </div>
             </div>
             <div className="flex gap-3 justify-end mt-4">

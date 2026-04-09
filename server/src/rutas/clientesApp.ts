@@ -1,11 +1,11 @@
 import type { FastifyInstance } from 'fastify';
-import bcrypt from 'bcryptjs';
 import fs from 'fs';
 import path from 'path';
 import sharp from 'sharp';
 import { z } from 'zod';
 import NodeCache from 'node-cache';
 import { env } from '../lib/env.js';
+import { revocarSesionesPorSujeto } from '../lib/sesionesAuth.js';
 import { detectarTipoImagen } from '../utils/validarImagen.js';
 import { resolverCategoriasSalon } from '../lib/categoriasSalon.js';
 import { cacheSalonesPublicos } from '../lib/cache.js';
@@ -14,6 +14,7 @@ import { prisma } from '../prismaCliente.js';
 import { verificarJWT } from '../middleware/autenticacion.js';
 import { obtenerSlotsDisponiblesBackend } from '../lib/programacion.js';
 import { enviarEmailVerificacionCliente } from '../servicios/servicioEmail.js';
+import { compararHashContrasena, generarHashContrasena } from '../utils/contrasenas.js';
 import { esEmailValido } from '../utils/validarEmail.js';
 import { fechaIsoSchema, obtenerMensajeValidacion, telefonoSchema, textoSchema } from '../lib/validacion.js';
 import { obtenerFechaISOEnZona, normalizarZonaHorariaEstudio } from '../utils/zonasHorarias.js';
@@ -702,7 +703,7 @@ export async function rutasClientesApp(servidor: FastifyInstance): Promise<void>
 
       const emailNuevo = resultado.data.email.trim().toLowerCase();
       if (!esEmailValido(emailNuevo)) {
-        return respuesta.code(400).send({ error: 'Solo se aceptan correos personales válidos y no temporales de Gmail, Hotmail, Outlook, Yahoo, iCloud o Proton' });
+        return respuesta.code(400).send({ error: 'Solo se aceptan correos personales válidos de Gmail, Hotmail, Outlook o Yahoo' });
       }
 
       const clienteActual = await prisma.clienteApp.findUnique({
@@ -870,16 +871,18 @@ export async function rutasClientesApp(servidor: FastifyInstance): Promise<void>
 
       if (!clienteApp) return respuesta.code(404).send({ error: 'Perfil no encontrado' });
 
-      const contrasenaValida = await bcrypt.compare(contrasenaActual, clienteApp.hashContrasena);
+      const contrasenaValida = await compararHashContrasena(contrasenaActual, clienteApp.hashContrasena);
       if (!contrasenaValida) {
         return respuesta.code(400).send({ error: 'La contraseña actual es incorrecta' });
       }
 
-      const nuevoHash = await bcrypt.hash(contrasenaNueva, 12);
+      const nuevoHash = await generarHashContrasena(contrasenaNueva);
       await prisma.clienteApp.update({
         where: { id: payload.sub },
         data: { hashContrasena: nuevoHash },
       });
+
+      await revocarSesionesPorSujeto('cliente_app', payload.sub, 'contrasena_actualizada');
 
       return respuesta.send({ datos: { actualizado: true } });
     },

@@ -82,6 +82,11 @@ export interface Estudio {
   fechaSolicitudCancelacion?: string | null;
   motivoCancelacion?: string | null;
   pinCancelacionConfigurado?: boolean;
+  precioSuscripcionActual?: number | null;
+  monedaSuscripcion?: Moneda | null;
+  precioSuscripcionProximo?: number | null;
+  fechaAplicacionPrecioProximo?: string | null;
+  precioRenovacion?: number | null;
   createdAt: string; // ISO datetime
   updatedAt: string; // ISO datetime
 }

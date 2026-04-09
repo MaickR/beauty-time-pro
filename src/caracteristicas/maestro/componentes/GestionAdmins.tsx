@@ -1,9 +1,9 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   Plus,
-  Trash2,
   Settings,
+  Pencil,
   Eye,
   EyeOff,
   MoreHorizontal,
@@ -18,12 +18,12 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { peticion } from '../../../lib/clienteHTTP';
 import { usarToast } from '../../../componentes/ui/ProveedorToast';
-import { DialogoConfirmacion } from '../../../componentes/ui/DialogoConfirmacion';
 import { Tooltip } from '../../../componentes/ui/Tooltip';
 
 // ─── Tipos ────────────────────────────────────────────
 
 type CargoColaborador = 'maestro' | 'supervisor' | 'vendedor';
+type OrdenColaboradores = 'recientes' | 'nombre' | 'rol' | 'estado';
 
 interface PermisosMaestro {
   aprobarSalones: boolean;
@@ -68,9 +68,10 @@ const esquemaNuevoColaborador = z.object({
   email: z.string().email('Invalid email'),
   contrasena: z
     .string()
-    .min(8, 'Minimum 8 characters')
-    .regex(/[A-Z]/, 'Requires uppercase letter')
-    .regex(/[0-9]/, 'Requires number'),
+    .refine(
+      (valor) => valor === '' || (valor.length >= 8 && /[A-Z]/.test(valor) && /[0-9]/.test(valor)),
+      'Use at least 8 characters, one uppercase letter and one number',
+    ),
   cargo: z.enum(['maestro', 'supervisor', 'vendedor'], {
     message: 'Role is required',
   }),
@@ -248,9 +249,12 @@ export function GestionAdmins() {
   const clienteConsulta = useQueryClient();
   const [mostrarFormulario, setMostrarFormulario] = useState(false);
   const [colaboradorEditando, setColaboradorEditando] = useState<Colaborador | null>(null);
+  const [colaboradorEdicionGeneral, setColaboradorEdicionGeneral] = useState<Colaborador | null>(
+    null,
+  );
   const [mostrarContrasena, setMostrarContrasena] = useState(false);
   const [accionesAbiertas, setAccionesAbiertas] = useState<string | null>(null);
-  const [colaboradorEliminar, setColaboradorEliminar] = useState<Colaborador | null>(null);
+  const [orden, setOrden] = useState<OrdenColaboradores>('recientes');
   const [permisosMaestroEditando, setPermisosMaestroEditando] =
     useState<PermisosMaestro>(PERMISOS_MAESTRO_VACIOS);
   const [permisosSupervisorEditando, setPermisosSupervisorEditando] = useState<PermisosSupervisor>(
@@ -343,20 +347,42 @@ export function GestionAdmins() {
     onError: (error) => mostrarToast(error instanceof Error ? error.message : 'Error activating'),
   });
 
-  const eliminarColaborador = useMutation({
-    mutationFn: async (id: string) => {
-      await peticion(`/admin/admins/${id}`, { method: 'DELETE' });
+  const actualizarColaborador = useMutation({
+    mutationFn: async (datos: CamposNuevoColaborador & { id: string }) => {
+      const cuerpo: Record<string, unknown> = {
+        nombre: datos.nombre,
+        email: datos.email,
+        cargo: datos.cargo,
+      };
+
+      if (datos.contrasena.trim()) {
+        cuerpo['contrasena'] = datos.contrasena;
+      }
+
+      if (datos.cargo === 'maestro') {
+        cuerpo['permisos'] = normalizarPermisosMaestro(permisosMaestroEditando);
+      } else if (datos.cargo === 'supervisor') {
+        cuerpo['permisosSupervisor'] = permisosSupervisorEditando;
+      }
+
+      await peticion(`/admin/admins/${datos.id}`, {
+        method: 'PUT',
+        body: JSON.stringify(cuerpo),
+      });
     },
     onSuccess: () => {
-      setColaboradorEliminar(null);
-      mostrarToast('Collaborator permanently deleted');
+      mostrarToast('Collaborator updated');
+      setColaboradorEdicionGeneral(null);
+      cerrarFormulario();
       void clienteConsulta.invalidateQueries({ queryKey: ['colaboradores'] });
     },
-    onError: (error) => mostrarToast(error instanceof Error ? error.message : 'Error deleting'),
+    onError: (error) =>
+      mostrarToast(error instanceof Error ? error.message : 'Error updating collaborator'),
   });
 
   const cerrarFormulario = () => {
     setMostrarFormulario(false);
+    setColaboradorEdicionGeneral(null);
     reset();
     setPermisosMaestroEditando(PERMISOS_MAESTRO_VACIOS);
     setPermisosSupervisorEditando(PERMISOS_SUPERVISOR_VACIOS);
@@ -367,6 +393,19 @@ export function GestionAdmins() {
     setColaboradorEditando(colaborador);
     setPermisosMaestroEditando(colaborador.permisos ?? PERMISOS_MAESTRO_VACIOS);
     setPermisosSupervisorEditando(colaborador.permisosSupervisor ?? PERMISOS_SUPERVISOR_VACIOS);
+  };
+
+  const abrirEdicionGeneral = (colaborador: Colaborador) => {
+    setColaboradorEdicionGeneral(colaborador);
+    setMostrarFormulario(true);
+    setPermisosMaestroEditando(colaborador.permisos ?? PERMISOS_MAESTRO_VACIOS);
+    setPermisosSupervisorEditando(colaborador.permisosSupervisor ?? PERMISOS_SUPERVISOR_VACIOS);
+    reset({
+      cargo: colaborador.rol as CargoColaborador,
+      nombre: colaborador.nombre,
+      email: colaborador.email,
+      contrasena: '',
+    });
   };
 
   const actualizarPermisoMaestro = (campo: keyof PermisosMaestro, valor: boolean) => {
@@ -400,6 +439,30 @@ export function GestionAdmins() {
     setMostrarContrasena(true);
   };
 
+  const colaboradoresOrdenados = useMemo(() => {
+    const lista = [...colaboradores];
+
+    lista.sort((a, b) => {
+      if (orden === 'nombre') {
+        return a.nombre.localeCompare(b.nombre, 'es');
+      }
+
+      if (orden === 'rol') {
+        return a.rol.localeCompare(b.rol, 'es') || a.nombre.localeCompare(b.nombre, 'es');
+      }
+
+      if (orden === 'estado') {
+        return Number(b.activo) - Number(a.activo) || a.nombre.localeCompare(b.nombre, 'es');
+      }
+
+      const accesoA = a.ultimoAcceso ? new Date(a.ultimoAcceso).getTime() : 0;
+      const accesoB = b.ultimoAcceso ? new Date(b.ultimoAcceso).getTime() : 0;
+      return accesoB - accesoA || a.nombre.localeCompare(b.nombre, 'es');
+    });
+
+    return lista;
+  }, [colaboradores, orden]);
+
   if (isLoading) {
     return (
       <div className="bg-white rounded-2xl border border-slate-200 p-8 animate-pulse">
@@ -419,17 +482,33 @@ export function GestionAdmins() {
         <h2 id="titulo-colaboradores" className="text-2xl font-black text-slate-900">
           Collaborators
         </h2>
-        <button
-          onClick={() => {
-            setMostrarFormulario(true);
-            reset({ cargo: 'maestro', nombre: '', email: '', contrasena: '' });
-            setPermisosMaestroEditando(PERMISOS_MAESTRO_VACIOS);
-            setPermisosSupervisorEditando(PERMISOS_SUPERVISOR_VACIOS);
-          }}
-          className="flex items-center justify-center gap-2 bg-pink-600 text-white px-5 py-3 rounded-xl font-bold shadow hover:bg-pink-700 transition-all shrink-0 w-full sm:w-auto"
-        >
-          <Plus className="w-4 h-4" /> New collaborator
-        </button>
+        <div className="flex w-full flex-col gap-3 sm:w-auto sm:flex-row sm:items-center">
+          <label className="flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-3 text-sm font-semibold text-slate-600">
+            <span>Sort</span>
+            <select
+              value={orden}
+              onChange={(evento) => setOrden(evento.target.value as OrdenColaboradores)}
+              className="bg-transparent text-sm font-semibold text-slate-900 outline-none"
+            >
+              <option value="recientes">Recent access</option>
+              <option value="nombre">Name</option>
+              <option value="rol">Role</option>
+              <option value="estado">Status</option>
+            </select>
+          </label>
+          <button
+            onClick={() => {
+              setColaboradorEdicionGeneral(null);
+              setMostrarFormulario(true);
+              reset({ cargo: 'maestro', nombre: '', email: '', contrasena: '' });
+              setPermisosMaestroEditando(PERMISOS_MAESTRO_VACIOS);
+              setPermisosSupervisorEditando(PERMISOS_SUPERVISOR_VACIOS);
+            }}
+            className="flex items-center justify-center gap-2 bg-pink-600 text-white px-5 py-3 rounded-xl font-bold shadow hover:bg-pink-700 transition-all shrink-0 w-full sm:w-auto"
+          >
+            <Plus className="w-4 h-4" /> New collaborator
+          </button>
+        </div>
       </div>
 
       {colaboradores.length === 0 ? (
@@ -459,14 +538,14 @@ export function GestionAdmins() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
-                {colaboradores.map((colaborador) => {
+                {colaboradoresOrdenados.map((colaborador) => {
                   const protegido = esColaboradorProtegido(colaborador);
 
                   return (
                     <tr key={colaborador.id} className="hover:bg-slate-50/50 transition-colors">
                       <td className="px-5 py-4">
                         <div className="flex items-center gap-2">
-                          <span className="font-bold text-slate-900 truncate max-w-[200px]">
+                          <span className="font-bold text-slate-900 truncate max-w-50">
                             {colaborador.nombre}
                           </span>
                           {protegido && (
@@ -476,7 +555,7 @@ export function GestionAdmins() {
                           )}
                         </div>
                       </td>
-                      <td className="px-5 py-4 text-slate-500 truncate max-w-[250px]">
+                      <td className="px-5 py-4 text-slate-500 truncate max-w-62.5">
                         {colaborador.email}
                       </td>
                       <td className="px-5 py-4">
@@ -524,6 +603,24 @@ export function GestionAdmins() {
                             </Tooltip>
                           )}
 
+                          <Tooltip
+                            texto={
+                              protegido ? 'Protected account — cannot modify' : 'Edit collaborator'
+                            }
+                          >
+                            <button
+                              onClick={() => {
+                                if (protegido) return;
+                                abrirEdicionGeneral(colaborador);
+                              }}
+                              aria-label={`Edit collaborator ${colaborador.nombre}`}
+                              aria-disabled={protegido}
+                              className={`p-2 rounded-xl transition-all ${protegido ? 'opacity-40 cursor-not-allowed bg-slate-50' : 'hover:bg-slate-100'}`}
+                            >
+                              <Pencil className="w-4 h-4 text-slate-600" />
+                            </button>
+                          </Tooltip>
+
                           {!colaborador.activo && !protegido && (
                             <button
                               onClick={() => activarColaborador.mutate(colaborador.id)}
@@ -569,11 +666,11 @@ export function GestionAdmins() {
                                   <button
                                     onClick={() => {
                                       setAccionesAbiertas(null);
-                                      setColaboradorEliminar(colaborador);
+                                      abrirEdicionGeneral(colaborador);
                                     }}
-                                    className="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-sm font-semibold text-red-600 hover:bg-red-50"
+                                    className="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
                                   >
-                                    <Trash2 className="w-4 h-4" /> Delete permanently
+                                    <Pencil className="w-4 h-4" /> Edit details
                                   </button>
                                 </div>
                               )}
@@ -590,7 +687,7 @@ export function GestionAdmins() {
 
           {/* Mobile: Tarjetas */}
           <div className="md:hidden divide-y divide-slate-100">
-            {colaboradores.map((colaborador) => {
+            {colaboradoresOrdenados.map((colaborador) => {
               const protegido = esColaboradorProtegido(colaborador);
 
               return (
@@ -614,6 +711,18 @@ export function GestionAdmins() {
                           <Settings className="w-4 h-4 text-slate-600" />
                         </button>
                       )}
+
+                      <button
+                        onClick={() => {
+                          if (protegido) return;
+                          abrirEdicionGeneral(colaborador);
+                        }}
+                        aria-label={`Edit collaborator ${colaborador.nombre}`}
+                        aria-disabled={protegido}
+                        className={`p-2 rounded-xl transition-all ${protegido ? 'opacity-40 cursor-not-allowed' : 'hover:bg-slate-100'}`}
+                      >
+                        <Pencil className="w-4 h-4 text-slate-600" />
+                      </button>
 
                       {!colaborador.activo && !protegido && (
                         <button
@@ -651,11 +760,11 @@ export function GestionAdmins() {
                               <button
                                 onClick={() => {
                                   setAccionesAbiertas(null);
-                                  setColaboradorEliminar(colaborador);
+                                  abrirEdicionGeneral(colaborador);
                                 }}
-                                className="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-sm font-semibold text-red-600 hover:bg-red-50"
+                                className="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
                               >
-                                <Trash2 className="w-4 h-4" /> Delete permanently
+                                <Pencil className="w-4 h-4" /> Edit details
                               </button>
                             </div>
                           )}
@@ -705,10 +814,22 @@ export function GestionAdmins() {
         >
           <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg max-h-screen overflow-y-auto p-6">
             <h3 id="titulo-nuevo-colaborador" className="text-xl font-black text-slate-900 mb-6">
-              New collaborator
+              {colaboradorEdicionGeneral ? 'Edit collaborator' : 'New collaborator'}
             </h3>
             <form
-              onSubmit={handleSubmit((datos) => crearColaborador.mutate(datos))}
+              onSubmit={handleSubmit((datos) => {
+                if (!colaboradorEdicionGeneral && !datos.contrasena.trim()) {
+                  mostrarToast('Password is required for a new collaborator');
+                  return;
+                }
+
+                if (colaboradorEdicionGeneral) {
+                  actualizarColaborador.mutate({ ...datos, id: colaboradorEdicionGeneral.id });
+                  return;
+                }
+
+                crearColaborador.mutate(datos);
+              })}
               className="space-y-4"
             >
               {/* Cargo */}
@@ -892,10 +1013,18 @@ export function GestionAdmins() {
                 </button>
                 <button
                   type="submit"
-                  disabled={isSubmitting || crearColaborador.isPending}
+                  disabled={
+                    isSubmitting || crearColaborador.isPending || actualizarColaborador.isPending
+                  }
                   className="px-6 py-2 rounded-xl bg-pink-600 text-white font-bold hover:bg-pink-700 transition-all disabled:opacity-50"
                 >
-                  {crearColaborador.isPending ? 'Creating...' : 'Create collaborator'}
+                  {colaboradorEdicionGeneral
+                    ? actualizarColaborador.isPending
+                      ? 'Saving...'
+                      : 'Save collaborator'
+                    : crearColaborador.isPending
+                      ? 'Creating...'
+                      : 'Create collaborator'}
                 </button>
               </div>
             </form>
@@ -997,20 +1126,6 @@ export function GestionAdmins() {
           </div>
         </div>
       )}
-
-      <DialogoConfirmacion
-        abierto={colaboradorEliminar !== null}
-        mensaje="Delete collaborator"
-        descripcion="This action is permanent and irreversible. The collaborator and all their audit history will be deleted."
-        textoConfirmar="Delete permanently"
-        variante="peligro"
-        cargando={eliminarColaborador.isPending}
-        onCancelar={() => setColaboradorEliminar(null)}
-        onConfirmar={() => {
-          if (!colaboradorEliminar) return;
-          eliminarColaborador.mutate(colaboradorEliminar.id);
-        }}
-      />
     </section>
   );
 }

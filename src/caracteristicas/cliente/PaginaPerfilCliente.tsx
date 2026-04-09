@@ -5,7 +5,6 @@ import { NavegacionCliente } from '../../componentes/diseno/NavegacionCliente';
 import { DialogoConfirmacion } from '../../componentes/ui/DialogoConfirmacion';
 import { Spinner } from '../../componentes/ui/Spinner';
 import { SelectorFecha } from '../../componentes/ui/SelectorFecha';
-import { usarTemaSalon } from '../../hooks/usarTemaSalon';
 import { usarNotificacionesPush } from '../../hooks/usarNotificacionesPush';
 import { usarPerfilCliente } from './hooks/usarPerfilCliente';
 import { formatearDinero } from '../../utils/formato';
@@ -546,8 +545,10 @@ export function PaginaPerfilCliente() {
   const [confirmacionGuardadoVisible, setConfirmacionGuardadoVisible] = useState(false);
   const [emailNuevo, setEmailNuevo] = useState('');
   const [colorCliente, setColorCliente] = useState('#F48FB1');
-  const vistaActiva = ubicacion.hash === '#reservas' ? 'reservas' : 'perfil';
-  const pestanaReservasInicial = ubicacion.hash === '#reservas' ? 'proximas' : 'historial';
+  const vistaSolicitada = new URLSearchParams(ubicacion.search).get('vista');
+  const vistaActiva =
+    vistaSolicitada === 'reservas' || ubicacion.hash === '#reservas' ? 'reservas' : 'perfil';
+  const pestanaReservasInicial = vistaActiva === 'reservas' ? 'proximas' : 'historial';
 
   useEffect(() => {
     if (!perfil) {
@@ -558,8 +559,6 @@ export function PaginaPerfilCliente() {
     const colorGuardado = localStorage.getItem(`color_cliente_${perfil.id}`);
     setColorCliente(colorGuardado ?? '#F48FB1');
   }, [perfil]);
-
-  usarTemaSalon(colorCliente);
 
   useEffect(() => {
     if (!confirmacionGuardadoVisible) {
@@ -636,13 +635,13 @@ export function PaginaPerfilCliente() {
         <section className="bg-white border border-slate-100 rounded-3xl p-2 shadow-sm">
           <div className="grid grid-cols-2 gap-2">
             <Link
-              to="/mi-perfil"
+              to="/cliente/perfil"
               className={`rounded-2xl px-4 py-3 text-sm font-black text-center transition-colors ${vistaActiva === 'perfil' ? 'bg-pink-600 text-white' : 'text-slate-600 hover:bg-slate-50'}`}
             >
               Mi perfil
             </Link>
             <Link
-              to="/mi-perfil#reservas"
+              to="/cliente/perfil?vista=reservas"
               className={`rounded-2xl px-4 py-3 text-sm font-black text-center transition-colors ${vistaActiva === 'reservas' ? 'bg-pink-600 text-white' : 'text-slate-600 hover:bg-slate-50'}`}
             >
               Mis reservas

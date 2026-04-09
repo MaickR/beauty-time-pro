@@ -41,7 +41,7 @@ export function NavegacionCliente() {
     ? (localStorage.getItem(`color_cliente_${consultaPerfil.data.id}`) ?? '#F48FB1')
     : '#F48FB1';
 
-  usarTemaSalon(colorCliente);
+  usarTemaSalon(colorCliente, { restaurarAlDesmontar: true });
 
   // Cerrar menú al clic exterior
   useEffect(() => {

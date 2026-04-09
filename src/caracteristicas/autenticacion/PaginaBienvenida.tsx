@@ -1,10 +1,34 @@
+import { useQuery } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 import { CheckCircle2, Scissors } from 'lucide-react';
 import { usarTituloPagina } from '../../hooks/usarTituloPagina';
+import { obtenerPreciosPublicos } from '../../servicios/servicioPreciosPlanes';
+import { formatearDinero } from '../../utils/formato';
+
+function obtenerPrecioPlan(
+  precios: Awaited<ReturnType<typeof obtenerPreciosPublicos>> | undefined,
+  plan: 'STANDARD' | 'PRO',
+) {
+  const precioMexico = precios?.find((precio) => precio.plan === plan && precio.pais === 'Mexico');
+  const precioColombia = precios?.find(
+    (precio) => precio.plan === plan && precio.pais === 'Colombia',
+  );
+
+  if (!precioMexico || !precioColombia) {
+    return 'Loading prices...';
+  }
+
+  return `${formatearDinero(precioMexico.monto, 'MXN')} / ${formatearDinero(precioColombia.monto, 'COP')}`;
+}
 
 export function PaginaBienvenida() {
   usarTituloPagina('Bienvenido — Beauty Time Pro');
   const navegar = useNavigate();
+  const { data: preciosPublicos } = useQuery({
+    queryKey: ['precios-publicos'],
+    queryFn: obtenerPreciosPublicos,
+    staleTime: 60_000,
+  });
 
   return (
     <div className="min-h-screen bg-[radial-gradient(circle_at_top_left,_rgba(194,24,91,0.14),_transparent_32%),radial-gradient(circle_at_bottom_right,_rgba(240,98,146,0.14),_transparent_34%),linear-gradient(180deg,_#fff8fb_0%,_#ffffff_42%,_#fafafa_100%)]">
@@ -85,7 +109,7 @@ export function PaginaBienvenida() {
             <article className="rounded-2xl border border-[var(--color-borde)] bg-[var(--color-superficie)] p-5">
               <p className="text-xs font-black uppercase tracking-tight text-pink-700">Standard</p>
               <p className="mt-2 text-lg font-black text-[var(--color-texto)]">
-                $700 MXN / $147,000 COP
+                {obtenerPrecioPlan(preciosPublicos, 'STANDARD')}
               </p>
               <ul className="mt-4 space-y-2 text-sm text-[var(--color-texto-suave)]">
                 <li className="flex items-center gap-2">
@@ -105,7 +129,7 @@ export function PaginaBienvenida() {
             <article className="rounded-2xl border border-[var(--color-borde)] bg-[var(--color-superficie)] p-5">
               <p className="text-xs font-black uppercase tracking-tight text-pink-700">Pro</p>
               <p className="mt-2 text-lg font-black text-[var(--color-texto)]">
-                $1,000 MXN / $210,000 COP
+                {obtenerPrecioPlan(preciosPublicos, 'PRO')}
               </p>
               <ul className="mt-4 space-y-2 text-sm text-[var(--color-texto-suave)]">
                 <li className="flex items-center gap-2">

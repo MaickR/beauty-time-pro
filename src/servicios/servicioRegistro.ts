@@ -3,31 +3,49 @@ import type { Servicio, ServicioPersonalizado, TurnoTrabajo, Pais } from '../tip
 
 export class ErrorServicioRegistro extends Error {
   codigo?: string;
+  campos?: Record<string, string>;
+  segundosRestantes?: number;
 
-  constructor(mensaje: string, codigo?: string) {
+  constructor(
+    mensaje: string,
+    codigo?: string,
+    opciones?: {
+      campos?: Record<string, string>;
+      segundosRestantes?: number;
+    },
+  ) {
     super(mensaje);
     this.name = 'ErrorServicioRegistro';
     this.codigo = codigo;
+    this.campos = opciones?.campos;
+    this.segundosRestantes = opciones?.segundosRestantes;
   }
 }
 
 interface RespuestaRegistroCliente {
   datos: {
     mensaje: string;
+    clienteId?: string;
+    email?: string;
     enlaceVerificacion?: string;
+    expiraEn?: string;
+    reenviarEnSegundos?: number;
   };
 }
 
 export interface ResultadoRegistro {
   mensaje: string;
+  clienteId?: string;
+  email?: string;
   enlaceVerificacion?: string;
+  expiraEn?: string;
+  reenviarEnSegundos?: number;
 }
 
 interface DatosRegistroCliente {
   email: string;
   contrasena: string;
-  nombre: string;
-  apellido: string;
+  nombreCompleto: string;
   fechaNacimiento: string;
   pais: Pais;
   ciudad?: string;
@@ -72,6 +90,8 @@ interface RespuestaDisponibilidad {
 interface RespuestaErrorPublica {
   error?: string;
   codigo?: string;
+  campos?: Record<string, string>;
+  segundosRestantes?: number;
 }
 
 async function peticionPublica<T>(ruta: string, body: unknown): Promise<T> {
@@ -82,7 +102,10 @@ async function peticionPublica<T>(ruta: string, body: unknown): Promise<T> {
   });
   const json = (await respuesta.json()) as T & RespuestaErrorPublica;
   if (!respuesta.ok) {
-    throw new ErrorServicioRegistro(json.error ?? `Error ${respuesta.status}`, json.codigo);
+    throw new ErrorServicioRegistro(json.error ?? `Error ${respuesta.status}`, json.codigo, {
+      campos: json.campos,
+      segundosRestantes: json.segundosRestantes,
+    });
   }
   return json;
 }
@@ -92,11 +115,25 @@ export async function registrarCliente(datos: DatosRegistroCliente): Promise<Res
   return resultado.datos;
 }
 
-export async function verificarEmailCliente(token: string): Promise<{ mensaje: string }> {
-  const resultado = await peticionPublica<RespuestaRegistroCliente>('/registro/verificar-email', {
-    token,
-  });
+export async function verificarEmailCliente(datos: {
+  token?: string;
+  clienteId?: string;
+  codigo?: string;
+}): Promise<{ mensaje: string }> {
+  const resultado = await peticionPublica<RespuestaRegistroCliente>(
+    '/registro/verificar-email',
+    datos,
+  );
   return { mensaje: resultado.datos.mensaje };
+}
+
+export async function reenviarCodigoVerificacionCliente(
+  clienteId: string,
+): Promise<ResultadoRegistro> {
+  const resultado = await peticionPublica<RespuestaRegistroCliente>('/registro/reenviar-codigo', {
+    clienteId,
+  });
+  return resultado.datos;
 }
 
 export async function registrarSalon(datos: DatosRegistroSalon): Promise<ResultadoRegistro> {

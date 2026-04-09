@@ -2,7 +2,7 @@ import { prisma } from '../prismaCliente.js';
 import type { Prisma } from '../generated/prisma/client.js';
 
 interface RegistrarAuditoriaParams {
-  usuarioId: string;
+  usuarioId?: string | null;
   accion: string;
   entidadTipo: string;
   entidadId: string;
@@ -13,7 +13,7 @@ interface RegistrarAuditoriaParams {
 export async function registrarAuditoria(params: RegistrarAuditoriaParams): Promise<void> {
   await prisma.auditLog.create({
     data: {
-      usuarioId: params.usuarioId,
+      usuarioId: params.usuarioId ?? null,
       accion: params.accion,
       entidadTipo: params.entidadTipo,
       entidadId: params.entidadId,

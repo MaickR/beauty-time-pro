@@ -207,6 +207,14 @@ function mapearEstudios(datos: Estudio[]): Estudio[] {
       cancelacionSolicitada: (d['cancelacionSolicitada'] as boolean) ?? false,
       fechaSolicitudCancelacion: (d['fechaSolicitudCancelacion'] as string | null) ?? null,
       motivoCancelacion: (d['motivoCancelacion'] as string | null) ?? null,
+      precioSuscripcionActual: (d['precioSuscripcionActual'] as number | null | undefined) ?? null,
+      monedaSuscripcion:
+        (d['monedaSuscripcion'] as import('../tipos').Moneda | null | undefined) ?? null,
+      precioSuscripcionProximo:
+        (d['precioSuscripcionProximo'] as number | null | undefined) ?? null,
+      fechaAplicacionPrecioProximo:
+        (d['fechaAplicacionPrecioProximo'] as string | null | undefined) ?? null,
+      precioRenovacion: (d['precioRenovacion'] as number | null | undefined) ?? null,
       pinCancelacionConfigurado: (d['pinCancelacionConfigurado'] as boolean) ?? false,
     } as Estudio;
   });

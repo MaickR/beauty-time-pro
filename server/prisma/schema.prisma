@@ -60,6 +60,9 @@ model Estudio {
   suscripcion       String       @default("mensual")
   inicioSuscripcion String       // "YYYY-MM-DD"
   fechaVencimiento  String       // "YYYY-MM-DD"
+  precioPlanActualId        String?
+  precioPlanProximoId       String?
+  fechaAplicacionPrecioProximo String?
   horario           Json         // Record<string, TurnoTrabajo>
   servicios         Json         // Servicio[]
   serviciosCustom   Json         // ServicioPersonalizado[]
@@ -84,6 +87,8 @@ model Estudio {
   actualizadoEn     DateTime     @updatedAt
 
   vendedor          Usuario?     @relation("EstudioVendedor", fields: [vendedorId], references: [id])
+  precioPlanActual  PrecioPlan?  @relation("PrecioPlanActual", fields: [precioPlanActualId], references: [id], onDelete: SetNull)
+  precioPlanProximo PrecioPlan?  @relation("PrecioPlanProximo", fields: [precioPlanProximoId], references: [id], onDelete: SetNull)
   personal          Personal[]
   reservas          Reserva[]
   pagos             Pago[]
@@ -104,6 +109,27 @@ model Estudio {
   @@index([fechaVencimiento])
   @@index([vendedorAsociado])
   @@index([vendedorId])
+  @@index([precioPlanActualId])
+  @@index([precioPlanProximoId])
+}
+
+model PrecioPlan {
+  id          String      @id @default(uuid())
+  plan        PlanEstudio
+  pais        String
+  moneda      String
+  monto       Int
+  version     Int
+  vigenteDesde DateTime   @default(now())
+  creadoEn    DateTime    @default(now())
+  actualizadoEn DateTime  @updatedAt
+
+  estudiosActuales Estudio[] @relation("PrecioPlanActual")
+  estudiosProximos Estudio[] @relation("PrecioPlanProximo")
+
+  @@map("precios_plan")
+  @@unique([plan, pais, version])
+  @@index([plan, pais, vigenteDesde])
 }
 
 // ─── Preregistro de salón por vendedor ──────────────────
@@ -167,14 +193,38 @@ model TokenVerificacionApp {
   id          String      @id @default(uuid())
   token       String      @unique @default(uuid())
   tipo        String      // "verificacion_email" | "reset_contrasena"
+  codigoHash  String?
   usuarioId   String?
   clienteId   String?
   clienteApp  ClienteApp? @relation(fields: [clienteId], references: [id])
   expiraEn    DateTime
   usado       Boolean     @default(false)
+  ultimoEnvioEn DateTime   @default(now())
+  intentosFallidos Int     @default(0)
   creadoEn    DateTime    @default(now())
 
   @@map("tokens_verificacion_app")
+  @@index([clienteId, tipo, usado, expiraEn])
+}
+
+model SesionAutenticacion {
+  id               String   @id @default(uuid())
+  sujetoTipo       String
+  sujetoId         String
+  refreshTokenHash String
+  csrfTokenHash    String
+  userAgent        String?
+  ip               String?
+  expiraEn         DateTime
+  ultimoUsoEn      DateTime @default(now())
+  revocadaEn       DateTime?
+  motivoRevocacion String?
+  creadaEn         DateTime @default(now())
+  actualizadaEn    DateTime @updatedAt
+
+  @@map("sesiones_autenticacion")
+  @@index([sujetoTipo, sujetoId, revocadaEn])
+  @@index([expiraEn])
 }
 
 model CorreoPendiente {
@@ -510,8 +560,8 @@ model PermisosSupervisor {
 
 model AuditLog {
   id          String   @id @default(uuid())
-  usuarioId   String
-  usuario     Usuario  @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
+  usuarioId   String?
+  usuario     Usuario? @relation(fields: [usuarioId], references: [id], onDelete: SetNull)
   accion      String
   entidadTipo String
   entidadId   String

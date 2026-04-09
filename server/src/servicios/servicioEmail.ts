@@ -149,12 +149,17 @@ export async function enviarEmailResetContrasena(emailDestino: string, token: st
 export async function enviarEmailVerificacionCliente(datos: {
   emailDestino: string;
   nombreCliente: string;
-  enlaceVerificacion: string;
+  enlaceVerificacion?: string;
+  codigoVerificacion?: string;
+  titulo?: string;
+  mensajePrincipal?: string;
+  mensajeSecundario?: string;
+  asunto?: string;
 }): Promise<void> {
   const html = crearTemplateVerificacionCliente(datos);
   await encolarEmailRenderizado({
     destinatario: datos.emailDestino,
-    asunto: 'Verifica tu correo — Beauty Time Pro',
+    asunto: datos.asunto ?? 'Verifica tu correo — Beauty Time Pro',
     html,
   });
 }
@@ -307,6 +312,67 @@ export async function enviarEmailPagoConfirmado(params: {
   await encolarEmailRenderizado({
     destinatario: params.email,
     asunto: `Pago confirmado — ${params.nombreSalon}`,
+    html,
+  });
+}
+
+export async function enviarEmailCambioPrecioPlan(params: {
+  email: string;
+  nombreDueno: string;
+  nombreSalon: string;
+  plan: 'STANDARD' | 'PRO';
+  moneda: 'MXN' | 'COP';
+  precioAnterior: number;
+  precioNuevo: number;
+  fechaEntradaVigor: string;
+}): Promise<void> {
+  const locale = params.moneda === 'COP' ? 'es-CO' : 'es-MX';
+  const precioAnterior = new Intl.NumberFormat(locale, {
+    style: 'currency',
+    currency: params.moneda,
+    minimumFractionDigits: params.moneda === 'COP' ? 0 : 2,
+    maximumFractionDigits: params.moneda === 'COP' ? 0 : 2,
+  }).format(params.precioAnterior / 100);
+  const precioNuevo = new Intl.NumberFormat(locale, {
+    style: 'currency',
+    currency: params.moneda,
+    minimumFractionDigits: params.moneda === 'COP' ? 0 : 2,
+    maximumFractionDigits: params.moneda === 'COP' ? 0 : 2,
+  }).format(params.precioNuevo / 100);
+  const nombrePlan = params.plan === 'PRO' ? 'Pro' : 'Standard';
+
+  const html = `
+    <!DOCTYPE html>
+    <html lang="es">
+    <head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"></head>
+    <body style="margin:0;padding:0;background:#f8fafc;font-family:system-ui,sans-serif;">
+      <div style="max-width:560px;margin:40px auto;background:#fff;border-radius:16px;overflow:hidden;box-shadow:0 2px 8px rgba(0,0,0,.08);">
+        <div style="background:#C2185B;padding:32px 40px;">
+          <h1 style="margin:0;color:#fff;font-size:22px;font-weight:800;">Beauty Time Pro</h1>
+          <p style="margin:8px 0 0;color:rgba(255,255,255,.85);font-size:14px;">Actualización de precio del plan</p>
+        </div>
+        <div style="padding:40px;">
+          <p style="color:#475569;font-size:15px;line-height:1.6;margin:0 0 20px;">
+            Hola ${params.nombreDueno}, el precio de tu plan <strong>${nombrePlan}</strong> para <strong>${params.nombreSalon}</strong> cambiará en tu próximo corte.
+          </p>
+          <div style="background:#fff1f2;border:1px solid #fbcfe8;border-radius:14px;padding:20px;margin-bottom:24px;">
+            <p style="margin:0 0 8px;font-size:13px;color:#9d174d;font-weight:700;">Resumen del cambio</p>
+            <p style="margin:0 0 6px;font-size:15px;color:#0f172a;"><strong>Precio actual:</strong> ${precioAnterior}</p>
+            <p style="margin:0 0 6px;font-size:15px;color:#0f172a;"><strong>Nuevo precio:</strong> ${precioNuevo}</p>
+            <p style="margin:0;font-size:15px;color:#0f172a;"><strong>Entrada en vigor:</strong> ${params.fechaEntradaVigor}</p>
+          </div>
+          <p style="color:#64748b;font-size:14px;line-height:1.6;margin:0;">
+            Tu suscripción mantendrá el precio anterior hasta esa fecha. A partir del siguiente período se aplicará el nuevo monto automáticamente.
+          </p>
+        </div>
+      </div>
+    </body>
+    </html>
+  `;
+
+  await encolarEmailRenderizado({
+    destinatario: params.email,
+    asunto: `Cambio de precio programado — ${params.nombreSalon}`,
     html,
   });
 }

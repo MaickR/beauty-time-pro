@@ -128,8 +128,7 @@ export function MetricasGlobales() {
         <TarjetaMetrica
           icono={<Store className="w-5 h-5" />}
           etiqueta="Total Salones"
-          valor={data.totalSalones}
-          descripcion={`${data.salonesNuevosUltimos30Dias} nuevos en los últimos 30 días`}
+          valor={data.salonesActivos + data.salonesSuspendidos}
           colorFondo="bg-slate-100"
           colorIcono="text-slate-600"
           onClick={() => setModalActivo('total-salones')}
@@ -138,7 +137,6 @@ export function MetricasGlobales() {
           icono={<ShieldCheck className="w-5 h-5" />}
           etiqueta="Control de salones"
           valor={data.salonesActivos}
-          descripcion={`${data.salonesSuspendidos} suspendidos`}
           colorFondo="bg-green-100"
           colorIcono="text-green-600"
           colorTexto="text-green-700"
@@ -148,7 +146,6 @@ export function MetricasGlobales() {
           icono={<CalendarDays className="w-5 h-5" />}
           etiqueta="Reservas"
           valor={data.reservasHoy}
-          descripcion={`${data.reservasUltimos30Dias.toLocaleString('es-MX')} en los últimos 30 días`}
           colorFondo="bg-pink-100"
           colorIcono="text-pink-600"
           onClick={() => setModalActivo('reservas')}
@@ -157,7 +154,6 @@ export function MetricasGlobales() {
           icono={<Wallet className="w-5 h-5" />}
           etiqueta="Ventas"
           valor={resumirIngresos(data.ingresosPorMoneda)}
-          descripcion="Ingresos por moneda"
           colorFondo="bg-emerald-100"
           colorIcono="text-emerald-700"
           onClick={() => setModalActivo('ventas')}

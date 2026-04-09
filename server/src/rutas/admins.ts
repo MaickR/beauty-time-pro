@@ -4,6 +4,7 @@ import crypto from 'node:crypto';
 import { prisma } from '../prismaCliente.js';
 import { esEmailAdminProtegido, verificarJWT } from '../middleware/autenticacion.js';
 import { requierePermiso } from '../middleware/verificarPermiso.js';
+import { revocarSesionesPorSujeto } from '../lib/sesionesAuth.js';
 import { registrarAuditoria } from '../utils/auditoria.js';
 
 const ROLES_COLABORADOR = ['maestro', 'supervisor', 'vendedor'] as const;
@@ -71,6 +72,40 @@ function normalizarPermisos(
   return permisosBase;
 }
 
+function normalizarPermisosSupervisor(
+  permisosSupervisor:
+    | {
+        verTotalSalones?: boolean;
+        verControlSalones?: boolean;
+        verReservas?: boolean;
+        verVentas?: boolean;
+        verDirectorio?: boolean;
+        editarDirectorio?: boolean;
+        verControlCobros?: boolean;
+        accionRecordatorio?: boolean;
+        accionRegistroPago?: boolean;
+        accionSuspension?: boolean;
+        activarSalones?: boolean;
+        verPreregistros?: boolean;
+      }
+    | undefined,
+) {
+  return {
+    verTotalSalones: permisosSupervisor?.verTotalSalones ?? false,
+    verControlSalones: permisosSupervisor?.verControlSalones ?? false,
+    verReservas: permisosSupervisor?.verReservas ?? false,
+    verVentas: permisosSupervisor?.verVentas ?? false,
+    verDirectorio: permisosSupervisor?.verDirectorio ?? false,
+    editarDirectorio: permisosSupervisor?.editarDirectorio ?? false,
+    verControlCobros: permisosSupervisor?.verControlCobros ?? false,
+    accionRecordatorio: permisosSupervisor?.accionRecordatorio ?? false,
+    accionRegistroPago: permisosSupervisor?.accionRegistroPago ?? false,
+    accionSuspension: permisosSupervisor?.accionSuspension ?? false,
+    activarSalones: permisosSupervisor?.activarSalones ?? false,
+    verPreregistros: permisosSupervisor?.verPreregistros ?? false,
+  };
+}
+
 export async function rutasAdmins(servidor: FastifyInstance): Promise<void> {
   /**
    * GET /admin/admins — Lista todos los colaboradores (admins, supervisores, vendedores)
@@ -117,7 +152,7 @@ export async function rutasAdmins(servidor: FastifyInstance): Promise<void> {
             },
           },
         },
-        orderBy: { creadoEn: 'asc' },
+        orderBy: [{ activo: 'desc' }, { creadoEn: 'asc' }],
       });
 
       return respuesta.send({
@@ -211,18 +246,7 @@ export async function rutasAdmins(servidor: FastifyInstance): Promise<void> {
         await prisma.permisosSupervisor.create({
           data: {
             usuarioId: nuevoColaborador.id,
-            verTotalSalones: permisosSupervisor.verTotalSalones ?? false,
-            verControlSalones: permisosSupervisor.verControlSalones ?? false,
-            verReservas: permisosSupervisor.verReservas ?? false,
-            verVentas: permisosSupervisor.verVentas ?? false,
-            verDirectorio: permisosSupervisor.verDirectorio ?? false,
-            editarDirectorio: permisosSupervisor.editarDirectorio ?? false,
-            verControlCobros: permisosSupervisor.verControlCobros ?? false,
-            accionRecordatorio: permisosSupervisor.accionRecordatorio ?? false,
-            accionRegistroPago: permisosSupervisor.accionRegistroPago ?? false,
-            accionSuspension: permisosSupervisor.accionSuspension ?? false,
-            activarSalones: permisosSupervisor.activarSalones ?? false,
-            verPreregistros: permisosSupervisor.verPreregistros ?? false,
+            ...normalizarPermisosSupervisor(permisosSupervisor),
           },
         });
       }
@@ -240,6 +264,164 @@ export async function rutasAdmins(servidor: FastifyInstance): Promise<void> {
       return respuesta.code(201).send({
         datos: { mensaje: 'Colaborador creado correctamente', id: nuevoColaborador.id },
       });
+    },
+  );
+
+  servidor.put<{
+    Params: { id: string };
+    Body: {
+      email?: string;
+      nombre?: string;
+      contrasena?: string;
+      cargo?: string;
+      permisos?: {
+        aprobarSalones?: boolean;
+        gestionarPagos?: boolean;
+        crearAdmins?: boolean;
+        verAuditLog?: boolean;
+        verMetricas?: boolean;
+        suspenderSalones?: boolean;
+        esMaestroTotal?: boolean;
+      };
+      permisosSupervisor?: {
+        verTotalSalones?: boolean;
+        verControlSalones?: boolean;
+        verReservas?: boolean;
+        verVentas?: boolean;
+        verDirectorio?: boolean;
+        editarDirectorio?: boolean;
+        verControlCobros?: boolean;
+        accionRecordatorio?: boolean;
+        accionRegistroPago?: boolean;
+        accionSuspension?: boolean;
+        activarSalones?: boolean;
+        verPreregistros?: boolean;
+      };
+    };
+  }>(
+    '/admin/admins/:id',
+    { preHandler: [verificarJWT, requierePermiso('crearAdmins')] },
+    async (solicitud, respuesta) => {
+      const payload = solicitud.user as { sub: string };
+      const { id } = solicitud.params;
+      const { email, nombre, contrasena, cargo, permisos, permisosSupervisor } = solicitud.body;
+
+      const colaborador = await prisma.usuario.findUnique({
+        where: { id },
+        select: {
+          id: true,
+          email: true,
+          nombre: true,
+          rol: true,
+          activo: true,
+        },
+      });
+
+      if (!colaborador || !esRolColaboradorValido(colaborador.rol)) {
+        return respuesta.code(404).send({ error: 'Colaborador no encontrado' });
+      }
+
+      if (id === payload.sub) {
+        return respuesta.code(403).send({ error: 'No puedes modificar tu propia cuenta desde este panel.' });
+      }
+
+      if (esAdminProtegido(colaborador)) {
+        return respuesta.code(403).send({ error: 'Este administrador no puede ser modificado ni eliminado.' });
+      }
+
+      const emailNormalizado = email?.trim().toLowerCase();
+      const cargoNormalizado = cargo?.trim();
+      const siguienteCargo =
+        cargoNormalizado && esRolColaboradorValido(cargoNormalizado)
+          ? cargoNormalizado
+          : colaborador.rol;
+
+      if (cargoNormalizado && !esRolColaboradorValido(cargoNormalizado)) {
+        return respuesta.code(400).send({ error: 'El cargo debe ser: maestro, supervisor o vendedor' });
+      }
+
+      if (emailNormalizado && emailNormalizado !== colaborador.email) {
+        const existente = await prisma.usuario.findUnique({
+          where: { email: emailNormalizado },
+          select: { id: true },
+        });
+
+        if (existente && existente.id !== colaborador.id) {
+          return respuesta.code(409).send({ error: 'El correo ya está registrado' });
+        }
+      }
+
+      if (contrasena && contrasena.length < 8) {
+        return respuesta.code(400).send({ error: 'La contraseña debe tener al menos 8 caracteres' });
+      }
+
+      const actualizacionUsuario: Record<string, unknown> = {};
+      if (typeof nombre === 'string' && nombre.trim()) {
+        actualizacionUsuario['nombre'] = nombre.trim();
+      }
+      if (emailNormalizado) {
+        actualizacionUsuario['email'] = emailNormalizado;
+      }
+      if (cargoNormalizado && cargoNormalizado !== colaborador.rol) {
+        actualizacionUsuario['rol'] = cargoNormalizado;
+      }
+      if (contrasena) {
+        actualizacionUsuario['hashContrasena'] = await bcrypt.hash(contrasena, 12);
+      }
+
+      await prisma.$transaction(async (tx) => {
+        if (Object.keys(actualizacionUsuario).length > 0) {
+          await tx.usuario.update({ where: { id }, data: actualizacionUsuario });
+        }
+
+        if (siguienteCargo === 'maestro') {
+          if (colaborador.rol !== 'maestro' || permisos !== undefined) {
+            await tx.permisosMaestro.upsert({
+              where: { usuarioId: id },
+              create: { usuarioId: id, ...normalizarPermisos(permisos) },
+              update: normalizarPermisos(permisos),
+            });
+          }
+          await tx.permisosSupervisor.deleteMany({ where: { usuarioId: id } });
+        } else if (siguienteCargo === 'supervisor') {
+          if (colaborador.rol !== 'supervisor' || permisosSupervisor !== undefined) {
+            await tx.permisosSupervisor.upsert({
+              where: { usuarioId: id },
+              create: { usuarioId: id, ...normalizarPermisosSupervisor(permisosSupervisor) },
+              update: normalizarPermisosSupervisor(permisosSupervisor),
+            });
+          }
+          await tx.permisosMaestro.deleteMany({ where: { usuarioId: id } });
+        } else {
+          await tx.permisosMaestro.deleteMany({ where: { usuarioId: id } });
+          await tx.permisosSupervisor.deleteMany({ where: { usuarioId: id } });
+        }
+      });
+
+      await revocarSesionesPorSujeto('usuario', id, 'colaborador_actualizado');
+
+      await registrarAuditoria({
+        usuarioId: payload.sub,
+        accion: 'actualizar_colaborador',
+        entidadTipo: 'usuario',
+        entidadId: id,
+        detalles: {
+          antes: {
+            email: colaborador.email,
+            nombre: colaborador.nombre,
+            rol: colaborador.rol,
+          },
+          despues: {
+            email: emailNormalizado ?? colaborador.email,
+            nombre: typeof nombre === 'string' && nombre.trim() ? nombre.trim() : colaborador.nombre,
+            rol: siguienteCargo,
+          },
+          sesionRevocada: true,
+        },
+        ip: solicitud.ip,
+      });
+
+      return respuesta.send({ datos: { mensaje: 'Colaborador actualizado correctamente' } });
     },
   );
 
@@ -311,6 +493,8 @@ export async function rutasAdmins(servidor: FastifyInstance): Promise<void> {
           ip: solicitud.ip,
         });
 
+        await revocarSesionesPorSujeto('usuario', id, 'permisos_actualizados');
+
         return respuesta.send({ datos: permisosActualizados });
       }
 
@@ -320,33 +504,9 @@ export async function rutasAdmins(servidor: FastifyInstance): Promise<void> {
           where: { usuarioId: id },
           create: {
             usuarioId: id,
-            verTotalSalones: ps.verTotalSalones ?? false,
-            verControlSalones: ps.verControlSalones ?? false,
-            verReservas: ps.verReservas ?? false,
-            verVentas: ps.verVentas ?? false,
-            verDirectorio: ps.verDirectorio ?? false,
-            editarDirectorio: ps.editarDirectorio ?? false,
-            verControlCobros: ps.verControlCobros ?? false,
-            accionRecordatorio: ps.accionRecordatorio ?? false,
-            accionRegistroPago: ps.accionRegistroPago ?? false,
-            accionSuspension: ps.accionSuspension ?? false,
-            activarSalones: ps.activarSalones ?? false,
-            verPreregistros: ps.verPreregistros ?? false,
+            ...normalizarPermisosSupervisor(ps),
           },
-          update: {
-            verTotalSalones: ps.verTotalSalones ?? false,
-            verControlSalones: ps.verControlSalones ?? false,
-            verReservas: ps.verReservas ?? false,
-            verVentas: ps.verVentas ?? false,
-            verDirectorio: ps.verDirectorio ?? false,
-            editarDirectorio: ps.editarDirectorio ?? false,
-            verControlCobros: ps.verControlCobros ?? false,
-            accionRecordatorio: ps.accionRecordatorio ?? false,
-            accionRegistroPago: ps.accionRegistroPago ?? false,
-            accionSuspension: ps.accionSuspension ?? false,
-            activarSalones: ps.activarSalones ?? false,
-            verPreregistros: ps.verPreregistros ?? false,
-          },
+          update: normalizarPermisosSupervisor(ps),
         });
 
         await registrarAuditoria({
@@ -357,6 +517,8 @@ export async function rutasAdmins(servidor: FastifyInstance): Promise<void> {
           detalles: solicitud.body.permisosSupervisor as Record<string, unknown>,
           ip: solicitud.ip,
         });
+
+        await revocarSesionesPorSujeto('usuario', id, 'permisos_actualizados');
 
         return respuesta.send({ datos: permisosActualizados });
       }
@@ -393,6 +555,8 @@ export async function rutasAdmins(servidor: FastifyInstance): Promise<void> {
         where: { id },
         data: { activo: false },
       });
+
+      await revocarSesionesPorSujeto('usuario', id, 'colaborador_desactivado');
 
       await registrarAuditoria({
         usuarioId: payload.sub,

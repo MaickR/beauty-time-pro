@@ -7,17 +7,13 @@ import {
   formatearDinero,
   obtenerEstadoSuscripcion,
   obtenerMonedaPorPais,
+  formatearFechaHumana,
 } from '../../../utils/formato';
 import type { Estudio, EstadoSuscripcion } from '../../../tipos';
 
 const REGISTROS_POR_PAGINA = 10;
 const RETRASO_BUSQUEDA = 300;
 const UMBRAL_RECORDATORIO = 10;
-
-const PRECIO_MENSUAL_CENTAVOS: Record<string, number> = {
-  Mexico: 100_000,
-  Colombia: 20_000_000,
-};
 
 const PAISES_FILTRO = ['Todos', 'Mexico', 'Colombia'] as const;
 
@@ -178,11 +174,25 @@ interface PropsSubTabla {
 
 function obtenerDatosEstudio(estudio: Estudio) {
   const sub = obtenerEstadoSuscripcion(estudio);
-  const moneda = obtenerMonedaPorPais(estudio.country);
-  const precio = PRECIO_MENSUAL_CENTAVOS[estudio.country] ?? 100_000;
+  const moneda = estudio.monedaSuscripcion ?? obtenerMonedaPorPais(estudio.country);
+  const precioActual = estudio.precioSuscripcionActual ?? estudio.precioRenovacion ?? 0;
+  const precioProximo = estudio.precioSuscripcionProximo ?? null;
+  const fechaCambio = estudio.fechaAplicacionPrecioProximo ?? null;
+  const tieneCambioProgramado = Boolean(
+    precioProximo && fechaCambio && precioActual > 0 && precioProximo !== precioActual,
+  );
   const puedeRecordar = sub ? sub.daysRemaining <= UMBRAL_RECORDATORIO : false;
-  const estaSuspendido = estudio.estado === 'suspendido';
-  return { sub, moneda, precio, puedeRecordar, estaSuspendido };
+  const estaSuspendido = estudio.estado === 'suspendido' || estudio.estado === 'bloqueado';
+  return {
+    sub,
+    moneda,
+    precioActual,
+    precioProximo,
+    fechaCambio,
+    tieneCambioProgramado,
+    puedeRecordar,
+    estaSuspendido,
+  };
 }
 
 function EtiquetaVigencia({ sub }: { sub: EstadoSuscripcion | null }) {
@@ -219,7 +229,16 @@ function TarjetasMovil({
         </p>
       )}
       {estudios.map((e) => {
-        const { sub, moneda, precio, puedeRecordar, estaSuspendido } = obtenerDatosEstudio(e);
+        const {
+          sub,
+          moneda,
+          precioActual,
+          precioProximo,
+          fechaCambio,
+          tieneCambioProgramado,
+          puedeRecordar,
+          estaSuspendido,
+        } = obtenerDatosEstudio(e);
         return (
           <div key={e.id} className="flex flex-col gap-3 px-5 py-5">
             <div>
@@ -230,8 +249,14 @@ function TarjetasMovil({
             </div>
             <EtiquetaVigencia sub={sub} />
             <p className="text-sm font-bold text-slate-700">
-              {e.plan} · {formatearDinero(precio, moneda)}/mes
+              {e.plan} · {formatearDinero(precioActual, moneda)}/mes
             </p>
+            {tieneCambioProgramado && precioProximo && fechaCambio && (
+              <p className="text-xs font-medium text-slate-500">
+                Próximo precio: {formatearDinero(precioProximo, moneda)} desde{' '}
+                {formatearFechaHumana(fechaCambio)}
+              </p>
+            )}
             <div className="flex flex-col gap-2">
               <button
                 onClick={() => mutacionRecordatorio.mutate(e.id)}
@@ -253,7 +278,7 @@ function TarjetasMovil({
                 className="w-full rounded-xl border border-red-200 bg-red-50 px-4 py-2.5 text-[10px] font-black uppercase text-red-700 hover:bg-red-100 disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center gap-2 transition-colors"
               >
                 <ShieldAlert className="w-3 h-3" />{' '}
-                {mutacionSuspension.isPending ? 'Procesando...' : 'Aviso de suspensión'}
+                {mutacionSuspension.isPending ? 'Processing...' : 'Suspend salon'}
               </button>
             </div>
           </div>
@@ -284,7 +309,16 @@ function TablaEscritorio({
         </thead>
         <tbody className="divide-y divide-slate-100">
           {estudios.map((e) => {
-            const { sub, moneda, precio, puedeRecordar, estaSuspendido } = obtenerDatosEstudio(e);
+            const {
+              sub,
+              moneda,
+              precioActual,
+              precioProximo,
+              fechaCambio,
+              tieneCambioProgramado,
+              puedeRecordar,
+              estaSuspendido,
+            } = obtenerDatosEstudio(e);
             return (
               <tr key={e.id} className="hover:bg-slate-50 transition-colors">
                 <td className="px-6 py-5">
@@ -299,8 +333,14 @@ function TablaEscritorio({
                 <td className="px-6 py-5">
                   <p className="text-sm font-black text-slate-900">{e.plan}</p>
                   <p className="text-xs text-slate-500 mt-1">
-                    {formatearDinero(precio, moneda)}/mes
+                    {formatearDinero(precioActual, moneda)}/mes
                   </p>
+                  {tieneCambioProgramado && precioProximo && fechaCambio && (
+                    <p className="mt-2 text-[11px] font-medium text-slate-500">
+                      Próximo: {formatearDinero(precioProximo, moneda)} desde{' '}
+                      {formatearFechaHumana(fechaCambio)}
+                    </p>
+                  )}
                 </td>
                 <td className="px-6 py-5 text-right">
                   <div className="flex items-center justify-end gap-2">
@@ -328,8 +368,8 @@ function TablaEscritorio({
                     <button
                       onClick={() => mutacionSuspension.mutate(e.id)}
                       disabled={estaSuspendido || mutacionSuspension.isPending}
-                      aria-label="Aviso de suspensión"
-                      title={estaSuspendido ? 'Salón ya suspendido' : 'Aviso de suspensión'}
+                      aria-label="Suspend salon"
+                      title={estaSuspendido ? 'Salon already unavailable' : 'Suspend salon now'}
                       className="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-red-700 hover:bg-red-100 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
                     >
                       <ShieldAlert className="w-3.5 h-3.5" />

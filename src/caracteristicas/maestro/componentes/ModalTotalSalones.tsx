@@ -1,6 +1,6 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { X, Download, Search } from 'lucide-react';
+import { X, Download, Search, ArrowUpDown, ArrowUp, ArrowDown } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { obtenerTotalSalones } from '../../../servicios/servicioAdmin';
 import type { SalonTotalMetrica } from '../../../servicios/servicioAdmin';
@@ -13,6 +13,9 @@ interface PropsModalTotalSalones {
 
 const LIMITE = 10;
 
+type CampoOrden = 'nombre' | 'fechaCreacion' | 'plan' | 'pais' | 'vendedor';
+type DireccionOrden = 'asc' | 'desc';
+
 export function ModalTotalSalones({ onCerrar }: PropsModalTotalSalones) {
   const [buscar, setBuscar] = useState('');
   const [buscarDebounced, setBuscarDebounced] = useState('');
@@ -24,6 +27,8 @@ export function ModalTotalSalones({ onCerrar }: PropsModalTotalSalones) {
   const [temporizadorVendedor, setTemporizadorVendedor] = useState<ReturnType<
     typeof setTimeout
   > | null>(null);
+  const [campoOrden, setCampoOrden] = useState<CampoOrden>('fechaCreacion');
+  const [direccionOrden, setDireccionOrden] = useState<DireccionOrden>('desc');
 
   // Debounce manual
   const [temporizador, setTemporizador] = useState<ReturnType<typeof setTimeout> | null>(null);
@@ -80,9 +85,63 @@ export function ModalTotalSalones({ onCerrar }: PropsModalTotalSalones) {
     setPagina(1);
   };
 
+  const alternarOrden = (campo: CampoOrden) => {
+    if (campoOrden === campo) {
+      setDireccionOrden((d) => (d === 'asc' ? 'desc' : 'asc'));
+    } else {
+      setCampoOrden(campo);
+      setDireccionOrden('asc');
+    }
+  };
+
+  const datosOrdenados = useMemo(() => {
+    if (!data?.datos) return [];
+    const copia = [...data.datos];
+    copia.sort((a, b) => {
+      let valorA: string;
+      let valorB: string;
+      switch (campoOrden) {
+        case 'nombre':
+          valorA = a.nombre.toLowerCase();
+          valorB = b.nombre.toLowerCase();
+          break;
+        case 'fechaCreacion':
+          valorA = a.fechaCreacion;
+          valorB = b.fechaCreacion;
+          break;
+        case 'plan':
+          valorA = a.plan;
+          valorB = b.plan;
+          break;
+        case 'pais':
+          valorA = a.pais;
+          valorB = b.pais;
+          break;
+        case 'vendedor':
+          valorA = (a.vendedor ?? '').toLowerCase();
+          valorB = (b.vendedor ?? '').toLowerCase();
+          break;
+        default:
+          return 0;
+      }
+      const resultado = valorA < valorB ? -1 : valorA > valorB ? 1 : 0;
+      return direccionOrden === 'asc' ? resultado : -resultado;
+    });
+    return copia;
+  }, [data?.datos, campoOrden, direccionOrden]);
+
+  const iconoOrden = (campo: CampoOrden) => {
+    if (campoOrden !== campo) return <ArrowUpDown className="w-3 h-3 opacity-30" />;
+    return direccionOrden === 'asc' ? (
+      <ArrowUp className="w-3 h-3" />
+    ) : (
+      <ArrowDown className="w-3 h-3" />
+    );
+  };
+
   const exportarExcel = () => {
-    if (!data?.datos) return;
-    const filas = data.datos.map((s: SalonTotalMetrica) => ({
+    if (!datosOrdenados.length) return;
+    const filas = datosOrdenados.map((s: SalonTotalMetrica) => ({
       'Nombre del salón': s.nombre,
       'Fecha de creación': formatearFechaHumana(s.fechaCreacion),
       Plan: s.plan,
@@ -191,25 +250,50 @@ export function ModalTotalSalones({ onCerrar }: PropsModalTotalSalones) {
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-slate-200">
-                  <th className="text-left py-3 px-2 text-xs font-black text-slate-400 uppercase">
-                    Nombre del salón
+                  <th
+                    className="text-left py-3 px-2 text-xs font-black text-slate-400 uppercase cursor-pointer select-none hover:text-slate-600"
+                    onClick={() => alternarOrden('nombre')}
+                  >
+                    <span className="inline-flex items-center gap-1">
+                      Nombre del salón {iconoOrden('nombre')}
+                    </span>
                   </th>
-                  <th className="text-left py-3 px-2 text-xs font-black text-slate-400 uppercase">
-                    Fecha de creación
+                  <th
+                    className="text-left py-3 px-2 text-xs font-black text-slate-400 uppercase cursor-pointer select-none hover:text-slate-600"
+                    onClick={() => alternarOrden('fechaCreacion')}
+                  >
+                    <span className="inline-flex items-center gap-1">
+                      Fecha de creación {iconoOrden('fechaCreacion')}
+                    </span>
                   </th>
-                  <th className="text-left py-3 px-2 text-xs font-black text-slate-400 uppercase">
-                    Plan
+                  <th
+                    className="text-left py-3 px-2 text-xs font-black text-slate-400 uppercase cursor-pointer select-none hover:text-slate-600"
+                    onClick={() => alternarOrden('plan')}
+                  >
+                    <span className="inline-flex items-center gap-1">
+                      Plan {iconoOrden('plan')}
+                    </span>
                   </th>
-                  <th className="text-left py-3 px-2 text-xs font-black text-slate-400 uppercase">
-                    País
+                  <th
+                    className="text-left py-3 px-2 text-xs font-black text-slate-400 uppercase cursor-pointer select-none hover:text-slate-600"
+                    onClick={() => alternarOrden('pais')}
+                  >
+                    <span className="inline-flex items-center gap-1">
+                      País {iconoOrden('pais')}
+                    </span>
                   </th>
-                  <th className="text-left py-3 px-2 text-xs font-black text-slate-400 uppercase">
-                    Vendedor
+                  <th
+                    className="text-left py-3 px-2 text-xs font-black text-slate-400 uppercase cursor-pointer select-none hover:text-slate-600"
+                    onClick={() => alternarOrden('vendedor')}
+                  >
+                    <span className="inline-flex items-center gap-1">
+                      Vendedor {iconoOrden('vendedor')}
+                    </span>
                   </th>
                 </tr>
               </thead>
               <tbody>
-                {data?.datos.map((s) => (
+                {datosOrdenados.map((s) => (
                   <tr key={s.id} className="border-b border-slate-50 hover:bg-slate-50">
                     <td className="py-3 px-2 font-bold text-slate-900">{s.nombre}</td>
                     <td className="py-3 px-2 text-slate-600">
@@ -226,7 +310,7 @@ export function ModalTotalSalones({ onCerrar }: PropsModalTotalSalones) {
                     <td className="py-3 px-2 text-slate-500">{s.vendedor ?? '—'}</td>
                   </tr>
                 ))}
-                {(!data?.datos || data.datos.length === 0) && (
+                {datosOrdenados.length === 0 && (
                   <tr>
                     <td colSpan={5} className="py-8 text-center text-slate-400 font-bold">
                       No se encontraron salones

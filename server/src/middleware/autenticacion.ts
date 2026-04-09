@@ -2,11 +2,13 @@ import type { FastifyRequest, FastifyReply } from 'fastify';
 import { prisma } from '../prismaCliente.js';
 import { env } from '../lib/env.js';
 import { obtenerErrorAccesoSalon, salonEstaDisponible } from '../lib/estadoSalon.js';
+import { obtenerSesionActiva } from '../lib/sesionesAuth.js';
 
 export interface PayloadJWT {
   sub: string;
   rol: string;
   estudioId: string | null;
+  sesionId?: string;
   nombre?: string;
   email?: string;
   personalId?: string;
@@ -48,6 +50,14 @@ export async function verificarJWT(
     await solicitud.jwtVerify();
 
     const payload = solicitud.user as PayloadJWT;
+
+    if (payload.sesionId) {
+      const sesion = await obtenerSesionActiva(payload.sesionId);
+      if (!sesion) {
+        await respuesta.code(401).send({ error: 'Sesión expirada. Inicia sesión nuevamente.' });
+        return;
+      }
+    }
 
     if (payload.rol === 'empleado') {
       const acceso = await prisma.empleadoAcceso.findUnique({

@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -6,6 +6,8 @@ import { z } from 'zod';
 import { Plus, X, Clock, CheckCircle, XCircle, FileText } from 'lucide-react';
 import { obtenerMisPreregistros, crearPreregistro } from '../../../servicios/servicioVendedor';
 import type { PreregistroSalon } from '../../../servicios/servicioVendedor';
+
+const CLAVE_BORRADOR_PREREGISTRO = 'vendedor_preregistro_salon_borrador_v1';
 
 // ─── Schema ──────────────────────────────────────────────────────────────
 const esquemaFormulario = z.object({
@@ -47,6 +49,7 @@ export function TabPreregistros() {
     register,
     handleSubmit,
     reset,
+    watch,
     formState: { errors, isSubmitting },
   } = useForm<CamposFormulario>({
     resolver: zodResolver(esquemaFormulario),
@@ -55,12 +58,49 @@ export function TabPreregistros() {
 
   const [errorServidor, setErrorServidor] = useState('');
 
+  useEffect(() => {
+    try {
+      const borrador = window.localStorage.getItem(CLAVE_BORRADOR_PREREGISTRO);
+      if (!borrador) return;
+      reset(JSON.parse(borrador) as CamposFormulario);
+    } catch {
+      // Ignorar borrador inválido.
+    }
+  }, [reset]);
+
+  useEffect(() => {
+    const suscripcion = watch((valores) => {
+      try {
+        window.localStorage.setItem(
+          CLAVE_BORRADOR_PREREGISTRO,
+          JSON.stringify({
+            nombreSalon: valores.nombreSalon ?? '',
+            propietario: valores.propietario ?? '',
+            emailPropietario: valores.emailPropietario ?? '',
+            telefonoPropietario: valores.telefonoPropietario ?? '',
+            pais: valores.pais ?? 'Mexico',
+            direccion: valores.direccion ?? '',
+            descripcion: valores.descripcion ?? '',
+            categorias: valores.categorias ?? '',
+            plan: valores.plan ?? 'STANDARD',
+            notas: valores.notas ?? '',
+          }),
+        );
+      } catch {
+        // Ignorar almacenamiento no disponible.
+      }
+    });
+
+    return () => suscripcion.unsubscribe();
+  }, [watch]);
+
   const mutacion = useMutation({
     mutationFn: crearPreregistro,
     onSuccess: () => {
       clienteConsulta.invalidateQueries({ queryKey: ['vendedor'] });
       setMostrarFormulario(false);
       reset();
+      window.localStorage.removeItem(CLAVE_BORRADOR_PREREGISTRO);
       setErrorServidor('');
     },
     onError: (err: Error) => {
@@ -88,7 +128,12 @@ export function TabPreregistros() {
         <button
           onClick={() => {
             setMostrarFormulario(true);
-            reset();
+            try {
+              const borrador = window.localStorage.getItem(CLAVE_BORRADOR_PREREGISTRO);
+              reset(borrador ? (JSON.parse(borrador) as CamposFormulario) : undefined);
+            } catch {
+              reset();
+            }
             setErrorServidor('');
           }}
           className="flex items-center gap-2 px-4 py-2 text-sm font-bold text-white bg-pink-600 rounded-lg hover:bg-pink-700 transition-colors"
@@ -121,6 +166,10 @@ export function TabPreregistros() {
               >
                 <X className="w-5 h-5 text-slate-500" />
               </button>
+            </div>
+
+            <div className="mb-4 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-medium text-slate-600">
+              Draft saves automatically while you complete this pre-registration.
             </div>
 
             <form onSubmit={handleSubmit(alEnviar)} className="space-y-4">
@@ -208,10 +257,14 @@ export function TabPreregistros() {
               <div className="flex gap-3 justify-end pt-2">
                 <button
                   type="button"
-                  onClick={() => setMostrarFormulario(false)}
+                  onClick={() => {
+                    window.localStorage.removeItem(CLAVE_BORRADOR_PREREGISTRO);
+                    reset();
+                    setMostrarFormulario(false);
+                  }}
                   className="px-4 py-2 text-sm font-semibold text-slate-600 rounded-lg hover:bg-slate-100 transition-colors"
                 >
-                  Cancel
+                  Clear draft
                 </button>
                 <button
                   type="submit"

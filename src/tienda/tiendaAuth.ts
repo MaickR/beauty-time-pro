@@ -119,7 +119,8 @@ export function obtenerRutaPorRol(
   claveClienteActual: string | null,
   _forzarCambioContrasena = false,
 ) {
-  if (rol === 'maestro' || rol === 'supervisor') return '/maestro';
+  if (rol === 'maestro') return '/maestro';
+  if (rol === 'supervisor') return '/supervisor';
   if (rol === 'vendedor') return '/vendedor';
   if (rol === 'dueno' && estudioActual) {
     const identificadorRuta = slugEstudioActual ?? estudioActual;

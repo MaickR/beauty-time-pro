@@ -3,7 +3,14 @@
  *
  * Todas las operaciones hablan con /auth/* en lugar de Firebase Auth.
  */
-import { ErrorAPI, peticion, guardarToken, limpiarToken, URL_BASE } from '../lib/clienteHTTP';
+import {
+  ErrorAPI,
+  peticion,
+  guardarSesionAutenticacion,
+  limpiarToken,
+  obtenerTokenCsrf,
+  URL_BASE,
+} from '../lib/clienteHTTP';
 import { obtenerSalonPublicoPorClave } from './servicioClienteApp';
 
 export type FuncionDesuscribir = () => void;
@@ -40,6 +47,7 @@ export interface DatosAccesoSalon {
 
 export interface DatosSesion {
   token: string;
+  csrfToken: string;
   rol: string;
   estudioId: string | null;
   slugEstudio: string | null;
@@ -57,6 +65,7 @@ interface RespuestaInicioSesion {
 }
 
 const RETRASO_REINTENTO_LOGIN_MS = 450;
+const URL_BASE_DESARROLLO_LOCAL = 'http://localhost:3000';
 
 function esperar(ms: number): Promise<void> {
   return new Promise((resolver) => {
@@ -69,6 +78,22 @@ function esErrorTransitorioLogin(error: unknown): boolean {
   return error.estado === 404 || error.estado >= 500;
 }
 
+async function fetchRefrescoConFallback(init: RequestInit): Promise<Response> {
+  try {
+    return await fetch(`${URL_BASE}/auth/refrescar`, init);
+  } catch (error) {
+    if (
+      !(error instanceof TypeError) ||
+      !import.meta.env.DEV ||
+      URL_BASE === URL_BASE_DESARROLLO_LOCAL
+    ) {
+      throw error;
+    }
+
+    return fetch(`${URL_BASE_DESARROLLO_LOCAL}/auth/refrescar`, init);
+  }
+}
+
 async function autenticarConReintento(payload: {
   email?: string;
   contrasena?: string;
@@ -79,7 +104,7 @@ async function autenticarConReintento(payload: {
       method: 'POST',
       body: JSON.stringify(payload),
     });
-    guardarToken(res.datos.token);
+    guardarSesionAutenticacion(res.datos);
     return res.datos;
   } catch (error) {
     // Reintento único para cubrir reinicios breves del backend durante desarrollo.
@@ -89,7 +114,7 @@ async function autenticarConReintento(payload: {
         method: 'POST',
         body: JSON.stringify(payload),
       });
-      guardarToken(res.datos.token);
+      guardarSesionAutenticacion(res.datos);
       return res.datos;
     }
     throw error;
@@ -132,6 +157,7 @@ export async function buscarAccesoSalonPorClaveAPI(clave: string): Promise<Datos
  */
 export async function refrescarSesion(): Promise<{
   token: string;
+  csrfToken: string;
   rol: string;
   estudioId: string | null;
   slugEstudio: string | null;
@@ -144,13 +170,21 @@ export async function refrescarSesion(): Promise<{
   forzarCambioContrasena?: boolean;
 } | null> {
   try {
-    const res = await fetch(`${URL_BASE}/auth/refrescar`, {
+    const cabeceras = new Headers();
+    const csrfToken = obtenerTokenCsrf();
+    if (csrfToken) {
+      cabeceras.set('x-csrf-token', csrfToken);
+    }
+
+    const res = await fetchRefrescoConFallback({
       method: 'POST',
       credentials: 'include',
+      headers: cabeceras,
+      body: '{}',
     });
     if (!res.ok) return null;
     const json = (await res.json()) as RespuestaInicioSesion;
-    guardarToken(json.datos.token);
+    guardarSesionAutenticacion(json.datos);
     return json.datos;
   } catch {
     return null;

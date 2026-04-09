@@ -53,6 +53,7 @@ export default defineConfig({
   test: {
     environment: 'jsdom',
     globals: false,
+    exclude: ['**/node_modules/**', '**/dist/**'],
     environmentMatchGlobs: [
       // Los tests del servidor (Node puro) no necesitan DOM
       ['server/src/**/*.test.ts', 'node'],

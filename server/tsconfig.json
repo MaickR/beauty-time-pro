@@ -6,6 +6,8 @@
     "lib": ["ES2023"],
     "outDir": "dist",
     "rootDir": "src",
+    "composite": true,
+    "declaration": true,
     "strict": true,
     "noUncheckedIndexedAccess": true,
     "noImplicitOverride": true,

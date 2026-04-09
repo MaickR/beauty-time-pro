@@ -25,6 +25,7 @@ import { MetricasGlobales } from './componentes/MetricasGlobales';
 import { PanelFinanciero } from './componentes/PanelFinanciero';
 import { BaseClientes } from './componentes/BaseClientes';
 import { PreregistrosAdmin } from './componentes/PreregistrosAdmin';
+import { PanelPreciosPlanes } from './componentes/PanelPreciosPlanes';
 import type { Estudio } from '../../tipos';
 
 type TabMaestro =
@@ -35,7 +36,6 @@ type TabMaestro =
   | 'base-datos';
 
 export function PaginaMaestro() {
-  usarTituloPagina('Panel Maestro');
   const ubicacion = useLocation();
   const { estudios, recargar } = usarContextoApp();
   const { cerrarSesion, usuario } = usarTiendaAuth();
@@ -48,6 +48,16 @@ export function PaginaMaestro() {
   const esMaestro = usuario?.rol === 'maestro';
   const esSupervisor = usuario?.rol === 'supervisor';
   const ps = usuario?.permisosSupervisor;
+  const rutaBasePanel = esSupervisor ? '/supervisor' : '/maestro';
+  const tituloDocumento = esSupervisor ? 'Panel Supervisor' : 'Panel Maestro';
+  const tituloCabecera = esSupervisor ? 'Panel Supervisor' : 'Mike Master';
+  const subtituloCabecera = esSupervisor ? 'Acceso por permisos asignados' : 'Administrador Global';
+  const tituloSeccionDirectorio = esSupervisor ? 'Panel Supervisor' : 'Panel Administrativo';
+  const descripcionSeccionDirectorio = esSupervisor
+    ? 'Gestión operativa según los permisos asignados por el administrador maestro'
+    : 'Control total de salones, personal, servicios y citas';
+
+  usarTituloPagina(tituloDocumento);
 
   const puedeVerMetricas =
     usuario?.esMaestroTotal ||
@@ -84,7 +94,7 @@ export function PaginaMaestro() {
   ];
 
   useEffect(() => {
-    if (ubicacion.pathname === '/maestro/finanzas' && puedeGestionarPagos) {
+    if (ubicacion.pathname === `${rutaBasePanel}/finanzas` && puedeGestionarPagos) {
       setTabActiva('estado-cuenta');
       return;
     }
@@ -92,7 +102,7 @@ export function PaginaMaestro() {
     if (!tabsDisponibles.includes(tabActiva) && tabsDisponibles.length > 0) {
       setTabActiva(tabsDisponibles[0]);
     }
-  }, [puedeGestionarPagos, tabActiva, tabsDisponibles, ubicacion.pathname]);
+  }, [puedeGestionarPagos, rutaBasePanel, tabActiva, tabsDisponibles, ubicacion.pathname]);
 
   const manejarConfirmarPago = async (monto: number, moneda: 'MXN' | 'COP') => {
     if (!pagoEstudio) return;
@@ -118,9 +128,9 @@ export function PaginaMaestro() {
             <ShieldCheck className="text-pink-500" />
           </div>
           <div>
-            <h2 className="text-xl font-black italic text-slate-900 uppercase">Mike Master</h2>
+            <h2 className="text-xl font-black italic text-slate-900 uppercase">{tituloCabecera}</h2>
             <p className="text-[10px] font-black text-pink-600 uppercase tracking-widest">
-              Administrador Global
+              {subtituloCabecera}
             </p>
           </div>
         </div>
@@ -141,7 +151,7 @@ export function PaginaMaestro() {
                 onClick={() => setTabActiva('directorio')}
                 className={`px-6 py-3 rounded-xl text-xs font-black transition-all flex items-center gap-2 ${tabActiva === 'directorio' ? 'bg-white shadow-sm text-slate-900' : 'text-slate-500 hover:text-slate-800'}`}
               >
-                <Store className="w-4 h-4" /> Panel Administrativo
+                <Store className="w-4 h-4" /> {tituloSeccionDirectorio}
               </button>
             )}
             {tabsDisponibles.includes('estado-cuenta') && (
@@ -199,11 +209,9 @@ export function PaginaMaestro() {
             <div className="flex flex-col md:flex-row md:justify-between md:items-center gap-6 mb-8">
               <div>
                 <h1 className="text-4xl font-black italic uppercase tracking-tighter">
-                  Panel Administrativo
+                  {tituloSeccionDirectorio}
                 </h1>
-                <p className="text-slate-500 font-medium">
-                  Control total de salones, personal, servicios y citas
-                </p>
+                <p className="text-slate-500 font-medium">{descripcionSeccionDirectorio}</p>
               </div>
               {puedeSuspenderSalones && (
                 <button
@@ -219,6 +227,8 @@ export function PaginaMaestro() {
               {puedeGestionarPagos && <SolicitudesCancelacion />}
 
               {puedeSuspenderSalones && <DirectorioAcceso />}
+
+              {esMaestro && puedeGestionarPagos && <PanelPreciosPlanes onActualizado={recargar} />}
             </div>
           </>
         )}
@@ -270,6 +280,7 @@ export function PaginaMaestro() {
           }}
           onAgregarPersonal={hook.agregarPersonal}
           onRegenerarContrasenaDueno={hook.regenerarContrasenaDueno}
+          onDescartarBorrador={hook.descartarBorrador}
           onEnviar={(e) => hook.enviarFormulario(e, recargar, mostrarToast, mostrarToast)}
           onCerrar={hook.cerrarModal}
         />

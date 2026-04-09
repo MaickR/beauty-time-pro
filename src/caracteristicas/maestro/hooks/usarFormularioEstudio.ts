@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { actualizarEstudio, crearSalonAdmin } from '../../../servicios/servicioEstudios';
 import { sincronizarPersonalEstudio } from '../../../servicios/servicioPersonal';
 import { confirmarPago as _confirmarPago } from '../../../servicios/servicioPagos';
@@ -11,6 +11,8 @@ import {
 import { generarContrasenaSegura } from '../../../utils/seguridad';
 import { DIAS_SEMANA, CATALOGO_SERVICIOS } from '../../../lib/constantes';
 import type { Estudio, Servicio, Personal, TurnoTrabajo } from '../../../tipos';
+
+const CLAVE_BORRADOR_ALTA_SALON = 'maestro_alta_salon_borrador_v1';
 
 export interface FormularioEstudio extends Omit<Estudio, 'id' | 'createdAt' | 'updatedAt'> {
   id?: string;
@@ -63,6 +65,44 @@ function normalizarTextoOpcional(valor?: string | null) {
   return limpio === '' ? '' : limpio;
 }
 
+function restaurarBorradorAlta(): FormularioEstudio | null {
+  if (typeof window === 'undefined') return null;
+
+  try {
+    const borrador = window.localStorage.getItem(CLAVE_BORRADOR_ALTA_SALON);
+    if (!borrador) return null;
+
+    const datos = JSON.parse(borrador) as Partial<FormularioEstudio>;
+    return {
+      ...crearEstadoInicial(),
+      ...datos,
+      contrasenaDueno: datos.contrasenaDueno?.trim() || generarContrasenaTemporal(),
+    };
+  } catch {
+    return null;
+  }
+}
+
+function guardarBorradorAlta(formulario: FormularioEstudio) {
+  if (typeof window === 'undefined') return;
+
+  try {
+    window.localStorage.setItem(CLAVE_BORRADOR_ALTA_SALON, JSON.stringify(formulario));
+  } catch {
+    // Ignorar almacenamiento no disponible.
+  }
+}
+
+function limpiarBorradorAlta() {
+  if (typeof window === 'undefined') return;
+
+  try {
+    window.localStorage.removeItem(CLAVE_BORRADOR_ALTA_SALON);
+  } catch {
+    // Ignorar almacenamiento no disponible.
+  }
+}
+
 export function usarFormularioEstudio() {
   const [modoModal, setModoModal] = useState<'ADD' | 'EDIT' | 'CONFIRMACION' | null>(null);
   const [formulario, setFormulario] = useState<FormularioEstudio>(crearEstadoInicial());
@@ -71,8 +111,13 @@ export function usarFormularioEstudio() {
     Record<string, string>
   >({});
 
+  useEffect(() => {
+    if (modoModal !== 'ADD') return;
+    guardarBorradorAlta(formulario);
+  }, [formulario, modoModal]);
+
   const abrirModalAlta = () => {
-    setFormulario(crearEstadoInicial());
+    setFormulario(restaurarBorradorAlta() ?? crearEstadoInicial());
     setConfirmacionAlta(null);
     setModoModal('ADD');
   };
@@ -86,6 +131,11 @@ export function usarFormularioEstudio() {
   const cerrarModal = () => {
     setModoModal(null);
     setConfirmacionAlta(null);
+  };
+
+  const descartarBorrador = () => {
+    limpiarBorradorAlta();
+    setFormulario(crearEstadoInicial());
   };
 
   const regenerarContrasenaDueno = () => {
@@ -209,6 +259,7 @@ export function usarFormularioEstudio() {
           claveClientes: resultado.acceso.claveClientes,
           urlReserva: `${window.location.origin}/reservar/${resultado.acceso.claveClientes}`,
         });
+        limpiarBorradorAlta();
         setModoModal('CONFIRMACION');
         await alRefrescar();
         mostrarExito(`Salón "${resultado.estudio.name}" creado correctamente.`);
@@ -238,6 +289,7 @@ export function usarFormularioEstudio() {
     abrirModalAlta,
     abrirModalEdicion,
     cerrarModal,
+    descartarBorrador,
     confirmacionAlta,
     regenerarContrasenaDueno,
     alternarServicio,

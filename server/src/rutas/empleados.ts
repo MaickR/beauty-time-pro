@@ -5,12 +5,14 @@ import {
   incluirServiciosDetalleReserva,
   serializarReservaApi,
 } from '../lib/serializacionReservas.js';
+import { revocarSesionesPorSujeto } from '../lib/sesionesAuth.js';
 import { prisma } from '../prismaCliente.js';
 import { verificarJWT } from '../middleware/autenticacion.js';
 import type { PayloadJWT } from '../middleware/autenticacion.js';
 import { emailSchema, textoSchema } from '../lib/validacion.js';
 import { enviarEmailBienvenidaEmpleado } from '../servicios/servicioEmail.js';
 import { env } from '../lib/env.js';
+import { compararHashContrasena, generarHashContrasena } from '../utils/contrasenas.js';
 import { obtenerFechaISOEnZona, normalizarZonaHorariaEstudio } from '../utils/zonasHorarias.js';
 
 const REGEX_CONTRASENA_SEGURA = /^(?=.*[A-Z])(?=.*[0-9])(?=.*[^A-Za-z0-9]).{8,}$/;
@@ -311,12 +313,14 @@ export async function rutasEmpleados(servidor: FastifyInstance): Promise<void> {
       const acceso = await prisma.empleadoAcceso.findUnique({ where: { id: payload.sub } });
       if (!acceso) return respuesta.code(404).send({ error: 'Cuenta no encontrada' });
 
-      if (!(await bcrypt.compare(contrasenaActual, acceso.hashContrasena))) {
+      if (!(await compararHashContrasena(contrasenaActual, acceso.hashContrasena))) {
         return respuesta.code(401).send({ error: 'Contraseña actual incorrecta' });
       }
 
-      const nuevoHash = await bcrypt.hash(contrasenaNueva, 12);
+      const nuevoHash = await generarHashContrasena(contrasenaNueva);
       await prisma.empleadoAcceso.update({ where: { id: acceso.id }, data: { hashContrasena: nuevoHash, forzarCambioContrasena: false } });
+
+      await revocarSesionesPorSujeto('empleado_acceso', acceso.id, 'contrasena_actualizada');
 
       return respuesta.send({ datos: { mensaje: 'Contraseña actualizada correctamente' } });
     },

@@ -40,6 +40,7 @@ interface PropsModalEstudio {
   onCerrar: () => void;
   confirmacionAlta: ConfirmacionAltaSalon | null;
   onRegenerarContrasenaDueno: () => void;
+  onDescartarBorrador: () => void;
 }
 
 export function ModalEstudio({
@@ -52,6 +53,7 @@ export function ModalEstudio({
   onCerrar,
   confirmacionAlta,
   onRegenerarContrasenaDueno,
+  onDescartarBorrador,
 }: PropsModalEstudio) {
   const [mostrarContrasena, setMostrarContrasena] = useState(false);
   const [prefijoTelefono, setPrefijoTelefono] = useState('+52');
@@ -336,6 +338,26 @@ export function ModalEstudio({
         </div>
 
         <form onSubmit={onEnviar} className="flex-1 overflow-y-auto px-4 py-8 sm:p-10 space-y-12">
+          {modo === 'ADD' && (
+            <div className="flex flex-col gap-3 rounded-[2rem] border border-slate-200 bg-slate-50 px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <p className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-500">
+                  Draft protection
+                </p>
+                <p className="mt-1 text-sm font-medium text-slate-500">
+                  This form saves automatically while you work.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={onDescartarBorrador}
+                className="rounded-full border border-slate-200 bg-white px-4 py-2 text-[10px] font-black uppercase text-slate-700"
+              >
+                Clear draft
+              </button>
+            </div>
+          )}
+
           {/* SECCIÓN 1: IDENTIDAD */}
           <section className="grid grid-cols-1 sm:grid-cols-2 gap-6">
             <div className="col-span-full font-black text-xs text-pink-600 uppercase tracking-widest mb-2 flex items-center gap-2">

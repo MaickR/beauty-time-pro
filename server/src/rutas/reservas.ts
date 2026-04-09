@@ -70,6 +70,38 @@ async function asegurarInfraestructuraServiciosDetalle(): Promise<boolean> {
   return asegurarColumnaTabla('reserva_servicios', 'motivo', 'VARCHAR(191) NULL');
 }
 
+async function resolverUsuarioAuditoriaReserva(payload: {
+  sub: string;
+  rol: string;
+  estudioId: string | null;
+  personalId?: string;
+}): Promise<string | null> {
+  if (payload.rol !== 'empleado') {
+    return payload.sub;
+  }
+
+  if (!payload.estudioId) {
+    return null;
+  }
+
+  const dueno = await prisma.usuario.findFirst({
+    where: { estudioId: payload.estudioId, rol: 'dueno' },
+    select: { id: true },
+  });
+
+  if (dueno) {
+    return dueno.id;
+  }
+
+  const usuarioRespaldo = await prisma.usuario.findFirst({
+    where: { estudioId: payload.estudioId },
+    select: { id: true },
+    orderBy: { creadoEn: 'asc' },
+  });
+
+  return usuarioRespaldo?.id ?? null;
+}
+
 type ReservaCompatParaBackfill = {
   id: string;
   servicios: unknown;
@@ -792,6 +824,11 @@ export async function rutasReservas(servidor: FastifyInstance): Promise<void> {
       }
       if (!fechaNacimiento) {
         fechaNacimiento = clienteApp.fechaNacimiento?.toISOString().split('T')[0] ?? undefined;
+        if (!fechaNacimiento) {
+          return respuesta.code(400).send({
+            error: 'Fecha de nacimiento requerida. Actualiza tu perfil antes de reservar.',
+          });
+        }
       }
     }
 
@@ -1481,18 +1518,32 @@ export async function rutasReservas(servidor: FastifyInstance): Promise<void> {
 
       const reservaActualizada = await sincronizarResumenReserva(solicitud.params.id);
 
-      await registrarAuditoria({
-        usuarioId: payload.sub,
-        accion: 'reserva_servicio_agregado',
-        entidadTipo: 'reserva',
-        entidadId: solicitud.params.id,
-        detalles: {
-          servicioNombre: nombre,
-          duracion,
-          precio,
-        },
-        ip: solicitud.ip,
-      });
+      const usuarioAuditoriaId = await resolverUsuarioAuditoriaReserva(payload);
+
+      if (usuarioAuditoriaId) {
+        await registrarAuditoria({
+          usuarioId: usuarioAuditoriaId,
+          accion: 'reserva_servicio_agregado',
+          entidadTipo: 'reserva',
+          entidadId: solicitud.params.id,
+          detalles: {
+            servicioNombre: nombre,
+            duracion,
+            precio,
+            actor: {
+              rol: payload.rol,
+              accesoId: payload.sub,
+              personalId: payload.personalId ?? null,
+            },
+          },
+          ip: solicitud.ip,
+        });
+      } else {
+        solicitud.log.warn(
+          { reservaId: solicitud.params.id, actorRol: payload.rol, accesoId: payload.sub },
+          'No se pudo resolver un usuario para auditar el servicio adicional de la reserva',
+        );
+      }
 
       return respuesta.send({ datos: reservaActualizada });
     },

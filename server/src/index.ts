@@ -32,6 +32,7 @@ import { rutasEmpleados } from './rutas/empleados.js';
 import { rutasMensajesMasivos } from './rutas/mensajesMasivos.js';
 import { rutasProductos } from './rutas/productos.js';
 import { rutasVendedor } from './rutas/vendedor.js';
+import { rutasPreciosPlanes } from './rutas/preciosPlanes.js';
 
 function obtenerContentTypeEstatico(rutaArchivo: string): string {
   const extension = path.extname(rutaArchivo).toLowerCase();
@@ -102,7 +103,7 @@ void (async () => {
     },
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
     credentials: true,
-    allowedHeaders: ['Content-Type', 'Authorization'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'x-csrf-token'],
   });
 
   servidor.addHook('onSend', async (solicitud, respuesta, payload) => {
@@ -118,6 +119,15 @@ void (async () => {
 
   servidor.setErrorHandler((error: FastifyError, _solicitud, respuesta) => {
     if (error.statusCode === 429) {
+      return respuesta.code(429).send({ error: 'Demasiados intentos. Espera 15 minutos.' });
+    }
+
+    // Algunos handlers de rate-limit pueden propagar solo message sin statusCode.
+    if (
+      !error.statusCode &&
+      typeof error.message === 'string' &&
+      /demasiados intentos|rate limit|too many requests/i.test(error.message)
+    ) {
       return respuesta.code(429).send({ error: 'Demasiados intentos. Espera 15 minutos.' });
     }
 
@@ -173,6 +183,7 @@ void (async () => {
   await servidor.register(rutasMensajesMasivos);
   await servidor.register(rutasProductos);
   await servidor.register(rutasVendedor);
+  await servidor.register(rutasPreciosPlanes);
 
   servidor.get('/salud', async () => ({
     estado: 'ok',

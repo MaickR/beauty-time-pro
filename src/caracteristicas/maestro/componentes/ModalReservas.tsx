@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { X, CalendarDays } from 'lucide-react';
+import { X, CalendarDays, Download } from 'lucide-react';
+import * as XLSX from 'xlsx';
 import { obtenerReservasMetrica } from '../../../servicios/servicioAdmin';
 import { formatearFechaHumana } from '../../../utils/formato';
 import { EsqueletoTarjeta } from '../../../componentes/ui/Esqueleto';
@@ -22,12 +23,12 @@ function obtenerFechaHace30Dias(): string {
 }
 
 const ESTADOS_FILTRO = [
-  { valor: 'pending', etiqueta: 'Pending' },
-  { valor: 'confirmed', etiqueta: 'Confirmed' },
-  { valor: 'completed', etiqueta: 'Completed' },
-  { valor: 'cancelled', etiqueta: 'Cancelled' },
-  { valor: 'rescheduled', etiqueta: 'Rescheduled' },
-  { valor: 'no_show', etiqueta: 'No show' },
+  { valor: 'pending', etiqueta: 'Pendiente' },
+  { valor: 'confirmed', etiqueta: 'Confirmada' },
+  { valor: 'completed', etiqueta: 'Completada' },
+  { valor: 'cancelled', etiqueta: 'Cancelada' },
+  { valor: 'rescheduled', etiqueta: 'Reagendada' },
+  { valor: 'no_show', etiqueta: 'No asistió' },
 ] as const;
 
 const PAISES_FILTRO = ['Mexico', 'Colombia'] as const;
@@ -69,17 +70,17 @@ export function ModalReservas({ onCerrar }: PropsModalReservas) {
   const etiquetaEstado = (estado: string) => {
     switch (estado) {
       case 'cancelled':
-        return 'Cancelled';
+        return 'Cancelada';
       case 'completed':
-        return 'Completed';
+        return 'Completada';
       case 'pending':
-        return 'Pending';
+        return 'Pendiente';
       case 'confirmed':
-        return 'Confirmed';
+        return 'Confirmada';
       case 'rescheduled':
-        return 'Rescheduled';
+        return 'Reagendada';
       case 'no_show':
-        return 'No show';
+        return 'No asistió';
       default:
         return estado;
     }
@@ -102,6 +103,20 @@ export function ModalReservas({ onCerrar }: PropsModalReservas) {
       default:
         return 'bg-slate-100 text-slate-600';
     }
+  };
+
+  const exportarExcel = () => {
+    if (!data?.datos?.length) return;
+    const filas = data.datos.map((r) => ({
+      Salón: r.salon,
+      Fecha: formatearFechaHumana(r.fecha),
+      Estado: etiquetaEstado(r.estado),
+      País: r.pais,
+    }));
+    const hoja = XLSX.utils.json_to_sheet(filas);
+    const libro = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(libro, hoja, 'Reservas');
+    XLSX.writeFile(libro, 'reservas.xlsx');
   };
 
   return (
@@ -281,6 +296,12 @@ export function ModalReservas({ onCerrar }: PropsModalReservas) {
               className="px-3 py-1.5 border border-slate-200 rounded-lg text-xs font-bold disabled:opacity-40"
             >
               Siguiente
+            </button>
+            <button
+              onClick={exportarExcel}
+              className="px-3 py-1.5 bg-emerald-600 text-white rounded-lg text-xs font-bold flex items-center gap-1 hover:bg-emerald-700"
+            >
+              <Download className="w-3.5 h-3.5" /> Exportar Excel
             </button>
           </div>
         </div>

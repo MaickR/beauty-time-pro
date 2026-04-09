@@ -4,7 +4,7 @@ import { randomBytes, randomInt, randomUUID } from 'node:crypto';
 import { z } from 'zod';
 import { prisma } from '../prismaCliente.js';
 import { verificarJWT } from '../middleware/autenticacion.js';
-import { requierePermiso } from '../middleware/verificarPermiso.js';
+import { requiereAccesoAdministrativo, requierePermiso } from '../middleware/verificarPermiso.js';
 import { resolverCategoriasSalon } from '../lib/categoriasSalon.js';
 import { construirSelectDesdeColumnas, obtenerColumnasTabla } from '../lib/compatibilidadEsquema.js';
 import { cacheSalonesPublicos } from '../lib/cache.js';
@@ -14,7 +14,7 @@ import { registrarAuditoria } from '../utils/auditoria.js';
 import { emailSchema, fechaIsoSchema, obtenerMensajeValidacion, telefonoSchema, textoSchema } from '../lib/validacion.js';
 import { normalizarPlanEstudio, validarCantidadServiciosPlan } from '../lib/planes.js';
 import { generarClavesSalonUnicas } from '../lib/clavesSalon.js';
-import { convertirMonedaACentavos } from '../utils/moneda.js';
+import { asegurarPrecioActualSalon, obtenerPrecioPlanActual, obtenerResumenSuscripcionesActivas } from '../lib/preciosPlanes.js';
 import { obtenerFechaISOEnZona, obtenerZonaHorariaPorPais } from '../utils/zonasHorarias.js';
 import { generarSlugUnico } from '../utils/generarSlug.js';
 
@@ -100,10 +100,8 @@ function obtenerMonedaPorPais(pais?: string | null): 'MXN' | 'COP' {
   return pais === 'Colombia' ? 'COP' : 'MXN';
 }
 
-function obtenerMontoPlanPorPais(pais?: string | null): number {
-  return obtenerMonedaPorPais(pais) === 'COP'
-    ? convertirMonedaACentavos(200000)
-    : convertirMonedaACentavos(1000);
+function esAdministradorConPermisos(rol: string): boolean {
+  return rol === 'maestro' || rol === 'supervisor';
 }
 
 function calcularNuevaFechaVencimiento(params: {
@@ -676,7 +674,7 @@ export async function rutasAdmin(servidor: FastifyInstance): Promise<void> {
     { preHandler: [verificarJWT, requierePermiso('aprobarSalones')] },
     async (solicitud, respuesta) => {
       const payload = solicitud.user as { rol: string };
-      if (payload.rol !== 'maestro') {
+      if (!esAdministradorConPermisos(payload.rol)) {
         return respuesta.code(403).send({ error: 'Sin permisos para esta acción' });
       }
 
@@ -733,10 +731,10 @@ export async function rutasAdmin(servidor: FastifyInstance): Promise<void> {
             fechaSolicitud: convertirFecha(estudioNormalizado['fechaSolicitud'])?.toISOString() ?? null,
             fechaAprobacion: convertirFecha(estudioNormalizado['fechaAprobacion'])?.toISOString() ?? null,
             motivoRechazo: (estudioNormalizado['motivoRechazo'] as string | null | undefined) ?? null,
-            aprobadoPorNombre: aprobacion?.usuario.nombre ?? null,
-            aprobadoPorEmail: aprobacion?.usuario.email ?? null,
-            renovadoPorNombre: renovacion?.usuario.nombre ?? null,
-            renovadoPorEmail: renovacion?.usuario.email ?? null,
+            aprobadoPorNombre: aprobacion?.usuario?.nombre ?? null,
+            aprobadoPorEmail: aprobacion?.usuario?.email ?? null,
+            renovadoPorNombre: renovacion?.usuario?.nombre ?? null,
+            renovadoPorEmail: renovacion?.usuario?.email ?? null,
           };
         })
         .filter((estudio) => (estadoSolicitado ? estudio.estado === estadoSolicitado : true));
@@ -756,7 +754,7 @@ export async function rutasAdmin(servidor: FastifyInstance): Promise<void> {
     { preHandler: [verificarJWT, requierePermiso('aprobarSalones')] },
     async (solicitud, respuesta) => {
       const payload = solicitud.user as { rol: string };
-      if (payload.rol !== 'maestro') {
+      if (!esAdministradorConPermisos(payload.rol)) {
         return respuesta.code(403).send({ error: 'Sin permisos para esta acción' });
       }
 
@@ -802,7 +800,7 @@ export async function rutasAdmin(servidor: FastifyInstance): Promise<void> {
     { preHandler: [verificarJWT, requierePermiso('aprobarSalones')] },
     async (solicitud, respuesta) => {
       const payload = solicitud.user as { rol: string };
-      if (payload.rol !== 'maestro') {
+      if (!esAdministradorConPermisos(payload.rol)) {
         return respuesta.code(403).send({ error: 'Sin permisos para esta acción' });
       }
 
@@ -844,7 +842,7 @@ export async function rutasAdmin(servidor: FastifyInstance): Promise<void> {
     { preHandler: [verificarJWT, requierePermiso('aprobarSalones')] },
     async (solicitud, respuesta) => {
       const payload = solicitud.user as { rol: string; sub: string };
-      if (payload.rol !== 'maestro') {
+      if (!esAdministradorConPermisos(payload.rol)) {
         return respuesta.code(403).send({ error: 'Sin permisos para esta acción' });
       }
 
@@ -932,7 +930,7 @@ export async function rutasAdmin(servidor: FastifyInstance): Promise<void> {
     { preHandler: [verificarJWT, requierePermiso('aprobarSalones')] },
     async (solicitud, respuesta) => {
       const payload = solicitud.user as { rol: string; sub: string };
-      if (payload.rol !== 'maestro') {
+      if (!esAdministradorConPermisos(payload.rol)) {
         return respuesta.code(403).send({ error: 'Sin permisos para esta acción' });
       }
 
@@ -992,7 +990,7 @@ export async function rutasAdmin(servidor: FastifyInstance): Promise<void> {
     { preHandler: [verificarJWT, requierePermiso('aprobarSalones')] },
     async (solicitud, respuesta) => {
       const payload = solicitud.user as { rol: string };
-      if (payload.rol !== 'maestro') {
+      if (!esAdministradorConPermisos(payload.rol)) {
         return respuesta.code(403).send({ error: 'Sin permisos para esta acción' });
       }
 
@@ -1111,8 +1109,15 @@ export async function rutasAdmin(servidor: FastifyInstance): Promise<void> {
           diasSemana.map((dia) => [dia, { isOpen: dia !== 'Domingo', openTime: '09:00', closeTime: '19:00' }]),
         );
 
+        const precioPlanActual = await obtenerPrecioPlanActual(planNormalizado, pais);
+        if (!precioPlanActual) {
+          return respuesta.code(500).send({
+            error: `No existe un precio configurado para el plan ${planNormalizado} en ${pais}`,
+          });
+        }
+
         const monedaInicial = obtenerMonedaPorPais(pais);
-        const montoInicial = obtenerMontoPlanPorPais(pais);
+        const montoInicial = precioPlanActual.monto;
         const [columnasEstudios, columnasUsuarios, columnasPersonal, columnasPagos] = await Promise.all([
           obtenerColumnasTabla('estudios'),
           obtenerColumnasTabla('usuarios'),
@@ -1142,6 +1147,9 @@ export async function rutasAdmin(servidor: FastifyInstance): Promise<void> {
             suscripcion: 'mensual',
             inicioSuscripcion: formatearFecha(fechaInicio),
             fechaVencimiento: formatearFecha(vencimiento),
+            ...(columnasEstudios.has('precioPlanActualId') && { precioPlanActualId: precioPlanActual.id }),
+            ...(columnasEstudios.has('precioPlanProximoId') && { precioPlanProximoId: null }),
+            ...(columnasEstudios.has('fechaAplicacionPrecioProximo') && { fechaAplicacionPrecioProximo: null }),
             horario,
             servicios,
             serviciosCustom,
@@ -1245,7 +1253,7 @@ export async function rutasAdmin(servidor: FastifyInstance): Promise<void> {
     { preHandler: [verificarJWT, requierePermiso('suspenderSalones')] },
     async (solicitud, respuesta) => {
       const payload = solicitud.user as { rol: string; sub: string };
-      if (payload.rol !== 'maestro') {
+      if (!esAdministradorConPermisos(payload.rol)) {
         return respuesta.code(403).send({ error: 'Sin permisos para esta acción' });
       }
 
@@ -1356,7 +1364,7 @@ export async function rutasAdmin(servidor: FastifyInstance): Promise<void> {
     { preHandler: [verificarJWT, requierePermiso('gestionarPagos')] },
     async (solicitud, respuesta) => {
       const payload = solicitud.user as { rol: string; sub: string };
-      if (payload.rol !== 'maestro') {
+      if (!esAdministradorConPermisos(payload.rol)) {
         return respuesta.code(403).send({ error: 'Sin permisos para esta acción' });
       }
 
@@ -1435,7 +1443,7 @@ export async function rutasAdmin(servidor: FastifyInstance): Promise<void> {
     { preHandler: [verificarJWT, requierePermiso('gestionarPagos')] },
     async (solicitud, respuesta) => {
       const payload = solicitud.user as { rol: string; sub: string };
-      if (payload.rol !== 'maestro') {
+      if (!esAdministradorConPermisos(payload.rol)) {
         return respuesta.code(403).send({ error: 'Sin permisos para esta acción' });
       }
 
@@ -1514,7 +1522,7 @@ export async function rutasAdmin(servidor: FastifyInstance): Promise<void> {
     { preHandler: [verificarJWT, requierePermiso('suspenderSalones')] },
     async (solicitud, respuesta) => {
       const payload = solicitud.user as { rol: string; sub: string };
-      if (payload.rol !== 'maestro') {
+      if (!esAdministradorConPermisos(payload.rol)) {
         return respuesta.code(403).send({ error: 'Sin permisos para esta acción' });
       }
 
@@ -1606,7 +1614,7 @@ export async function rutasAdmin(servidor: FastifyInstance): Promise<void> {
     { preHandler: [verificarJWT, requierePermiso('verMetricas')] },
     async (solicitud, respuesta) => {
       const payload = solicitud.user as { rol: string };
-      if (payload.rol !== 'maestro') {
+      if (!esAdministradorConPermisos(payload.rol)) {
         return respuesta.code(403).send({ error: 'Sin permisos para esta acción' });
       }
 
@@ -1623,18 +1631,6 @@ export async function rutasAdmin(servidor: FastifyInstance): Promise<void> {
       const hace30DiasLimiteStr = hace30DiasLimite.toISOString().split('T')[0]!;
 
       const hoy = new Date().toISOString().split('T')[0]!;
-
-      const inicioMesActual = new Date();
-      inicioMesActual.setDate(1);
-      const inicioMesActualStr = inicioMesActual.toISOString().split('T')[0]!;
-
-      const inicioMesAnterior = new Date(inicioMesActual);
-      inicioMesAnterior.setMonth(inicioMesAnterior.getMonth() - 1);
-      const inicioMesAnteriorStr = inicioMesAnterior.toISOString().split('T')[0]!;
-
-      const finMesAnterior = new Date(inicioMesActual);
-      finMesAnterior.setDate(0);
-      const finMesAnteriorStr = finMesAnterior.toISOString().split('T')[0]!;
 
       const [
         totalSalones,
@@ -1653,8 +1649,7 @@ export async function rutasAdmin(servidor: FastifyInstance): Promise<void> {
         solicitudesCreadasUltimos30Dias,
         salonesAprobadosUltimos30Dias,
         cancelacionesPendientes,
-        ingresosMesActual,
-        ingresosMesAnterior,
+        resumenSuscripcionesActivas,
       ] = await Promise.all([
         prisma.estudio.count(),
         prisma.estudio.count({ where: { estado: 'aprobado', activo: true } }),
@@ -1700,16 +1695,7 @@ export async function rutasAdmin(servidor: FastifyInstance): Promise<void> {
           where: { fechaAprobacion: { gte: hace30Dias } },
         }),
         prisma.estudio.count({ where: { cancelacionSolicitada: true } }),
-        prisma.pago.groupBy({
-          by: ['moneda'],
-          where: { fecha: { gte: inicioMesActualStr, lte: hoy } },
-          _sum: { monto: true },
-        }),
-        prisma.pago.groupBy({
-          by: ['moneda'],
-          where: { fecha: { gte: inicioMesAnteriorStr, lte: finMesAnteriorStr } },
-          _sum: { monto: true },
-        }),
+        obtenerResumenSuscripcionesActivas(),
       ]);
 
       const promedioReservasPorSalonActivo =
@@ -1721,27 +1707,20 @@ export async function rutasAdmin(servidor: FastifyInstance): Promise<void> {
             )
           : 0;
 
-      const ingresosAnteriorPorMoneda = new Map(
-        ingresosMesAnterior.map((registro) => [registro.moneda, registro._sum.monto ?? 0]),
-      );
-      const ingresosPorMoneda = Array.from(
-        new Set([
-          ...ingresosMesActual.map((registro) => registro.moneda),
-          ...ingresosMesAnterior.map((registro) => registro.moneda),
-        ]),
-      ).map((moneda) => {
-        const actual = ingresosMesActual.find((registro) => registro.moneda === moneda)?._sum.monto ?? 0;
-        const anterior = ingresosAnteriorPorMoneda.get(moneda) ?? 0;
-        const variacion =
-          anterior > 0 ? Number((((actual - anterior) / anterior) * 100).toFixed(1)) : actual > 0 ? 100 : 0;
-
-        return {
-          moneda,
-          actual,
-          anterior,
-          variacion,
-        };
-      });
+      const ingresosPorMoneda = [
+        {
+          moneda: 'MXN',
+          actual: resumenSuscripcionesActivas.porPais.Mexico.total,
+          anterior: resumenSuscripcionesActivas.porPais.Mexico.total,
+          variacion: 0,
+        },
+        {
+          moneda: 'COP',
+          actual: resumenSuscripcionesActivas.porPais.Colombia.total,
+          anterior: resumenSuscripcionesActivas.porPais.Colombia.total,
+          variacion: 0,
+        },
+      ];
 
       return respuesta.send({
         datos: {
@@ -1775,7 +1754,7 @@ export async function rutasAdmin(servidor: FastifyInstance): Promise<void> {
     { preHandler: [verificarJWT, requierePermiso('gestionarPagos')] },
     async (solicitud, respuesta) => {
       const payload = solicitud.user as { rol: string };
-      if (payload.rol !== 'maestro') {
+      if (!esAdministradorConPermisos(payload.rol)) {
         return respuesta.code(403).send({ error: 'Sin permisos para esta acción' });
       }
 
@@ -1819,7 +1798,7 @@ export async function rutasAdmin(servidor: FastifyInstance): Promise<void> {
     { preHandler: [verificarJWT, requierePermiso('gestionarPagos')] },
     async (solicitud, respuesta) => {
       const payload = solicitud.user as { rol: string; sub: string };
-      if (payload.rol !== 'maestro') {
+      if (!esAdministradorConPermisos(payload.rol)) {
         return respuesta.code(403).send({ error: 'Sin permisos para esta acción' });
       }
 
@@ -2004,9 +1983,16 @@ export async function rutasAdmin(servidor: FastifyInstance): Promise<void> {
         diasSemana.map((dia) => [dia, { isOpen: dia !== 'Domingo', openTime: '09:00', closeTime: '19:00' }]),
       );
 
-      const monedaInicial = obtenerMonedaPorPais(preregistro.pais);
-      const montoInicial = obtenerMontoPlanPorPais(preregistro.pais);
       const planNormalizado = normalizarPlanEstudio(preregistro.plan);
+      const precioPlanActual = await obtenerPrecioPlanActual(planNormalizado, preregistro.pais);
+      if (!precioPlanActual) {
+        return respuesta.code(500).send({
+          error: `No existe un precio configurado para el plan ${planNormalizado} en ${preregistro.pais}`,
+        });
+      }
+
+      const monedaInicial = obtenerMonedaPorPais(preregistro.pais);
+      const montoInicial = precioPlanActual.monto;
       const [columnasEstudios, columnasUsuarios, columnasPagos] = await Promise.all([
         obtenerColumnasTabla('estudios'),
         obtenerColumnasTabla('usuarios'),
@@ -2034,6 +2020,9 @@ export async function rutasAdmin(servidor: FastifyInstance): Promise<void> {
           suscripcion: 'mensual',
           inicioSuscripcion: formatearFecha(fechaInicio),
           fechaVencimiento: formatearFecha(vencimiento),
+          ...(columnasEstudios.has('precioPlanActualId') && { precioPlanActualId: precioPlanActual.id }),
+          ...(columnasEstudios.has('precioPlanProximoId') && { precioPlanProximoId: null }),
+          ...(columnasEstudios.has('fechaAplicacionPrecioProximo') && { fechaAplicacionPrecioProximo: null }),
           horario,
           servicios: [],
           serviciosCustom: [],
@@ -2245,7 +2234,7 @@ export async function rutasAdmin(servidor: FastifyInstance): Promise<void> {
     { preHandler: [verificarJWT, requierePermiso('verMetricas')] },
     async (solicitud, respuesta) => {
       const payload = solicitud.user as { rol: string };
-      if (payload.rol !== 'maestro') {
+      if (!esAdministradorConPermisos(payload.rol)) {
         return respuesta.code(403).send({ error: 'Sin permisos para esta acción' });
       }
 
@@ -2327,10 +2316,18 @@ export async function rutasAdmin(servidor: FastifyInstance): Promise<void> {
     Querystring: { pagina?: string; limite?: string };
   }>(
     '/admin/salones/activos',
-    { preHandler: [verificarJWT, requierePermiso('suspenderSalones')] },
+    {
+      preHandler: [
+        verificarJWT,
+        requiereAccesoAdministrativo({
+          maestro: ['aprobarSalones', 'suspenderSalones'],
+          supervisor: ['verControlSalones', 'accionSuspension', 'activarSalones'],
+        }),
+      ],
+    },
     async (solicitud, respuesta) => {
       const payload = solicitud.user as { rol: string };
-      if (payload.rol !== 'maestro') {
+      if (!esAdministradorConPermisos(payload.rol)) {
         return respuesta.code(403).send({ error: 'Sin permisos para esta acción' });
       }
 
@@ -2388,10 +2385,18 @@ export async function rutasAdmin(servidor: FastifyInstance): Promise<void> {
     Querystring: { pagina?: string; limite?: string };
   }>(
     '/admin/salones/suspendidos',
-    { preHandler: [verificarJWT, requierePermiso('suspenderSalones')] },
+    {
+      preHandler: [
+        verificarJWT,
+        requiereAccesoAdministrativo({
+          maestro: ['aprobarSalones', 'suspenderSalones'],
+          supervisor: ['verControlSalones', 'accionSuspension', 'activarSalones'],
+        }),
+      ],
+    },
     async (solicitud, respuesta) => {
       const payload = solicitud.user as { rol: string };
-      if (payload.rol !== 'maestro') {
+      if (!esAdministradorConPermisos(payload.rol)) {
         return respuesta.code(403).send({ error: 'Sin permisos para esta acción' });
       }
 
@@ -2443,10 +2448,18 @@ export async function rutasAdmin(servidor: FastifyInstance): Promise<void> {
     Querystring: { pagina?: string; limite?: string };
   }>(
     '/admin/salones/bloqueados',
-    { preHandler: [verificarJWT, requierePermiso('suspenderSalones')] },
+    {
+      preHandler: [
+        verificarJWT,
+        requiereAccesoAdministrativo({
+          maestro: ['aprobarSalones', 'suspenderSalones'],
+          supervisor: ['verControlSalones', 'accionSuspension', 'activarSalones'],
+        }),
+      ],
+    },
     async (solicitud, respuesta) => {
       const payload = solicitud.user as { rol: string };
-      if (payload.rol !== 'maestro') {
+      if (!esAdministradorConPermisos(payload.rol)) {
         return respuesta.code(403).send({ error: 'Sin permisos para esta acción' });
       }
 
@@ -2499,7 +2512,7 @@ export async function rutasAdmin(servidor: FastifyInstance): Promise<void> {
     { preHandler: [verificarJWT, requierePermiso('suspenderSalones')] },
     async (solicitud, respuesta) => {
       const payload = solicitud.user as { rol: string; sub: string };
-      if (payload.rol !== 'maestro') {
+      if (!esAdministradorConPermisos(payload.rol)) {
         return respuesta.code(403).send({ error: 'Sin permisos para esta acción' });
       }
 
@@ -2556,10 +2569,18 @@ export async function rutasAdmin(servidor: FastifyInstance): Promise<void> {
    */
   servidor.put<{ Params: { id: string } }>(
     '/admin/salones/:id/activar',
-    { preHandler: [verificarJWT, requierePermiso('suspenderSalones')] },
+    {
+      preHandler: [
+        verificarJWT,
+        requiereAccesoAdministrativo({
+          maestro: ['suspenderSalones'],
+          supervisor: ['activarSalones', 'accionSuspension'],
+        }),
+      ],
+    },
     async (solicitud, respuesta) => {
       const payload = solicitud.user as { rol: string; sub: string };
-      if (payload.rol !== 'maestro') {
+      if (!esAdministradorConPermisos(payload.rol)) {
         return respuesta.code(403).send({ error: 'Sin permisos para esta acción' });
       }
 
@@ -2627,7 +2648,7 @@ export async function rutasAdmin(servidor: FastifyInstance): Promise<void> {
     { preHandler: [verificarJWT, requierePermiso('suspenderSalones')] },
     async (solicitud, respuesta) => {
       const payload = solicitud.user as { rol: string; sub: string };
-      if (payload.rol !== 'maestro') {
+      if (!esAdministradorConPermisos(payload.rol)) {
         return respuesta.code(403).send({ error: 'Sin permisos para esta acción' });
       }
 
@@ -2636,7 +2657,7 @@ export async function rutasAdmin(servidor: FastifyInstance): Promise<void> {
 
       const estudio = await prisma.estudio.findUnique({
         where: { id },
-        select: { id: true, nombre: true, plan: true, inicioSuscripcion: true, fechaVencimiento: true, mensajesMasivosExtra: true },
+        select: { id: true, nombre: true, pais: true, plan: true, inicioSuscripcion: true, fechaVencimiento: true, mensajesMasivosExtra: true },
       });
 
       if (!estudio) {
@@ -2674,6 +2695,14 @@ export async function rutasAdmin(servidor: FastifyInstance): Promise<void> {
 
       if (Object.keys(actualizacion).length > 0) {
         await prisma.estudio.update({ where: { id }, data: actualizacion });
+      }
+
+      if (plan && (plan === 'STANDARD' || plan === 'PRO')) {
+        await asegurarPrecioActualSalon({
+          estudioId: id,
+          plan,
+          pais: estudio.pais,
+        });
       }
 
       if (contrasena && contrasena.length >= 8) {
@@ -2718,7 +2747,7 @@ export async function rutasAdmin(servidor: FastifyInstance): Promise<void> {
     { preHandler: [verificarJWT, requierePermiso('verMetricas')] },
     async (solicitud, respuesta) => {
       const payload = solicitud.user as { rol: string };
-      if (payload.rol !== 'maestro') {
+      if (!esAdministradorConPermisos(payload.rol)) {
         return respuesta.code(403).send({ error: 'Sin permisos para esta acción' });
       }
 
@@ -2805,66 +2834,28 @@ export async function rutasAdmin(servidor: FastifyInstance): Promise<void> {
     { preHandler: [verificarJWT, requierePermiso('verMetricas')] },
     async (solicitud, respuesta) => {
       const payload = solicitud.user as { rol: string };
-      if (payload.rol !== 'maestro') {
+      if (!esAdministradorConPermisos(payload.rol)) {
         return respuesta.code(403).send({ error: 'Sin permisos para esta acción' });
       }
 
-      // Obtener totales por moneda
-      const totalesPorMoneda = await prisma.pago.groupBy({
-        by: ['moneda'],
-        _sum: { monto: true },
-      });
-
-      const totalMXN = totalesPorMoneda.find((t) => t.moneda === 'MXN')?._sum.monto ?? 0;
-      const totalCOP = totalesPorMoneda.find((t) => t.moneda === 'COP')?._sum.monto ?? 0;
-
-      // Desglose por plan para México
-      const salonesMexico = await prisma.estudio.findMany({
-        where: { pais: 'Mexico' },
-        select: { id: true, plan: true },
-      });
-
-      const salonesColombia = await prisma.estudio.findMany({
-        where: { pais: 'Colombia' },
-        select: { id: true, plan: true },
-      });
-
-      const idsMexicoPro = salonesMexico.filter((s) => s.plan === 'PRO').map((s) => s.id);
-      const idsMexicoStd = salonesMexico.filter((s) => s.plan === 'STANDARD').map((s) => s.id);
-      const idsColPro = salonesColombia.filter((s) => s.plan === 'PRO').map((s) => s.id);
-      const idsColStd = salonesColombia.filter((s) => s.plan === 'STANDARD').map((s) => s.id);
-
-      const [ventasMxPro, ventasMxStd, ventasColPro, ventasColStd] = await Promise.all([
-        idsMexicoPro.length > 0
-          ? prisma.pago.aggregate({ where: { estudioId: { in: idsMexicoPro } }, _sum: { monto: true }, _count: true })
-          : { _sum: { monto: 0 }, _count: 0 },
-        idsMexicoStd.length > 0
-          ? prisma.pago.aggregate({ where: { estudioId: { in: idsMexicoStd } }, _sum: { monto: true }, _count: true })
-          : { _sum: { monto: 0 }, _count: 0 },
-        idsColPro.length > 0
-          ? prisma.pago.aggregate({ where: { estudioId: { in: idsColPro } }, _sum: { monto: true }, _count: true })
-          : { _sum: { monto: 0 }, _count: 0 },
-        idsColStd.length > 0
-          ? prisma.pago.aggregate({ where: { estudioId: { in: idsColStd } }, _sum: { monto: true }, _count: true })
-          : { _sum: { monto: 0 }, _count: 0 },
-      ]);
+      const resumen = await obtenerResumenSuscripcionesActivas();
 
       return respuesta.send({
         datos: {
           mexico: {
-            total: totalMXN,
+            total: resumen.porPais.Mexico.total,
             moneda: 'MXN',
             desglose: {
-              pro: { salones: idsMexicoPro.length, monto: ventasMxPro._sum.monto ?? 0 },
-              standard: { salones: idsMexicoStd.length, monto: ventasMxStd._sum.monto ?? 0 },
+              pro: resumen.porPais.Mexico.desglose.pro,
+              standard: resumen.porPais.Mexico.desglose.standard,
             },
           },
           colombia: {
-            total: totalCOP,
+            total: resumen.porPais.Colombia.total,
             moneda: 'COP',
             desglose: {
-              pro: { salones: idsColPro.length, monto: ventasColPro._sum.monto ?? 0 },
-              standard: { salones: idsColStd.length, monto: ventasColStd._sum.monto ?? 0 },
+              pro: resumen.porPais.Colombia.desglose.pro,
+              standard: resumen.porPais.Colombia.desglose.standard,
             },
           },
         },
@@ -2876,17 +2867,32 @@ export async function rutasAdmin(servidor: FastifyInstance): Promise<void> {
    * GET /admin/directorio — directorio de acceso con búsqueda
    */
   servidor.get<{
-    Querystring: { buscar?: string; pagina?: string; limite?: string };
+    Querystring: {
+      buscar?: string;
+      pagina?: string;
+      limite?: string;
+      pais?: string;
+      estado?: string;
+      plan?: string;
+    };
   }>(
     '/admin/directorio',
-    { preHandler: [verificarJWT, requierePermiso('suspenderSalones')] },
+    {
+      preHandler: [
+        verificarJWT,
+        requiereAccesoAdministrativo({
+          maestro: ['aprobarSalones', 'suspenderSalones'],
+          supervisor: ['verDirectorio', 'editarDirectorio', 'verControlSalones', 'accionSuspension'],
+        }),
+      ],
+    },
     async (solicitud, respuesta) => {
       const payload = solicitud.user as { rol: string };
-      if (payload.rol !== 'maestro') {
+      if (!esAdministradorConPermisos(payload.rol)) {
         return respuesta.code(403).send({ error: 'Sin permisos para esta acción' });
       }
 
-      const { buscar, pagina: paginaStr, limite: limiteStr } = solicitud.query;
+      const { buscar, pagina: paginaStr, limite: limiteStr, pais, estado, plan } = solicitud.query;
       const pagina = Math.max(1, parseInt(paginaStr ?? '1', 10));
       const limite = Math.min(100, Math.max(1, parseInt(limiteStr ?? '10', 10)));
       const saltar = (pagina - 1) * limite;
@@ -2899,6 +2905,18 @@ export async function rutasAdmin(servidor: FastifyInstance): Promise<void> {
           { propietario: { contains: buscNorm } },
         ];
       }
+      if (pais === 'Mexico' || pais === 'Colombia') {
+        where.pais = pais;
+      }
+      if (
+        estado &&
+        ['pendiente', 'aprobado', 'rechazado', 'suspendido', 'bloqueado'].includes(estado)
+      ) {
+        where.estado = estado as 'pendiente' | 'aprobado' | 'rechazado' | 'suspendido' | 'bloqueado';
+      }
+      if (plan && ['STANDARD', 'PRO'].includes(plan)) {
+        where.plan = plan as 'STANDARD' | 'PRO';
+      }
 
       const [total, salones] = await Promise.all([
         prisma.estudio.count({ where }),
@@ -2909,10 +2927,13 @@ export async function rutasAdmin(servidor: FastifyInstance): Promise<void> {
             nombre: true,
             propietario: true,
             pais: true,
+            plan: true,
+            estado: true,
+            activo: true,
             usuarios: {
               where: { rol: 'dueno' },
               take: 1,
-              select: { nombre: true, email: true },
+              select: { nombre: true, email: true, activo: true, ultimoAcceso: true },
             },
           },
           orderBy: { creadoEn: 'desc' },
@@ -2927,6 +2948,11 @@ export async function rutasAdmin(servidor: FastifyInstance): Promise<void> {
         dueno: s.usuarios[0]?.nombre ?? s.propietario,
         correo: s.usuarios[0]?.email ?? null,
         pais: s.pais,
+        plan: s.plan,
+        estado: s.estado,
+        activo: s.activo,
+        duenoActivo: s.usuarios[0]?.activo ?? false,
+        ultimoAccesoDueno: s.usuarios[0]?.ultimoAcceso?.toISOString() ?? null,
       }));
 
       return respuesta.send({ datos, total, pagina, totalPaginas: Math.ceil(total / limite) });
@@ -2938,10 +2964,18 @@ export async function rutasAdmin(servidor: FastifyInstance): Promise<void> {
    */
   servidor.get<{ Params: { id: string } }>(
     '/admin/directorio/:id',
-    { preHandler: [verificarJWT, requierePermiso('suspenderSalones')] },
+    {
+      preHandler: [
+        verificarJWT,
+        requiereAccesoAdministrativo({
+          maestro: ['aprobarSalones', 'suspenderSalones'],
+          supervisor: ['verDirectorio', 'editarDirectorio', 'verControlSalones', 'accionSuspension'],
+        }),
+      ],
+    },
     async (solicitud, respuesta) => {
       const payload = solicitud.user as { rol: string };
-      if (payload.rol !== 'maestro') {
+      if (!esAdministradorConPermisos(payload.rol)) {
         return respuesta.code(403).send({ error: 'Sin permisos para esta acción' });
       }
 
@@ -2990,10 +3024,18 @@ export async function rutasAdmin(servidor: FastifyInstance): Promise<void> {
     Body: Record<string, unknown>;
   }>(
     '/admin/directorio/:id',
-    { preHandler: [verificarJWT, requierePermiso('suspenderSalones')] },
+    {
+      preHandler: [
+        verificarJWT,
+        requiereAccesoAdministrativo({
+          maestro: ['suspenderSalones'],
+          supervisor: ['editarDirectorio'],
+        }),
+      ],
+    },
     async (solicitud, respuesta) => {
       const payload = solicitud.user as { rol: string; sub: string };
-      if (payload.rol !== 'maestro') {
+      if (!esAdministradorConPermisos(payload.rol)) {
         return respuesta.code(403).send({ error: 'Sin permisos para esta acción' });
       }
 
@@ -3047,10 +3089,18 @@ export async function rutasAdmin(servidor: FastifyInstance): Promise<void> {
     Querystring: { pagina?: string; limite?: string };
   }>(
     '/admin/directorio/:id/historial',
-    { preHandler: [verificarJWT, requierePermiso('suspenderSalones')] },
+    {
+      preHandler: [
+        verificarJWT,
+        requiereAccesoAdministrativo({
+          maestro: ['aprobarSalones', 'suspenderSalones'],
+          supervisor: ['verDirectorio', 'editarDirectorio', 'verControlSalones', 'accionSuspension'],
+        }),
+      ],
+    },
     async (solicitud, respuesta) => {
       const payload = solicitud.user as { rol: string };
-      if (payload.rol !== 'maestro') {
+      if (!esAdministradorConPermisos(payload.rol)) {
         return respuesta.code(403).send({ error: 'Sin permisos para esta acción' });
       }
 

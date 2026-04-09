@@ -1,4 +1,5 @@
 import type { FastifyInstance } from 'fastify';
+import type { Prisma } from '../generated/prisma/client.js';
 import { z } from 'zod';
 import { prisma } from '../prismaCliente.js';
 import { verificarJWT } from '../middleware/autenticacion.js';
@@ -6,6 +7,7 @@ import { requierePermiso } from '../middleware/verificarPermiso.js';
 import { registrarAuditoria } from '../utils/auditoria.js';
 import { normalizarZonaHorariaEstudio, obtenerFechaISOEnZona } from '../utils/zonasHorarias.js';
 import { enviarEmailPagoConfirmado } from '../servicios/servicioEmail.js';
+import { asegurarPrecioActualSalon, obtenerPrecioPlanActual, resolverPrecioRenovacion } from '../lib/preciosPlanes.js';
 
 type PaisPago = 'Mexico' | 'Colombia';
 type MonedaPago = 'MXN' | 'COP';
@@ -163,8 +165,8 @@ async function enriquecerPagos(
       estudioNombre: pago.estudio.nombre,
       pais: normalizarPais(pago.estudio.pais),
       moneda: obtenerMonedaPorPais(pago.estudio.pais),
-      registradoPorNombre: auditoria?.usuario.nombre ?? (detalles?.['registradoPorNombre'] as string | undefined) ?? null,
-      registradoPorEmail: auditoria?.usuario.email ?? (detalles?.['registradoPorEmail'] as string | undefined) ?? null,
+      registradoPorNombre: auditoria?.usuario?.nombre ?? (detalles?.['registradoPorNombre'] as string | undefined) ?? null,
+      registradoPorEmail: auditoria?.usuario?.email ?? (detalles?.['registradoPorEmail'] as string | undefined) ?? null,
       fechaBaseRenovacion: (detalles?.['fechaBase'] as string | undefined) ?? null,
       nuevaFechaVencimiento: (detalles?.['nuevaFechaVencimiento'] as string | undefined) ?? null,
       estrategiaRenovacion: (detalles?.['estrategia'] as string | undefined) ?? null,
@@ -237,12 +239,13 @@ export async function rutasPagos(servidor: FastifyInstance): Promise<void> {
       resultado.data;
 
 
-    const estudio = await prisma.estudio.findUnique({
+    let estudio = await prisma.estudio.findUnique({
       where: { id: estudioId },
       select: {
         id: true,
         nombre: true,
         pais: true,
+        plan: true,
         zonaHoraria: true,
         fechaVencimiento: true,
         inicioSuscripcion: true,
@@ -250,11 +253,58 @@ export async function rutasPagos(servidor: FastifyInstance): Promise<void> {
         activo: true,
         emailContacto: true,
         propietario: true,
+        precioPlanActualId: true,
+        precioPlanProximoId: true,
+        fechaAplicacionPrecioProximo: true,
+        precioPlanActual: {
+          select: {
+            id: true,
+            plan: true,
+            pais: true,
+            moneda: true,
+            monto: true,
+            version: true,
+            vigenteDesde: true,
+          },
+        },
+        precioPlanProximo: {
+          select: {
+            id: true,
+            plan: true,
+            pais: true,
+            moneda: true,
+            monto: true,
+            version: true,
+            vigenteDesde: true,
+          },
+        },
       },
     });
 
     if (!estudio) {
       return respuesta.code(404).send({ error: 'Salón no encontrado' });
+    }
+
+    if (!estudio.precioPlanActual) {
+      const precioAsignado = await asegurarPrecioActualSalon({
+        estudioId,
+        plan: estudio.plan,
+        pais: estudio.pais,
+      });
+
+      estudio = {
+        ...estudio,
+        precioPlanActualId: precioAsignado.id,
+        precioPlanActual: {
+          id: precioAsignado.id,
+          plan: precioAsignado.plan,
+          pais: precioAsignado.pais,
+          moneda: precioAsignado.moneda,
+          monto: precioAsignado.monto,
+          version: precioAsignado.version,
+          vigenteDesde: precioAsignado.vigenteDesde,
+        },
+      };
     }
 
     const monedaAplicada = obtenerMonedaPorPais(estudio.pais);
@@ -269,9 +319,21 @@ export async function rutasPagos(servidor: FastifyInstance): Promise<void> {
         })
       : null;
 
+    const fechaBaseCobro = renovacion?.fechaBase ?? estudio.fechaVencimiento ?? estudio.inicioSuscripcion ?? fecha;
+    const precioFallback = estudio.precioPlanActual ?? await obtenerPrecioPlanActual(estudio.plan, estudio.pais);
+    const precioResuelto = resolverPrecioRenovacion(estudio, fechaBaseCobro);
+    const precioAplicado = precioResuelto.precioAplicado ?? precioFallback;
+
+    if (!precioAplicado) {
+      return respuesta.code(500).send({ error: 'No existe un precio configurado para este salón' });
+    }
+
+    const esPagoSuscripcion = extenderSuscripcion || (tipo ?? 'suscripcion') === 'suscripcion';
+    const montoAplicado = esPagoSuscripcion ? precioAplicado.monto : monto;
+
     const pago = await crearPagoCompat({
       estudioId,
-      monto,
+      monto: montoAplicado,
       moneda: monedaAplicada,
       concepto: concepto ?? `Suscripción mensual Beauty Time Pro (${monedaAplicada})`,
       fecha,
@@ -279,10 +341,31 @@ export async function rutasPagos(servidor: FastifyInstance): Promise<void> {
       referencia,
     });
 
+    const actualizacionEstudio: Prisma.EstudioUncheckedUpdateInput = {};
+
     if (renovacion) {
+      actualizacionEstudio.fechaVencimiento = renovacion.nuevaFechaVencimiento;
+    }
+
+    if (precioAplicado.id && (precioResuelto.cambiaEnRenovacion || !estudio.precioPlanActualId)) {
+      actualizacionEstudio.precioPlanActualId = precioAplicado.id;
+    }
+
+    if (precioResuelto.cambiaEnRenovacion) {
+      actualizacionEstudio.precioPlanProximoId = null;
+      actualizacionEstudio.fechaAplicacionPrecioProximo = null;
+    }
+
+    if (renovacion && estudio.estado === 'suspendido') {
+      actualizacionEstudio.estado = 'aprobado';
+      actualizacionEstudio.activo = true;
+      actualizacionEstudio.fechaSuspension = null;
+    }
+
+    if (Object.keys(actualizacionEstudio).length > 0) {
       await prisma.estudio.update({
         where: { id: estudioId },
-        data: { fechaVencimiento: renovacion.nuevaFechaVencimiento },
+        data: actualizacionEstudio,
       });
     }
 
@@ -294,12 +377,17 @@ export async function rutasPagos(servidor: FastifyInstance): Promise<void> {
       detalles: {
         estudioId,
         estudioNombre: estudio.nombre,
-        monto,
+        montoSolicitado: monto,
+        montoAplicado,
         monedaSolicitada: moneda ?? null,
         monedaAplicada,
+        precioPlanActualId: estudio.precioPlanActualId,
+        precioPlanAplicadoId: precioAplicado.id,
+        precioPlanProximoId: estudio.precioPlanProximoId,
+        precioCambioEnRenovacion: precioResuelto.cambiaEnRenovacion,
         registradoPorNombre: payload.nombre ?? null,
         registradoPorEmail: payload.email ?? null,
-        fechaBase: renovacion?.fechaBase ?? null,
+        fechaBase: fechaBaseCobro,
         nuevaFechaVencimiento: renovacion?.nuevaFechaVencimiento ?? null,
         estrategia: renovacion?.estrategia ?? null,
       },
@@ -308,15 +396,6 @@ export async function rutasPagos(servidor: FastifyInstance): Promise<void> {
 
     // Si el salón estaba suspendido y se extendió la suscripción, reactivar automáticamente
     if (renovacion && estudio.estado === 'suspendido') {
-      await prisma.estudio.update({
-        where: { id: estudioId },
-        data: {
-          estado: 'aprobado',
-          activo: true,
-          fechaSuspension: null,
-        },
-      });
-
       await registrarAuditoria({
         usuarioId: payload.sub,
         accion: 'reactivar_salon_por_pago',
@@ -365,12 +444,14 @@ export async function rutasPagos(servidor: FastifyInstance): Promise<void> {
         ...pago,
         pais: normalizarPais(estudio.pais),
         moneda: monedaAplicada,
+        monto: montoAplicado,
         estudioNombre: estudio.nombre,
         registradoPorNombre: payload.nombre ?? null,
         registradoPorEmail: payload.email ?? null,
         fechaBaseRenovacion: renovacion?.fechaBase ?? null,
         nuevaFechaVencimiento: renovacion?.nuevaFechaVencimiento ?? null,
         estrategiaRenovacion: renovacion?.estrategia ?? null,
+        precioPlanIdAplicado: precioAplicado.id,
       },
     });
   });

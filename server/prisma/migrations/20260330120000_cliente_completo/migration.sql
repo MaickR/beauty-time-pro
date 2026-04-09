@@ -1,4 +1,4 @@
-﻿-- AlterTable: hacer fechaNacimiento opcional
+-- AlterTable: hacer fechaNacimiento opcional
 ALTER TABLE `clientes_app` MODIFY `fechaNacimiento` DATETIME NULL;
 
 -- AlterTable: agregar campo ciudad

@@ -25,5 +25,6 @@
     "noEmit": true,
     "skipLibCheck": true
   },
-  "include": ["src", "main.tsx"]
+  "include": ["src", "main.tsx"],
+  "references": [{ "path": "./server" }]
 }

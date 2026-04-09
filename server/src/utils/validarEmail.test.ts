@@ -8,11 +8,9 @@ describe('validarEmail', () => {
 			expect(esDominioPermitido('usuario@hotmail.com')).toBe(true);
 			expect(esDominioPermitido('usuario@outlook.com')).toBe(true);
 			expect(esDominioPermitido('usuario@yahoo.com')).toBe(true);
-			expect(esDominioPermitido('usuario@icloud.com')).toBe(true);
-			expect(esDominioPermitido('usuario@protonmail.com')).toBe(true);
 			expect(esDominioPermitido('usuario@hotmail.com.mx')).toBe(true);
-			expect(esDominioPermitido('usuario@live.com.co')).toBe(true);
-			expect(esDominioPermitido('usuario@pm.me')).toBe(true);
+			expect(esDominioPermitido('usuario@outlook.es')).toBe(true);
+			expect(esDominioPermitido('usuario@yahoo.com.co')).toBe(true);
 		});
 
 		it('rechaza dominios desconocidos o temporales', () => {
@@ -21,6 +19,8 @@ describe('validarEmail', () => {
 			expect(esDominioPermitido('usuario@guerrillamail.com')).toBe(false);
 			expect(esDominioPermitido('usuario@empresa.com')).toBe(false);
 			expect(esDominioPermitido('usuario@universidad.edu.mx')).toBe(false);
+			expect(esDominioPermitido('usuario@icloud.com')).toBe(false);
+			expect(esDominioPermitido('usuario@protonmail.com')).toBe(false);
 		});
 	});
 

@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
-import { X, DollarSign, ChevronDown, ChevronRight } from 'lucide-react';
+import { X, ChevronDown, ChevronRight } from 'lucide-react';
 import { useState } from 'react';
 import { obtenerVentasMetrica } from '../../../servicios/servicioAdmin';
 import type { VentasPais } from '../../../servicios/servicioAdmin';
@@ -37,9 +37,17 @@ export function ModalVentas({ onCerrar }: PropsModalVentas) {
     });
   };
 
+  const formatearSinSimbolo = (centavos: number) => {
+    const valor = centavos / 100;
+    return valor.toLocaleString('es-MX', {
+      minimumFractionDigits: 0,
+      maximumFractionDigits: 0,
+    });
+  };
+
   const paises: PaisResumen[] = data
     ? [
-        { nombre: 'Mexico', datos: data.datos.mexico },
+        { nombre: 'México', datos: data.datos.mexico },
         { nombre: 'Colombia', datos: data.datos.colombia },
       ]
     : [];
@@ -77,16 +85,16 @@ export function ModalVentas({ onCerrar }: PropsModalVentas) {
             <>
               {/* Totales globales */}
               <div className="grid grid-cols-2 gap-3">
-                <div className="bg-gradient-to-br from-green-50 to-green-100 rounded-2xl p-4 text-center">
-                  <p className="text-xs font-black text-green-600 uppercase mb-1">Total MXN</p>
-                  <p className="text-2xl font-black text-green-700">
-                    {formatearMoneda(data.datos.mexico.total, 'MXN')}
+                <div className="bg-gradient-to-br from-green-50 via-white to-red-50 rounded-2xl p-4 text-center border border-green-100">
+                  <p className="text-xs font-black text-green-700 uppercase mb-1">México · MXN</p>
+                  <p className="text-2xl font-black text-green-800">
+                    {formatearSinSimbolo(data.datos.mexico.total)}
                   </p>
                 </div>
-                <div className="bg-gradient-to-br from-blue-50 to-blue-100 rounded-2xl p-4 text-center">
-                  <p className="text-xs font-black text-blue-600 uppercase mb-1">Total COP</p>
-                  <p className="text-2xl font-black text-blue-700">
-                    {formatearMoneda(data.datos.colombia.total, 'COP')}
+                <div className="bg-gradient-to-br from-yellow-50 via-blue-50 to-red-50 rounded-2xl p-4 text-center border border-yellow-200">
+                  <p className="text-xs font-black text-blue-700 uppercase mb-1">Colombia · COP</p>
+                  <p className="text-2xl font-black text-blue-800">
+                    {formatearSinSimbolo(data.datos.colombia.total)}
                   </p>
                 </div>
               </div>
@@ -97,24 +105,27 @@ export function ModalVentas({ onCerrar }: PropsModalVentas) {
                   const expandido = expandidos[nombre] ?? false;
                   const { moneda, desglose } = paisData;
                   const totalSalones = desglose.pro.salones + desglose.standard.salones;
+                  const esMexico = nombre === 'México';
                   return (
                     <div
                       key={nombre}
-                      className="border border-slate-200 rounded-2xl overflow-hidden"
+                      className={`border rounded-2xl overflow-hidden ${esMexico ? 'border-green-200' : 'border-yellow-200'}`}
                     >
                       <button
                         onClick={() => alternarExpandido(nombre)}
                         className="w-full flex items-center justify-between px-4 py-3 hover:bg-slate-50 transition-colors"
                       >
                         <div className="flex items-center gap-3">
-                          <DollarSign className="w-4 h-4 text-slate-400" />
+                          <span className="text-lg">{esMexico ? '🇲🇽' : '🇨🇴'}</span>
                           <span className="font-black text-slate-900">{nombre}</span>
                           <span className="text-xs font-bold text-slate-400">
                             {totalSalones} salones
                           </span>
                         </div>
                         <div className="flex items-center gap-3">
-                          <span className="text-sm font-black text-pink-600">
+                          <span
+                            className={`text-sm font-black ${esMexico ? 'text-green-700' : 'text-blue-700'}`}
+                          >
                             {formatearMoneda(paisData.total, moneda)}
                           </span>
                           {expandido ? (

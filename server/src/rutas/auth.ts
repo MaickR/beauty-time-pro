@@ -1,4 +1,4 @@
-import type { FastifyInstance } from 'fastify';
+import type { FastifyInstance, FastifyRequest } from 'fastify';
 import crypto from 'crypto';
 import { z } from 'zod';
 import { prisma } from '../prismaCliente.js';
@@ -6,17 +6,51 @@ import { env } from '../lib/env.js';
 import { enviarEmailResetContrasena, enviarEmailVerificacionCliente } from '../servicios/servicioEmail.js';
 import { verificarJWT } from '../middleware/autenticacion.js';
 import { obtenerErrorAccesoSalon, salonEstaDisponible } from '../lib/estadoSalon.js';
+import {
+  crearSesionAutenticacion,
+  registrarUsoSesion,
+  revocarSesionAutenticacion,
+  revocarSesionesPorSujeto,
+  rotarSesionAutenticacion,
+  validarRefreshSesion,
+  type TipoSujetoSesion,
+} from '../lib/sesionesAuth.js';
+import { registrarAuditoria } from '../utils/auditoria.js';
 import { compararHashContrasena, generarHashContrasena } from '../utils/contrasenas.js';
 
 const REFRESH_EXPIRA = env.JWT_REFRESH_EXPIRA_EN;
 const COOKIE_REFRESH = 'refresh_token';
+const CABECERA_CSRF = 'x-csrf-token';
+
+function obtenerMaxAgeRefreshSegundos() {
+  const coincidencia = REFRESH_EXPIRA.trim().match(/^(\d+)([smhd])$/i);
+  if (!coincidencia) {
+    return 60 * 60 * 24 * 7;
+  }
+
+  const cantidad = Number(coincidencia[1]);
+  const unidad = (coincidencia[2] ?? 'd').toLowerCase();
+
+  switch (unidad) {
+    case 's':
+      return cantidad;
+    case 'm':
+      return cantidad * 60;
+    case 'h':
+      return cantidad * 60 * 60;
+    case 'd':
+      return cantidad * 60 * 60 * 24;
+    default:
+      return 60 * 60 * 24 * 7;
+  }
+}
 
 function obtenerOpcionesCookieRefresh() {
   return {
     httpOnly: true,
     secure: env.ENTORNO === 'production',
     sameSite: env.ENTORNO === 'production' ? 'strict' : 'lax',
-    path: '/auth/refrescar',
+    path: '/auth',
   } as const;
 }
 
@@ -99,6 +133,69 @@ function crearPermisosSupervisorVacios(): PermisosSupervisorJWT {
   };
 }
 
+function obtenerTokenCsrfCabecera(solicitud: FastifyRequest): string | null {
+  const valor = solicitud.headers[CABECERA_CSRF];
+  if (Array.isArray(valor)) {
+    return valor[0] ?? null;
+  }
+  return typeof valor === 'string' && valor.trim() ? valor.trim() : null;
+}
+
+function obtenerTipoSujetoSesion(rol: string): TipoSujetoSesion {
+  if (rol === 'empleado') {
+    return 'empleado_acceso';
+  }
+
+  if (rol === 'cliente') {
+    return 'cliente_app';
+  }
+
+  return 'usuario';
+}
+
+async function resolverUsuarioAuditoriaAcceso(payload: {
+  rol: string;
+  sub: string;
+}): Promise<string | null> {
+  if (payload.rol !== 'cliente' && payload.rol !== 'empleado') {
+    return payload.sub;
+  }
+
+  return null;
+}
+
+async function registrarAuditoriaAcceso(
+  accion: string,
+  solicitud: FastifyRequest,
+  payload: {
+    rol: string;
+    sub: string;
+    sesionId?: string;
+    email?: string;
+    estudioId?: string | null;
+  },
+  detalles?: Record<string, unknown>,
+): Promise<void> {
+  const usuarioId = await resolverUsuarioAuditoriaAcceso(payload);
+
+  await registrarAuditoria({
+    usuarioId,
+    accion,
+    entidadTipo: 'sesion',
+    entidadId: payload.sesionId ?? payload.sub,
+    detalles: {
+      actor: {
+        rol: payload.rol,
+        sujetoId: payload.sub,
+        estudioId: payload.estudioId ?? null,
+        email: payload.email ?? null,
+      },
+      ...detalles,
+    },
+    ip: solicitud.ip,
+  });
+}
+
 export async function rutasAuth(servidor: FastifyInstance): Promise<void> {
   /**
    * POST /auth/iniciar-sesion
@@ -167,6 +264,13 @@ export async function rutasAuth(servidor: FastifyInstance): Promise<void> {
             slugEstudio: estudioDueno.slug,
             nombre: usuarioDueno.nombre,
             email: usuarioDueno.email,
+          }, {
+            sujetoTipo: 'usuario',
+            ip: solicitud.ip,
+            userAgent: solicitud.headers['user-agent'],
+            solicitud,
+            accionAuditoria: 'login_exitoso',
+            detallesAuditoria: { metodo: 'clave_dueno' },
           });
         }
         const estudioCliente = await prisma.estudio.findFirst({
@@ -185,6 +289,13 @@ export async function rutasAuth(servidor: FastifyInstance): Promise<void> {
             estudioId: estudioCliente.id,
             nombre: '',
             email: '',
+          }, {
+            sujetoTipo: 'cliente_app',
+            ip: solicitud.ip,
+            userAgent: solicitud.headers['user-agent'],
+            solicitud,
+            accionAuditoria: 'login_exitoso',
+            detallesAuditoria: { metodo: 'clave_cliente_publica' },
           });
         }
 
@@ -227,6 +338,13 @@ export async function rutasAuth(servidor: FastifyInstance): Promise<void> {
           estudioId: null,
           nombre: `${clienteApp.nombre} ${clienteApp.apellido}`,
           email: clienteApp.email,
+        }, {
+          sujetoTipo: 'cliente_app',
+          ip: solicitud.ip,
+          userAgent: solicitud.headers['user-agent'],
+          solicitud,
+          accionAuditoria: 'login_exitoso',
+          detallesAuditoria: { metodo: esBusquedaPorEmail ? 'correo' : 'telefono' },
         });
       }
 
@@ -282,6 +400,13 @@ export async function rutasAuth(servidor: FastifyInstance): Promise<void> {
           email: empleadoAcceso.email,
           personalId: empleadoAcceso.personalId,
           forzarCambioContrasena: empleadoAcceso.forzarCambioContrasena,
+        }, {
+          sujetoTipo: 'empleado_acceso',
+          ip: solicitud.ip,
+          userAgent: solicitud.headers['user-agent'],
+          solicitud,
+          accionAuditoria: 'login_exitoso',
+          detallesAuditoria: { metodo: 'correo' },
         });
       }
 
@@ -426,6 +551,13 @@ export async function rutasAuth(servidor: FastifyInstance): Promise<void> {
         esMaestroTotal,
         permisos: permisosJWT,
         permisosSupervisor: permisosSupervisorJWT,
+      }, {
+        sujetoTipo: 'usuario',
+        ip: solicitud.ip,
+        userAgent: solicitud.headers['user-agent'],
+        solicitud,
+        accionAuditoria: 'login_exitoso',
+        detallesAuditoria: { metodo: 'correo' },
       });
     },
   );
@@ -448,7 +580,16 @@ export async function rutasAuth(servidor: FastifyInstance): Promise<void> {
       },
     },
     async (solicitud, respuesta) => {
-      const payload = solicitud.user as { sub: string };
+      const payload = solicitud.user as {
+        sub: string;
+        rol: string;
+        estudioId: string | null;
+        nombre?: string;
+        email?: string;
+        esMaestroTotal?: boolean;
+        permisos?: PermisosJWT;
+        permisosSupervisor?: PermisosSupervisorJWT;
+      };
       const { contrasenaActual, contrasenaNueva } = solicitud.body;
 
       if (!REGEX_CONTRASENA.test(contrasenaNueva)) {
@@ -457,7 +598,17 @@ export async function rutasAuth(servidor: FastifyInstance): Promise<void> {
         });
       }
 
-      const usuario = await prisma.usuario.findUnique({ where: { id: payload.sub } });
+      const usuario = await prisma.usuario.findUnique({
+        where: { id: payload.sub },
+        select: {
+          id: true,
+          nombre: true,
+          email: true,
+          estudioId: true,
+          hashContrasena: true,
+          estudio: { select: { slug: true } },
+        },
+      });
       if (!usuario) return respuesta.code(404).send({ error: 'Usuario no encontrado' });
 
       if (!(await compararHashContrasena(contrasenaActual, usuario.hashContrasena))) {
@@ -470,7 +621,25 @@ export async function rutasAuth(servidor: FastifyInstance): Promise<void> {
         data: { hashContrasena: nuevoHash },
       });
 
-      return respuesta.send({ datos: { mensaje: 'Contraseña actualizada correctamente' } });
+      await revocarSesionesPorSujeto('usuario', usuario.id, 'contrasena_actualizada');
+
+      return emitirTokens(servidor, respuesta, {
+        sub: usuario.id,
+        rol: payload.rol,
+        estudioId: usuario.estudioId,
+        slugEstudio: usuario.estudio?.slug ?? null,
+        nombre: usuario.nombre,
+        email: usuario.email,
+        esMaestroTotal: payload.esMaestroTotal ?? false,
+        permisos: payload.permisos ?? crearPermisosVacios(),
+        permisosSupervisor: payload.permisosSupervisor ?? crearPermisosSupervisorVacios(),
+      }, {
+        sujetoTipo: 'usuario',
+        ip: solicitud.ip,
+        userAgent: solicitud.headers['user-agent'],
+        solicitud,
+        accionAuditoria: 'cambio_contrasena',
+      });
     },
   );
 
@@ -613,6 +782,8 @@ export async function rutasAuth(servidor: FastifyInstance): Promise<void> {
         prisma.tokenReset.update({ where: { id: registro.id }, data: { usado: true } }),
       ]);
 
+      await revocarSesionesPorSujeto('usuario', registro.usuarioId, 'reset_contrasena');
+
       return respuesta.send({ datos: { mensaje: 'Contraseña actualizada. Ya puedes iniciar sesión.' } });
     },
   );
@@ -636,12 +807,45 @@ export async function rutasAuth(servidor: FastifyInstance): Promise<void> {
     }
 
     const refreshToken = solicitud.cookies[COOKIE_REFRESH];
+    const csrfToken = obtenerTokenCsrfCabecera(solicitud);
     if (!refreshToken) return respuesta.code(401).send({ error: 'No autenticado' });
+    if (!csrfToken) {
+      return respuesta.code(403).send({ error: 'Token CSRF requerido' });
+    }
 
     try {
       const payload = servidor.jwt.verify<{
-        sub: string; rol: string; estudioId: string | null; nombre: string; email: string; personalId?: string; forzarCambioContrasena?: boolean;
+        sub: string;
+        rol: string;
+        estudioId: string | null;
+        nombre: string;
+        email: string;
+        personalId?: string;
+        forzarCambioContrasena?: boolean;
+        sesionId?: string;
+        refreshTokenId?: string;
+        tipoToken?: string;
       }>(refreshToken);
+
+      if (!payload.sesionId || !payload.refreshTokenId || payload.tipoToken !== 'refresh') {
+        respuesta.clearCookie(COOKIE_REFRESH, obtenerOpcionesCookieRefresh());
+        return respuesta.code(401).send({ error: 'Sesión expirada. Inicia sesión nuevamente.' });
+      }
+
+      const sesionRotada = await rotarSesionAutenticacion(
+        payload.sesionId,
+        payload.refreshTokenId,
+        csrfToken,
+        {
+          ip: solicitud.ip,
+          userAgent: solicitud.headers['user-agent'],
+        },
+      );
+
+      if (!sesionRotada) {
+        respuesta.clearCookie(COOKIE_REFRESH, obtenerOpcionesCookieRefresh());
+        return respuesta.code(401).send({ error: 'Sesión expirada. Inicia sesión nuevamente.' });
+      }
 
       let esMaestroTotal = false;
       let permisos = crearPermisosVacios();
@@ -870,8 +1074,18 @@ export async function rutasAuth(servidor: FastifyInstance): Promise<void> {
       payloadActualizado.permisos = permisos;
       payloadActualizado.permisosSupervisor = permisosSupervisor;
 
-      return emitirTokens(servidor, respuesta, payloadActualizado);
+      await registrarUsoSesion(payload.sesionId);
+
+      return emitirTokens(servidor, respuesta, payloadActualizado, {
+        sujetoTipo: obtenerTipoSujetoSesion(payload.rol),
+        ip: solicitud.ip,
+        userAgent: solicitud.headers['user-agent'],
+        solicitud,
+        accionAuditoria: 'refresh_sesion',
+        sesionRotada,
+      });
     } catch {
+      respuesta.clearCookie(COOKIE_REFRESH, obtenerOpcionesCookieRefresh());
       return respuesta.code(401).send({ error: 'Sesión expirada. Inicia sesión nuevamente.' });
     }
   });
@@ -884,7 +1098,72 @@ export async function rutasAuth(servidor: FastifyInstance): Promise<void> {
       return respuesta.code(403).send({ error: 'Origen no permitido' });
     }
 
+    const csrfToken = obtenerTokenCsrfCabecera(solicitud);
+    if (!csrfToken) {
+      return respuesta.code(403).send({ error: 'Token CSRF requerido' });
+    }
+
+    let datosAuditoria: {
+      rol: string;
+      sub: string;
+      sesionId?: string;
+      email?: string;
+      estudioId?: string | null;
+    } | null = null;
+
+    try {
+      await solicitud.jwtVerify();
+      const payload = solicitud.user as {
+        rol: string;
+        sub: string;
+        sesionId?: string;
+        email?: string;
+        estudioId?: string | null;
+      };
+
+      if (payload.sesionId) {
+        await revocarSesionAutenticacion(payload.sesionId, 'logout_manual');
+        datosAuditoria = payload;
+      }
+    } catch {
+      try {
+        const refreshToken = solicitud.cookies[COOKIE_REFRESH];
+        if (refreshToken) {
+          const payloadRefresh = servidor.jwt.verify<{
+            rol: string;
+            sub: string;
+            sesionId?: string;
+            refreshTokenId?: string;
+            email?: string;
+            estudioId?: string | null;
+            tipoToken?: string;
+          }>(refreshToken);
+
+          if (
+            payloadRefresh.sesionId &&
+            payloadRefresh.refreshTokenId &&
+            payloadRefresh.tipoToken === 'refresh' &&
+            await validarRefreshSesion({
+              sesionId: payloadRefresh.sesionId,
+              refreshTokenId: payloadRefresh.refreshTokenId,
+              csrfToken,
+            })
+          ) {
+            await revocarSesionAutenticacion(payloadRefresh.sesionId, 'logout_manual');
+            datosAuditoria = payloadRefresh;
+          }
+        }
+      } catch {
+        // Si la cookie ya expiró, solo limpiamos estado del navegador.
+      }
+    }
+
     respuesta.clearCookie(COOKIE_REFRESH, obtenerOpcionesCookieRefresh());
+
+    if (datosAuditoria) {
+      await registrarAuditoriaAcceso('logout_sesion', solicitud, datosAuditoria);
+    }
+
     return respuesta.send({ datos: { mensaje: 'Sesión cerrada' } });
   });
 }
@@ -905,23 +1184,73 @@ async function emitirTokens(
     personalId?: string;
     forzarCambioContrasena?: boolean;
   },
+  metadatosSesion: {
+    sujetoTipo: TipoSujetoSesion;
+    ip?: string;
+    userAgent?: string;
+    solicitud?: FastifyRequest;
+    accionAuditoria?: string;
+    detallesAuditoria?: Record<string, unknown>;
+    sesionRotada?: {
+      sesionId: string;
+      refreshTokenId: string;
+      csrfToken: string;
+    };
+  },
 ): Promise<import('fastify').FastifyReply> {
-  // El slug no se incluye en el JWT para mantenerlo liviano
-  const { slugEstudio, ...payloadJWT } = payload;
+  const sesion =
+    metadatosSesion.sesionRotada ??
+    (await crearSesionAutenticacion(metadatosSesion.sujetoTipo, payload.sub, {
+      ip: metadatosSesion.ip,
+      userAgent: metadatosSesion.userAgent,
+    }));
+
+  const payloadJWT = {
+    sub: payload.sub,
+    rol: payload.rol,
+    estudioId: payload.estudioId,
+    nombre: payload.nombre,
+    email: payload.email,
+    esMaestroTotal: payload.esMaestroTotal ?? false,
+    permisos: payload.permisos ?? crearPermisosVacios(),
+    permisosSupervisor: payload.permisosSupervisor ?? crearPermisosSupervisorVacios(),
+    personalId: payload.personalId,
+    forzarCambioContrasena: payload.forzarCambioContrasena ?? false,
+    sesionId: sesion.sesionId,
+  };
+
   const accessToken = servidor.jwt.sign(payloadJWT);
-  const refreshToken = servidor.jwt.sign(payloadJWT, { expiresIn: REFRESH_EXPIRA });
+  const refreshToken = servidor.jwt.sign(
+    {
+      ...payloadJWT,
+      refreshTokenId: sesion.refreshTokenId,
+      tipoToken: 'refresh',
+    },
+    { expiresIn: REFRESH_EXPIRA },
+  );
 
   respuesta.setCookie(COOKIE_REFRESH, refreshToken, {
     ...obtenerOpcionesCookieRefresh(),
-    maxAge: 60 * 60 * 24 * 7,
+    maxAge: obtenerMaxAgeRefreshSegundos(),
   });
+
+  if (metadatosSesion.solicitud && metadatosSesion.accionAuditoria) {
+    await registrarAuditoriaAcceso(metadatosSesion.accionAuditoria, metadatosSesion.solicitud, {
+      rol: payload.rol,
+      sub: payload.sub,
+      sesionId: sesion.sesionId,
+      email: payload.email,
+      estudioId: payload.estudioId,
+    }, metadatosSesion.detallesAuditoria);
+  }
 
   return respuesta.code(200).send({
     datos: {
       token: accessToken,
+      csrfToken: sesion.csrfToken,
       rol: payload.rol,
       estudioId: payload.estudioId,
-      slugEstudio: slugEstudio ?? null,
+      slugEstudio: payload.slugEstudio ?? null,
       nombre: payload.nombre,
       email: payload.email,
       esMaestroTotal: payload.esMaestroTotal ?? false,

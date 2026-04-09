@@ -13,8 +13,10 @@ interface PropsModalPago {
 }
 
 export function ModalPago({ estudio, onConfirmar, onCerrar }: PropsModalPago) {
-  const moneda = obtenerMonedaPorPais(estudio.country);
-  const monto = moneda === 'COP' ? 200000 : 1000;
+  const moneda = estudio.monedaSuscripcion ?? obtenerMonedaPorPais(estudio.country);
+  const monto = estudio.precioRenovacion ?? estudio.precioSuscripcionActual ?? 0;
+  const precioActual = estudio.precioSuscripcionActual ?? monto;
+  const precioCambiaEnRenovacion = monto !== precioActual;
   const fechaBase = estudio.paidUntil || estudio.subscriptionStart;
   const estaVencido = Boolean(fechaBase) && fechaBase < new Date().toISOString().slice(0, 10);
 
@@ -49,6 +51,12 @@ export function ModalPago({ estudio, onConfirmar, onCerrar }: PropsModalPago) {
             Esta cuenta solo se registra en {moneda}. La plataforma ya no permite elegir otra moneda
             para evitar cobros inconsistentes.
           </p>
+          {precioCambiaEnRenovacion && estudio.fechaAplicacionPrecioProximo && (
+            <p className="mt-3 text-sm font-bold text-emerald-700">
+              El próximo período aplicará {formatearDinero(monto, moneda)} desde{' '}
+              {formatearFechaHumana(estudio.fechaAplicacionPrecioProximo)}.
+            </p>
+          )}
         </div>
 
         <div className="rounded-4xl border border-emerald-200 bg-emerald-50 p-5 text-left mb-8">
@@ -64,6 +72,7 @@ export function ModalPago({ estudio, onConfirmar, onCerrar }: PropsModalPago) {
 
         <button
           onClick={() => onConfirmar(monto, moneda)}
+          disabled={monto <= 0}
           className="w-full bg-slate-900 text-white font-black py-4 rounded-2xl hover:bg-black hover:scale-[1.02] transition-all flex items-center justify-center gap-2 shadow-sm mb-3"
         >
           Registrar {formatearDinero(monto, moneda)} y sumar 1 mes

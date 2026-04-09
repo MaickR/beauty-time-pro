@@ -3,15 +3,14 @@ import { Link, useNavigate } from 'react-router-dom';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
-import { Eye, EyeOff, Scissors, User } from 'lucide-react';
+import { Eye, EyeOff, Mail, Scissors, UserRound } from 'lucide-react';
 import { SelectorFecha } from '../../componentes/ui/SelectorFecha';
-import { registrarCliente } from '../../servicios/servicioRegistro';
+import { ErrorServicioRegistro, registrarCliente } from '../../servicios/servicioRegistro';
 import { usarTituloPagina } from '../../hooks/usarTituloPagina';
-import { ModalTerminos } from './componentes/ModalTerminos';
 import { ModalPrivacidad } from './componentes/ModalPrivacidad';
+import { ModalTerminos } from './componentes/ModalTerminos';
 import type { Pais } from '../../tipos';
 
-const DOMINIOS_MSG = 'Solo aceptamos correos de Gmail, Hotmail, Outlook, Yahoo o iCloud';
 const DOMINIOS = [
   'gmail.com',
   'googlemail.com',
@@ -22,49 +21,52 @@ const DOMINIOS = [
   'outlook.com',
   'outlook.es',
   'outlook.com.mx',
-  'live.com',
-  'live.com.mx',
-  'live.com.co',
   'yahoo.com',
   'yahoo.es',
   'yahoo.com.mx',
   'yahoo.com.co',
-  'icloud.com',
-  'me.com',
-  'protonmail.com',
-  'pm.me',
 ];
+const MENSAJE_DOMINIO = 'Usa un correo personal de Gmail, Hotmail, Outlook o Yahoo';
 
 function esDominioPermitido(email: string): boolean {
-  const dom = email.split('@')[1]?.toLowerCase();
-  return dom !== undefined && DOMINIOS.includes(dom);
+  const dominio = email.split('@')[1]?.toLowerCase();
+  return dominio !== undefined && DOMINIOS.includes(dominio);
 }
 
 const esquema = z
   .object({
-    nombre: z.string().min(2, 'Mínimo 2 caracteres'),
-    apellido: z.string().min(2, 'Mínimo 2 caracteres'),
-    email: z.string().email('Correo inválido').refine(esDominioPermitido, DOMINIOS_MSG),
-    pais: z.enum(['Mexico', 'Colombia']),
-    ciudad: z.string().max(80, 'Máximo 80 caracteres').optional().or(z.literal('')),
-    contrasena: z
+    nombreCompleto: z
       .string()
-      .min(8, 'Mínimo 8 caracteres')
-      .regex(/[A-Z]/, 'Necesita al menos una mayúscula')
-      .regex(/[0-9]/, 'Necesita al menos un número')
-      .regex(/[^A-Za-z0-9]/, 'Necesita al menos un carácter especial'),
-    confirmarContrasena: z.string(),
+      .trim()
+      .min(3, 'Ingresa tu nombre completo')
+      .max(120, 'Máximo 120 caracteres'),
+    email: z
+      .string()
+      .trim()
+      .email('Ingresa un correo válido')
+      .refine(esDominioPermitido, MENSAJE_DOMINIO),
     telefono: z
       .string()
-      .regex(/^[0-9]{10}$/, '10 dígitos sin espacios')
+      .trim()
+      .regex(/^\d{10}$/, 'Usa 10 dígitos sin espacios')
       .optional()
       .or(z.literal('')),
-    fechaNacimiento: z.string().min(1, 'Selecciona la fecha de nacimiento'),
+    ciudad: z.string().trim().max(80, 'Máximo 80 caracteres').optional().or(z.literal('')),
+    pais: z.enum(['Mexico', 'Colombia']),
+    fechaNacimiento: z.string().min(1, 'Selecciona tu fecha de nacimiento'),
+    contrasena: z
+      .string()
+      .min(8, 'Usa al menos 8 caracteres')
+      .regex(/[A-Z]/, 'Agrega una letra mayúscula')
+      .regex(/[a-z]/, 'Agrega una letra minúscula')
+      .regex(/[0-9]/, 'Agrega un número')
+      .regex(/[^A-Za-z0-9]/, 'Agrega un carácter especial'),
+    confirmarContrasena: z.string(),
     aceptaTerminos: z.literal(true, 'Debes aceptar los términos para continuar'),
   })
-  .refine((d) => d.contrasena === d.confirmarContrasena, {
-    message: 'Las contraseñas no coinciden',
+  .refine((datos) => datos.contrasena === datos.confirmarContrasena, {
     path: ['confirmarContrasena'],
+    message: 'Las contraseñas no coinciden',
   })
   .superRefine((datos, contexto) => {
     const fecha = new Date(`${datos.fechaNacimiento}T00:00:00`);
@@ -72,60 +74,40 @@ const esquema = z
       contexto.addIssue({
         code: z.ZodIssueCode.custom,
         path: ['fechaNacimiento'],
-        message: 'La fecha de nacimiento no es válida',
+        message: 'Ingresa una fecha de nacimiento válida',
       });
       return;
     }
 
     const hoy = new Date();
     let edad = hoy.getFullYear() - fecha.getFullYear();
-    const aunNoCumple =
+    const noHaCumplido =
       hoy.getMonth() < fecha.getMonth() ||
       (hoy.getMonth() === fecha.getMonth() && hoy.getDate() < fecha.getDate());
-    if (aunNoCumple) edad -= 1;
+    if (noHaCumplido) {
+      edad -= 1;
+    }
 
     if (edad < 13) {
       contexto.addIssue({
         code: z.ZodIssueCode.custom,
         path: ['fechaNacimiento'],
-        message: 'Debes tener al menos 13 años para registrarte en Beauty Time Pro',
+        message: 'Debes tener al menos 13 años',
       });
     }
   });
 
 type CamposFormulario = z.infer<typeof esquema>;
 
-function calcularRequisitosContrasena(contrasena: string) {
-  return {
-    longitudMinima: contrasena.length >= 8,
-    tieneMayuscula: /[A-Z]/.test(contrasena),
-    tieneNumero: /[0-9]/.test(contrasena),
-    tieneEspecial: /[^A-Za-z0-9]/.test(contrasena),
-  };
-}
-
-function calcularFortaleza(contrasena: string): { nivel: number; etiqueta: string; color: string } {
-  const r = calcularRequisitosContrasena(contrasena);
-  const nivel = [r.longitudMinima, r.tieneMayuscula, r.tieneNumero, r.tieneEspecial].filter(
-    Boolean,
-  ).length;
-  const colores = ['bg-red-400', 'bg-orange-400', 'bg-yellow-400', 'bg-green-500'];
-  const etiquetas = ['Débil', 'Regular', 'Buena', 'Fuerte'];
-  return {
-    nivel,
-    etiqueta: etiquetas[nivel - 1] ?? 'Débil',
-    color: colores[nivel - 1] ?? 'bg-red-400',
-  };
-}
-
 export function PaginaRegistroCliente() {
-  usarTituloPagina('Crear cuenta — Beauty Time Pro');
+  usarTituloPagina('Crear cuenta de cliente');
   const navegar = useNavigate();
-  const [mostrarPass, setMostrarPass] = useState(false);
-  const [mostrarConfirm, setMostrarConfirm] = useState(false);
+  const [mostrarContrasena, setMostrarContrasena] = useState(false);
+  const [mostrarConfirmacion, setMostrarConfirmacion] = useState(false);
   const [mostrarTerminos, setMostrarTerminos] = useState(false);
   const [mostrarPrivacidad, setMostrarPrivacidad] = useState(false);
   const [errorServidor, setErrorServidor] = useState('');
+
   const hoy = new Date();
   const fechaMaxima = `${hoy.getFullYear() - 13}-${String(hoy.getMonth() + 1).padStart(2, '0')}-${String(hoy.getDate()).padStart(2, '0')}`;
   const fechaMinima = `${hoy.getFullYear() - 100}-${String(hoy.getMonth() + 1).padStart(2, '0')}-${String(hoy.getDate()).padStart(2, '0')}`;
@@ -139,441 +121,392 @@ export function PaginaRegistroCliente() {
   } = useForm<CamposFormulario>({
     resolver: zodResolver(esquema),
     defaultValues: {
-      pais: 'Mexico',
-      ciudad: '',
+      nombreCompleto: '',
+      email: '',
       telefono: '',
+      ciudad: '',
+      pais: 'Mexico',
       fechaNacimiento: '',
+      contrasena: '',
+      confirmarContrasena: '',
     },
   });
 
-  const contrasenaActual = watch('contrasena') ?? '';
-  const fechaNacimiento = watch('fechaNacimiento') ?? '';
-  const fortaleza = calcularFortaleza(contrasenaActual);
+  const contrasena = watch('contrasena') ?? '';
 
   const alEnviar = async (datos: CamposFormulario) => {
     setErrorServidor('');
     try {
       const resultado = await registrarCliente({
+        nombreCompleto: datos.nombreCompleto,
         email: datos.email,
-        contrasena: datos.contrasena,
-        nombre: datos.nombre,
-        apellido: datos.apellido,
-        pais: datos.pais,
-        ciudad: datos.ciudad || undefined,
-        fechaNacimiento: datos.fechaNacimiento,
         telefono: datos.telefono || undefined,
+        ciudad: datos.ciudad || undefined,
+        pais: datos.pais,
+        fechaNacimiento: datos.fechaNacimiento,
+        contrasena: datos.contrasena,
       });
+
+      if (!resultado.clienteId) {
+        setErrorServidor(resultado.mensaje);
+        return;
+      }
+
       const parametros = new URLSearchParams({
-        motivo: 'verificacion',
+        clienteId: resultado.clienteId,
+        email: resultado.email ?? datos.email,
         mensaje: resultado.mensaje,
       });
-      if (resultado.enlaceVerificacion) {
-        parametros.set('enlace', resultado.enlaceVerificacion);
-      }
-      navegar(`/email-enviado?${parametros.toString()}`);
+      navegar(`/verificar-email?${parametros.toString()}`);
     } catch (error) {
-      setErrorServidor(
-        error instanceof Error ? error.message : 'Ocurrió un error. Intenta de nuevo.',
-      );
+      if (error instanceof ErrorServicioRegistro) {
+        setErrorServidor(error.message);
+        return;
+      }
+      setErrorServidor('No pudimos crear la cuenta. Intenta de nuevo.');
     }
   };
 
-  const aceptarTerminos = () => {
+  const aceptarAcuerdo = () => {
     setValue('aceptaTerminos', true, {
       shouldDirty: true,
       shouldTouch: true,
       shouldValidate: true,
     });
     setMostrarTerminos(false);
-  };
-
-  const aceptarPrivacidad = () => {
-    setValue('aceptaTerminos', true, {
-      shouldDirty: true,
-      shouldTouch: true,
-      shouldValidate: true,
-    });
     setMostrarPrivacidad(false);
   };
 
   return (
-    <div className="min-h-screen flex">
-      {/* Panel izquierdo */}
-      <div className="hidden lg:flex lg:w-2/5 flex-col justify-between p-12 bg-linear-to-br from-[#880E4F] via-[#C2185B] to-[#F06292]">
-        <div className="flex items-center gap-3">
-          <div className="bg-white/20 p-3 rounded-2xl">
-            <Scissors className="text-white w-7 h-7" aria-hidden="true" />
-          </div>
-          <span className="text-white font-black text-xl">Beauty Time Pro</span>
-        </div>
-        <div className="text-white">
-          <div className="mb-6 flex h-20 w-20 items-center justify-center rounded-3xl bg-white/20">
-            <User className="w-10 h-10 text-white" aria-hidden="true" />
-          </div>
-          <h2 className="text-4xl font-black mb-4">Únete a Beauty Time Pro</h2>
-          <ul className="space-y-3" aria-label="Beneficios para clientes">
-            {[
-              'Reserva en cualquier momento',
-              'Historial de tus citas',
-              'Acumula puntos de fidelidad',
-            ].map((b) => (
-              <li key={b} className="flex items-center gap-3">
-                <span className="w-5 h-5 rounded-full bg-white/30 flex items-center justify-center shrink-0">
-                  <span className="w-2 h-2 rounded-full bg-white" />
-                </span>
-                <span>{b}</span>
-              </li>
-            ))}
-          </ul>
-        </div>
-        <p className="text-white/50 text-sm">© {new Date().getFullYear()} Beauty Time Pro</p>
-      </div>
-
-      {/* Panel derecho */}
-      <div className="flex-1 flex flex-col items-center justify-center p-6 bg-gray-50 overflow-y-auto">
-        <div className="w-full max-w-lg py-8">
-          <div className="flex lg:hidden items-center gap-2 justify-center mb-6">
-            <div className="bg-linear-to-br from-[#880E4F] to-[#F06292] p-2.5 rounded-xl">
-              <Scissors className="text-white w-6 h-6" aria-hidden="true" />
+    <main className="min-h-screen bg-[#f5efe6] px-6 py-10 sm:px-10 lg:px-14 lg:py-14">
+      <div className="mx-auto grid max-w-6xl gap-8 lg:grid-cols-[0.88fr_1.12fr]">
+        <section className="rounded-4xl bg-[#1d1b1a] p-8 text-white shadow-2xl shadow-black/20 sm:p-10">
+          <div className="flex items-center gap-3">
+            <div className="flex h-12 w-12 items-center justify-center rounded-2xl border border-white/10 bg-white/10">
+              <Scissors className="h-5 w-5" aria-hidden="true" />
             </div>
-            <span className="font-black text-lg text-slate-900">Beauty Time Pro</span>
+            <div>
+              <p className="text-xs uppercase tracking-[0.28em] text-white/55">Beauty Time Pro</p>
+              <p className="text-sm text-white/70">Cuenta de cliente</p>
+            </div>
           </div>
 
-          <h1 className="text-3xl font-black text-slate-900 mb-1">Crear tu cuenta</h1>
-          <p className="text-slate-500 text-sm mb-7">Completa los datos para comenzar</p>
+          <div className="mt-10 max-w-md">
+            <p className="text-sm uppercase tracking-[0.3em] text-[#f5cea7]">Registro rápido</p>
+            <h1 className="mt-4 text-4xl font-semibold leading-tight">
+              Crea tu cuenta y verifícala con un código corto por correo.
+            </h1>
+            <p className="mt-5 text-base leading-7 text-white/70">
+              La cuenta solo se crea con correos personales permitidos. Cada nueva solicitud de
+              verificación invalida automáticamente el código anterior.
+            </p>
+          </div>
 
-          {errorServidor && (
-            <div
-              role="alert"
-              className="mb-5 rounded-xl bg-red-50 border border-red-200 px-4 py-3 text-sm text-red-700"
-            >
+          <div className="mt-10 space-y-4">
+            {[
+              'Los dominios están restringidos a proveedores personales confiables.',
+              'El código vence y puede reenviarse después de 60 segundos.',
+              'La misma cuenta funciona en los salones compatibles una vez verificada.',
+            ].map((texto) => (
+              <div
+                key={texto}
+                className="rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-white/75"
+              >
+                {texto}
+              </div>
+            ))}
+          </div>
+        </section>
+
+        <section className="rounded-4xl border border-[#e4d8c8] bg-[#fffdf9] p-6 shadow-[0_24px_80px_rgba(71,55,36,0.12)] sm:p-8">
+          <div className="mb-8 flex items-start justify-between gap-4">
+            <div>
+              <h2 className="text-3xl font-semibold tracking-tight text-slate-950">
+                Crear cuenta de cliente
+              </h2>
+              <p className="mt-2 text-sm leading-6 text-slate-600">
+                Después de este paso, te enviaremos un código de 4 caracteres para confirmar tu
+                correo.
+              </p>
+            </div>
+            <div className="hidden h-12 w-12 items-center justify-center rounded-2xl bg-[#f3eadf] text-slate-700 sm:flex">
+              <UserRound className="h-5 w-5" aria-hidden="true" />
+            </div>
+          </div>
+
+          {errorServidor ? (
+            <div className="mb-5 rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
               {errorServidor}
             </div>
-          )}
+          ) : null}
 
           <form onSubmit={handleSubmit(alEnviar)} noValidate className="space-y-4">
-            {/* Nombre y Apellido */}
-            <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label
+                htmlFor="nombreCompleto"
+                className="mb-1.5 block text-sm font-medium text-slate-700"
+              >
+                Nombre completo
+              </label>
+              <input
+                id="nombreCompleto"
+                type="text"
+                autoComplete="name"
+                className="w-full rounded-2xl border border-[#dacbb8] bg-white px-4 py-3.5 text-sm outline-none transition focus:border-slate-900 focus:ring-2 focus:ring-[#f0d7bb]"
+                aria-invalid={Boolean(errors.nombreCompleto)}
+                {...register('nombreCompleto')}
+              />
+              {errors.nombreCompleto ? (
+                <p className="mt-1 text-xs text-red-600">{errors.nombreCompleto.message}</p>
+              ) : null}
+            </div>
+
+            <div className="grid gap-4 sm:grid-cols-2">
               <div>
-                <label htmlFor="nombre" className="block text-sm font-semibold text-slate-700 mb-1">
-                  Nombre
+                <label htmlFor="email" className="mb-1.5 block text-sm font-medium text-slate-700">
+                  Correo electrónico
                 </label>
-                <input
-                  id="nombre"
-                  type="text"
-                  autoComplete="given-name"
-                  className="w-full px-3.5 py-3 bg-white border border-slate-200 rounded-xl text-sm outline-none focus:ring-2 focus:ring-pink-500 focus:border-transparent"
-                  aria-invalid={!!errors.nombre}
-                  {...register('nombre')}
-                />
-                {errors.nombre && (
-                  <p role="alert" className="mt-1 text-xs text-red-500">
-                    {errors.nombre.message}
-                  </p>
-                )}
+                <div className="relative">
+                  <Mail
+                    className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400"
+                    aria-hidden="true"
+                  />
+                  <input
+                    id="email"
+                    type="email"
+                    autoComplete="email"
+                    className="w-full rounded-2xl border border-[#dacbb8] bg-white px-10 py-3.5 text-sm outline-none transition focus:border-slate-900 focus:ring-2 focus:ring-[#f0d7bb]"
+                    aria-invalid={Boolean(errors.email)}
+                    {...register('email')}
+                  />
+                </div>
+                {errors.email ? (
+                  <p className="mt-1 text-xs text-red-600">{errors.email.message}</p>
+                ) : null}
               </div>
+
               <div>
                 <label
-                  htmlFor="apellido"
-                  className="block text-sm font-semibold text-slate-700 mb-1"
+                  htmlFor="telefono"
+                  className="mb-1.5 block text-sm font-medium text-slate-700"
                 >
-                  Apellido
+                  Teléfono
                 </label>
                 <input
-                  id="apellido"
+                  id="telefono"
+                  type="tel"
+                  autoComplete="tel"
+                  inputMode="numeric"
+                  className="w-full rounded-2xl border border-[#dacbb8] bg-white px-4 py-3.5 text-sm outline-none transition focus:border-slate-900 focus:ring-2 focus:ring-[#f0d7bb]"
+                  aria-invalid={Boolean(errors.telefono)}
+                  {...register('telefono')}
+                />
+                {errors.telefono ? (
+                  <p className="mt-1 text-xs text-red-600">{errors.telefono.message}</p>
+                ) : null}
+              </div>
+            </div>
+
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div>
+                <label htmlFor="pais" className="mb-1.5 block text-sm font-medium text-slate-700">
+                  País
+                </label>
+                <select
+                  id="pais"
+                  className="w-full rounded-2xl border border-[#dacbb8] bg-white px-4 py-3.5 text-sm outline-none transition focus:border-slate-900 focus:ring-2 focus:ring-[#f0d7bb]"
+                  {...register('pais')}
+                >
+                  {(['Mexico', 'Colombia'] as Pais[]).map((pais) => (
+                    <option key={pais} value={pais}>
+                      {pais === 'Mexico' ? 'México' : 'Colombia'}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label htmlFor="ciudad" className="mb-1.5 block text-sm font-medium text-slate-700">
+                  Ciudad
+                </label>
+                <input
+                  id="ciudad"
                   type="text"
-                  autoComplete="family-name"
-                  className="w-full px-3.5 py-3 bg-white border border-slate-200 rounded-xl text-sm outline-none focus:ring-2 focus:ring-pink-500 focus:border-transparent"
-                  aria-invalid={!!errors.apellido}
-                  {...register('apellido')}
+                  autoComplete="address-level2"
+                  className="w-full rounded-2xl border border-[#dacbb8] bg-white px-4 py-3.5 text-sm outline-none transition focus:border-slate-900 focus:ring-2 focus:ring-[#f0d7bb]"
+                  {...register('ciudad')}
                 />
-                {errors.apellido && (
-                  <p role="alert" className="mt-1 text-xs text-red-500">
-                    {errors.apellido.message}
-                  </p>
-                )}
+                {errors.ciudad ? (
+                  <p className="mt-1 text-xs text-red-600">{errors.ciudad.message}</p>
+                ) : null}
               </div>
             </div>
 
-            {/* Email */}
             <div>
-              <label htmlFor="email" className="block text-sm font-semibold text-slate-700 mb-1">
-                Correo electrónico
+              <label className="mb-1.5 block text-sm font-medium text-slate-700">
+                Fecha de nacimiento
               </label>
-              <input
-                id="email"
-                type="email"
-                autoComplete="email"
-                className="w-full px-3.5 py-3 bg-white border border-slate-200 rounded-xl text-sm outline-none focus:ring-2 focus:ring-pink-500 focus:border-transparent"
-                aria-invalid={!!errors.email}
-                aria-describedby={errors.email ? 'error-email' : undefined}
-                {...register('email')}
+              <SelectorFecha
+                etiqueta="Fecha de nacimiento"
+                valor={watch('fechaNacimiento') ?? ''}
+                alCambiar={(valor) =>
+                  setValue('fechaNacimiento', valor, {
+                    shouldDirty: true,
+                    shouldTouch: true,
+                    shouldValidate: true,
+                  })
+                }
+                max={fechaMaxima}
+                min={fechaMinima}
+                ocultarEtiqueta
               />
-              {errors.email && (
-                <p id="error-email" role="alert" className="mt-1 text-xs text-red-500">
-                  {errors.email.message}
-                </p>
-              )}
+              {errors.fechaNacimiento ? (
+                <p className="mt-1 text-xs text-red-600">{errors.fechaNacimiento.message}</p>
+              ) : null}
             </div>
 
-            <div>
-              <label htmlFor="pais" className="block text-sm font-semibold text-slate-700 mb-1">
-                ¿En qué país estás?
-              </label>
-              <select
-                id="pais"
-                className="w-full px-3.5 py-3 bg-white border border-slate-200 rounded-xl text-sm outline-none focus:ring-2 focus:ring-pink-500 focus:border-transparent"
-                aria-invalid={!!errors.pais}
-                {...register('pais')}
-              >
-                {(['Mexico', 'Colombia'] as Pais[]).map((pais) => (
-                  <option key={pais} value={pais}>
-                    {pais === 'Mexico' ? 'México' : 'Colombia'}
-                  </option>
-                ))}
-              </select>
-              {errors.pais && (
-                <p role="alert" className="mt-1 text-xs text-red-500">
-                  {errors.pais.message}
-                </p>
-              )}
-            </div>
-
-            {/* Ciudad */}
-            <div>
-              <label htmlFor="ciudad" className="block text-sm font-semibold text-slate-700 mb-1">
-                Ciudad <span className="font-normal text-slate-400">(optional)</span>
-              </label>
-              <input
-                id="ciudad"
-                type="text"
-                autoComplete="address-level2"
-                className="w-full px-3.5 py-3 bg-white border border-slate-200 rounded-xl text-sm outline-none focus:ring-2 focus:ring-pink-500 focus:border-transparent"
-                placeholder="Ej. Ciudad de México"
-                aria-invalid={!!errors.ciudad}
-                {...register('ciudad')}
-              />
-              {errors.ciudad && (
-                <p role="alert" className="mt-1 text-xs text-red-500">
-                  {errors.ciudad.message}
-                </p>
-              )}
-            </div>
-
-            {/* Contraseña */}
-            <div>
-              <label
-                htmlFor="contrasena"
-                className="block text-sm font-semibold text-slate-700 mb-1"
-              >
-                Contraseña
-              </label>
-              <div className="relative">
-                <input
-                  id="contrasena"
-                  type={mostrarPass ? 'text' : 'password'}
-                  className="w-full pr-11 px-3.5 py-3 bg-white border border-slate-200 rounded-xl text-sm outline-none focus:ring-2 focus:ring-pink-500 focus:border-transparent"
-                  aria-invalid={!!errors.contrasena}
-                  {...register('contrasena')}
-                />
-                <button
-                  type="button"
-                  onClick={() => setMostrarPass((v) => !v)}
-                  className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
-                  aria-label={mostrarPass ? 'Ocultar contraseña' : 'Mostrar contraseña'}
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div>
+                <label
+                  htmlFor="contrasena"
+                  className="mb-1.5 block text-sm font-medium text-slate-700"
                 >
-                  {mostrarPass ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                </button>
-              </div>
-              {/* Medidor de fortaleza y requisitos */}
-              {contrasenaActual.length > 0 && (
-                <div className="mt-2 space-y-2">
-                  <div className="flex gap-1">
-                    {[1, 2, 3, 4].map((n) => (
-                      <div
-                        key={n}
-                        className={`h-1.5 flex-1 rounded-full transition-colors ${n <= fortaleza.nivel ? fortaleza.color : 'bg-slate-200'}`}
-                      />
-                    ))}
-                  </div>
-                  <p className="text-xs text-slate-500">
-                    Fortaleza: <span className="font-semibold">{fortaleza.etiqueta}</span>
-                  </p>
-                  <ul className="grid grid-cols-2 gap-x-3 gap-y-0.5 text-xs">
-                    {[
-                      {
-                        ok: calcularRequisitosContrasena(contrasenaActual).longitudMinima,
-                        texto: '8 caracteres',
-                      },
-                      {
-                        ok: calcularRequisitosContrasena(contrasenaActual).tieneMayuscula,
-                        texto: 'Una mayúscula',
-                      },
-                      {
-                        ok: calcularRequisitosContrasena(contrasenaActual).tieneNumero,
-                        texto: 'Un número',
-                      },
-                      {
-                        ok: calcularRequisitosContrasena(contrasenaActual).tieneEspecial,
-                        texto: 'Un carácter especial',
-                      },
-                    ].map(({ ok, texto }) => (
-                      <li
-                        key={texto}
-                        className={`flex items-center gap-1 ${ok ? 'text-green-600' : 'text-slate-400'}`}
-                      >
-                        <span aria-hidden="true">{ok ? '✓' : '○'}</span> {texto}
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              )}
-              {errors.contrasena && (
-                <p role="alert" className="mt-1 text-xs text-red-500">
-                  {errors.contrasena.message}
-                </p>
-              )}
-            </div>
-
-            {/* Confirmar contraseña */}
-            <div>
-              <label
-                htmlFor="confirmarContrasena"
-                className="block text-sm font-semibold text-slate-700 mb-1"
-              >
-                Confirmar contraseña
-              </label>
-              <div className="relative">
-                <input
-                  id="confirmarContrasena"
-                  type={mostrarConfirm ? 'text' : 'password'}
-                  className="w-full pr-11 px-3.5 py-3 bg-white border border-slate-200 rounded-xl text-sm outline-none focus:ring-2 focus:ring-pink-500 focus:border-transparent"
-                  aria-invalid={!!errors.confirmarContrasena}
-                  {...register('confirmarContrasena')}
-                />
-                <button
-                  type="button"
-                  onClick={() => setMostrarConfirm((v) => !v)}
-                  className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
-                  aria-label={mostrarConfirm ? 'Ocultar contraseña' : 'Mostrar contraseña'}
-                >
-                  {mostrarConfirm ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                </button>
-              </div>
-              {errors.confirmarContrasena && (
-                <p role="alert" className="mt-1 text-xs text-red-500">
-                  {errors.confirmarContrasena.message}
-                </p>
-              )}
-            </div>
-
-            {/* Fecha de nacimiento */}
-            <div>
-              <input type="hidden" {...register('fechaNacimiento')} />
-              <div className="rounded-2xl border border-slate-200 bg-white p-3">
-                <SelectorFecha
-                  etiqueta="Fecha de nacimiento"
-                  valor={fechaNacimiento}
-                  min={fechaMinima}
-                  max={fechaMaxima}
-                  error={errors.fechaNacimiento?.message}
-                  alCambiar={(valor) =>
-                    setValue('fechaNacimiento', valor, {
-                      shouldDirty: true,
-                      shouldTouch: true,
-                      shouldValidate: true,
-                    })
-                  }
-                />
-                <p className="mt-2 text-xs text-slate-400">
-                  Debes tener al menos 13 años para crear una cuenta. Si eres menor de edad, pide a
-                  un adulto que te acompañe al salón.
-                </p>
-              </div>
-            </div>
-
-            {/* Teléfono opcional */}
-            <div>
-              <label htmlFor="telefono" className="block text-sm font-semibold text-slate-700 mb-1">
-                Teléfono <span className="font-normal text-slate-400">(opcional)</span>
-              </label>
-              <input
-                id="telefono"
-                type="tel"
-                autoComplete="tel"
-                className="w-full px-3.5 py-3 bg-white border border-slate-200 rounded-xl text-sm outline-none focus:ring-2 focus:ring-pink-500 focus:border-transparent"
-                placeholder="10 dígitos"
-                {...register('telefono')}
-              />
-              {errors.telefono && (
-                <p role="alert" className="mt-1 text-xs text-red-500">
-                  {errors.telefono.message}
-                </p>
-              )}
-            </div>
-
-            {/* Términos */}
-            <div>
-              <div className="flex items-start gap-2">
-                <input
-                  type="checkbox"
-                  id="aceptaTerminos"
-                  {...register('aceptaTerminos')}
-                  className="mt-1 h-4 w-4 shrink-0 rounded accent-pink-600"
-                />
-                <label htmlFor="aceptaTerminos" className="text-sm text-gray-600">
-                  Acepto los{' '}
-                  <button
-                    type="button"
-                    onClick={() => setMostrarTerminos(true)}
-                    className="font-medium text-pink-600 underline"
-                  >
-                    Términos y condiciones
-                  </button>{' '}
-                  y la{' '}
-                  <button
-                    type="button"
-                    onClick={() => setMostrarPrivacidad(true)}
-                    className="font-medium text-pink-600 underline"
-                  >
-                    Política de privacidad
-                  </button>
+                  Contraseña
                 </label>
+                <div className="relative">
+                  <input
+                    id="contrasena"
+                    type={mostrarContrasena ? 'text' : 'password'}
+                    autoComplete="new-password"
+                    className="w-full rounded-2xl border border-[#dacbb8] bg-white px-4 py-3.5 pr-12 text-sm outline-none transition focus:border-slate-900 focus:ring-2 focus:ring-[#f0d7bb]"
+                    aria-invalid={Boolean(errors.contrasena)}
+                    {...register('contrasena')}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setMostrarContrasena((valor) => !valor)}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-700"
+                    aria-label={mostrarContrasena ? 'Ocultar contraseña' : 'Mostrar contraseña'}
+                  >
+                    {mostrarContrasena ? (
+                      <EyeOff className="h-4 w-4" />
+                    ) : (
+                      <Eye className="h-4 w-4" />
+                    )}
+                  </button>
+                </div>
+                {errors.contrasena ? (
+                  <p className="mt-1 text-xs text-red-600">{errors.contrasena.message}</p>
+                ) : null}
               </div>
-              {errors.aceptaTerminos && (
-                <p role="alert" className="mt-1 text-xs text-red-500">
-                  Debes aceptar los términos para continuar
-                </p>
-              )}
+
+              <div>
+                <label
+                  htmlFor="confirmarContrasena"
+                  className="mb-1.5 block text-sm font-medium text-slate-700"
+                >
+                  Confirmar contraseña
+                </label>
+                <div className="relative">
+                  <input
+                    id="confirmarContrasena"
+                    type={mostrarConfirmacion ? 'text' : 'password'}
+                    autoComplete="new-password"
+                    className="w-full rounded-2xl border border-[#dacbb8] bg-white px-4 py-3.5 pr-12 text-sm outline-none transition focus:border-slate-900 focus:ring-2 focus:ring-[#f0d7bb]"
+                    aria-invalid={Boolean(errors.confirmarContrasena)}
+                    {...register('confirmarContrasena')}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setMostrarConfirmacion((valor) => !valor)}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-700"
+                    aria-label={
+                      mostrarConfirmacion ? 'Ocultar confirmación' : 'Mostrar confirmación'
+                    }
+                  >
+                    {mostrarConfirmacion ? (
+                      <EyeOff className="h-4 w-4" />
+                    ) : (
+                      <Eye className="h-4 w-4" />
+                    )}
+                  </button>
+                </div>
+                {errors.confirmarContrasena ? (
+                  <p className="mt-1 text-xs text-red-600">{errors.confirmarContrasena.message}</p>
+                ) : null}
+              </div>
             </div>
+
+            <div className="rounded-2xl border border-[#eadfce] bg-[#f8f3ec] px-4 py-3 text-sm text-slate-600">
+              <p className="font-medium text-slate-900">Reglas de la contraseña</p>
+              <p className="mt-1 leading-6">
+                Mínimo 8 caracteres, con mayúscula, minúscula, número y carácter especial. Longitud
+                actual: {contrasena.length}.
+              </p>
+            </div>
+
+            <label className="flex items-start gap-3 rounded-2xl border border-[#eadfce] bg-[#fffaf3] px-4 py-3 text-sm text-slate-600">
+              <input
+                type="checkbox"
+                className="mt-1 h-4 w-4 rounded border-slate-300"
+                {...register('aceptaTerminos')}
+              />
+              <span className="leading-6">
+                Acepto los{' '}
+                <button
+                  type="button"
+                  onClick={() => setMostrarTerminos(true)}
+                  className="font-semibold text-slate-900 underline underline-offset-4"
+                >
+                  Términos del servicio
+                </button>{' '}
+                y la{' '}
+                <button
+                  type="button"
+                  onClick={() => setMostrarPrivacidad(true)}
+                  className="font-semibold text-slate-900 underline underline-offset-4"
+                >
+                  Política de privacidad
+                </button>
+                .
+              </span>
+            </label>
+            {errors.aceptaTerminos ? (
+              <p className="-mt-2 text-xs text-red-600">{errors.aceptaTerminos.message}</p>
+            ) : null}
 
             <button
               type="submit"
               disabled={isSubmitting}
-              className="w-full bg-linear-to-r from-[#C2185B] to-[#E91E8C] text-white font-bold py-3.5 rounded-2xl hover:shadow-lg hover:scale-[1.01] disabled:opacity-60 disabled:cursor-not-allowed transition-all"
+              aria-busy={isSubmitting}
+              className="w-full rounded-2xl bg-[#161616] px-4 py-3.5 text-sm font-semibold text-white transition hover:bg-black disabled:cursor-not-allowed disabled:opacity-60"
             >
               {isSubmitting ? 'Creando cuenta...' : 'Crear cuenta'}
             </button>
           </form>
 
-          <p className="text-center text-sm text-slate-500 mt-6">
+          <p className="mt-6 text-center text-sm text-slate-600">
             ¿Ya tienes cuenta?{' '}
-            <Link to="/iniciar-sesion" className="text-pink-700 font-semibold hover:underline">
+            <Link
+              to="/iniciar-sesion"
+              className="font-semibold text-slate-900 underline decoration-[#c7b299] underline-offset-4"
+            >
               Inicia sesión
             </Link>
           </p>
-        </div>
+        </section>
       </div>
+
       <ModalTerminos
         abierto={mostrarTerminos}
-        alAceptar={aceptarTerminos}
         alCerrar={() => setMostrarTerminos(false)}
+        alAceptar={aceptarAcuerdo}
       />
       <ModalPrivacidad
         abierto={mostrarPrivacidad}
-        alAceptar={aceptarPrivacidad}
         alCerrar={() => setMostrarPrivacidad(false)}
+        alAceptar={aceptarAcuerdo}
       />
-    </div>
+    </main>
   );
 }

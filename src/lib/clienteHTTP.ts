@@ -2,7 +2,7 @@
  * Cliente HTTP para llamadas al backend Fastify.
  *
  * - Base URL tomada de VITE_URL_API (validada al arranque por env.ts).
- * - Adjunta automáticamente el access token JWT del almacenamiento local.
+ * - Adjunta automáticamente el access token JWT en memoria.
  * - Si recibe 401, intenta refrescar el token una vez antes de rechazar.
  */
 import { env } from './env';
@@ -22,13 +22,15 @@ export class ErrorAPI extends Error {
 }
 
 export const URL_BASE = env.VITE_URL_API;
-const CLAVE_TOKEN = 'btp_access_token';
+const URL_BASE_DESARROLLO_LOCAL = 'http://localhost:3000';
+const CLAVE_CSRF = 'btp_csrf_token';
 const CODIGOS_BLOQUEO_SESION = new Set([
   'CUENTA_SUSPENDIDA',
   'SALON_SUSPENDIDO',
   'ACCESO_REVOCADO',
   'CUENTA_DESACTIVADA',
 ]);
+let tokenEnMemoria: string | null = null;
 
 /** Callback registrado externamente para reaccionar a la expiración de sesión. */
 let _callbackSesionExpirada:
@@ -47,31 +49,72 @@ function manejarSesionInvalida(datos: { mensaje: string; codigo?: string; estado
   _callbackSesionExpirada?.(datos);
 }
 
+function puedeUsarFallbackLocal(error: unknown): boolean {
+  return Boolean(env.DEV && URL_BASE !== URL_BASE_DESARROLLO_LOCAL && error instanceof TypeError);
+}
+
+async function fetchConFallbackLocal(ruta: string, init: RequestInit): Promise<Response> {
+  try {
+    return await fetch(`${URL_BASE}${ruta}`, init);
+  } catch (error) {
+    if (!puedeUsarFallbackLocal(error)) {
+      throw error;
+    }
+
+    return fetch(`${URL_BASE_DESARROLLO_LOCAL}${ruta}`, init);
+  }
+}
+
 /** Lee el token del almacenamiento de sesión. */
 function leerToken(): string | null {
-  return sessionStorage.getItem(CLAVE_TOKEN);
+  return tokenEnMemoria;
 }
 
-/** Persiste el token en el almacenamiento de sesión. */
+export function obtenerTokenCsrf(): string | null {
+  return localStorage.getItem(CLAVE_CSRF);
+}
+
+function guardarTokenCsrf(token: string): void {
+  localStorage.setItem(CLAVE_CSRF, token);
+}
+
+/** Persiste el token en memoria y el CSRF en sessionStorage. */
 export function guardarToken(token: string): void {
-  sessionStorage.setItem(CLAVE_TOKEN, token);
+  tokenEnMemoria = token;
 }
 
-/** Elimina el token del almacenamiento de sesión. */
+export function guardarSesionAutenticacion(datos: { token: string; csrfToken?: string }): void {
+  tokenEnMemoria = datos.token;
+  if (datos.csrfToken) {
+    guardarTokenCsrf(datos.csrfToken);
+  }
+}
+
+/** Elimina el token en memoria y el CSRF persistido. */
 export function limpiarToken(): void {
-  sessionStorage.removeItem(CLAVE_TOKEN);
+  tokenEnMemoria = null;
+  localStorage.removeItem(CLAVE_CSRF);
 }
 
 /** Intenta refrescar el access token usando la cookie httpOnly de refresh. */
 async function intentarRefrescar(): Promise<string | null> {
   try {
-    const res = await fetch(`${URL_BASE}/auth/refrescar`, {
+    const cabeceras = new Headers();
+    const csrfToken = obtenerTokenCsrf();
+    if (csrfToken) {
+      cabeceras.set('x-csrf-token', csrfToken);
+    }
+    cabeceras.set('Content-Type', 'application/json');
+
+    const res = await fetchConFallbackLocal('/auth/refrescar', {
       method: 'POST',
       credentials: 'include',
+      headers: cabeceras,
+      body: '{}',
     });
     if (!res.ok) return null;
-    const json = (await res.json()) as { datos: { token: string } };
-    guardarToken(json.datos.token);
+    const json = (await res.json()) as { datos: { token: string; csrfToken?: string } };
+    guardarSesionAutenticacion(json.datos);
     return json.datos.token;
   } catch {
     return null;
@@ -121,11 +164,17 @@ export async function peticion<T>(ruta: string, opciones: RequestInit = {}): Pro
 
   const metodo = (opciones.method ?? 'GET').toUpperCase();
   const cuerpoNormalizado =
-    opciones.body === undefined && (metodo === 'PUT' || metodo === 'PATCH') ? '{}' : opciones.body;
+    opciones.body === undefined && (metodo === 'POST' || metodo === 'PUT' || metodo === 'PATCH')
+      ? '{}'
+      : opciones.body;
   const cabeceras = new Headers(opciones.headers);
 
   const token = leerToken();
   if (token) cabeceras.set('Authorization', `Bearer ${token}`);
+  const csrfToken = obtenerTokenCsrf();
+  if (csrfToken && metodo !== 'GET' && metodo !== 'HEAD') {
+    cabeceras.set('x-csrf-token', csrfToken);
+  }
   if (
     !cabeceras.has('Content-Type') &&
     cuerpoNormalizado &&
@@ -134,7 +183,7 @@ export async function peticion<T>(ruta: string, opciones: RequestInit = {}): Pro
     cabeceras.set('Content-Type', 'application/json');
   }
 
-  const respuesta = await fetch(`${URL_BASE}${ruta}`, {
+  const respuesta = await fetchConFallbackLocal(ruta, {
     ...opciones,
     body: cuerpoNormalizado,
     headers: cabeceras,
@@ -146,7 +195,7 @@ export async function peticion<T>(ruta: string, opciones: RequestInit = {}): Pro
     const nuevoToken = await intentarRefrescar();
     if (nuevoToken) {
       cabeceras.set('Authorization', `Bearer ${nuevoToken}`);
-      const reintento = await fetch(`${URL_BASE}${ruta}`, {
+      const reintento = await fetchConFallbackLocal(ruta, {
         ...opciones,
         body: cuerpoNormalizado,
         headers: cabeceras,

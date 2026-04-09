@@ -102,6 +102,11 @@ export interface SalonDirectorio {
   dueno: string;
   correo: string | null;
   pais: string;
+  plan: 'STANDARD' | 'PRO';
+  estado: string;
+  activo: boolean;
+  duenoActivo: boolean;
+  ultimoAccesoDueno: string | null;
 }
 
 export interface DetalleSalonDirectorio {
@@ -306,11 +311,17 @@ export async function obtenerDirectorio(params: {
   buscar?: string;
   pagina?: number;
   limite?: number;
+  pais?: string;
+  estado?: string;
+  plan?: string;
 }): Promise<RespuestaListaPaginada<SalonDirectorio>> {
   const qs = new URLSearchParams();
   if (params.buscar) qs.set('buscar', params.buscar);
   if (params.pagina) qs.set('pagina', String(params.pagina));
   if (params.limite) qs.set('limite', String(params.limite));
+  if (params.pais) qs.set('pais', params.pais);
+  if (params.estado) qs.set('estado', params.estado);
+  if (params.plan) qs.set('plan', params.plan);
   return peticion<RespuestaListaPaginada<SalonDirectorio>>(`/admin/directorio?${qs}`);
 }
 

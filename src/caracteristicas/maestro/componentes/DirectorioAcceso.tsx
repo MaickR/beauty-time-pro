@@ -7,10 +7,24 @@ import { ModalDetalleSalon } from './ModalDetalleSalon';
 
 const LIMITE = 10;
 const RETRASO_BUSQUEDA = 300;
+const OPCIONES_PAIS = ['Todos', 'Mexico', 'Colombia'] as const;
+const OPCIONES_PLAN = ['Todos', 'STANDARD', 'PRO'] as const;
+const OPCIONES_ESTADO = ['Todos', 'pendiente', 'aprobado', 'suspendido', 'bloqueado'] as const;
+
+const ESTADO_BADGE: Record<string, string> = {
+  pendiente: 'bg-amber-100 text-amber-700',
+  aprobado: 'bg-emerald-100 text-emerald-700',
+  suspendido: 'bg-red-100 text-red-700',
+  bloqueado: 'bg-slate-200 text-slate-700',
+  rechazado: 'bg-rose-100 text-rose-700',
+};
 
 export function DirectorioAcceso() {
   const [busqueda, setBusqueda] = useState('');
   const [busquedaDiferida, setBusquedaDiferida] = useState('');
+  const [filtroPais, setFiltroPais] = useState<(typeof OPCIONES_PAIS)[number]>('Todos');
+  const [filtroPlan, setFiltroPlan] = useState<(typeof OPCIONES_PLAN)[number]>('Todos');
+  const [filtroEstado, setFiltroEstado] = useState<(typeof OPCIONES_ESTADO)[number]>('Todos');
   const [pagina, setPagina] = useState(1);
   const [salonSeleccionado, setSalonSeleccionado] = useState<string | null>(null);
   const temporizadorRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -27,12 +41,23 @@ export function DirectorioAcceso() {
   }, [busqueda]);
 
   const { data, isLoading } = useQuery({
-    queryKey: ['admin', 'directorio', busquedaDiferida, pagina],
+    queryKey: [
+      'admin',
+      'directorio',
+      busquedaDiferida,
+      pagina,
+      filtroPais,
+      filtroPlan,
+      filtroEstado,
+    ],
     queryFn: () =>
       obtenerDirectorio({
         buscar: busquedaDiferida || undefined,
         pagina,
         limite: LIMITE,
+        pais: filtroPais === 'Todos' ? undefined : filtroPais,
+        plan: filtroPlan === 'Todos' ? undefined : filtroPlan,
+        estado: filtroEstado === 'Todos' ? undefined : filtroEstado,
       }),
     staleTime: 15_000,
   });
@@ -59,6 +84,36 @@ export function DirectorioAcceso() {
         />
       </div>
 
+      <div className="mb-4 flex flex-wrap gap-2">
+        <FiltroLista
+          etiqueta="Country"
+          valor={filtroPais}
+          opciones={OPCIONES_PAIS}
+          onCambiar={(valor) => {
+            setFiltroPais(valor as (typeof OPCIONES_PAIS)[number]);
+            setPagina(1);
+          }}
+        />
+        <FiltroLista
+          etiqueta="Plan"
+          valor={filtroPlan}
+          opciones={OPCIONES_PLAN}
+          onCambiar={(valor) => {
+            setFiltroPlan(valor as (typeof OPCIONES_PLAN)[number]);
+            setPagina(1);
+          }}
+        />
+        <FiltroLista
+          etiqueta="Status"
+          valor={filtroEstado}
+          opciones={OPCIONES_ESTADO}
+          onCambiar={(valor) => {
+            setFiltroEstado(valor as (typeof OPCIONES_ESTADO)[number]);
+            setPagina(1);
+          }}
+        />
+      </div>
+
       {/* Tabla */}
       {isLoading ? (
         <div className="space-y-3">
@@ -81,6 +136,12 @@ export function DirectorioAcceso() {
                   <th className="text-left py-3 px-4 text-xs font-black text-slate-400 uppercase hidden md:table-cell">
                     Correo
                   </th>
+                  <th className="text-left py-3 px-4 text-xs font-black text-slate-400 uppercase hidden lg:table-cell">
+                    Plan
+                  </th>
+                  <th className="text-left py-3 px-4 text-xs font-black text-slate-400 uppercase">
+                    Status
+                  </th>
                   <th className="text-left py-3 px-4 text-xs font-black text-slate-400 uppercase hidden sm:table-cell">
                     País
                   </th>
@@ -99,6 +160,27 @@ export function DirectorioAcceso() {
                     <td className="py-3 px-4 text-slate-600">{salon.dueno}</td>
                     <td className="py-3 px-4 text-slate-500 hidden md:table-cell">
                       {salon.correo ?? '—'}
+                    </td>
+                    <td className="py-3 px-4 hidden lg:table-cell">
+                      <span
+                        className={`inline-flex rounded-full px-2.5 py-1 text-[11px] font-black ${salon.plan === 'PRO' ? 'bg-slate-900 text-white' : 'bg-slate-100 text-slate-700'}`}
+                      >
+                        {salon.plan}
+                      </span>
+                    </td>
+                    <td className="py-3 px-4">
+                      <div className="flex flex-col gap-1">
+                        <span
+                          className={`inline-flex w-fit rounded-full px-2.5 py-1 text-[11px] font-black ${ESTADO_BADGE[salon.estado] ?? 'bg-slate-100 text-slate-700'}`}
+                        >
+                          {salon.estado}
+                        </span>
+                        <span
+                          className={`text-[11px] font-semibold ${salon.duenoActivo ? 'text-emerald-600' : 'text-red-600'}`}
+                        >
+                          {salon.duenoActivo ? 'Owner access active' : 'Owner access blocked'}
+                        </span>
+                      </div>
                     </td>
                     <td className="py-3 px-4 text-slate-500 hidden sm:table-cell">{salon.pais}</td>
                     <td className="py-3 px-4 text-center">
@@ -158,5 +240,34 @@ export function DirectorioAcceso() {
         />
       )}
     </section>
+  );
+}
+
+function FiltroLista({
+  etiqueta,
+  valor,
+  opciones,
+  onCambiar,
+}: {
+  etiqueta: string;
+  valor: string;
+  opciones: readonly string[];
+  onCambiar: (valor: string) => void;
+}) {
+  return (
+    <label className="flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-bold text-slate-600">
+      <span>{etiqueta}</span>
+      <select
+        value={valor}
+        onChange={(evento) => onCambiar(evento.target.value)}
+        className="bg-transparent text-xs font-bold text-slate-800 outline-none"
+      >
+        {opciones.map((opcion) => (
+          <option key={opcion} value={opcion}>
+            {opcion}
+          </option>
+        ))}
+      </select>
+    </label>
   );
 }

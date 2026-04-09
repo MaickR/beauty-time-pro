@@ -90,6 +90,14 @@ function mapearEstudioBackend(estudio: EstudioBackend): Estudio {
     fechaSolicitudCancelacion:
       (estudio['fechaSolicitudCancelacion'] as string | null | undefined) ?? null,
     motivoCancelacion: (estudio['motivoCancelacion'] as string | null | undefined) ?? null,
+    precioSuscripcionActual:
+      (estudio['precioSuscripcionActual'] as number | null | undefined) ?? null,
+    monedaSuscripcion: (estudio['monedaSuscripcion'] as Estudio['monedaSuscripcion']) ?? null,
+    precioSuscripcionProximo:
+      (estudio['precioSuscripcionProximo'] as number | null | undefined) ?? null,
+    fechaAplicacionPrecioProximo:
+      (estudio['fechaAplicacionPrecioProximo'] as string | null | undefined) ?? null,
+    precioRenovacion: (estudio['precioRenovacion'] as number | null | undefined) ?? null,
     createdAt:
       (estudio['createdAt'] as string | undefined) ?? (estudio['creadoEn'] as string) ?? '',
     updatedAt:

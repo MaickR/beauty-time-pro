@@ -20,11 +20,6 @@ const PaginaResetContrasena = lazy(() =>
     default: m.PaginaResetContrasena,
   })),
 );
-const PaginaBienvenida = lazy(() =>
-  import('../caracteristicas/autenticacion/PaginaBienvenida').then((m) => ({
-    default: m.PaginaBienvenida,
-  })),
-);
 const PaginaRegistroSalon = lazy(() =>
   import('../caracteristicas/autenticacion/PaginaRegistroSalon').then((m) => ({
     default: m.PaginaRegistroSalon,
@@ -130,7 +125,7 @@ function RedireccionRaiz() {
     if (claveClienteActual) {
       return <Navigate to={`/reservar/${claveClienteActual}`} replace />;
     }
-    return <PaginaBienvenida />;
+    return <Navigate to="/iniciar-sesion" replace />;
   }
 
   return (
@@ -162,7 +157,7 @@ export function Enrutador() {
         <Route path="/email-enviado" element={<PaginaEmailEnviado />} />
         <Route path="/verificar-email" element={<PaginaVerificarEmail />} />
 
-        <Route element={<GuardiaRuta rolesPermitidos={['maestro', 'supervisor']} />}>
+        <Route element={<GuardiaRuta rolesPermitidos={['maestro']} />}>
           <Route
             path="/maestro"
             element={
@@ -173,6 +168,25 @@ export function Enrutador() {
           />
           <Route
             path="/maestro/finanzas"
+            element={
+              <LimiteError>
+                <PaginaMaestro />
+              </LimiteError>
+            }
+          />
+        </Route>
+
+        <Route element={<GuardiaRuta rolesPermitidos={['supervisor']} />}>
+          <Route
+            path="/supervisor"
+            element={
+              <LimiteError>
+                <PaginaMaestro />
+              </LimiteError>
+            }
+          />
+          <Route
+            path="/supervisor/finanzas"
             element={
               <LimiteError>
                 <PaginaMaestro />
