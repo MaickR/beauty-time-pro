@@ -4,6 +4,8 @@ import { Eye, Search } from 'lucide-react';
 import { obtenerDirectorio } from '../../../servicios/servicioAdmin';
 import { EsqueletoTarjeta } from '../../../componentes/ui/Esqueleto';
 import { ModalDetalleSalon } from './ModalDetalleSalon';
+import { Tooltip } from '../../../componentes/ui/Tooltip';
+import { formatearPais, formatearPlan } from '../../../utils/formato';
 
 const LIMITE = 10;
 const RETRASO_BUSQUEDA = 300;
@@ -79,14 +81,14 @@ export function DirectorioAcceso() {
           type="text"
           value={busqueda}
           onChange={(e) => manejarBusqueda(e.target.value)}
-          placeholder="Search by name or owner..."
+          placeholder="Buscar por salón o dueño..."
           className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-slate-200 text-sm font-medium outline-none focus:ring-2 focus:ring-pink-500"
         />
       </div>
 
       <div className="mb-4 flex flex-wrap gap-2">
         <FiltroLista
-          etiqueta="Country"
+          etiqueta="País"
           valor={filtroPais}
           opciones={OPCIONES_PAIS}
           onCambiar={(valor) => {
@@ -104,7 +106,7 @@ export function DirectorioAcceso() {
           }}
         />
         <FiltroLista
-          etiqueta="Status"
+          etiqueta="Estado"
           valor={filtroEstado}
           opciones={OPCIONES_ESTADO}
           onCambiar={(valor) => {
@@ -140,7 +142,7 @@ export function DirectorioAcceso() {
                     Plan
                   </th>
                   <th className="text-left py-3 px-4 text-xs font-black text-slate-400 uppercase">
-                    Status
+                    Estado
                   </th>
                   <th className="text-left py-3 px-4 text-xs font-black text-slate-400 uppercase hidden sm:table-cell">
                     País
@@ -165,7 +167,7 @@ export function DirectorioAcceso() {
                       <span
                         className={`inline-flex rounded-full px-2.5 py-1 text-[11px] font-black ${salon.plan === 'PRO' ? 'bg-slate-900 text-white' : 'bg-slate-100 text-slate-700'}`}
                       >
-                        {salon.plan}
+                        {formatearPlan(salon.plan)}
                       </span>
                     </td>
                     <td className="py-3 px-4">
@@ -178,25 +180,31 @@ export function DirectorioAcceso() {
                         <span
                           className={`text-[11px] font-semibold ${salon.duenoActivo ? 'text-emerald-600' : 'text-red-600'}`}
                         >
-                          {salon.duenoActivo ? 'Owner access active' : 'Owner access blocked'}
+                          {salon.duenoActivo
+                            ? 'Acceso del dueño activo'
+                            : 'Acceso del dueño bloqueado'}
                         </span>
                       </div>
                     </td>
-                    <td className="py-3 px-4 text-slate-500 hidden sm:table-cell">{salon.pais}</td>
+                    <td className="py-3 px-4 text-slate-500 hidden sm:table-cell">
+                      {formatearPais(salon.pais)}
+                    </td>
                     <td className="py-3 px-4 text-center">
-                      <button
-                        onClick={() => setSalonSeleccionado(salon.id)}
-                        className="p-2 rounded-lg hover:bg-pink-50 text-slate-400 hover:text-pink-600 transition-colors"
-                        aria-label={`Ver detalle de ${salon.nombre}`}
-                      >
-                        <Eye className="w-4 h-4" />
-                      </button>
+                      <Tooltip texto="Editar">
+                        <button
+                          onClick={() => setSalonSeleccionado(salon.id)}
+                          className="p-2 rounded-lg hover:bg-pink-50 text-slate-400 hover:text-pink-600 transition-colors"
+                          aria-label={`Ver detalle de ${salon.nombre}`}
+                        >
+                          <Eye className="w-4 h-4" />
+                        </button>
+                      </Tooltip>
                     </td>
                   </tr>
                 ))}
                 {(!data?.datos || data.datos.length === 0) && (
                   <tr>
-                    <td colSpan={5} className="py-8 text-center text-slate-400 font-bold">
+                    <td colSpan={7} className="py-8 text-center text-slate-400 font-bold">
                       No se encontraron salones
                     </td>
                   </tr>
@@ -264,7 +272,13 @@ function FiltroLista({
       >
         {opciones.map((opcion) => (
           <option key={opcion} value={opcion}>
-            {opcion}
+            {opcion === 'Mexico'
+              ? 'México'
+              : opcion === 'STANDARD'
+                ? 'Estándar'
+                : opcion === 'PRO'
+                  ? 'Pro'
+                  : opcion}
           </option>
         ))}
       </select>

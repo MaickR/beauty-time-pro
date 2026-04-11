@@ -6,6 +6,7 @@ import { esEmailAdminProtegido, verificarJWT } from '../middleware/autenticacion
 import { requierePermiso } from '../middleware/verificarPermiso.js';
 import { revocarSesionesPorSujeto } from '../lib/sesionesAuth.js';
 import { registrarAuditoria } from '../utils/auditoria.js';
+import { esEmailColaboradorValido } from '../utils/validarEmail.js';
 
 const ROLES_COLABORADOR = ['maestro', 'supervisor', 'vendedor'] as const;
 type RolColaborador = (typeof ROLES_COLABORADOR)[number];
@@ -16,6 +17,14 @@ function esRolColaboradorValido(valor: string): valor is RolColaborador {
 
 function esAdminProtegido(admin: { email: string }): boolean {
   return esEmailAdminProtegido(admin.email);
+}
+
+function limpiarNombreColaborador(valor: string): string {
+  return valor.replace(/[^\p{L}\s]/gu, '').replace(/\s+/g, ' ').trim();
+}
+
+function esNombreColaboradorValido(valor: string): boolean {
+  return /^[\p{L}\s]{2,}$/u.test(limpiarNombreColaborador(valor));
 }
 
 async function obtenerColaboradorObjetivo(id: string) {
@@ -208,6 +217,14 @@ export async function rutasAdmins(servidor: FastifyInstance): Promise<void> {
         return respuesta.code(400).send({ error: 'email, nombre y contrasena son requeridos' });
       }
 
+      if (!esNombreColaboradorValido(nombre)) {
+        return respuesta.code(400).send({ error: 'El nombre solo admite letras y espacios' });
+      }
+
+      if (!esEmailColaboradorValido(email)) {
+        return respuesta.code(400).send({ error: 'El correo no es válido o pertenece a un dominio temporal' });
+      }
+
       if (!cargo || !esRolColaboradorValido(cargo)) {
         return respuesta.code(400).send({ error: 'El cargo debe ser: maestro, supervisor o vendedor' });
       }
@@ -226,7 +243,7 @@ export async function rutasAdmins(servidor: FastifyInstance): Promise<void> {
       const nuevoColaborador = await prisma.usuario.create({
         data: {
           email: email.trim().toLowerCase(),
-          nombre: nombre.trim(),
+          nombre: limpiarNombreColaborador(nombre),
           hashContrasena,
           rol: cargo,
           activo: true,
@@ -341,6 +358,10 @@ export async function rutasAdmins(servidor: FastifyInstance): Promise<void> {
       }
 
       if (emailNormalizado && emailNormalizado !== colaborador.email) {
+        if (!esEmailColaboradorValido(emailNormalizado)) {
+          return respuesta.code(400).send({ error: 'El correo no es válido o pertenece a un dominio temporal' });
+        }
+
         const existente = await prisma.usuario.findUnique({
           where: { email: emailNormalizado },
           select: { id: true },
@@ -357,7 +378,11 @@ export async function rutasAdmins(servidor: FastifyInstance): Promise<void> {
 
       const actualizacionUsuario: Record<string, unknown> = {};
       if (typeof nombre === 'string' && nombre.trim()) {
-        actualizacionUsuario['nombre'] = nombre.trim();
+        if (!esNombreColaboradorValido(nombre)) {
+          return respuesta.code(400).send({ error: 'El nombre solo admite letras y espacios' });
+        }
+
+        actualizacionUsuario['nombre'] = limpiarNombreColaborador(nombre);
       }
       if (emailNormalizado) {
         actualizacionUsuario['email'] = emailNormalizado;

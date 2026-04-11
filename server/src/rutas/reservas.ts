@@ -16,11 +16,13 @@ import {
   obtenerServiciosNormalizados,
   serializarReservaApi,
 } from '../lib/serializacionReservas.js';
+import { obtenerNombresSucursales } from '../lib/sedes.js';
 import { prisma } from '../prismaCliente.js';
 import { enviarEmailConfirmacion } from '../servicios/servicioEmail.js';
 import { verificarJWT, verificarJWTOpcional } from '../middleware/autenticacion.js';
 import { registrarAuditoria } from '../utils/auditoria.js';
 import { sanitizarTexto } from '../utils/sanitizar.js';
+import { esEmailValido } from '../utils/validarEmail.js';
 import { construirFechaHoraEnZona, obtenerFechaISOEnZona, normalizarZonaHorariaEstudio } from '../utils/zonasHorarias.js';
 import {
   notificarCitaCancelada,
@@ -343,16 +345,26 @@ const esquemaCrearReservaBase = z.object({
   sucursal: z.string().trim().optional(),
   marcaTinte: z.string().trim().optional().nullable(),
   tonalidad: z.string().trim().optional().nullable(),
-  observaciones: z.string().trim().max(500).optional().nullable(),
+  observaciones: z
+    .string()
+    .trim()
+    .max(240)
+    .regex(/^[\p{L}\p{N}\s.,:;()¿?¡!\-]*$/u, 'Las notas solo aceptan texto, números y signos básicos')
+    .optional()
+    .nullable(),
   usarRecompensa: z.boolean().optional(),
 });
 
 const esquemaDatosClienteReserva = z.object({
-  nombreCliente: z.string().trim().min(2, 'El nombre del cliente es obligatorio'),
+  nombreCliente: z
+    .string()
+    .trim()
+    .min(2, 'El nombre del cliente es obligatorio')
+    .regex(/^[\p{L}\s]+$/u, 'El nombre del cliente solo puede contener letras y espacios'),
   telefonoCliente: z
     .string()
     .trim()
-    .regex(/^[0-9+\-\s()]{7,20}$/, 'El teléfono debe contener entre 7 y 20 caracteres válidos'),
+    .regex(/^\d{10}$/, 'El teléfono del cliente debe tener exactamente 10 dígitos'),
   fechaNacimiento: z
     .string()
     .trim()
@@ -777,10 +789,26 @@ export async function rutasReservas(servidor: FastifyInstance): Promise<void> {
       prisma.estudio.findUnique({
         where: { id: estudioId },
         select: {
+          id: true,
+          nombre: true,
           fechaVencimiento: true,
           estado: true,
           activo: true,
           servicios: true,
+          sucursales: true,
+          estudioPrincipalId: true,
+          permiteReservasPublicas: true,
+          sedes: {
+            where: { activo: true, estado: 'aprobado' },
+            select: {
+              id: true,
+              nombre: true,
+              estudioPrincipalId: true,
+              activo: true,
+              estado: true,
+              permiteReservasPublicas: true,
+            },
+          },
           zonaHoraria: true,
           pais: true,
         },
@@ -800,6 +828,46 @@ export async function rutasReservas(servidor: FastifyInstance): Promise<void> {
     const hoyStr = obtenerFechaISOEnZona(new Date(), zonaHorariaSalon, estudio.pais);
     if (estudio.fechaVencimiento < hoyStr) {
       return respuesta.code(400).send({ error: 'Este salón no tiene una suscripción activa' });
+    }
+
+    const esReservaPublica = !payload || (payload.rol === 'cliente' && payload.estudioId === null);
+    if (esReservaPublica && estudio.estudioPrincipalId && !estudio.permiteReservasPublicas) {
+      return respuesta.code(400).send({ error: 'La sede seleccionada no está disponible para reservas públicas' });
+    }
+
+    const sucursalesDisponibles = obtenerNombresSucursales(
+      estudio as unknown as Record<string, unknown>,
+      Array.isArray(estudio.sucursales) ? (estudio.sucursales as string[]) : [],
+    );
+    const sedesReservables = Array.from(
+      new Set([estudio.nombre.trim(), ...sucursalesDisponibles]),
+    ).filter((nombre) => nombre.length > 0);
+    const sucursalNormalizada = sucursal?.trim() ?? '';
+
+    let sucursalEfectiva = sucursalNormalizada || sedesReservables[0] || '';
+
+    if (estudio.estudioPrincipalId) {
+      const nombreSede = estudio.nombre.trim();
+      if (
+        sucursalNormalizada &&
+        sucursalNormalizada.localeCompare(nombreSede, 'es', { sensitivity: 'base' }) !== 0
+      ) {
+        return respuesta.code(400).send({ error: 'La sede seleccionada no coincide con el salón elegido' });
+      }
+      sucursalEfectiva = nombreSede;
+    }
+
+    if (!estudio.estudioPrincipalId && sedesReservables.length > 1 && !sucursalNormalizada) {
+      return respuesta.code(400).send({ error: 'Debes seleccionar una sede para esta reserva' });
+    }
+
+    if (
+      !estudio.estudioPrincipalId &&
+      sucursalNormalizada &&
+      sedesReservables.length > 0 &&
+      !sedesReservables.includes(sucursalNormalizada)
+    ) {
+      return respuesta.code(400).send({ error: 'La sede seleccionada no pertenece a este salón' });
     }
 
     // ─── Si es un ClienteApp autenticado, rellenar datos desde su perfil ──
@@ -832,6 +900,8 @@ export async function rutasReservas(servidor: FastifyInstance): Promise<void> {
       }
     }
 
+    const emailNormalizado = email?.trim().toLowerCase() || undefined;
+
     const resultadoDatosCliente = esquemaDatosClienteReserva.safeParse({
       nombreCliente,
       telefonoCliente,
@@ -847,6 +917,12 @@ export async function rutasReservas(servidor: FastifyInstance): Promise<void> {
       return respuesta.code(400).send({
         error: 'Datos del cliente inválidos para crear la reserva',
         campos,
+      });
+    }
+
+    if (emailNormalizado && !esEmailValido(emailNormalizado)) {
+      return respuesta.code(400).send({
+        error: 'Solo se aceptan correos personales válidos de Gmail, Hotmail, Outlook o Yahoo',
       });
     }
 
@@ -895,7 +971,7 @@ export async function rutasReservas(servidor: FastifyInstance): Promise<void> {
     const datosCliente = {
       nombre: nombreCliente,
       fechaNacimiento: nacimiento,
-      ...(email !== undefined && { email }),
+      ...(emailNormalizado !== undefined && { email: emailNormalizado }),
     };
 
     let cliente;
@@ -906,7 +982,7 @@ export async function rutasReservas(servidor: FastifyInstance): Promise<void> {
         create: {
           estudioId,
           telefono: telefonoCliente,
-          email: email ?? null,
+          email: emailNormalizado ?? null,
           ...datosCliente,
         },
       });
@@ -957,7 +1033,7 @@ export async function rutasReservas(servidor: FastifyInstance): Promise<void> {
           serviciosNormalizados,
           precioTotalEfectivo,
           estadoReserva,
-          sucursal,
+          sucursal: sucursalEfectiva,
           marcaTinte,
           tonalidad,
           notaMenorEdad: esMenorDeEdad

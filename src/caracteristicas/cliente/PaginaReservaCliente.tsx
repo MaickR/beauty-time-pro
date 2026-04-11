@@ -1,3 +1,4 @@
+import { useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { ChevronLeft, Check, Clock, Calendar, User, Tag, Loader2 } from 'lucide-react';
@@ -19,24 +20,75 @@ function iniciales(nombre: string) {
     .toUpperCase();
 }
 
+function tieneHorarioModificadoSalon(salon: SalonDetalle, fecha: Date): boolean {
+  const claveDia = DIAS_SEMANA[fecha.getDay()];
+  const horarioDia = salon.horario?.[claveDia];
+  if (!horarioDia?.isOpen) return false;
+
+  return salon.personal.some((especialista) => {
+    const diasTrabajo = Array.isArray(especialista.diasTrabajo)
+      ? (especialista.diasTrabajo as number[])
+      : null;
+    if (diasTrabajo && !diasTrabajo.includes(fecha.getDay())) {
+      return true;
+    }
+
+    const inicioEspecialista = especialista.horaInicio ?? horarioDia.openTime;
+    const finEspecialista = especialista.horaFin ?? horarioDia.closeTime;
+    const tieneDescanso = Boolean(especialista.descansoInicio && especialista.descansoFin);
+
+    return (
+      inicioEspecialista !== horarioDia.openTime ||
+      finEspecialista !== horarioDia.closeTime ||
+      tieneDescanso
+    );
+  });
+}
+
 // ── Selector de Especialista ─────────────────────────────────────────────────
 function PasoEspecialista({
   salon,
+  sucursalSeleccionada,
+  onSeleccionarSucursal,
   onSeleccionar,
 }: {
   salon: SalonDetalle;
+  sucursalSeleccionada: string;
+  onSeleccionarSucursal: (sucursal: string) => void;
   onSeleccionar: (id: string) => void;
 }) {
+  const requiereSucursal = (salon.sucursales?.length ?? 0) > 1;
+
   return (
     <section aria-labelledby="titulo-especialista">
       <h2 id="titulo-especialista" className="font-black text-lg text-slate-900 mb-4">
         Elige tu especialista
       </h2>
+      {requiereSucursal && (
+        <div className="mb-4 rounded-2xl border border-slate-200 bg-white p-4">
+          <label className="mb-2 block text-xs font-black uppercase tracking-wide text-slate-500">
+            Sede
+          </label>
+          <select
+            value={sucursalSeleccionada}
+            onChange={(evento) => onSeleccionarSucursal(evento.target.value)}
+            className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm font-bold text-slate-700"
+          >
+            <option value="">Selecciona una sede</option>
+            {salon.sucursales?.map((sucursal) => (
+              <option key={sucursal} value={sucursal}>
+                {sucursal}
+              </option>
+            ))}
+          </select>
+        </div>
+      )}
       <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
         {salon.personal.map((p) => (
           <button
             key={p.id}
             onClick={() => onSeleccionar(p.id)}
+            disabled={requiereSucursal && !sucursalSeleccionada}
             className="bg-white border-2 border-slate-100 rounded-2xl p-4 text-left hover:border-pink-300 hover:shadow-md transition-all"
           >
             <div
@@ -216,9 +268,30 @@ function PasoFecha({
                 aria-pressed={seleccionado}
               >
                 {dia}
+                {!seleccionado &&
+                  (esFestivo || estaCerrado || tieneHorarioModificadoSalon(salon, dateObj)) && (
+                    <span className="mt-1 flex items-center gap-1">
+                      {(esFestivo || estaCerrado) && (
+                        <span className="h-1.5 w-1.5 rounded-full bg-red-500" />
+                      )}
+                      {!esFestivo &&
+                        !estaCerrado &&
+                        tieneHorarioModificadoSalon(salon, dateObj) && (
+                          <span className="h-1.5 w-1.5 rounded-full bg-blue-500" />
+                        )}
+                    </span>
+                  )}
               </button>
             );
           })}
+        </div>
+        <div className="mt-4 flex items-center justify-center gap-4 text-[10px] font-black uppercase tracking-wide text-slate-500">
+          <span className="inline-flex items-center gap-1.5">
+            <span className="h-2 w-2 rounded-full bg-red-500" /> Cierre
+          </span>
+          <span className="inline-flex items-center gap-1.5">
+            <span className="h-2 w-2 rounded-full bg-blue-500" /> Horario modificado
+          </span>
         </div>
       </div>
     </section>
@@ -288,6 +361,7 @@ function PasoHora({
 // ── Confirmación ─────────────────────────────────────────────────────────────
 function PasoConfirmar({
   salon,
+  sucursal,
   personalId,
   servicios,
   fecha,
@@ -297,6 +371,7 @@ function PasoConfirmar({
   onConfirmar,
 }: {
   salon: SalonDetalle;
+  sucursal: string;
   personalId: string;
   servicios: Servicio[];
   fecha: Date;
@@ -333,6 +408,7 @@ function PasoConfirmar({
             <p className="font-bold text-slate-900 capitalize">
               {fechaFormateada} · {hora}
             </p>
+            {sucursal && <p className="text-xs font-semibold text-slate-500">Sede: {sucursal}</p>}
           </div>
         </div>
         <div className="flex items-start gap-3">
@@ -412,7 +488,7 @@ function PasoExitosa({
       </p>
       <div className="flex flex-col gap-3 max-w-xs mx-auto">
         <button
-          onClick={() => navegar('/cliente/historial')}
+          onClick={() => navegar('/cliente/perfil?vista=reservas')}
           className="py-3 rounded-2xl font-black text-white"
           style={{ backgroundColor: color }}
         >
@@ -466,6 +542,12 @@ function ContenidoReserva({
   const navegar = useNavigate();
   const flujo = usarFlujoReservaCliente(salon);
   const color = salon.colorPrimario ?? '#C2185B';
+
+  useEffect(() => {
+    if ((salon.sucursales?.length ?? 0) === 1 && !flujo.sucursalSeleccionada) {
+      flujo.seleccionarSucursal(salon.sucursales?.[0] ?? '');
+    }
+  }, [salon.id, salon.sucursales, flujo.sucursalSeleccionada]);
 
   const PASOS_TITULO: Record<string, string> = {
     especialista: 'Especialista',
@@ -526,7 +608,12 @@ function ContenidoReserva({
 
       <main className="max-w-2xl mx-auto px-4 py-6">
         {flujo.paso === 'especialista' && (
-          <PasoEspecialista salon={salon} onSeleccionar={flujo.seleccionarPersonal} />
+          <PasoEspecialista
+            salon={salon}
+            sucursalSeleccionada={flujo.sucursalSeleccionada}
+            onSeleccionarSucursal={flujo.seleccionarSucursal}
+            onSeleccionar={flujo.seleccionarPersonal}
+          />
         )}
         {flujo.paso === 'servicios' && (
           <PasoServicios
@@ -555,6 +642,7 @@ function ContenidoReserva({
         {flujo.paso === 'confirmar' && (
           <PasoConfirmar
             salon={salon}
+            sucursal={flujo.sucursalSeleccionada}
             personalId={flujo.personalId}
             servicios={flujo.serviciosSeleccionados}
             fecha={flujo.fechaSeleccionada}

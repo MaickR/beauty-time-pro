@@ -1,7 +1,13 @@
 /**
- * Servicio de estudios — llama al backend Fastify en lugar de Firebase.
+ * Servicio de estudios - llama al backend Fastify en lugar de Firebase.
  */
-import type { Estudio, PlanEstudio, Servicio, ServicioPersonalizado } from '../tipos/index';
+import type {
+  Estudio,
+  PlanEstudio,
+  SedeEstudio,
+  Servicio,
+  ServicioPersonalizado,
+} from '../tipos/index';
 import { peticion } from '../lib/clienteHTTP';
 
 type RespuestaEstudio = { datos: Estudio };
@@ -15,8 +21,17 @@ interface DatosCrearSalonAdmin {
   telefono: string;
   pais: Estudio['country'];
   plan: PlanEstudio;
+  estudioPrincipalId?: string | null;
+  permiteReservasPublicas?: boolean;
   inicioSuscripcion: string;
+  direccion?: string;
+  sucursales?: string[];
   servicios: Servicio[];
+  productos?: Array<{
+    nombre: string;
+    categoria?: string;
+    precio: number;
+  }>;
   serviciosCustom: ServicioPersonalizado[];
   personal: Array<{
     nombre: string;
@@ -47,6 +62,9 @@ type RespuestaCrearSalonAdmin = {
 function mapearEstudioBackend(estudio: EstudioBackend): Estudio {
   const personal = Array.isArray(estudio['personal'])
     ? (estudio['personal'] as Record<string, unknown>[])
+    : [];
+  const sedes = Array.isArray(estudio['sedes'])
+    ? (estudio['sedes'] as Record<string, unknown>[])
     : [];
 
   return {
@@ -85,6 +103,34 @@ function mapearEstudioBackend(estudio: EstudioBackend): Estudio {
     direccion: (estudio['direccion'] as string | null | undefined) ?? null,
     emailContacto: (estudio['emailContacto'] as string | null | undefined) ?? null,
     estado: (estudio['estado'] as string | null | undefined) ?? null,
+    estudioPrincipalId: (estudio['estudioPrincipalId'] as string | null | undefined) ?? null,
+    estudioPrincipal:
+      (estudio['estudioPrincipal'] as
+        | { id: string; nombre: string; slug: string | null }
+        | null
+        | undefined) ?? null,
+    esSede: (estudio['esSede'] as boolean | undefined) ?? false,
+    permiteReservasPublicas: (estudio['permiteReservasPublicas'] as boolean | undefined) ?? true,
+    sedes: sedes.map(
+      (sede): SedeEstudio => ({
+        id: (sede['id'] as string) ?? '',
+        nombre: (sede['nombre'] as string) ?? '',
+        slug: (sede['slug'] as string | null | undefined) ?? null,
+        plan: ((sede['plan'] as string) ?? 'STANDARD') as PlanEstudio,
+        estado: (sede['estado'] as string) ?? 'aprobado',
+        activo: (sede['activo'] as boolean | undefined) ?? true,
+        fechaVencimiento: (sede['fechaVencimiento'] as string) ?? '',
+        propietario: (sede['propietario'] as string | null | undefined) ?? null,
+        telefono: (sede['telefono'] as string | null | undefined) ?? null,
+        direccion: (sede['direccion'] as string | null | undefined) ?? null,
+        emailContacto: (sede['emailContacto'] as string | null | undefined) ?? null,
+        estudioPrincipalId: (sede['estudioPrincipalId'] as string | null | undefined) ?? null,
+        permiteReservasPublicas: (sede['permiteReservasPublicas'] as boolean | undefined) ?? true,
+        precioSuscripcionActual:
+          (sede['precioSuscripcionActual'] as number | null | undefined) ?? null,
+        monedaSuscripcion: (sede['monedaSuscripcion'] as SedeEstudio['monedaSuscripcion']) ?? null,
+      }),
+    ),
     primeraVez: (estudio['primeraVez'] as boolean | undefined) ?? true,
     cancelacionSolicitada: (estudio['cancelacionSolicitada'] as boolean | undefined) ?? false,
     fechaSolicitudCancelacion:
@@ -143,8 +189,13 @@ export async function crearSalonAdmin(
       telefono: datos.telefono,
       pais: datos.pais,
       plan: datos.plan,
+      estudioPrincipalId: datos.estudioPrincipalId,
+      permiteReservasPublicas: datos.permiteReservasPublicas,
       inicioSuscripcion: datos.inicioSuscripcion,
+      direccion: datos.direccion,
+      sucursales: datos.sucursales,
       servicios: datos.servicios,
+      productos: datos.productos,
       serviciosCustom: datos.serviciosCustom,
       personal: datos.personal,
     }),
@@ -165,6 +216,10 @@ export async function actualizarEstudio(id: string, campos: Partial<Estudio>): P
   if (campos.website !== undefined) cuerpo['sitioWeb'] = campos.website;
   if (campos.country !== undefined) cuerpo['pais'] = campos.country;
   if (campos.plan !== undefined) cuerpo['plan'] = campos.plan;
+  if (campos.estudioPrincipalId !== undefined)
+    cuerpo['estudioPrincipalId'] = campos.estudioPrincipalId;
+  if (campos.permiteReservasPublicas !== undefined)
+    cuerpo['permiteReservasPublicas'] = campos.permiteReservasPublicas;
   if (campos.branches !== undefined) cuerpo['sucursales'] = campos.branches;
   if (campos.schedule !== undefined) cuerpo['horario'] = campos.schedule;
   if (campos.selectedServices !== undefined) cuerpo['servicios'] = campos.selectedServices;

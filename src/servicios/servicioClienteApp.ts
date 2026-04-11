@@ -70,6 +70,11 @@ function normalizarSalonPublico(salon: SalonPublico): SalonPublico {
 function normalizarSalonDetalle(salon: SalonDetalle): SalonDetalle {
   return {
     ...normalizarSalonPublico(salon),
+    slug: salon.slug,
+    estudioPrincipalId: salon.estudioPrincipalId ?? null,
+    permiteReservasPublicas: salon.permiteReservasPublicas ?? true,
+    sucursales: Array.isArray(salon.sucursales) ? salon.sucursales : [],
+    sedesReservables: Array.isArray(salon.sedesReservables) ? salon.sedesReservables : [],
     personal: salon.personal,
     servicios: salon.servicios,
     horario: salon.horario,
@@ -120,9 +125,8 @@ export async function obtenerSalonPublico(id: string): Promise<SalonDetalle> {
 }
 
 export async function obtenerSalonPublicoPorClave(clave: string): Promise<SalonDetalle> {
-  const claveNormalizada = clave.trim().toUpperCase();
   const res = await peticion<RespuestaAccesoSalon>(
-    `/salones/publicos/clave/${encodeURIComponent(claveNormalizada)}`,
+    `/salones/publicos/clave/${encodeURIComponent(clave.trim())}`,
   );
   return normalizarSalonDetalle(res.datos);
 }
@@ -143,9 +147,23 @@ export async function obtenerDisponibilidadCompleta(
   salonId: string,
   fecha: string,
   duracion: number,
+  opciones?: { sucursal?: string; servicios?: string[] },
 ): Promise<DisponibilidadEspecialista[]> {
+  const parametros = new URLSearchParams({
+    fecha,
+    duracion: String(duracion),
+  });
+
+  if (opciones?.sucursal?.trim()) {
+    parametros.set('sucursal', opciones.sucursal.trim());
+  }
+
+  if (opciones?.servicios && opciones.servicios.length > 0) {
+    parametros.set('servicios', opciones.servicios.map((servicio) => servicio.trim()).join(','));
+  }
+
   const res = await peticion<{ especialistas: DisponibilidadEspecialista[] }>(
-    `/salones/publicos/${salonId}/disponibilidad-completa?fecha=${encodeURIComponent(fecha)}&duracion=${duracion}`,
+    `/salones/publicos/${salonId}/disponibilidad-completa?${parametros.toString()}`,
   );
   return res.especialistas;
 }

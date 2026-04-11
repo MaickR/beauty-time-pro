@@ -77,6 +77,11 @@ export interface Estudio {
   direccion?: string | null;
   emailContacto?: string | null;
   estado?: string | null;
+  estudioPrincipalId?: string | null;
+  estudioPrincipal?: { id: string; nombre: string; slug: string | null } | null;
+  esSede?: boolean;
+  permiteReservasPublicas?: boolean;
+  sedes?: SedeEstudio[];
   primeraVez?: boolean;
   cancelacionSolicitada?: boolean;
   fechaSolicitudCancelacion?: string | null;
@@ -89,6 +94,24 @@ export interface Estudio {
   precioRenovacion?: number | null;
   createdAt: string; // ISO datetime
   updatedAt: string; // ISO datetime
+}
+
+export interface SedeEstudio {
+  id: string;
+  nombre: string;
+  slug: string | null;
+  plan: PlanEstudio;
+  estado: string;
+  activo: boolean;
+  fechaVencimiento: string;
+  propietario: string | null;
+  telefono: string | null;
+  direccion: string | null;
+  emailContacto: string | null;
+  estudioPrincipalId: string | null;
+  permiteReservasPublicas: boolean;
+  precioSuscripcionActual: number | null;
+  monedaSuscripcion: Moneda | null;
 }
 
 export type EstadoSalon = 'pendiente' | 'aprobado' | 'rechazado' | 'suspendido' | 'bloqueado';
@@ -186,6 +209,11 @@ export interface EspecialistaPublico {
 }
 
 export interface SalonDetalle extends SalonPublico {
+  slug?: string;
+  estudioPrincipalId?: string | null;
+  permiteReservasPublicas?: boolean;
+  sucursales?: string[];
+  sedesReservables?: SedeEstudio[];
   servicios: Servicio[];
   horario: Record<string, TurnoTrabajo>;
   festivos: string[];
@@ -243,13 +271,22 @@ export interface ReservaCliente {
   horaInicio: string;
   duracion: number;
   estado: EstadoReserva;
+  sucursal: string;
   servicios: Servicio[];
   serviciosDetalle?: DetalleServicioReserva[];
   precioTotal: number; // centavos
   tokenCancelacion: string;
   reagendada: boolean;
   reservaOriginalId: string | null;
-  salon: { id: string; nombre: string; colorPrimario: string | null; logoUrl: string | null };
+  salon: {
+    id: string;
+    nombre: string;
+    colorPrimario: string | null;
+    logoUrl: string | null;
+    direccion?: string | null;
+    pais?: Pais;
+    slug?: string | null;
+  };
   especialista: { id: string; nombre: string; eliminado: boolean };
 }
 
@@ -309,6 +346,9 @@ export interface EmpleadoAccesoInfo {
 
 export interface ReservaEmpleado {
   id: string;
+  estudioId?: string;
+  personalId?: string;
+  clienteId?: string;
   fecha: string;
   horaInicio: string;
   duracion: number;
@@ -320,6 +360,12 @@ export interface ReservaEmpleado {
   telefonoCliente: string;
   clienteAppId: string | null;
   sucursal: string;
+  marcaTinte?: string | null;
+  tonalidad?: string | null;
+  observaciones?: string | null;
+  notasMenorEdad?: string | null;
+  tokenCancelacion?: string;
+  creadoEn?: string;
 }
 
 export interface PerfilEmpleado {
@@ -341,12 +387,16 @@ export interface PerfilEmpleado {
     logoUrl: string | null;
     direccion: string | null;
     telefono: string;
+    emailContacto?: string | null;
     horarioApertura: string | null;
     horarioCierre: string | null;
     diasAtencion: string | null;
+    horario: Record<string, TurnoTrabajo>;
+    festivos: string[];
     estado: string | null;
     pais: string | null;
     claveCliente: string;
+    slug: string | null;
     servicios: Servicio[];
   };
 }

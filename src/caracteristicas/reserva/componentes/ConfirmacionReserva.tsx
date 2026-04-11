@@ -1,16 +1,36 @@
 import { useEffect } from 'react';
 import confetti from 'canvas-confetti';
 import { CheckCircle2, Clock, Gift } from 'lucide-react';
+import { formatearDineroEntero } from '../../../utils/formato';
+import type { Moneda } from '../../../tipos';
 
 interface PropsConfirmacionReserva {
   nombreCliente: string;
   descripcionRecompensa?: string | null;
+  salon: string;
+  sucursal: string;
+  especialista: string;
+  servicios: string[];
+  duracion: number;
+  total: number;
+  fecha: string;
+  hora: string;
+  moneda: Moneda;
   onCerrar: () => void;
 }
 
 export function ConfirmacionReserva({
   nombreCliente,
   descripcionRecompensa,
+  salon,
+  sucursal,
+  especialista,
+  servicios,
+  duracion,
+  total,
+  fecha,
+  hora,
+  moneda,
   onCerrar,
 }: PropsConfirmacionReserva) {
   useEffect(() => {
@@ -29,7 +49,7 @@ export function ConfirmacionReserva({
       aria-modal="true"
       aria-labelledby="tituloConfirmacion"
     >
-      <div className="bg-white rounded-[3rem] p-10 max-w-lg w-full text-center shadow-2xl">
+      <div className="bg-white rounded-[3rem] p-6 md:p-8 max-w-2xl w-full max-h-[92vh] overflow-y-auto text-center shadow-2xl">
         <div className="w-24 h-24 bg-green-100 text-green-500 rounded-full flex items-center justify-center mx-auto mb-6 shadow-inner">
           <CheckCircle2 className="w-12 h-12" />
         </div>
@@ -39,11 +59,57 @@ export function ConfirmacionReserva({
         >
           ¡Cita Confirmada!
         </h2>
-        <p className="text-lg font-medium text-slate-600 mb-8">
+        <p className="text-base md:text-lg font-medium text-slate-600 mb-6">
           Muchas gracias por tu preferencia,{' '}
           <strong className="text-pink-600 uppercase">{nombreCliente}</strong>. Tu especialista te
           estará esperando.
         </p>
+
+        <div className="mb-6 rounded-3xl border border-slate-200 bg-slate-50 p-5 text-left">
+          <h4 className="mb-3 text-xs font-black uppercase tracking-widest text-slate-500">
+            Resumen de la cita
+          </h4>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <div>
+              <p className="text-[11px] font-black uppercase tracking-wide text-slate-400">Salón</p>
+              <p className="text-sm font-bold text-slate-900">{salon}</p>
+            </div>
+            <div>
+              <p className="text-[11px] font-black uppercase tracking-wide text-slate-400">Sede</p>
+              <p className="text-sm font-bold text-slate-900">{sucursal || 'Principal'}</p>
+            </div>
+            <div>
+              <p className="text-[11px] font-black uppercase tracking-wide text-slate-400">Fecha</p>
+              <p className="text-sm font-bold text-slate-900">
+                {fecha} · {hora}
+              </p>
+            </div>
+            <div>
+              <p className="text-[11px] font-black uppercase tracking-wide text-slate-400">
+                Especialista
+              </p>
+              <p className="text-sm font-bold text-slate-900">{especialista || 'Por asignar'}</p>
+            </div>
+            <div className="sm:col-span-2">
+              <p className="text-[11px] font-black uppercase tracking-wide text-slate-400">
+                Servicios
+              </p>
+              <p className="text-sm font-bold text-slate-900">{servicios.join(', ')}</p>
+            </div>
+            <div>
+              <p className="text-[11px] font-black uppercase tracking-wide text-slate-400">
+                Duración aprox.
+              </p>
+              <p className="text-sm font-bold text-slate-900">{duracion} min</p>
+            </div>
+            <div>
+              <p className="text-[11px] font-black uppercase tracking-wide text-slate-400">Total</p>
+              <p className="text-sm font-bold text-slate-900">
+                {formatearDineroEntero(total, moneda)}
+              </p>
+            </div>
+          </div>
+        </div>
 
         <div className="bg-sky-50 border border-sky-200 rounded-3xl p-6 mb-8 text-left shadow-sm">
           <div className="flex items-start gap-4">
@@ -101,9 +167,9 @@ export function ConfirmacionReserva({
 
         <button
           onClick={onCerrar}
-          className="w-full bg-slate-900 text-white font-black py-5 rounded-4xl hover:bg-black transition-all uppercase tracking-widest text-sm shadow-xl active:scale-95"
+          className="w-full bg-slate-900 text-white font-black py-4 rounded-4xl hover:bg-black transition-all uppercase tracking-widest text-sm shadow-xl active:scale-95"
         >
-          {descripcionRecompensa ? '¡Genial!' : 'Entendido, Gracias'}
+          {descripcionRecompensa ? 'Confirmar cita' : 'Cerrar'}
         </button>
       </div>
     </div>

@@ -31,9 +31,11 @@ import { Spinner } from '../../componentes/ui/Spinner';
 import { BannerNotificacionesPush } from '../../componentes/ui/BannerNotificacionesPush';
 import { usarNotificacionesPush } from '../../hooks/usarNotificacionesPush';
 import { env } from '../../lib/env';
+import { DIAS_SEMANA } from '../../lib/constantes';
 import { obtenerDefinicionPlan } from '../../lib/planes';
 import { colorMasClaro } from '../../utils/color';
-import type { Moneda } from '../../tipos';
+import { actualizarEstudio } from '../../servicios/servicioEstudios';
+import type { Moneda, Estudio } from '../../tipos';
 
 function obtenerOrigenReservas(): string {
   const origenActual = window.location.origin;
@@ -46,6 +48,29 @@ function obtenerOrigenReservas(): string {
   return origenActual;
 }
 
+function diaTieneHorarioModificado(fecha: Date, estudio: Estudio) {
+  const claveDia = DIAS_SEMANA[fecha.getDay()];
+  const horarioDia = estudio.schedule?.[claveDia];
+  if (!horarioDia?.isOpen) return false;
+
+  return (estudio.staff ?? []).some((especialista) => {
+    if (!especialista.active) return false;
+    if (especialista.workingDays && !especialista.workingDays.includes(fecha.getDay())) {
+      return true;
+    }
+
+    const inicioEspecialista = especialista.shiftStart ?? horarioDia.openTime;
+    const finEspecialista = especialista.shiftEnd ?? horarioDia.closeTime;
+    const tieneDescanso = Boolean(especialista.breakStart && especialista.breakEnd);
+
+    return (
+      inicioEspecialista !== horarioDia.openTime ||
+      finEspecialista !== horarioDia.closeTime ||
+      tieneDescanso
+    );
+  });
+}
+
 export function PaginaAgenda() {
   usarTituloPagina('Agenda');
   const { slug } = useParams<{ slug: string }>();
@@ -54,10 +79,7 @@ export function PaginaAgenda() {
   const { cerrarSesion, usuario } = usarTiendaAuth();
   const { mostrarToast } = usarToast();
   const [fechaVista, setFechaVista] = useState(new Date());
-  const [mostrarBienvenida, setMostrarBienvenida] = useState(() => {
-    if (!slug) return true;
-    return localStorage.getItem(`bienvenida_salon_v2_${slug}`) !== 'visto';
-  });
+  const [mostrarBienvenida, setMostrarBienvenida] = useState(true);
   const [mostrarModalCrearCita, setMostrarModalCrearCita] = useState(false);
   const [activandoPush, setActivandoPush] = useState(false);
   const [qrReserva, setQrReserva] = useState<string | null>(null);
@@ -69,7 +91,19 @@ export function PaginaAgenda() {
   const estudioId = estudio?.id;
   const { notificaciones, marcarLeida } = usarNotificacionesEstudio(estudioId);
 
-  const linkReservas = estudio ? `${obtenerOrigenReservas()}/reservar/${estudio.clientKey}` : null;
+  useEffect(() => {
+    if (!estudio?.slug || !slug || slug === estudio.slug) return;
+    navegar(`/estudio/${estudio.slug}/agenda`, { replace: true });
+  }, [estudio?.slug, slug, navegar]);
+
+  const identificadorPublicoReserva = estudio?.slug?.trim() || estudio?.clientKey || null;
+  const linkReservas = identificadorPublicoReserva
+    ? `${obtenerOrigenReservas()}/reservar/${identificadorPublicoReserva}`
+    : null;
+
+  useEffect(() => {
+    setMostrarBienvenida(Boolean(estudio?.primeraVez));
+  }, [estudio?.id, estudio?.primeraVez]);
 
   useEffect(() => {
     if (!linkReservas) {
@@ -98,7 +132,7 @@ export function PaginaAgenda() {
   if (!estudio)
     return (
       <div className="h-screen bg-slate-50 flex items-center justify-center">
-        <p className="text-slate-400 font-bold">Studio no encontrado.</p>
+        <p className="text-slate-400 font-bold">Salón no encontrado.</p>
       </div>
     );
 
@@ -113,17 +147,14 @@ export function PaginaAgenda() {
   const hoyStr = obtenerFechaLocalISO(ahora);
   const mesPrefijo = hoyStr.substring(0, 7);
   const citasHoy = reservasEstudio.filter((r) => r.date === hoyStr && r.status !== 'cancelled');
-  const citasMes = reservasEstudio.filter(
-    (r) => r.date.startsWith(mesPrefijo) && r.status !== 'cancelled',
-  );
   const totalCompletadoMes = reservasEstudio
     .filter((r) => r.date.startsWith(mesPrefijo) && r.status === 'completed')
     .reduce((sum, r) => sum + (r.totalPrice ?? 0), 0);
-  const totalEstimadoMes = citasMes.reduce((sum, r) => sum + (r.totalPrice ?? 0), 0);
   const especialistasActivos = (estudio.staff ?? []).filter((s) => s.active).length;
   const colorPrimario = estudio.colorPrimario ?? '#C2185B';
   const definicionPlan = obtenerDefinicionPlan(estudio.plan);
-  const precioSuscripcion = moneda === 'COP' ? '$200,000 COP' : '$1,000 MXN';
+  const monedaPlan = estudio.monedaSuscripcion ?? moneda;
+  const precioPlanActual = estudio.precioRenovacion ?? estudio.precioSuscripcionActual;
   const estadoSub = obtenerEstadoSuscripcion(estudio);
   const diasRestantes = estadoSub?.daysRemaining ?? 0;
   const colorDiasRestantes =
@@ -138,12 +169,22 @@ export function PaginaAgenda() {
 
   const compartirWhatsApp = () => {
     if (!linkReservas) return;
-    const mensajeWA = encodeURIComponent(`Reserva tu cita en ${estudio.name}: ${linkReservas}`);
+    const mensaje = `Hola. Te comparto el link de reservas de ${estudio.name}: ${linkReservas}`;
+    if (navigator.share) {
+      void navigator.share({
+        title: `Reservas de ${estudio.name}`,
+        text: mensaje,
+        url: linkReservas,
+      });
+      return;
+    }
+    const mensajeWA = encodeURIComponent(mensaje);
     window.open(`https://wa.me/?text=${mensajeWA}`, '_blank', 'noopener');
   };
 
   const abrirLinkReservas = () => {
-    window.open(`/reservar/${estudio.clientKey}`, '_blank', 'noopener');
+    if (!identificadorPublicoReserva) return;
+    window.open(`/reservar/${identificadorPublicoReserva}`, '_blank', 'noopener');
   };
 
   const descargarQr = () => {
@@ -219,16 +260,16 @@ export function PaginaAgenda() {
       <main className="max-w-7xl mx-auto p-4 md:p-8 space-y-8">
         {/* Saludo y resumen del día */}
         <div
-          className="rounded-[2.5rem] p-6 text-white shadow-lg md:p-8"
+          className="rounded-[2.75rem] p-6 text-white shadow-lg md:p-8"
           style={{
             background: `linear-gradient(135deg, var(--color-primario), ${colorMasClaro(colorPrimario)})`,
           }}
         >
-          <div>
-            <p className="text-sm font-bold opacity-80">
+          <div className="mx-auto max-w-4xl text-center">
+            <p className="text-sm font-bold opacity-80 md:text-base">
               {saludoTiempo}, {nombreSaludo}
             </p>
-            <p className="mt-2 text-sm opacity-70 capitalize">
+            <p className="mt-2 text-sm opacity-70 capitalize md:text-base">
               {ahora.toLocaleDateString('es-ES', {
                 weekday: 'long',
                 day: 'numeric',
@@ -236,39 +277,39 @@ export function PaginaAgenda() {
               })}
             </p>
           </div>
-          <div className="mt-5 grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
-            <div className="bg-white/20 rounded-2xl px-4 py-3 backdrop-blur-sm">
+          <div className="mt-6 grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-5 gap-3">
+            <div className="rounded-[1.75rem] border border-white/20 bg-white/14 px-4 py-4 backdrop-blur-sm text-center sm:text-left">
               <p className="text-[10px] font-bold opacity-80 uppercase tracking-widest">
-                Citas hoy
+                Citas agendadas hoy
               </p>
               <p className="text-2xl font-black">{citasHoy.length}</p>
             </div>
-            <div className="bg-white/20 rounded-2xl px-4 py-3 backdrop-blur-sm">
+            <div className="rounded-[1.75rem] border border-white/20 bg-white/14 px-4 py-4 backdrop-blur-sm text-center sm:text-left">
               <p className="text-[10px] font-bold opacity-80 uppercase tracking-widest">
-                Completado (mes)
+                Total ganado del mes
               </p>
               <p className="text-xl font-black">{formatearDinero(totalCompletadoMes, moneda)}</p>
             </div>
-            <div className="bg-white/20 rounded-2xl px-4 py-3 backdrop-blur-sm">
+            <div className="rounded-[1.75rem] border border-white/20 bg-white/14 px-4 py-4 backdrop-blur-sm text-center sm:text-left">
               <p className="text-[10px] font-bold opacity-80 uppercase tracking-widest">
-                Estimado (mes)
-              </p>
-              <p className="text-xl font-black">{formatearDinero(totalEstimadoMes, moneda)}</p>
-            </div>
-            <div className="bg-white/20 rounded-2xl px-4 py-3 backdrop-blur-sm">
-              <p className="text-[10px] font-bold opacity-80 uppercase tracking-widest">
-                Especialistas
+                Especialistas activos
               </p>
               <p className="text-2xl font-black">{especialistasActivos}</p>
             </div>
-            <div className="bg-white/20 rounded-2xl px-4 py-3 backdrop-blur-sm">
-              <p className="text-[10px] font-bold opacity-80 uppercase tracking-widest">Plan</p>
-              <p className="text-lg font-black">{definicionPlan.nombre}</p>
-              <p className="text-[10px] font-bold opacity-70">{precioSuscripcion}/mes</p>
-            </div>
-            <div className="bg-white/20 rounded-2xl px-4 py-3 backdrop-blur-sm">
+            <div className="rounded-[1.75rem] border border-white/20 bg-white/14 px-4 py-4 backdrop-blur-sm text-center sm:text-left">
               <p className="text-[10px] font-bold opacity-80 uppercase tracking-widest">
-                Días restantes
+                Plan actual
+              </p>
+              <p className="text-lg font-black">{definicionPlan.nombre}</p>
+              <p className="text-xs font-bold opacity-90">
+                {precioPlanActual
+                  ? formatearDinero(precioPlanActual, monedaPlan)
+                  : 'Precio no disponible'}
+              </p>
+            </div>
+            <div className="rounded-[1.75rem] border border-white/20 bg-white/14 px-4 py-4 backdrop-blur-sm text-center sm:text-left">
+              <p className="text-[10px] font-bold opacity-80 uppercase tracking-widest">
+                Días para corte
               </p>
               <p className={`text-2xl font-black ${colorDiasRestantes}`}>{diasRestantes}</p>
             </div>
@@ -306,6 +347,10 @@ export function PaginaAgenda() {
                   Link de reservas de tu salón
                 </h2>
               </div>
+              <p className="mb-3 text-xs text-slate-500">
+                Comparte este enlace público. Ya queda listo para usar tu dominio productivo cuando
+                se configure.
+              </p>
               <div className="bg-slate-50 rounded-xl px-4 py-2.5 flex items-center border border-slate-100 overflow-hidden">
                 <span className="text-xs font-mono text-slate-600 truncate flex-1">
                   {linkReservas}
@@ -381,25 +426,47 @@ export function PaginaAgenda() {
                   const dateStr = obtenerFechaLocalISO(dateObj);
                   const seleccionado = dateStr === fechaSelStr;
                   const tieneCitas = reservasEstudio.some((b) => b.date === dateStr);
+                  const claveDia = DIAS_SEMANA[dateObj.getDay()];
+                  const horarioDia = estudio.schedule?.[claveDia];
                   const esFestivo = estudio.holidays?.includes(dateStr);
+                  const esCierre = Boolean(esFestivo || (horarioDia && !horarioDia.isOpen));
+                  const tieneHorarioModificado =
+                    !esCierre && diaTieneHorarioModificado(dateObj, estudio);
                   return (
                     <div key={i} className="aspect-square flex items-center justify-center">
                       <button
                         onClick={() => setFechaVista(dateObj)}
-                        className={`w-full h-full rounded-2xl font-black text-xs md:text-sm transition-all relative flex flex-col items-center justify-center ${seleccionado ? 'bg-slate-900 text-white shadow-lg scale-110 z-10' : esFestivo ? 'bg-red-50 text-red-400 border border-red-100' : 'text-slate-600 hover:bg-slate-100'}`}
+                        className={`w-full h-full rounded-2xl font-black text-xs md:text-sm transition-all relative flex flex-col items-center justify-center ${seleccionado ? 'bg-slate-900 text-white shadow-lg scale-110 z-10' : esCierre ? 'bg-red-50 text-red-400 border border-red-100' : 'text-slate-600 hover:bg-slate-100'}`}
                         aria-label={dateStr}
                         aria-pressed={seleccionado}
                       >
                         {dia}
-                        {tieneCitas && !seleccionado && (
-                          <span
-                            className={`absolute bottom-1 w-1.5 h-1.5 rounded-full ${esFestivo ? 'bg-red-400' : 'bg-pink-500'}`}
-                          />
+                        {!seleccionado && (tieneCitas || esCierre || tieneHorarioModificado) && (
+                          <span className="absolute bottom-1 flex items-center gap-1">
+                            {tieneCitas && (
+                              <span className="h-1.5 w-1.5 rounded-full bg-pink-500" />
+                            )}
+                            {esCierre && <span className="h-1.5 w-1.5 rounded-full bg-red-500" />}
+                            {tieneHorarioModificado && (
+                              <span className="h-1.5 w-1.5 rounded-full bg-blue-500" />
+                            )}
+                          </span>
                         )}
                       </button>
                     </div>
                   );
                 })}
+              </div>
+              <div className="mt-5 flex flex-wrap items-center justify-center gap-4 text-[10px] font-black uppercase tracking-wide text-slate-500">
+                <span className="inline-flex items-center gap-1.5">
+                  <span className="h-2 w-2 rounded-full bg-pink-500" /> Citas
+                </span>
+                <span className="inline-flex items-center gap-1.5">
+                  <span className="h-2 w-2 rounded-full bg-red-500" /> Cierres
+                </span>
+                <span className="inline-flex items-center gap-1.5">
+                  <span className="h-2 w-2 rounded-full bg-blue-500" /> Horario modificado
+                </span>
               </div>
             </div>
           </div>
@@ -434,8 +501,10 @@ export function PaginaAgenda() {
           nombreSalon={estudio.name}
           estudioId={estudio.id}
           onCerrar={() => {
-            if (estudioId) localStorage.setItem(`bienvenida_salon_v2_${slug}`, 'visto');
             setMostrarBienvenida(false);
+            if (estudioId) {
+              void actualizarEstudio(estudioId, { primeraVez: false }).catch(() => undefined);
+            }
           }}
         />
       )}

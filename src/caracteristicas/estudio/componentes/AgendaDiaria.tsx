@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
   Calendar,
   CheckCircle2,
@@ -222,6 +222,40 @@ function ModalNoShow({
   );
 }
 
+interface PropsPaginadorLista {
+  paginaActual: number;
+  totalPaginas: number;
+  onCambiar: (pagina: number) => void;
+}
+
+function PaginadorLista({ paginaActual, totalPaginas, onCambiar }: PropsPaginadorLista) {
+  if (totalPaginas <= 1) return null;
+
+  return (
+    <div className="mt-5 flex items-center justify-between gap-3 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
+      <button
+        type="button"
+        disabled={paginaActual === 1}
+        onClick={() => onCambiar(paginaActual - 1)}
+        className="rounded-xl bg-white px-3 py-2 text-xs font-black text-slate-700 shadow-sm transition-colors hover:bg-slate-100 disabled:opacity-40"
+      >
+        Anterior
+      </button>
+      <span className="text-xs font-black uppercase tracking-wide text-slate-500">
+        Página {paginaActual} de {totalPaginas}
+      </span>
+      <button
+        type="button"
+        disabled={paginaActual === totalPaginas}
+        onClick={() => onCambiar(paginaActual + 1)}
+        className="rounded-xl bg-white px-3 py-2 text-xs font-black text-slate-700 shadow-sm transition-colors hover:bg-slate-100 disabled:opacity-40"
+      >
+        Siguiente
+      </button>
+    </div>
+  );
+}
+
 interface PropsTarjetaCita {
   reserva: Reserva;
   moneda: Moneda;
@@ -352,7 +386,7 @@ function TarjetaCita({
       {/* Observaciones del cliente */}
       {b.observaciones && (
         <div className="pl-5 mt-3 bg-amber-50 border border-amber-100 p-2.5 rounded-xl">
-          <p className="text-[10px] font-black text-amber-700 uppercase">Notes</p>
+          <p className="text-[10px] font-black text-amber-700 uppercase">Notas</p>
           <p className="text-xs text-amber-900 mt-0.5">{b.observaciones}</p>
         </div>
       )}
@@ -415,6 +449,12 @@ export function AgendaDiaria({
   const [pinCancelacion, setPinCancelacion] = useState('');
   const [tab, setTab] = useState<'agenda' | 'historial'>('agenda');
   const [especialistaTab, setEspecialistaTab] = useState<string>('todos');
+  const [paginaAgenda, setPaginaAgenda] = useState(1);
+  const [paginaHistorial, setPaginaHistorial] = useState(1);
+  const [modoHistorial, setModoHistorial] = useState<'dia' | 'rango' | 'mes'>('mes');
+  const [fechaHistorial, setFechaHistorial] = useState(() => obtenerFechaLocalISO(new Date()));
+  const [rangoInicio, setRangoInicio] = useState('');
+  const [rangoFin, setRangoFin] = useState('');
   const [mesHistorial, setMesHistorial] = useState(() => {
     const ahora = new Date();
     return `${ahora.getFullYear()}-${String(ahora.getMonth() + 1).padStart(2, '0')}`;
@@ -433,6 +473,7 @@ export function AgendaDiaria({
   const [servicioAdicionalSeleccionado, setServicioAdicionalSeleccionado] = useState('');
 
   const serviciosCatalogo = estudio.selectedServices ?? [];
+  const LIMITE_POR_PAGINA = 6;
 
   const { mutate: cambiarEstado, isPending: actualizando } = useMutation({
     mutationFn: ({ id, estado, pin }: { id: string; estado: EstadoReserva; pin?: string }) =>
@@ -495,12 +536,13 @@ export function AgendaDiaria({
     onSuccess: async () => {
       setModalAdicional(null);
       setServicioAdicionalSeleccionado('');
-      mostrarToast({ mensaje: 'Extra added successfully', variante: 'exito' });
+      mostrarToast({ mensaje: 'Servicio adicional agregado', variante: 'exito' });
       await recargar();
     },
     onError: (error: unknown) => {
       mostrarToast({
-        mensaje: error instanceof Error ? error.message : 'Could not add extra service',
+        mensaje:
+          error instanceof Error ? error.message : 'No se pudo agregar el servicio adicional',
         variante: 'error',
       });
     },
@@ -519,6 +561,23 @@ export function AgendaDiaria({
 
   const moneda: Moneda = estudio.country === 'Colombia' ? 'COP' : 'MXN';
   const fechaStr = obtenerFechaLocalISO(fechaVista);
+  const fechaHoy = obtenerFechaLocalISO(new Date());
+
+  useEffect(() => {
+    setPaginaAgenda(1);
+  }, [fechaStr, especialistaTab]);
+
+  useEffect(() => {
+    setPaginaHistorial(1);
+  }, [modoHistorial, mesHistorial, fechaHistorial, rangoInicio, rangoFin]);
+
+  useEffect(() => {
+    if (fechaStr < fechaHoy) {
+      setTab('historial');
+      setModoHistorial('dia');
+      setFechaHistorial(fechaStr);
+    }
+  }, [fechaStr, fechaHoy]);
 
   const citasDelDia = reservasDisponibles
     .filter((r) => r.studioId === estudio.id && r.status !== 'cancelled' && r.date === fechaStr)
@@ -532,15 +591,49 @@ export function AgendaDiaria({
       ? citasDelDia
       : citasDelDia.filter((c) => c.staffId === especialistaTab);
 
-  const [anioH, mesH] = mesHistorial.split('-').map(Number);
-  const citasHistorial = reservasDisponibles
-    .filter((r) => {
-      if (r.studioId !== estudio.id) return false;
-      if (r.status !== 'completed' && r.status !== 'cancelled') return false;
-      const [y, m] = r.date.split('-').map(Number);
-      return y === anioH && m === mesH;
-    })
-    .sort((a, b) => b.date.localeCompare(a.date) || b.time.localeCompare(a.time));
+  const citasHistorial = useMemo(() => {
+    const [anioH, mesH] = mesHistorial.split('-').map(Number);
+
+    return reservasDisponibles
+      .filter((r) => {
+        if (r.studioId !== estudio.id) return false;
+        if (r.status !== 'completed' && r.status !== 'cancelled' && r.status !== 'no_show') {
+          return false;
+        }
+
+        if (modoHistorial === 'dia') {
+          return r.date === fechaHistorial;
+        }
+
+        if (modoHistorial === 'rango') {
+          if (!rangoInicio || !rangoFin) return false;
+          return r.date >= rangoInicio && r.date <= rangoFin;
+        }
+
+        const [y, m] = r.date.split('-').map(Number);
+        return y === anioH && m === mesH;
+      })
+      .sort((a, b) => b.date.localeCompare(a.date) || a.time.localeCompare(b.time));
+  }, [
+    reservasDisponibles,
+    estudio.id,
+    modoHistorial,
+    fechaHistorial,
+    rangoInicio,
+    rangoFin,
+    mesHistorial,
+  ]);
+
+  const totalPaginasAgenda = Math.max(1, Math.ceil(citasFiltradas.length / LIMITE_POR_PAGINA));
+  const citasAgendaPaginadas = citasFiltradas.slice(
+    (paginaAgenda - 1) * LIMITE_POR_PAGINA,
+    paginaAgenda * LIMITE_POR_PAGINA,
+  );
+  const totalPaginasHistorial = Math.max(1, Math.ceil(citasHistorial.length / LIMITE_POR_PAGINA));
+  const citasHistorialPaginadas = citasHistorial.slice(
+    (paginaHistorial - 1) * LIMITE_POR_PAGINA,
+    paginaHistorial * LIMITE_POR_PAGINA,
+  );
 
   const cambiarMesHistorial = (offset: number) => {
     const [y, m] = mesHistorial.split('-').map(Number);
@@ -593,7 +686,7 @@ export function AgendaDiaria({
                 <Plus className="h-4 w-4" aria-hidden="true" /> Crear cita manual
               </button>
               <span className="bg-slate-900 text-white px-4 py-2 rounded-xl text-xs font-black shrink-0">
-                {citasDelDia.length} Citas
+                {citasDelDia.length} citas
               </span>
             </>
           )}
@@ -603,38 +696,109 @@ export function AgendaDiaria({
       {/* ── HISTORIAL ─────────────────────────────────────────────── */}
       {tab === 'historial' && (
         <div className="p-4 md:p-6 space-y-4">
-          <div className="flex items-center justify-between bg-slate-50 rounded-2xl px-4 py-2 border border-slate-100">
+          <div className="grid gap-3 rounded-2xl border border-slate-200 bg-slate-50 p-4 md:grid-cols-3">
             <button
               type="button"
-              onClick={() => cambiarMesHistorial(-1)}
-              aria-label="Mes anterior"
-              className="p-1.5 hover:bg-slate-200 rounded-lg transition-colors"
+              onClick={() => setModoHistorial('dia')}
+              className={`rounded-xl px-3 py-2 text-xs font-black uppercase ${modoHistorial === 'dia' ? 'bg-slate-900 text-white' : 'bg-white text-slate-600'}`}
             >
-              <ChevronLeft className="w-4 h-4" />
+              Fecha exacta
             </button>
-            <span className="text-sm font-black capitalize text-slate-800">
-              {new Date(`${mesHistorial}-01`).toLocaleDateString('es-ES', {
-                month: 'long',
-                year: 'numeric',
-              })}
-            </span>
             <button
               type="button"
-              onClick={() => cambiarMesHistorial(1)}
-              aria-label="Mes siguiente"
-              className="p-1.5 hover:bg-slate-200 rounded-lg transition-colors"
+              onClick={() => setModoHistorial('rango')}
+              className={`rounded-xl px-3 py-2 text-xs font-black uppercase ${modoHistorial === 'rango' ? 'bg-slate-900 text-white' : 'bg-white text-slate-600'}`}
             >
-              <ChevronRight className="w-4 h-4" />
+              Rango de fechas
+            </button>
+            <button
+              type="button"
+              onClick={() => setModoHistorial('mes')}
+              className={`rounded-xl px-3 py-2 text-xs font-black uppercase ${modoHistorial === 'mes' ? 'bg-slate-900 text-white' : 'bg-white text-slate-600'}`}
+            >
+              Mes completo
             </button>
           </div>
 
+          {modoHistorial === 'dia' && (
+            <label className="block rounded-2xl border border-slate-200 bg-white p-4">
+              <span className="mb-2 block text-[10px] font-black uppercase tracking-wide text-slate-500">
+                Selecciona una fecha pasada
+              </span>
+              <input
+                type="date"
+                max={fechaHoy}
+                value={fechaHistorial}
+                onChange={(evento) => setFechaHistorial(evento.target.value)}
+                className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm font-bold text-slate-800"
+              />
+            </label>
+          )}
+
+          {modoHistorial === 'rango' && (
+            <div className="grid gap-3 md:grid-cols-2">
+              <label className="block rounded-2xl border border-slate-200 bg-white p-4">
+                <span className="mb-2 block text-[10px] font-black uppercase tracking-wide text-slate-500">
+                  Desde
+                </span>
+                <input
+                  type="date"
+                  max={fechaHoy}
+                  value={rangoInicio}
+                  onChange={(evento) => setRangoInicio(evento.target.value)}
+                  className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm font-bold text-slate-800"
+                />
+              </label>
+              <label className="block rounded-2xl border border-slate-200 bg-white p-4">
+                <span className="mb-2 block text-[10px] font-black uppercase tracking-wide text-slate-500">
+                  Hasta
+                </span>
+                <input
+                  type="date"
+                  max={fechaHoy}
+                  min={rangoInicio || undefined}
+                  value={rangoFin}
+                  onChange={(evento) => setRangoFin(evento.target.value)}
+                  className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm font-bold text-slate-800"
+                />
+              </label>
+            </div>
+          )}
+
+          {modoHistorial === 'mes' && (
+            <div className="flex items-center justify-between bg-slate-50 rounded-2xl px-4 py-2 border border-slate-100">
+              <button
+                type="button"
+                onClick={() => cambiarMesHistorial(-1)}
+                aria-label="Mes anterior"
+                className="p-1.5 hover:bg-slate-200 rounded-lg transition-colors"
+              >
+                <ChevronLeft className="w-4 h-4" />
+              </button>
+              <span className="text-sm font-black capitalize text-slate-800">
+                {new Date(`${mesHistorial}-01`).toLocaleDateString('es-ES', {
+                  month: 'long',
+                  year: 'numeric',
+                })}
+              </span>
+              <button
+                type="button"
+                onClick={() => cambiarMesHistorial(1)}
+                aria-label="Mes siguiente"
+                className="p-1.5 hover:bg-slate-200 rounded-lg transition-colors"
+              >
+                <ChevronRight className="w-4 h-4" />
+              </button>
+            </div>
+          )}
+
           {citasHistorial.length === 0 ? (
             <p className="text-center text-sm text-slate-400 italic py-8 font-bold">
-              No hay citas en el historial para este mes.
+              No hay citas en el historial para este filtro.
             </p>
           ) : (
             <div className="space-y-3">
-              {citasHistorial.map((b) => (
+              {citasHistorialPaginadas.map((b) => (
                 <TarjetaCita
                   key={b.id}
                   reserva={b}
@@ -647,6 +811,11 @@ export function AgendaDiaria({
                   onAgregarServicio={(reservaId) => setModalAdicional(reservaId)}
                 />
               ))}
+              <PaginadorLista
+                paginaActual={paginaHistorial}
+                totalPaginas={totalPaginasHistorial}
+                onCambiar={setPaginaHistorial}
+              />
             </div>
           )}
         </div>
@@ -691,7 +860,7 @@ export function AgendaDiaria({
                     Sin citas para este especialista hoy.
                   </p>
                 ) : (
-                  citasFiltradas.map((b) => (
+                  citasAgendaPaginadas.map((b) => (
                     <TarjetaCita
                       key={b.id}
                       reserva={b}
@@ -706,6 +875,11 @@ export function AgendaDiaria({
                   ))
                 )}
               </div>
+              <PaginadorLista
+                paginaActual={paginaAgenda}
+                totalPaginas={totalPaginasAgenda}
+                onCambiar={setPaginaAgenda}
+              />
             </>
           )}
         </div>
@@ -742,10 +916,12 @@ export function AgendaDiaria({
         >
           <div className="w-full max-w-md rounded-3xl bg-white p-6 shadow-2xl">
             <h3 id="titulo-adicional" className="text-lg font-black text-slate-900 mb-4">
-              Add Extra Service
+              Agregar servicio adicional
             </h3>
             {serviciosCatalogo.length === 0 ? (
-              <p className="text-sm text-slate-400 italic">No services available in catalog.</p>
+              <p className="text-sm text-slate-400 italic">
+                No hay servicios disponibles en el catálogo.
+              </p>
             ) : (
               <div className="space-y-2 max-h-60 overflow-y-auto mb-4">
                 {serviciosCatalogo.map((srv) => {
@@ -779,7 +955,7 @@ export function AgendaDiaria({
                 }}
                 className="flex-1 rounded-2xl bg-slate-100 px-4 py-3 text-sm font-black text-slate-700 hover:bg-slate-200 transition-colors"
               >
-                Cancel
+                Cancelar
               </button>
               <button
                 type="button"
@@ -800,7 +976,7 @@ export function AgendaDiaria({
                 }}
                 className="flex-1 rounded-2xl bg-blue-600 px-4 py-3 text-sm font-black text-white hover:bg-blue-700 transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
               >
-                {agregandoAdicional ? 'Adding...' : 'Add'}
+                {agregandoAdicional ? 'Agregando...' : 'Agregar'}
               </button>
             </div>
           </div>

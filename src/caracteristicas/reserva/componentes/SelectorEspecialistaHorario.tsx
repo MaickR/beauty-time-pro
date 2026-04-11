@@ -1,11 +1,12 @@
 import { useEffect, useState } from 'react';
-import { Clock, User, RefreshCw } from 'lucide-react';
+import { Clock, RefreshCw, User } from 'lucide-react';
 import { obtenerDisponibilidadCompleta } from '../../../servicios/servicioClienteApp';
 import { URL_BASE } from '../../../lib/clienteHTTP';
 import type { DisponibilidadEspecialista, Servicio } from '../../../tipos';
 
 interface PropsSelectorEspecialistaHorario {
   salonId: string;
+  sucursalSeleccionada: string;
   fecha: string;
   totalDuracion: number;
   serviciosSeleccionados: Servicio[];
@@ -16,6 +17,7 @@ interface PropsSelectorEspecialistaHorario {
 
 export function SelectorEspecialistaHorario({
   salonId,
+  sucursalSeleccionada,
   fecha,
   totalDuracion,
   serviciosSeleccionados,
@@ -25,17 +27,19 @@ export function SelectorEspecialistaHorario({
 }: PropsSelectorEspecialistaHorario) {
   const [especialistas, setEspecialistas] = useState<DisponibilidadEspecialista[]>([]);
   const [cargando, setCargando] = useState(false);
-  const [alternativo, setAlternativo] = useState<DisponibilidadEspecialista | null>(null);
-  const [bannerDescartado, setBannerDescartado] = useState(false);
 
   useEffect(() => {
-    if (!salonId || !fecha || totalDuracion <= 0) {
+    if (!salonId || !fecha || totalDuracion <= 0 || serviciosSeleccionados.length === 0) {
       setEspecialistas([]);
       return;
     }
+
     let cancelado = false;
     setCargando(true);
-    void obtenerDisponibilidadCompleta(salonId, fecha, totalDuracion)
+    void obtenerDisponibilidadCompleta(salonId, fecha, totalDuracion, {
+      sucursal: sucursalSeleccionada,
+      servicios: serviciosSeleccionados.map((servicio) => servicio.name),
+    })
       .then((lista) => {
         if (!cancelado) setEspecialistas(lista);
       })
@@ -48,31 +52,7 @@ export function SelectorEspecialistaHorario({
     return () => {
       cancelado = true;
     };
-  }, [salonId, fecha, totalDuracion]);
-
-  // Calcular alternativo cuando cambia la selección
-  useEffect(() => {
-    setAlternativo(null);
-    setBannerDescartado(false);
-    if (!personalSeleccionado || !horaSeleccionada || serviciosSeleccionados.length === 0) return;
-
-    const nombresServicios = serviciosSeleccionados.map((s) => s.name.toLowerCase());
-    const especialistaActual = especialistas.find((e) => e.id === personalSeleccionado);
-    if (!especialistaActual) return;
-
-    const alternativoEncontrado = especialistas.find((e) => {
-      if (e.id === personalSeleccionado) return false;
-      if (!e.slotsLibres.includes(horaSeleccionada)) return false;
-      // Verificar que tenga al menos una especialidad común con los servicios seleccionados
-      return e.especialidades.some((esp) =>
-        nombresServicios.some(
-          (nombre) => nombre.includes(esp.toLowerCase()) || esp.toLowerCase().includes(nombre),
-        ),
-      );
-    });
-
-    setAlternativo(alternativoEncontrado ?? null);
-  }, [personalSeleccionado, horaSeleccionada, especialistas, serviciosSeleccionados]);
+  }, [fecha, salonId, serviciosSeleccionados, sucursalSeleccionada, totalDuracion]);
 
   if (cargando) {
     return (
@@ -85,54 +65,30 @@ export function SelectorEspecialistaHorario({
 
   if (especialistas.length === 0) {
     return (
-      <div className="bg-slate-50 border border-slate-200 rounded-3xl p-8 text-center">
+      <div className="rounded-3xl border border-slate-200 bg-slate-50 p-8 text-center">
         <Clock className="w-8 h-8 text-slate-400 mx-auto mb-3" />
         <p className="text-sm font-black text-slate-600 uppercase tracking-widest">
           Sin disponibilidad
         </p>
         <p className="text-xs text-slate-400 mt-2">
-          Ningún especialista tiene horario disponible este día. Elige otra fecha.
+          Ningún especialista disponible cubre la duración total de los servicios elegidos en esta
+          fecha.
         </p>
       </div>
     );
   }
 
-  const especialistaSeleccionado = especialistas.find((e) => e.id === personalSeleccionado);
-
   return (
-    <div className="space-y-4">
-      {/* Banner de especialista alternativo */}
-      {alternativo && !bannerDescartado && especialistaSeleccionado && (
-        <div className="bg-amber-50 border border-amber-200 rounded-2xl p-4 flex flex-col sm:flex-row sm:items-center gap-3">
-          <div className="flex-1 text-sm text-amber-800">
-            <span className="font-black">¿Sabías que </span>
-            <span className="font-black text-amber-900">{alternativo.nombre}</span>
-            <span className="font-bold"> también está disponible a esta hora y hace </span>
-            <span className="font-black">{alternativo.especialidades[0] ?? 'el servicio'}?</span>
-          </div>
-          <div className="flex gap-2 shrink-0">
-            <button
-              type="button"
-              onClick={() => {
-                onSeleccionar(alternativo.id, horaSeleccionada);
-                setBannerDescartado(true);
-              }}
-              className="px-4 py-2 bg-amber-600 text-white text-xs font-black rounded-xl hover:bg-amber-700 transition-colors"
-            >
-              Cambiar a {alternativo.nombre.split(' ')[0]}
-            </button>
-            <button
-              type="button"
-              onClick={() => setBannerDescartado(true)}
-              className="px-4 py-2 bg-white border border-amber-200 text-amber-700 text-xs font-black rounded-xl hover:bg-amber-50 transition-colors"
-            >
-              Mantener mi selección
-            </button>
-          </div>
-        </div>
-      )}
-
-      {/* Tarjetas de especialistas */}
+    <section className="space-y-4" aria-labelledby="titulo-especialistas-disponibles">
+      <div>
+        <h3 id="titulo-especialistas-disponibles" className="text-lg font-black text-slate-900">
+          Especialistas disponibles
+        </h3>
+        <p className="mt-1 text-sm text-slate-500">
+          Se muestran solo horarios que respetan duración total, turnos, descansos y reservas
+          activas.
+        </p>
+      </div>
       <div className="space-y-4">
         {especialistas.map((esp) => {
           const esteSeleccionado = esp.id === personalSeleccionado;
@@ -145,7 +101,6 @@ export function SelectorEspecialistaHorario({
                   : 'border-slate-200 bg-white hover:border-pink-200'
               }`}
             >
-              {/* Cabecera especialista */}
               <div className="flex items-center gap-3 mb-4">
                 {esp.foto ? (
                   <img
@@ -161,19 +116,18 @@ export function SelectorEspecialistaHorario({
                 <div>
                   <p className="font-black text-slate-900 text-base">{esp.nombre}</p>
                   <div className="flex flex-wrap gap-1 mt-1">
-                    {esp.especialidades.slice(0, 4).map((e) => (
+                    {esp.especialidades.slice(0, 4).map((especialidad) => (
                       <span
-                        key={e}
+                        key={especialidad}
                         className="text-[9px] font-black bg-slate-100 text-slate-500 px-2 py-0.5 rounded-lg uppercase"
                       >
-                        {e}
+                        {especialidad}
                       </span>
                     ))}
                   </div>
                 </div>
               </div>
 
-              {/* Slots disponibles */}
               {esp.slotsLibres.length === 0 ? (
                 <p className="text-xs text-slate-400 italic font-bold">
                   Agenda llena para este día.
@@ -186,10 +140,7 @@ export function SelectorEspecialistaHorario({
                       <button
                         key={hora}
                         type="button"
-                        onClick={() => {
-                          onSeleccionar(esp.id, hora);
-                          setBannerDescartado(false);
-                        }}
+                        onClick={() => onSeleccionar(esp.id, hora)}
                         aria-pressed={seleccionado}
                         className={`px-3 py-2 rounded-xl text-sm font-black border transition-all ${
                           seleccionado
@@ -207,6 +158,6 @@ export function SelectorEspecialistaHorario({
           );
         })}
       </div>
-    </div>
+    </section>
   );
 }

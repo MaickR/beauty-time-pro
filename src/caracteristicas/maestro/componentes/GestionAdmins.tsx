@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   Plus,
+  Search,
   Settings,
   Pencil,
   Eye,
@@ -12,6 +13,7 @@ import {
   ChevronDown,
   ChevronRight,
   RefreshCw,
+  Trash2,
 } from 'lucide-react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -19,11 +21,17 @@ import { z } from 'zod';
 import { peticion } from '../../../lib/clienteHTTP';
 import { usarToast } from '../../../componentes/ui/ProveedorToast';
 import { Tooltip } from '../../../componentes/ui/Tooltip';
+import {
+  esEmailColaboradorValido,
+  generarContrasenaColaborador,
+  limpiarNombrePersonaEntrada,
+} from '../../../utils/formularioSalon';
 
 // ─── Tipos ────────────────────────────────────────────
 
 type CargoColaborador = 'maestro' | 'supervisor' | 'vendedor';
 type OrdenColaboradores = 'recientes' | 'nombre' | 'rol' | 'estado';
+type DireccionOrden = 'asc' | 'desc';
 
 interface PermisosMaestro {
   aprobarSalones: boolean;
@@ -64,16 +72,20 @@ interface Colaborador {
 }
 
 const esquemaNuevoColaborador = z.object({
-  nombre: z.string().min(2, 'Minimum 2 characters'),
-  email: z.string().email('Invalid email'),
+  nombre: z.string().trim().min(2, 'Mínimo 2 caracteres'),
+  email: z
+    .string()
+    .trim()
+    .email('Correo inválido')
+    .refine(esEmailColaboradorValido, 'No se aceptan correos temporales o de un solo uso'),
   contrasena: z
     .string()
     .refine(
-      (valor) => valor === '' || (valor.length >= 8 && /[A-Z]/.test(valor) && /[0-9]/.test(valor)),
-      'Use at least 8 characters, one uppercase letter and one number',
+      (valor) => valor === '' || (valor.length >= 8 && valor.length <= 10),
+      'La contraseña debe tener entre 8 y 10 caracteres',
     ),
   cargo: z.enum(['maestro', 'supervisor', 'vendedor'], {
-    message: 'Role is required',
+    message: 'El rol es obligatorio',
   }),
 });
 
@@ -105,18 +117,18 @@ const PERMISOS_SUPERVISOR_VACIOS: PermisosSupervisor = {
 };
 
 const ETIQUETAS_PERMISOS_MAESTRO: Record<keyof Omit<PermisosMaestro, 'esMaestroTotal'>, string> = {
-  aprobarSalones: 'Approve salons',
-  gestionarPagos: 'Manage payments',
-  crearAdmins: 'Create admins',
-  verAuditLog: 'View audit log',
-  verMetricas: 'View metrics',
-  suspenderSalones: 'Suspend salons',
+  aprobarSalones: 'Aprobar salones',
+  gestionarPagos: 'Gestionar pagos',
+  crearAdmins: 'Gestionar colaboradores',
+  verAuditLog: 'Ver auditoría',
+  verMetricas: 'Ver métricas',
+  suspenderSalones: 'Suspender salones',
 };
 
 const ETIQUETAS_CARGO: Record<CargoColaborador, string> = {
-  maestro: 'Admin',
+  maestro: 'Administrador',
   supervisor: 'Supervisor',
-  vendedor: 'Seller',
+  vendedor: 'Vendedor',
 };
 
 const COLORES_CARGO: Record<string, string> = {
@@ -132,35 +144,35 @@ interface GrupoPermisoSupervisor {
 
 const GRUPOS_PERMISOS_SUPERVISOR: GrupoPermisoSupervisor[] = [
   {
-    titulo: 'Metrics',
+    titulo: 'Métricas',
     campos: [
-      { campo: 'verTotalSalones', etiqueta: 'View total salons' },
-      { campo: 'verControlSalones', etiqueta: 'View salon control' },
-      { campo: 'verReservas', etiqueta: 'View bookings' },
-      { campo: 'verVentas', etiqueta: 'View sales' },
+      { campo: 'verTotalSalones', etiqueta: 'Ver total de salones' },
+      { campo: 'verControlSalones', etiqueta: 'Ver control de salones' },
+      { campo: 'verReservas', etiqueta: 'Ver reservas' },
+      { campo: 'verVentas', etiqueta: 'Ver ventas' },
     ],
   },
   {
-    titulo: 'Access Directory',
+    titulo: 'Directorio de acceso',
     campos: [
-      { campo: 'verDirectorio', etiqueta: 'View directory' },
-      { campo: 'editarDirectorio', etiqueta: 'Edit directory' },
+      { campo: 'verDirectorio', etiqueta: 'Ver directorio' },
+      { campo: 'editarDirectorio', etiqueta: 'Editar directorio' },
     ],
   },
   {
-    titulo: 'Payment Control',
+    titulo: 'Control de cobros',
     campos: [
-      { campo: 'verControlCobros', etiqueta: 'View payment control' },
-      { campo: 'accionRecordatorio', etiqueta: 'Send reminders' },
-      { campo: 'accionRegistroPago', etiqueta: 'Register payments' },
-      { campo: 'accionSuspension', etiqueta: 'Suspend salons' },
+      { campo: 'verControlCobros', etiqueta: 'Ver control de cobros' },
+      { campo: 'accionRecordatorio', etiqueta: 'Enviar recordatorios' },
+      { campo: 'accionRegistroPago', etiqueta: 'Registrar pagos' },
+      { campo: 'accionSuspension', etiqueta: 'Suspender salones' },
     ],
   },
   {
-    titulo: 'Sellers',
+    titulo: 'Ventas y preregistros',
     campos: [
-      { campo: 'activarSalones', etiqueta: 'Activate salons' },
-      { campo: 'verPreregistros', etiqueta: 'View pre-registrations' },
+      { campo: 'activarSalones', etiqueta: 'Activar salones' },
+      { campo: 'verPreregistros', etiqueta: 'Ver pre-registros' },
     ],
   },
 ];
@@ -185,13 +197,6 @@ function normalizarPermisosMaestro(permisos: PermisosMaestro): PermisosMaestro {
     suspenderSalones: true,
     esMaestroTotal: true,
   };
-}
-
-function generarContrasenaSeguraLocal(longitud = 16): string {
-  const caracteres = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789!@#$%&*';
-  const valores = new Uint8Array(longitud);
-  crypto.getRandomValues(valores);
-  return Array.from(valores, (v) => caracteres[v % caracteres.length]).join('');
 }
 
 function AcordeonPermisos({
@@ -255,6 +260,11 @@ export function GestionAdmins() {
   const [mostrarContrasena, setMostrarContrasena] = useState(false);
   const [accionesAbiertas, setAccionesAbiertas] = useState<string | null>(null);
   const [orden, setOrden] = useState<OrdenColaboradores>('recientes');
+  const [direccionOrden, setDireccionOrden] = useState<DireccionOrden>('asc');
+  const [filtroNombre, setFiltroNombre] = useState('');
+  const [filtroEmail, setFiltroEmail] = useState('');
+  const [filtroRol, setFiltroRol] = useState<'todos' | CargoColaborador>('todos');
+  const [filtroEstado, setFiltroEstado] = useState<'todos' | 'activo' | 'inactivo'>('todos');
   const [permisosMaestroEditando, setPermisosMaestroEditando] =
     useState<PermisosMaestro>(PERMISOS_MAESTRO_VACIOS);
   const [permisosSupervisorEditando, setPermisosSupervisorEditando] = useState<PermisosSupervisor>(
@@ -280,6 +290,8 @@ export function GestionAdmins() {
   });
 
   const cargoWatch = watch('cargo');
+  const nombreWatch = watch('nombre');
+  const emailWatch = watch('email');
 
   const crearColaborador = useMutation({
     mutationFn: async (datos: CamposNuevoColaborador) => {
@@ -295,12 +307,12 @@ export function GestionAdmins() {
       });
     },
     onSuccess: () => {
-      mostrarToast('Collaborator created successfully');
+      mostrarToast('Colaborador creado correctamente');
       cerrarFormulario();
       void clienteConsulta.invalidateQueries({ queryKey: ['colaboradores'] });
     },
     onError: (error) =>
-      mostrarToast(error instanceof Error ? error.message : 'Error creating collaborator'),
+      mostrarToast(error instanceof Error ? error.message : 'Error al crear el colaborador'),
   });
 
   const actualizarPermisos = useMutation({
@@ -317,12 +329,12 @@ export function GestionAdmins() {
       });
     },
     onSuccess: () => {
-      mostrarToast('Permissions updated');
+      mostrarToast('Permisos actualizados correctamente');
       setColaboradorEditando(null);
       void clienteConsulta.invalidateQueries({ queryKey: ['colaboradores'] });
     },
     onError: (error) =>
-      mostrarToast(error instanceof Error ? error.message : 'Error updating permissions'),
+      mostrarToast(error instanceof Error ? error.message : 'Error al actualizar los permisos'),
   });
 
   const desactivarColaborador = useMutation({
@@ -330,10 +342,11 @@ export function GestionAdmins() {
       await peticion(`/admin/admins/${id}/desactivar`, { method: 'PUT' });
     },
     onSuccess: () => {
-      mostrarToast('Collaborator deactivated');
+      mostrarToast('Colaborador desactivado');
       void clienteConsulta.invalidateQueries({ queryKey: ['colaboradores'] });
     },
-    onError: (error) => mostrarToast(error instanceof Error ? error.message : 'Error deactivating'),
+    onError: (error) =>
+      mostrarToast(error instanceof Error ? error.message : 'Error al desactivar el colaborador'),
   });
 
   const activarColaborador = useMutation({
@@ -341,10 +354,11 @@ export function GestionAdmins() {
       await peticion(`/admin/admins/${id}/activar`, { method: 'PUT' });
     },
     onSuccess: () => {
-      mostrarToast('Collaborator activated');
+      mostrarToast('Colaborador activado');
       void clienteConsulta.invalidateQueries({ queryKey: ['colaboradores'] });
     },
-    onError: (error) => mostrarToast(error instanceof Error ? error.message : 'Error activating'),
+    onError: (error) =>
+      mostrarToast(error instanceof Error ? error.message : 'Error al activar el colaborador'),
   });
 
   const actualizarColaborador = useMutation({
@@ -371,13 +385,26 @@ export function GestionAdmins() {
       });
     },
     onSuccess: () => {
-      mostrarToast('Collaborator updated');
+      mostrarToast('Información actualizada correctamente');
       setColaboradorEdicionGeneral(null);
       cerrarFormulario();
       void clienteConsulta.invalidateQueries({ queryKey: ['colaboradores'] });
     },
     onError: (error) =>
-      mostrarToast(error instanceof Error ? error.message : 'Error updating collaborator'),
+      mostrarToast(error instanceof Error ? error.message : 'Error al actualizar el colaborador'),
+  });
+
+  const eliminarColaborador = useMutation({
+    mutationFn: async (id: string) => {
+      await peticion(`/admin/admins/${id}`, { method: 'DELETE' });
+    },
+    onSuccess: () => {
+      mostrarToast('Colaborador eliminado definitivamente');
+      setAccionesAbiertas(null);
+      void clienteConsulta.invalidateQueries({ queryKey: ['colaboradores'] });
+    },
+    onError: (error) =>
+      mostrarToast(error instanceof Error ? error.message : 'Error al eliminar el colaborador'),
   });
 
   const cerrarFormulario = () => {
@@ -434,34 +461,62 @@ export function GestionAdmins() {
   };
 
   const generarContrasena = () => {
-    const nueva = generarContrasenaSeguraLocal();
+    if (!nombreWatch?.trim() || !emailWatch?.trim()) {
+      mostrarToast('Escribe primero el nombre y el correo para generar la contraseña.');
+      return;
+    }
+
+    const nueva = generarContrasenaColaborador(nombreWatch, emailWatch);
     setValue('contrasena', nueva, { shouldValidate: true });
     setMostrarContrasena(true);
   };
 
   const colaboradoresOrdenados = useMemo(() => {
-    const lista = [...colaboradores];
+    const lista = [...colaboradores].filter((colaborador) => {
+      const coincideNombre = colaborador.nombre
+        .toLowerCase()
+        .includes(filtroNombre.trim().toLowerCase());
+      const coincideEmail = colaborador.email
+        .toLowerCase()
+        .includes(filtroEmail.trim().toLowerCase());
+      const coincideRol = filtroRol === 'todos' || colaborador.rol === filtroRol;
+      const coincideEstado =
+        filtroEstado === 'todos' ||
+        (filtroEstado === 'activo' ? colaborador.activo : !colaborador.activo);
+
+      return coincideNombre && coincideEmail && coincideRol && coincideEstado;
+    });
 
     lista.sort((a, b) => {
-      if (orden === 'nombre') {
-        return a.nombre.localeCompare(b.nombre, 'es');
-      }
+      const factor = direccionOrden === 'asc' ? 1 : -1;
 
-      if (orden === 'rol') {
-        return a.rol.localeCompare(b.rol, 'es') || a.nombre.localeCompare(b.nombre, 'es');
+      if (orden === 'nombre') {
+        return a.nombre.localeCompare(b.nombre, 'es') * factor;
       }
 
       if (orden === 'estado') {
-        return Number(b.activo) - Number(a.activo) || a.nombre.localeCompare(b.nombre, 'es');
+        const estadoA = a.activo ? 'activo' : 'inactivo';
+        const estadoB = b.activo ? 'activo' : 'inactivo';
+        return (
+          estadoA.localeCompare(estadoB, 'es') * factor || a.nombre.localeCompare(b.nombre, 'es')
+        );
       }
 
-      const accesoA = a.ultimoAcceso ? new Date(a.ultimoAcceso).getTime() : 0;
-      const accesoB = b.ultimoAcceso ? new Date(b.ultimoAcceso).getTime() : 0;
-      return accesoB - accesoA || a.nombre.localeCompare(b.nombre, 'es');
+      if (orden === 'rol') {
+        return a.rol.localeCompare(b.rol, 'es') * factor || a.nombre.localeCompare(b.nombre, 'es');
+      }
+
+      if (orden === 'recientes') {
+        const accesoA = a.ultimoAcceso ? new Date(a.ultimoAcceso).getTime() : 0;
+        const accesoB = b.ultimoAcceso ? new Date(b.ultimoAcceso).getTime() : 0;
+        return (accesoA - accesoB) * factor || a.nombre.localeCompare(b.nombre, 'es');
+      }
+
+      return a.nombre.localeCompare(b.nombre, 'es');
     });
 
     return lista;
-  }, [colaboradores, orden]);
+  }, [colaboradores, direccionOrden, filtroEmail, filtroEstado, filtroNombre, filtroRol, orden]);
 
   if (isLoading) {
     return (
@@ -480,20 +535,31 @@ export function GestionAdmins() {
     <section aria-labelledby="titulo-colaboradores" className="space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <h2 id="titulo-colaboradores" className="text-2xl font-black text-slate-900">
-          Collaborators
+          Colaboradores
         </h2>
         <div className="flex w-full flex-col gap-3 sm:w-auto sm:flex-row sm:items-center">
           <label className="flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-3 text-sm font-semibold text-slate-600">
-            <span>Sort</span>
+            <span>Ordenar por</span>
             <select
               value={orden}
               onChange={(evento) => setOrden(evento.target.value as OrdenColaboradores)}
               className="bg-transparent text-sm font-semibold text-slate-900 outline-none"
             >
-              <option value="recientes">Recent access</option>
-              <option value="nombre">Name</option>
-              <option value="rol">Role</option>
-              <option value="estado">Status</option>
+              <option value="recientes">Último acceso</option>
+              <option value="nombre">Nombre</option>
+              <option value="rol">Rol</option>
+              <option value="estado">Estado</option>
+            </select>
+          </label>
+          <label className="flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-3 text-sm font-semibold text-slate-600">
+            <span>Dirección</span>
+            <select
+              value={direccionOrden}
+              onChange={(evento) => setDireccionOrden(evento.target.value as DireccionOrden)}
+              className="bg-transparent text-sm font-semibold text-slate-900 outline-none"
+            >
+              <option value="asc">Ascendente</option>
+              <option value="desc">Descendente</option>
             </select>
           </label>
           <button
@@ -506,34 +572,76 @@ export function GestionAdmins() {
             }}
             className="flex items-center justify-center gap-2 bg-pink-600 text-white px-5 py-3 rounded-xl font-bold shadow hover:bg-pink-700 transition-all shrink-0 w-full sm:w-auto"
           >
-            <Plus className="w-4 h-4" /> New collaborator
+            <Plus className="w-4 h-4" /> Nuevo colaborador
           </button>
         </div>
       </div>
 
+      <div className="grid gap-3 rounded-2xl border border-slate-200 bg-white p-4 lg:grid-cols-[1.1fr_1.1fr_0.7fr_0.7fr]">
+        <label className="relative block">
+          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+          <input
+            value={filtroNombre}
+            onChange={(evento) => setFiltroNombre(evento.target.value)}
+            placeholder="Filtrar por nombre"
+            className="w-full rounded-xl border border-slate-200 py-3 pl-10 pr-3 text-sm font-medium outline-none focus:ring-2 focus:ring-pink-400"
+          />
+        </label>
+        <label className="relative block">
+          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+          <input
+            value={filtroEmail}
+            onChange={(evento) => setFiltroEmail(evento.target.value)}
+            placeholder="Filtrar por correo"
+            className="w-full rounded-xl border border-slate-200 py-3 pl-10 pr-3 text-sm font-medium outline-none focus:ring-2 focus:ring-pink-400"
+          />
+        </label>
+        <select
+          value={filtroRol}
+          onChange={(evento) => setFiltroRol(evento.target.value as 'todos' | CargoColaborador)}
+          className="rounded-xl border border-slate-200 px-3 py-3 text-sm font-medium outline-none focus:ring-2 focus:ring-pink-400"
+        >
+          <option value="todos">Todos los roles</option>
+          <option value="maestro">Administrador</option>
+          <option value="supervisor">Supervisor</option>
+          <option value="vendedor">Vendedor</option>
+        </select>
+        <select
+          value={filtroEstado}
+          onChange={(evento) =>
+            setFiltroEstado(evento.target.value as 'todos' | 'activo' | 'inactivo')
+          }
+          className="rounded-xl border border-slate-200 px-3 py-3 text-sm font-medium outline-none focus:ring-2 focus:ring-pink-400"
+        >
+          <option value="todos">Todos los estados</option>
+          <option value="activo">Activos</option>
+          <option value="inactivo">Inactivos</option>
+        </select>
+      </div>
+
       {colaboradores.length === 0 ? (
-        <p className="text-slate-500 text-sm">No collaborators registered yet.</p>
+        <p className="text-slate-500 text-sm">Aún no hay colaboradores registrados.</p>
       ) : (
-        <div className="bg-white border border-slate-200 rounded-2xl overflow-hidden">
+        <div className="relative rounded-2xl border border-slate-200 bg-white">
           {/* Desktop: Tabla */}
-          <div className="hidden md:block overflow-x-auto">
+          <div className="hidden overflow-x-auto overflow-y-visible md:block">
             <table className="w-full text-sm">
               <thead>
                 <tr className="bg-slate-50 border-b border-slate-200">
                   <th className="text-left px-5 py-3 font-semibold text-slate-500 uppercase text-xs tracking-wide">
-                    Name
+                    Nombre
                   </th>
                   <th className="text-left px-5 py-3 font-semibold text-slate-500 uppercase text-xs tracking-wide">
-                    Email
+                    Correo
                   </th>
                   <th className="text-left px-5 py-3 font-semibold text-slate-500 uppercase text-xs tracking-wide">
-                    Role
+                    Rol
                   </th>
                   <th className="text-left px-5 py-3 font-semibold text-slate-500 uppercase text-xs tracking-wide">
-                    Status
+                    Estado
                   </th>
                   <th className="text-right px-5 py-3 font-semibold text-slate-500 uppercase text-xs tracking-wide">
-                    Actions
+                    Acciones
                   </th>
                 </tr>
               </thead>
@@ -550,7 +658,7 @@ export function GestionAdmins() {
                           </span>
                           {protegido && (
                             <span className="inline-flex items-center gap-1 text-xs font-semibold px-2 py-0.5 rounded-full bg-slate-900 text-white shrink-0">
-                              <ShieldCheck className="w-3 h-3" /> Protected
+                              <ShieldCheck className="w-3 h-3" /> Protegido
                             </span>
                           )}
                         </div>
@@ -569,7 +677,7 @@ export function GestionAdmins() {
                           {colaborador.rol === 'maestro' &&
                             colaborador.permisos?.esMaestroTotal && (
                               <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-yellow-100 text-yellow-700">
-                                Full Master
+                                Maestro total
                               </span>
                             )}
                         </div>
@@ -578,23 +686,19 @@ export function GestionAdmins() {
                         <span
                           className={`text-xs font-semibold px-2 py-0.5 rounded-full ${colaborador.activo ? 'bg-green-100 text-green-700' : 'bg-slate-200 text-slate-600'}`}
                         >
-                          {colaborador.activo ? 'Active' : 'Inactive'}
+                          {colaborador.activo ? 'Activo' : 'Inactivo'}
                         </span>
                       </td>
                       <td className="px-5 py-4">
                         <div className="flex gap-1 items-center justify-end">
                           {colaborador.rol !== 'vendedor' && (
-                            <Tooltip
-                              texto={
-                                protegido ? 'Protected account — cannot modify' : 'Edit permissions'
-                              }
-                            >
+                            <Tooltip texto={protegido ? 'Cuenta protegida' : 'Actualizar accesos'}>
                               <button
                                 onClick={() => {
                                   if (protegido) return;
                                   abrirEdicionPermisos(colaborador);
                                 }}
-                                aria-label={`Edit permissions for ${colaborador.nombre}`}
+                                aria-label={`Actualizar accesos de ${colaborador.nombre}`}
                                 aria-disabled={protegido}
                                 className={`p-2 rounded-xl transition-all ${protegido ? 'opacity-40 cursor-not-allowed bg-slate-50' : 'hover:bg-slate-100'}`}
                               >
@@ -604,16 +708,14 @@ export function GestionAdmins() {
                           )}
 
                           <Tooltip
-                            texto={
-                              protegido ? 'Protected account — cannot modify' : 'Edit collaborator'
-                            }
+                            texto={protegido ? 'Cuenta protegida' : 'Actualizar información'}
                           >
                             <button
                               onClick={() => {
                                 if (protegido) return;
                                 abrirEdicionGeneral(colaborador);
                               }}
-                              aria-label={`Edit collaborator ${colaborador.nombre}`}
+                              aria-label={`Actualizar información de ${colaborador.nombre}`}
                               aria-disabled={protegido}
                               className={`p-2 rounded-xl transition-all ${protegido ? 'opacity-40 cursor-not-allowed bg-slate-50' : 'hover:bg-slate-100'}`}
                             >
@@ -626,17 +728,13 @@ export function GestionAdmins() {
                               onClick={() => activarColaborador.mutate(colaborador.id)}
                               className="flex items-center gap-1 px-3 py-1.5 rounded-xl bg-green-50 text-green-700 text-xs font-semibold hover:bg-green-100 transition-all"
                             >
-                              <Power className="w-3.5 h-3.5" /> Activate
+                              <Power className="w-3.5 h-3.5" /> Activar
                             </button>
                           )}
 
                           {colaborador.activo && (
                             <div className="relative">
-                              <Tooltip
-                                texto={
-                                  protegido ? 'Protected account — cannot modify' : 'More actions'
-                                }
-                              >
+                              <Tooltip texto={protegido ? 'Cuenta protegida' : 'Más acciones'}>
                                 <button
                                   onClick={() => {
                                     if (protegido) return;
@@ -644,7 +742,7 @@ export function GestionAdmins() {
                                       a === colaborador.id ? null : colaborador.id,
                                     );
                                   }}
-                                  aria-label={`Actions for ${colaborador.nombre}`}
+                                  aria-label={`Más acciones para ${colaborador.nombre}`}
                                   aria-disabled={protegido}
                                   className={`p-2 rounded-xl transition-all ${protegido ? 'opacity-40 cursor-not-allowed bg-slate-50' : 'hover:bg-slate-100'}`}
                                 >
@@ -661,7 +759,7 @@ export function GestionAdmins() {
                                     }}
                                     className="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
                                   >
-                                    <Power className="w-4 h-4" /> Deactivate
+                                    <Power className="w-4 h-4" /> Desactivar
                                   </button>
                                   <button
                                     onClick={() => {
@@ -670,7 +768,16 @@ export function GestionAdmins() {
                                     }}
                                     className="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
                                   >
-                                    <Pencil className="w-4 h-4" /> Edit details
+                                    <Pencil className="w-4 h-4" /> Actualizar información
+                                  </button>
+                                  <button
+                                    onClick={() => {
+                                      setAccionesAbiertas(null);
+                                      eliminarColaborador.mutate(colaborador.id);
+                                    }}
+                                    className="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-sm font-semibold text-red-600 hover:bg-red-50"
+                                  >
+                                    <Trash2 className="w-4 h-4" /> Eliminar definitivamente
                                   </button>
                                 </div>
                               )}
@@ -704,7 +811,7 @@ export function GestionAdmins() {
                             if (protegido) return;
                             abrirEdicionPermisos(colaborador);
                           }}
-                          aria-label={`Edit permissions for ${colaborador.nombre}`}
+                          aria-label={`Actualizar accesos de ${colaborador.nombre}`}
                           aria-disabled={protegido}
                           className={`p-2 rounded-xl transition-all ${protegido ? 'opacity-40 cursor-not-allowed' : 'hover:bg-slate-100'}`}
                         >
@@ -717,7 +824,7 @@ export function GestionAdmins() {
                           if (protegido) return;
                           abrirEdicionGeneral(colaborador);
                         }}
-                        aria-label={`Edit collaborator ${colaborador.nombre}`}
+                        aria-label={`Actualizar información de ${colaborador.nombre}`}
                         aria-disabled={protegido}
                         className={`p-2 rounded-xl transition-all ${protegido ? 'opacity-40 cursor-not-allowed' : 'hover:bg-slate-100'}`}
                       >
@@ -729,7 +836,7 @@ export function GestionAdmins() {
                           onClick={() => activarColaborador.mutate(colaborador.id)}
                           className="flex items-center gap-1 px-2 py-1.5 rounded-xl bg-green-50 text-green-700 text-xs font-semibold"
                         >
-                          <Power className="w-3.5 h-3.5" /> Activate
+                          <Power className="w-3.5 h-3.5" /> Activar
                         </button>
                       )}
 
@@ -741,7 +848,7 @@ export function GestionAdmins() {
                                 a === colaborador.id ? null : colaborador.id,
                               )
                             }
-                            aria-label={`Actions for ${colaborador.nombre}`}
+                            aria-label={`Más acciones para ${colaborador.nombre}`}
                             className="p-2 rounded-xl hover:bg-slate-100 transition-all"
                           >
                             <MoreHorizontal className="w-4 h-4 text-slate-600" />
@@ -755,7 +862,7 @@ export function GestionAdmins() {
                                 }}
                                 className="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
                               >
-                                <Power className="w-4 h-4" /> Deactivate
+                                <Power className="w-4 h-4" /> Desactivar
                               </button>
                               <button
                                 onClick={() => {
@@ -764,7 +871,16 @@ export function GestionAdmins() {
                                 }}
                                 className="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
                               >
-                                <Pencil className="w-4 h-4" /> Edit details
+                                <Pencil className="w-4 h-4" /> Actualizar información
+                              </button>
+                              <button
+                                onClick={() => {
+                                  setAccionesAbiertas(null);
+                                  eliminarColaborador.mutate(colaborador.id);
+                                }}
+                                className="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-sm font-semibold text-red-600 hover:bg-red-50"
+                              >
+                                <Trash2 className="w-4 h-4" /> Eliminar definitivamente
                               </button>
                             </div>
                           )}
@@ -781,16 +897,16 @@ export function GestionAdmins() {
                     <span
                       className={`text-xs font-semibold px-2 py-0.5 rounded-full ${colaborador.activo ? 'bg-green-100 text-green-700' : 'bg-slate-200 text-slate-600'}`}
                     >
-                      {colaborador.activo ? 'Active' : 'Inactive'}
+                      {colaborador.activo ? 'Activo' : 'Inactivo'}
                     </span>
                     {colaborador.rol === 'maestro' && colaborador.permisos?.esMaestroTotal && (
                       <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-yellow-100 text-yellow-700">
-                        Full Master
+                        Maestro total
                       </span>
                     )}
                     {protegido && (
                       <span className="inline-flex items-center gap-1 text-xs font-semibold px-2 py-0.5 rounded-full bg-slate-900 text-white">
-                        <ShieldCheck className="w-3 h-3" /> Protected
+                        <ShieldCheck className="w-3 h-3" /> Protegido
                       </span>
                     )}
                   </div>
@@ -814,12 +930,12 @@ export function GestionAdmins() {
         >
           <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg max-h-screen overflow-y-auto p-6">
             <h3 id="titulo-nuevo-colaborador" className="text-xl font-black text-slate-900 mb-6">
-              {colaboradorEdicionGeneral ? 'Edit collaborator' : 'New collaborator'}
+              {colaboradorEdicionGeneral ? 'Actualizar información' : 'Nuevo colaborador'}
             </h3>
             <form
               onSubmit={handleSubmit((datos) => {
                 if (!colaboradorEdicionGeneral && !datos.contrasena.trim()) {
-                  mostrarToast('Password is required for a new collaborator');
+                  mostrarToast('La contraseña es obligatoria para crear el colaborador.');
                   return;
                 }
 
@@ -838,16 +954,16 @@ export function GestionAdmins() {
                   htmlFor="cargo-colaborador"
                   className="block text-sm font-semibold text-slate-700 mb-1"
                 >
-                  Role
+                  Rol
                 </label>
                 <select
                   id="cargo-colaborador"
                   {...register('cargo')}
                   className="w-full border border-slate-200 rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-pink-400 outline-none bg-white"
                 >
-                  <option value="maestro">Admin</option>
+                  <option value="maestro">Administrador</option>
                   <option value="supervisor">Supervisor</option>
-                  <option value="vendedor">Seller</option>
+                  <option value="vendedor">Vendedor</option>
                 </select>
                 {errors.cargo && (
                   <p className="text-xs text-red-500 mt-1">{errors.cargo.message}</p>
@@ -860,11 +976,15 @@ export function GestionAdmins() {
                   htmlFor="nombre-colaborador"
                   className="block text-sm font-semibold text-slate-700 mb-1"
                 >
-                  Name
+                  Nombre
                 </label>
                 <input
                   id="nombre-colaborador"
                   {...register('nombre')}
+                  onInput={(evento) => {
+                    const entrada = evento.currentTarget;
+                    entrada.value = limpiarNombrePersonaEntrada(entrada.value);
+                  }}
                   className="w-full border border-slate-200 rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-pink-400 outline-none"
                 />
                 {errors.nombre && (
@@ -878,12 +998,16 @@ export function GestionAdmins() {
                   htmlFor="email-colaborador"
                   className="block text-sm font-semibold text-slate-700 mb-1"
                 >
-                  Email
+                  Correo
                 </label>
                 <input
                   id="email-colaborador"
                   type="email"
                   {...register('email')}
+                  onInput={(evento) => {
+                    const entrada = evento.currentTarget;
+                    entrada.value = entrada.value.trim().toLowerCase();
+                  }}
                   className="w-full border border-slate-200 rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-pink-400 outline-none"
                 />
                 {errors.email && (
@@ -897,7 +1021,7 @@ export function GestionAdmins() {
                   htmlFor="contrasena-colaborador"
                   className="block text-sm font-semibold text-slate-700 mb-1"
                 >
-                  Password
+                  Contraseña
                 </label>
                 <div className="flex gap-2">
                   <div className="relative flex-1">
@@ -905,12 +1029,13 @@ export function GestionAdmins() {
                       id="contrasena-colaborador"
                       type={mostrarContrasena ? 'text' : 'password'}
                       {...register('contrasena')}
+                      readOnly
                       className="w-full border border-slate-200 rounded-xl px-4 py-3 pr-10 text-sm focus:ring-2 focus:ring-pink-400 outline-none"
                     />
                     <button
                       type="button"
                       onClick={() => setMostrarContrasena((v) => !v)}
-                      aria-label={mostrarContrasena ? 'Hide password' : 'Show password'}
+                      aria-label={mostrarContrasena ? 'Ocultar contraseña' : 'Mostrar contraseña'}
                       className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400"
                     >
                       {mostrarContrasena ? (
@@ -924,21 +1049,24 @@ export function GestionAdmins() {
                     type="button"
                     onClick={generarContrasena}
                     className="flex items-center gap-1 px-3 py-2 rounded-xl border border-slate-200 text-sm font-semibold text-slate-600 hover:bg-slate-50 transition-all shrink-0"
-                    aria-label="Generate secure password"
+                    aria-label="Generar contraseña automática"
                   >
-                    <RefreshCw className="w-4 h-4" /> Generate
+                    <RefreshCw className="w-4 h-4" /> Generar
                   </button>
                 </div>
                 {errors.contrasena && (
                   <p className="text-xs text-red-500 mt-1">{errors.contrasena.message}</p>
                 )}
+                <p className="mt-1 text-xs font-medium text-slate-500">
+                  La contraseña se genera automáticamente con el nombre y el correo del colaborador.
+                </p>
               </div>
 
               {/* Permisos Admin (maestro) */}
               {cargoWatch === 'maestro' && (
                 <fieldset className="border border-slate-200 rounded-xl p-4">
                   <legend className="text-sm font-bold text-slate-700 px-1">
-                    Admin permissions
+                    Permisos de administrador
                   </legend>
                   <div className="grid grid-cols-2 gap-3 mt-2">
                     {(
@@ -967,9 +1095,7 @@ export function GestionAdmins() {
                         }
                         className="rounded"
                       />
-                      <span className="text-sm font-bold text-yellow-700">
-                        Full Master (grants all permissions)
-                      </span>
+                      <span className="text-sm font-bold text-yellow-700">Maestro total</span>
                     </label>
                   </div>
                 </fieldset>
@@ -979,7 +1105,7 @@ export function GestionAdmins() {
               {cargoWatch === 'supervisor' && (
                 <fieldset className="border border-slate-200 rounded-xl p-4">
                   <legend className="text-sm font-bold text-slate-700 px-1">
-                    Supervisor permissions
+                    Permisos de supervisor
                   </legend>
                   <div className="space-y-2 mt-2">
                     {GRUPOS_PERMISOS_SUPERVISOR.map((grupo) => (
@@ -998,8 +1124,8 @@ export function GestionAdmins() {
               {/* Info vendedor */}
               {cargoWatch === 'vendedor' && (
                 <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 text-sm text-blue-700">
-                  Sellers have restricted access. They can only manage pre-registrations assigned to
-                  them.
+                  Los vendedores tienen acceso restringido. Solo pueden gestionar sus pre-registros
+                  y los salones asociados a su flujo comercial.
                 </div>
               )}
 
@@ -1009,7 +1135,7 @@ export function GestionAdmins() {
                   onClick={cerrarFormulario}
                   className="px-4 py-2 rounded-xl border border-slate-200 text-slate-600 font-semibold hover:bg-slate-50"
                 >
-                  Cancel
+                  Cancelar
                 </button>
                 <button
                   type="submit"
@@ -1020,11 +1146,11 @@ export function GestionAdmins() {
                 >
                   {colaboradorEdicionGeneral
                     ? actualizarColaborador.isPending
-                      ? 'Saving...'
-                      : 'Save collaborator'
+                      ? 'Actualizando...'
+                      : 'Actualizar cambios'
                     : crearColaborador.isPending
-                      ? 'Creating...'
-                      : 'Create collaborator'}
+                      ? 'Creando...'
+                      : 'Crear colaborador'}
                 </button>
               </div>
             </form>
@@ -1037,15 +1163,15 @@ export function GestionAdmins() {
         <div
           role="dialog"
           aria-modal="true"
-          aria-labelledby="titulo-editar-permisos"
+          aria-labelledby="titulo-actualizar-accesos"
           className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
           onKeyDown={(evento) => {
             if (evento.key === 'Escape') setColaboradorEditando(null);
           }}
         >
           <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md max-h-screen overflow-y-auto p-6">
-            <h3 id="titulo-editar-permisos" className="text-xl font-black text-slate-900 mb-1">
-              Permissions — {colaboradorEditando.nombre}
+            <h3 id="titulo-actualizar-accesos" className="text-xl font-black text-slate-900 mb-1">
+              Actualizar accesos de {colaboradorEditando.nombre}
             </h3>
             <p className="text-sm text-slate-500 mb-1">{colaboradorEditando.email}</p>
             <span
@@ -1057,7 +1183,9 @@ export function GestionAdmins() {
 
             {colaboradorEditando.rol === 'maestro' && (
               <fieldset className="border border-slate-200 rounded-xl p-4 mb-6">
-                <legend className="text-sm font-bold text-slate-700 px-1">Admin permissions</legend>
+                <legend className="text-sm font-bold text-slate-700 px-1">
+                  Permisos de administrador
+                </legend>
                 <div className="grid grid-cols-2 gap-3 mt-2">
                   {(
                     Object.keys(
@@ -1083,7 +1211,7 @@ export function GestionAdmins() {
                       onChange={(e) => actualizarPermisoMaestro('esMaestroTotal', e.target.checked)}
                       className="rounded"
                     />
-                    <span className="text-sm font-bold text-yellow-700">Full Master</span>
+                    <span className="text-sm font-bold text-yellow-700">Maestro total</span>
                   </label>
                 </div>
               </fieldset>
@@ -1108,7 +1236,7 @@ export function GestionAdmins() {
                 onClick={() => setColaboradorEditando(null)}
                 className="px-4 py-2 rounded-xl border border-slate-200 text-slate-600 font-semibold hover:bg-slate-50"
               >
-                Cancel
+                Cancelar
               </button>
               <button
                 onClick={() =>
@@ -1120,7 +1248,7 @@ export function GestionAdmins() {
                 disabled={actualizarPermisos.isPending}
                 className="px-6 py-2 rounded-xl bg-pink-600 text-white font-bold hover:bg-pink-700 transition-all disabled:opacity-50"
               >
-                {actualizarPermisos.isPending ? 'Saving...' : 'Save permissions'}
+                {actualizarPermisos.isPending ? 'Actualizando...' : 'Actualizar cambios'}
               </button>
             </div>
           </div>

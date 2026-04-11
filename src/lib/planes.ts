@@ -5,26 +5,50 @@ export const MENSAJE_FUNCION_PRO =
 
 interface DefinicionPlanEstudio {
   codigo: PlanEstudio;
-  nombre: 'Standard' | 'Pro';
+  nombre: 'Estándar' | 'Pro';
   maxServicios: number;
   fidelidad: boolean;
   resumen: string;
+  capacidades: string[];
+  restricciones: string[];
 }
 
 const PLANES_ESTUDIO: Record<PlanEstudio, DefinicionPlanEstudio> = {
   STANDARD: {
     codigo: 'STANDARD',
-    nombre: 'Standard',
-    maxServicios: 5,
+    nombre: 'Estándar',
+    maxServicios: Number.POSITIVE_INFINITY,
     fidelidad: false,
-    resumen: 'Hasta 5 servicios activos y sin programa de fidelidad.',
+    resumen: 'Servicios ilimitados, sin fidelidad, sin productos y con límite de 5 empleados.',
+    capacidades: [
+      'Servicios ilimitados',
+      'Agenda, reservas y dashboard operativo',
+      'Cobro mensual estándar por país',
+      'Un solo salón sin sucursales Pro',
+    ],
+    restricciones: [
+      'Sin programa de fidelidad',
+      'Sin módulo de productos',
+      'Sin sucursales adicionales',
+      'Máximo 5 empleados',
+      'Sin envíos masivos ni herramientas Pro avanzadas',
+    ],
   },
   PRO: {
     codigo: 'PRO',
     nombre: 'Pro',
-    maxServicios: 15,
+    maxServicios: Number.POSITIVE_INFINITY,
     fidelidad: true,
-    resumen: 'Hasta 15 servicios activos y programa de fidelidad habilitado.',
+    resumen:
+      'Servicios, productos y sucursales habilitados con fidelidad y funciones comerciales completas.',
+    capacidades: [
+      'Servicios ilimitados',
+      'Programa de fidelidad',
+      'Productos del salón',
+      'Sucursales adicionales',
+      'Herramientas comerciales Pro',
+    ],
+    restricciones: [],
   },
 };
 

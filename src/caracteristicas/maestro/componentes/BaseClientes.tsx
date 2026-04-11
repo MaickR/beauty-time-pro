@@ -25,7 +25,9 @@ export function BaseClientes() {
   const [buscar, setBuscar] = useState('');
   const [buscarDebounced, setBuscarDebounced] = useState('');
   const [salonId, setSalonId] = useState('');
+  const [busquedaSalon, setBusquedaSalon] = useState('');
   const [pais, setPais] = useState('');
+  const [servicioFrecuente, setServicioFrecuente] = useState('');
 
   useEffect(() => {
     const timer = setTimeout(() => setBuscarDebounced(buscar), 300);
@@ -42,6 +44,7 @@ export function BaseClientes() {
         buscar: buscarDebounced || undefined,
         salonId: salonId || undefined,
         pais: pais || undefined,
+        servicioFrecuente: servicioFrecuente || undefined,
       });
       setClientes(res.clientes);
       setTotal(res.total);
@@ -51,7 +54,7 @@ export function BaseClientes() {
     } finally {
       setCargando(false);
     }
-  }, [pagina, buscarDebounced, salonId, pais]);
+  }, [pagina, buscarDebounced, salonId, pais, servicioFrecuente]);
 
   useEffect(() => {
     void cargarClientes();
@@ -60,7 +63,7 @@ export function BaseClientes() {
   // Cuando cambian los filtros, volver a pág 1
   useEffect(() => {
     setPagina(1);
-  }, [buscarDebounced, salonId, pais]);
+  }, [buscarDebounced, salonId, pais, servicioFrecuente]);
 
   const manejarExportar = async () => {
     setExportando(true);
@@ -69,6 +72,7 @@ export function BaseClientes() {
         buscar: buscarDebounced || undefined,
         salonId: salonId || undefined,
         pais: pais || undefined,
+        servicioFrecuente: servicioFrecuente || undefined,
       });
 
       const filas = todos.map((c) => ({
@@ -181,6 +185,9 @@ export function BaseClientes() {
 
   const inicioRango = (pagina - 1) * LIMITE_PAGINA + 1;
   const finRango = Math.min(pagina * LIMITE_PAGINA, total);
+  const estudiosFiltrados = estudios.filter((estudio) =>
+    estudio.name.toLowerCase().includes(busquedaSalon.trim().toLowerCase()),
+  );
 
   return (
     <div aria-busy={cargando}>
@@ -205,7 +212,7 @@ export function BaseClientes() {
       </div>
 
       {/* Filtros */}
-      <div className="bg-white border border-slate-200 rounded-2xl p-4 mb-6 flex flex-col md:flex-row gap-3">
+      <div className="bg-white border border-slate-200 rounded-2xl p-4 mb-6 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
         <div className="relative flex-1">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
           <input
@@ -217,19 +224,28 @@ export function BaseClientes() {
           />
         </div>
 
-        <select
-          value={salonId}
-          onChange={(e) => setSalonId(e.target.value)}
-          aria-label="Filtrar por salón"
-          className="text-sm border border-slate-200 rounded-xl px-3 py-2 focus:outline-none focus:ring-2 focus:ring-pink-300"
-        >
-          <option value="">Todos los salones</option>
-          {estudios.map((e) => (
-            <option key={e.id} value={e.id}>
-              {e.name}
-            </option>
-          ))}
-        </select>
+        <div className="space-y-2">
+          <input
+            type="text"
+            value={busquedaSalon}
+            onChange={(e) => setBusquedaSalon(e.target.value)}
+            placeholder="Buscar salón para filtrar..."
+            className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-pink-300"
+          />
+          <select
+            value={salonId}
+            onChange={(e) => setSalonId(e.target.value)}
+            aria-label="Filtrar por salón"
+            className="w-full text-sm border border-slate-200 rounded-xl px-3 py-2 focus:outline-none focus:ring-2 focus:ring-pink-300"
+          >
+            <option value="">Todos los salones</option>
+            {estudiosFiltrados.slice(0, 40).map((e) => (
+              <option key={e.id} value={e.id}>
+                {e.name}
+              </option>
+            ))}
+          </select>
+        </div>
 
         <select
           value={pais}
@@ -244,6 +260,14 @@ export function BaseClientes() {
             </option>
           ))}
         </select>
+
+        <input
+          type="text"
+          value={servicioFrecuente}
+          onChange={(e) => setServicioFrecuente(e.target.value)}
+          placeholder="Filtrar por servicio frecuente..."
+          className="text-sm border border-slate-200 rounded-xl px-3 py-2 focus:outline-none focus:ring-2 focus:ring-pink-300"
+        />
       </div>
 
       {error && (
@@ -269,7 +293,16 @@ export function BaseClientes() {
             <table className="w-full text-sm">
               <thead className="bg-slate-50 border-b border-slate-200">
                 <tr>
-                  {['Nombre', 'Contacto', 'Correo', 'Salón', 'País'].map((col) => (
+                  {[
+                    'Nombre',
+                    'Contacto',
+                    'Correo',
+                    'Salón',
+                    'País',
+                    'Servicio frecuente',
+                    'Visitas',
+                    'Última visita',
+                  ].map((col) => (
                     <th
                       key={col}
                       className="text-left px-4 py-3 text-xs font-black text-slate-600 uppercase tracking-wide whitespace-nowrap"
@@ -294,6 +327,13 @@ export function BaseClientes() {
                       {c.nombreEstudio}
                     </td>
                     <td className="px-4 py-3 text-slate-600">{c.paisEstudio}</td>
+                    <td className="px-4 py-3 text-slate-600 whitespace-nowrap">
+                      {c.servicioMasFrecuente || '—'}
+                    </td>
+                    <td className="px-4 py-3 text-slate-600">{c.totalVisitas}</td>
+                    <td className="px-4 py-3 text-slate-600 whitespace-nowrap">
+                      {c.ultimaVisita ?? '—'}
+                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -317,34 +357,9 @@ export function BaseClientes() {
             >
               <ChevronLeft className="w-4 h-4" />
             </button>
-            {Array.from({ length: totalPaginas }, (_, i) => i + 1)
-              .filter((p) => p === 1 || p === totalPaginas || Math.abs(p - pagina) <= 1)
-              .reduce<(number | '...')[]>((acc, p, i, arr) => {
-                if (i > 0 && p - (arr[i - 1] ?? 0) > 1) acc.push('...');
-                acc.push(p);
-                return acc;
-              }, [])
-              .map((item, idx) =>
-                item === '...' ? (
-                  <span key={`dots-${idx}`} className="px-2 py-2 text-slate-400">
-                    …
-                  </span>
-                ) : (
-                  <button
-                    key={item}
-                    onClick={() => setPagina(item)}
-                    aria-label={`Página ${item}`}
-                    aria-current={pagina === item ? 'page' : undefined}
-                    className={`min-w-[36px] px-3 py-2 rounded-lg border text-xs font-black transition-all ${
-                      pagina === item
-                        ? 'bg-pink-600 text-white border-pink-600'
-                        : 'border-slate-200 hover:bg-slate-100'
-                    }`}
-                  >
-                    {item}
-                  </button>
-                ),
-              )}
+            <span className="px-3 py-2 text-xs font-black text-slate-500">
+              Página {pagina} de {totalPaginas}
+            </span>
             <button
               onClick={() => setPagina((p) => Math.min(totalPaginas, p + 1))}
               disabled={pagina === totalPaginas}

@@ -16,6 +16,7 @@ export type PasoReserva = 'especialista' | 'servicios' | 'fecha' | 'hora' | 'con
 
 interface EstadoFlujo {
   paso: PasoReserva;
+  sucursalSeleccionada: string;
   personalId: string;
   serviciosSeleccionados: Servicio[];
   fechaSeleccionada: Date;
@@ -30,6 +31,7 @@ export function usarFlujoReservaCliente(salon: SalonDetalle) {
   const queryClient = useQueryClient();
   const [estado, setEstado] = useState<EstadoFlujo>({
     paso: 'especialista',
+    sucursalSeleccionada: salon.sucursales?.length === 1 ? salon.sucursales[0]! : '',
     personalId: '',
     serviciosSeleccionados: [],
     fechaSeleccionada: new Date(),
@@ -70,7 +72,7 @@ export function usarFlujoReservaCliente(salon: SalonDetalle) {
           servicios: estado.serviciosSeleccionados,
           precioTotal,
           estado: 'pending',
-          sucursal: '',
+          sucursal: estado.sucursalSeleccionada,
         }),
       });
       return resultado.datos;
@@ -84,6 +86,10 @@ export function usarFlujoReservaCliente(salon: SalonDetalle) {
 
   const seleccionarPersonal = (id: string) => {
     setEstado((e) => ({ ...e, personalId: id, serviciosSeleccionados: [], paso: 'servicios' }));
+  };
+
+  const seleccionarSucursal = (sucursal: string) => {
+    setEstado((e) => ({ ...e, sucursalSeleccionada: sucursal }));
   };
 
   const alternarServicio = (servicio: Servicio) => {
@@ -157,6 +163,10 @@ export function usarFlujoReservaCliente(salon: SalonDetalle) {
       mostrarError('Selecciona un horario disponible antes de confirmar.');
       return;
     }
+    if ((salon.sucursales?.length ?? 0) > 1 && !estado.sucursalSeleccionada) {
+      mostrarError('Selecciona una sede antes de confirmar tu reserva.');
+      return;
+    }
 
     setEstado((e) => ({ ...e, enviando: true }));
     try {
@@ -174,6 +184,7 @@ export function usarFlujoReservaCliente(salon: SalonDetalle) {
     duracionTotal,
     precioTotal,
     seleccionarPersonal,
+    seleccionarSucursal,
     alternarServicio,
     irAFecha,
     seleccionarFecha,

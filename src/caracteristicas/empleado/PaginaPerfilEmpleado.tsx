@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
-import { Mail, Phone, Scissors, UserRound } from 'lucide-react';
+import { Mail, Phone, Scissors, ShieldCheck, UserRound } from 'lucide-react';
 import { NavegacionEmpleado } from '../../componentes/diseno/NavegacionEmpleado';
 import { obtenerMiPerfilEmpleado } from '../../servicios/servicioEmpleados';
 
@@ -120,6 +120,9 @@ export function PaginaPerfilEmpleado() {
                 <Mail className="h-4 w-4 text-slate-400" />
                 <span>{perfil.email}</span>
               </p>
+              <p>
+                <span className="font-black text-slate-900">Rol:</span> Especialista del salón
+              </p>
               <div>
                 <p className="mb-2 font-black text-slate-900">Especialidades</p>
                 <div className="flex flex-wrap gap-2">
@@ -178,12 +181,12 @@ export function PaginaPerfilEmpleado() {
               <div className="rounded-2xl bg-sky-100 p-3 text-sky-600">
                 <Phone className="h-5 w-5" />
               </div>
-              <h2 className="text-lg font-black text-slate-900">Salon Contact</h2>
+              <h2 className="text-lg font-black text-slate-900">Contacto del salón</h2>
             </div>
 
             <div className="space-y-3 text-sm text-slate-700">
               <p>
-                <span className="font-black text-slate-900">Salon:</span> {perfil.estudio.nombre}
+                <span className="font-black text-slate-900">Salón:</span> {perfil.estudio.nombre}
               </p>
               <p className="inline-flex items-center gap-2">
                 <Phone className="h-4 w-4 text-slate-400" aria-hidden="true" />
@@ -194,10 +197,37 @@ export function PaginaPerfilEmpleado() {
                   {perfil.estudio.telefono}
                 </a>
               </p>
+              {perfil.estudio.emailContacto && (
+                <p className="inline-flex items-center gap-2">
+                  <Mail className="h-4 w-4 text-slate-400" aria-hidden="true" />
+                  <a
+                    href={`mailto:${perfil.estudio.emailContacto}`}
+                    className="text-pink-600 transition hover:text-pink-700"
+                  >
+                    {perfil.estudio.emailContacto}
+                  </a>
+                </p>
+              )}
               {perfil.estudio.direccion && (
                 <p className="text-slate-500">{perfil.estudio.direccion}</p>
               )}
             </div>
+          </section>
+        )}
+
+        {perfil && (
+          <section className="rounded-4xl border border-slate-200 bg-white p-6 shadow-sm">
+            <div className="mb-5 flex items-center gap-3">
+              <div className="rounded-2xl bg-emerald-100 p-3 text-emerald-600">
+                <ShieldCheck className="h-5 w-5" />
+              </div>
+              <h2 className="text-lg font-black text-slate-900">Acceso y seguridad</h2>
+            </div>
+
+            <p className="text-sm text-slate-700">
+              Tu acceso está administrado por el salón. Desde este panel puedes consultar tu perfil,
+              pero no cambiar la contraseña directamente.
+            </p>
           </section>
         )}
       </main>

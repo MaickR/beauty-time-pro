@@ -133,7 +133,7 @@ export function NavegacionCliente() {
                   <User className="w-4 h-4 text-slate-400" aria-hidden="true" /> Mi perfil
                 </Link>
                 <Link
-                  to="/cliente/historial"
+                  to="/cliente/perfil?vista=reservas"
                   role="menuitem"
                   onClick={() => setMenuAbierto(false)}
                   className="flex items-center gap-3 px-4 py-3 text-sm text-slate-700 hover:bg-slate-50 font-medium transition-colors"
@@ -196,7 +196,7 @@ export function NavegacionCliente() {
             <span className="text-[10px] font-bold">Inicio</span>
           </Link>
           <Link
-            to="/cliente/historial"
+            to="/cliente/perfil?vista=reservas"
             className="flex-1 flex flex-col items-center gap-1 py-3 text-slate-400 hover:text-pink-600 transition-colors"
           >
             <Star className="w-5 h-5" aria-hidden="true" />

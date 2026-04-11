@@ -1,6 +1,5 @@
 import { useEffect, useRef } from 'react';
 import { Sparkles, CalendarDays, Users, CheckCircle2 } from 'lucide-react';
-import { peticion } from '../../../lib/clienteHTTP';
 import { usarToast } from '../../../componentes/ui/ProveedorToast';
 
 interface PropsModalBienvenidaSalon {
@@ -47,15 +46,7 @@ export function ModalBienvenidaSalon({
     };
   }, [estudioId, onCerrar]);
 
-  const handleEmpezar = async () => {
-    try {
-      await peticion(`/estudios/${estudioId}`, {
-        method: 'PUT',
-        body: JSON.stringify({ primeraVez: false }),
-      });
-    } catch {
-      // No bloqueamos al usuario si falla — es solo una marca de conveniencia
-    }
+  const handleEmpezar = () => {
     mostrarToast({
       mensaje: `¡Bienvenido a ${nombreSalon}! Todo listo para comenzar.`,
       variante: 'exito',
@@ -104,7 +95,7 @@ export function ModalBienvenidaSalon({
         {/* Acción */}
         <button
           ref={botonRef}
-          onClick={() => void handleEmpezar()}
+          onClick={handleEmpezar}
           className="w-full bg-pink-600 text-white py-4 rounded-2xl font-black text-base hover:bg-pink-700 transition-colors shadow-lg shadow-pink-200"
         >
           ¡Empezar ahora!

@@ -15,6 +15,7 @@ import { colorHexSchema, emailOpcionalONuloSchema, fechaIsoSchema, horaOpcionalO
 import { esClaveSalonSegura, sanitizarClaveSalon } from '../lib/clavesSalon.js';
 import { normalizarPlanEstudio, obtenerDefinicionPlan, validarCantidadServiciosPlan } from '../lib/planes.js';
 import { asegurarPrecioActualSalon, obtenerPrecioPlanActual, resolverPrecioRenovacion } from '../lib/preciosPlanes.js';
+import { obtenerNombresSucursales, obtenerSedesRelacionadas } from '../lib/sedes.js';
 import { obtenerFechaISOEnZona, obtenerZonaHorariaPorPais, normalizarZonaHorariaEstudio } from '../utils/zonasHorarias.js';
 import { generarSlugUnico } from '../utils/generarSlug.js';
 
@@ -57,6 +58,8 @@ const esquemaCamposEstudio = {
   sitioWeb: urlOpcionalSchema,
   pais: textoSchema('pais', 50).optional(),
   plan: z.enum(['STANDARD', 'PRO']).optional(),
+  estudioPrincipalId: z.string().trim().min(1, 'Debes seleccionar un salón principal').nullable().optional(),
+  permiteReservasPublicas: z.boolean().optional(),
   sucursales: z.array(textoSchema('sucursal', 80)).max(20, 'No puedes registrar más de 20 sucursales').optional(),
   horario: esquemaHorario.optional(),
   servicios: z.array(esquemaServicio).max(100, 'No puedes registrar más de 100 servicios').optional(),
@@ -80,6 +83,8 @@ const esquemaCrearEstudio = z.object({
   sitioWeb: urlOpcionalSchema,
   pais: textoSchema('pais', 50).optional(),
   plan: z.enum(['STANDARD', 'PRO']).optional(),
+  estudioPrincipalId: z.string().trim().min(1, 'Debes seleccionar un salón principal').nullable().optional(),
+  permiteReservasPublicas: z.boolean().optional(),
   sucursales: z.array(textoSchema('sucursal', 80)).max(20).optional(),
   claveDueno: claveSalonSchema('claveDueno'),
   claveCliente: claveSalonSchema('claveCliente'),
@@ -128,6 +133,39 @@ async function verificarAccesoDuenoAEstudio(usuarioId: string, estudioId: string
   return Boolean(estudio);
 }
 
+async function validarEstudioPrincipal(
+  estudioPrincipalId: string,
+  estudioActualId?: string,
+): Promise<string | null> {
+  const estudioPrincipal = await prisma.estudio.findUnique({
+    where: { id: estudioPrincipalId },
+    select: {
+      id: true,
+      activo: true,
+      estado: true,
+      estudioPrincipalId: true,
+    },
+  });
+
+  if (!estudioPrincipal) {
+    return 'El salón principal seleccionado no existe';
+  }
+
+  if (estudioActualId && estudioPrincipal.id === estudioActualId) {
+    return 'Un salón no puede ser sede de sí mismo';
+  }
+
+  if (estudioPrincipal.estudioPrincipalId) {
+    return 'Solo puedes asociar sedes a un salón principal';
+  }
+
+  if (!estudioPrincipal.activo || estudioPrincipal.estado !== 'aprobado') {
+    return 'El salón principal seleccionado no está disponible';
+  }
+
+  return null;
+}
+
 async function asegurarColumnaPinCancelacion(): Promise<boolean> {
   return asegurarColumnaTabla('estudios', 'pinCancelacionHash', 'VARCHAR(191) NULL');
 }
@@ -142,7 +180,7 @@ function esErrorCompatibilidadEstudio(error: unknown): boolean {
   return (
     codigo === 'P2022' ||
     /Unknown column/i.test(mensaje) ||
-    /(pinCancelacionHash|plan|primeraVez|cancelacionSolicitada|fechaSolicitudCancelacion|motivoCancelacion|precioPlanActualId|precioPlanProximoId|fechaAplicacionPrecioProximo)/i.test(
+    /(pinCancelacionHash|plan|primeraVez|cancelacionSolicitada|fechaSolicitudCancelacion|motivoCancelacion|precioPlanActualId|precioPlanProximoId|fechaAplicacionPrecioProximo|estudioPrincipalId|permiteReservasPublicas)/i.test(
       mensaje,
     )
   );
@@ -167,6 +205,7 @@ const seleccionarEstudioPanelModerno = {
   id: true,
   nombre: true,
   slug: true,
+  estudioPrincipalId: true,
   propietario: true,
   telefono: true,
   sitioWeb: true,
@@ -198,11 +237,43 @@ const seleccionarEstudioPanelModerno = {
   diasAtencion: true,
   categorias: true,
   primeraVez: true,
+  permiteReservasPublicas: true,
   cancelacionSolicitada: true,
   fechaSolicitudCancelacion: true,
   motivoCancelacion: true,
   creadoEn: true,
   actualizadoEn: true,
+  estudioPrincipal: {
+    select: {
+      id: true,
+      nombre: true,
+      slug: true,
+    },
+  },
+  sedes: {
+    orderBy: { creadoEn: 'asc' },
+    select: {
+      id: true,
+      nombre: true,
+      slug: true,
+      plan: true,
+      estado: true,
+      activo: true,
+      fechaVencimiento: true,
+      propietario: true,
+      telefono: true,
+      direccion: true,
+      emailContacto: true,
+      estudioPrincipalId: true,
+      permiteReservasPublicas: true,
+      precioPlanActual: {
+        select: {
+          monto: true,
+          moneda: true,
+        },
+      },
+    },
+  },
   precioPlanActual: {
     select: {
       id: true,
@@ -236,6 +307,7 @@ const seleccionarEstudioPanelCompat = {
   id: true,
   nombre: true,
   slug: true,
+  estudioPrincipalId: true,
   propietario: true,
   telefono: true,
   sitioWeb: true,
@@ -261,6 +333,7 @@ const seleccionarEstudioPanelCompat = {
   horarioCierre: true,
   diasAtencion: true,
   categorias: true,
+  permiteReservasPublicas: true,
   creadoEn: true,
   actualizadoEn: true,
   personal: {
@@ -274,6 +347,10 @@ function serializarEstudioPanel(estudio: Record<string, unknown>) {
   const { pinCancelacionHash, ...resto } = estudio;
   const precioActual = (estudio['precioPlanActual'] as Record<string, unknown> | null | undefined) ?? null;
   const precioProximo = (estudio['precioPlanProximo'] as Record<string, unknown> | null | undefined) ?? null;
+  const sucursalesLegacy = Array.isArray(estudio['sucursales']) ? (estudio['sucursales'] as string[]) : [];
+  const sedes = obtenerSedesRelacionadas(estudio, sucursalesLegacy);
+  const estudioPrincipal =
+    (estudio['estudioPrincipal'] as Record<string, unknown> | null | undefined) ?? null;
   const precioRenovacion = resolverPrecioRenovacion({
     fechaVencimiento: (estudio['fechaVencimiento'] as string) ?? '',
     fechaAplicacionPrecioProximo: (estudio['fechaAplicacionPrecioProximo'] as string | null | undefined) ?? null,
@@ -304,6 +381,19 @@ function serializarEstudioPanel(estudio: Record<string, unknown>) {
   return {
     ...resto,
     plan: (estudio['plan'] as string | undefined) ?? 'STANDARD',
+    estudioPrincipalId: (estudio['estudioPrincipalId'] as string | null | undefined) ?? null,
+    estudioPrincipal: estudioPrincipal
+      ? {
+          id: (estudioPrincipal['id'] as string) ?? '',
+          nombre: (estudioPrincipal['nombre'] as string) ?? '',
+          slug: (estudioPrincipal['slug'] as string | null | undefined) ?? null,
+        }
+      : null,
+    esSede: Boolean((estudio['estudioPrincipalId'] as string | null | undefined) ?? null),
+    permiteReservasPublicas:
+      (estudio['permiteReservasPublicas'] as boolean | undefined) ?? true,
+    sedes,
+    sucursales: obtenerNombresSucursales(estudio, sucursalesLegacy),
     primeraVez: (estudio['primeraVez'] as boolean | undefined) ?? true,
     cancelacionSolicitada: (estudio['cancelacionSolicitada'] as boolean | undefined) ?? false,
     fechaSolicitudCancelacion:
@@ -408,6 +498,12 @@ export async function rutasEstudios(servidor: FastifyInstance): Promise<void> {
       }
 
       const datos = resultado.data;
+      if (datos.estudioPrincipalId) {
+        const errorEstudioPrincipal = await validarEstudioPrincipal(datos.estudioPrincipalId);
+        if (errorEstudioPrincipal) {
+          return respuesta.code(400).send({ error: errorEstudioPrincipal });
+        }
+      }
       const categorias = resolverCategoriasSalon({
         categorias: datos.categorias,
         servicios: datos.servicios,
@@ -440,7 +536,9 @@ export async function rutasEstudios(servidor: FastifyInstance): Promise<void> {
           pais: paisNormalizado,
           zonaHoraria: obtenerZonaHorariaPorPais(paisNormalizado),
           plan: planNormalizado,
-          sucursales: datos.sucursales ?? [],
+          estudioPrincipalId: datos.estudioPrincipalId ?? null,
+          permiteReservasPublicas: datos.permiteReservasPublicas ?? true,
+          sucursales: datos.estudioPrincipalId ? [] : (datos.sucursales ?? []),
           claveDueno: datos.claveDueno.toUpperCase(),
           claveCliente: datos.claveCliente.toUpperCase(),
           suscripcion: datos.suscripcion ?? 'mensual',
@@ -495,6 +593,12 @@ export async function rutasEstudios(servidor: FastifyInstance): Promise<void> {
         }
 
         const datos = resultado.data;
+        if (datos.estudioPrincipalId) {
+          const errorEstudioPrincipal = await validarEstudioPrincipal(datos.estudioPrincipalId, id);
+          if (errorEstudioPrincipal) {
+            return respuesta.code(400).send({ error: errorEstudioPrincipal });
+          }
+        }
         const [columnasEstudios, tablasDisponibles] = await Promise.all([
           obtenerColumnasTabla('estudios'),
           obtenerTablasDisponibles(),
@@ -568,6 +672,8 @@ export async function rutasEstudios(servidor: FastifyInstance): Promise<void> {
           ...(datos.pais !== undefined && columnasEstudios.has('pais') && { pais: datos.pais }),
           ...(datos.pais !== undefined && columnasEstudios.has('zonaHoraria') && { zonaHoraria: obtenerZonaHorariaPorPais(datos.pais) }),
           ...(datos.plan !== undefined && columnasEstudios.has('plan') && { plan: normalizarPlanEstudio(datos.plan) }),
+          ...(datos.estudioPrincipalId !== undefined && columnasEstudios.has('estudioPrincipalId') && { estudioPrincipalId: datos.estudioPrincipalId }),
+          ...(datos.permiteReservasPublicas !== undefined && columnasEstudios.has('permiteReservasPublicas') && { permiteReservasPublicas: datos.permiteReservasPublicas }),
           ...(datos.sucursales !== undefined && columnasEstudios.has('sucursales') && { sucursales: datos.sucursales }),
           ...(datos.horario !== undefined && columnasEstudios.has('horario') && { horario: datos.horario }),
           ...(datos.servicios !== undefined && columnasEstudios.has('servicios') && { servicios: datos.servicios as Prisma.InputJsonValue }),

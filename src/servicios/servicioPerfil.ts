@@ -14,6 +14,16 @@ export interface PerfilEstudio {
   plan: PlanEstudio;
   colorPrimario: string;
   logoUrl: string | null;
+  estudioPrincipalId?: string | null;
+  estudioPrincipal?: { id: string; nombre: string } | null;
+  sedes?: Array<{
+    id: string;
+    nombre: string;
+    plan: PlanEstudio;
+    estado: string;
+    activo: boolean;
+    permiteReservasPublicas: boolean;
+  }>;
 }
 
 export async function obtenerPerfilEstudio(estudioId: string): Promise<PerfilEstudio> {

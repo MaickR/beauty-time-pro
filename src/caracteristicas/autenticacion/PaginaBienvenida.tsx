@@ -15,7 +15,7 @@ function obtenerPrecioPlan(
   );
 
   if (!precioMexico || !precioColombia) {
-    return 'Loading prices...';
+    return 'Cargando precios...';
   }
 
   return `${formatearDinero(precioMexico.monto, 'MXN')} / ${formatearDinero(precioColombia.monto, 'COP')}`;
@@ -107,7 +107,7 @@ export function PaginaBienvenida() {
           <h2 className="text-2xl font-black text-[var(--color-texto)]">Planes</h2>
           <div className="mt-6 grid grid-cols-1 gap-4 md:grid-cols-2">
             <article className="rounded-2xl border border-[var(--color-borde)] bg-[var(--color-superficie)] p-5">
-              <p className="text-xs font-black uppercase tracking-tight text-pink-700">Standard</p>
+              <p className="text-xs font-black uppercase tracking-tight text-pink-700">Estándar</p>
               <p className="mt-2 text-lg font-black text-[var(--color-texto)]">
                 {obtenerPrecioPlan(preciosPublicos, 'STANDARD')}
               </p>

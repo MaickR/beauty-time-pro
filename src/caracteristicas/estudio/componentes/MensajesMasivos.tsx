@@ -39,16 +39,16 @@ export function MensajesMasivos({ estudioId, plan }: PropsMensajesMasivos) {
     mutationFn: (datos: { titulo: string; texto: string }) => enviarMensajeMasivo(estudioId, datos),
     onSuccess: (resultado) => {
       void clienteConsulta.invalidateQueries({ queryKey: ['mensajes-masivos', estudioId] });
-      mostrarToast(`Message sent to ${resultado.destinatarios} clients`);
+      mostrarToast(`Mensaje enviado a ${resultado.destinatarios} clientes`);
       setMostrarFormulario(false);
       setTitulo('');
       setTexto('');
     },
     onError: (error: { codigo?: string; message?: string }) => {
       if (error.codigo === 'LIMITE_MENSAJES_ALCANZADO') {
-        mostrarToast('You have used all your bulk messages');
+        mostrarToast('Ya usaste todos tus mensajes masivos');
       } else {
-        mostrarToast('Could not send message');
+        mostrarToast('No se pudo enviar el mensaje');
       }
     },
   });
@@ -69,11 +69,11 @@ export function MensajesMasivos({ estudioId, plan }: PropsMensajesMasivos) {
 
   const enviar = () => {
     if (!titulo.trim() || !texto.trim()) {
-      mostrarToast('Title and message are required');
+      mostrarToast('El título y el mensaje son obligatorios');
       return;
     }
     if (texto.length > 200) {
-      mostrarToast('Message cannot exceed 200 characters');
+      mostrarToast('El mensaje no puede superar los 200 caracteres');
       return;
     }
     mutacion.mutate({ titulo: titulo.trim(), texto: texto.trim() });
@@ -85,21 +85,21 @@ export function MensajesMasivos({ estudioId, plan }: PropsMensajesMasivos) {
         <div>
           <h3 className="text-xl font-black uppercase tracking-tight flex items-center gap-2">
             <Mail className="w-5 h-5" />
-            Bulk Messages
+            Mensajes masivos
           </h3>
           <p className="text-sm text-slate-500 mt-2">
-            Send messages to all your clients with a registered email.
+            Envía campañas a los clientes de tu salón que tengan correo registrado.
           </p>
         </div>
         <span className="px-4 py-2 rounded-2xl bg-slate-100 border border-slate-200 text-slate-700 text-sm font-black">
-          {datosMsg.usados} / {datosMsg.limite} used this year
+          {datosMsg.usados} / {datosMsg.limite} usados este año
         </span>
       </div>
 
       {limiteAlcanzado ? (
         <div className="rounded-2xl bg-amber-50 border border-amber-200 p-6 space-y-4">
           <p className="text-sm font-bold text-amber-800">
-            You have used all your bulk messages. Contact support to purchase additional sends.
+            Ya agotaste tus mensajes masivos incluidos. Contacta soporte para adquirir envíos extra.
           </p>
           <a
             href={WHATSAPP_SOPORTE}
@@ -108,7 +108,7 @@ export function MensajesMasivos({ estudioId, plan }: PropsMensajesMasivos) {
             className="inline-flex items-center gap-2 px-6 py-3 rounded-2xl bg-green-600 hover:bg-green-700 text-white text-sm font-black uppercase tracking-widest transition-colors shadow-sm"
           >
             <MessageCircle className="w-4 h-4" />
-            Contact Support via WhatsApp
+            Contactar soporte por WhatsApp
           </a>
         </div>
       ) : (
@@ -119,7 +119,7 @@ export function MensajesMasivos({ estudioId, plan }: PropsMensajesMasivos) {
               onClick={() => setMostrarFormulario(true)}
               className="px-6 py-3 rounded-2xl bg-(--color-primario) hover:bg-(--color-primario-oscuro) text-white text-sm font-black uppercase tracking-widest transition-colors shadow-sm"
             >
-              New Bulk Message
+              Nuevo mensaje masivo
             </button>
           ) : (
             <div className="space-y-4 rounded-2xl border border-slate-200 p-6">
@@ -128,7 +128,7 @@ export function MensajesMasivos({ estudioId, plan }: PropsMensajesMasivos) {
                   htmlFor="tituloMensaje"
                   className="block text-sm font-bold text-slate-700 mb-2"
                 >
-                  Title
+                  Título
                 </label>
                 <input
                   id="tituloMensaje"
@@ -136,7 +136,7 @@ export function MensajesMasivos({ estudioId, plan }: PropsMensajesMasivos) {
                   value={titulo}
                   onChange={(e) => setTitulo(e.target.value)}
                   maxLength={100}
-                  placeholder="e.g., Special holiday promotion"
+                  placeholder="Ej: Promoción especial de fin de semana"
                   className="w-full border border-slate-200 rounded-2xl px-4 py-3"
                 />
               </div>
@@ -146,7 +146,7 @@ export function MensajesMasivos({ estudioId, plan }: PropsMensajesMasivos) {
                   htmlFor="textoMensaje"
                   className="block text-sm font-bold text-slate-700 mb-2"
                 >
-                  Message
+                  Mensaje
                   <span className="text-slate-400 font-normal ml-2">{texto.length}/200</span>
                 </label>
                 <textarea
@@ -155,7 +155,7 @@ export function MensajesMasivos({ estudioId, plan }: PropsMensajesMasivos) {
                   maxLength={200}
                   value={texto}
                   onChange={(e) => setTexto(e.target.value)}
-                  placeholder="Write the message for your clients..."
+                  placeholder="Escribe el mensaje para tus clientes..."
                   className="w-full border border-slate-200 rounded-2xl px-4 py-3 resize-none"
                 />
               </div>
@@ -168,7 +168,7 @@ export function MensajesMasivos({ estudioId, plan }: PropsMensajesMasivos) {
                   className="inline-flex items-center gap-2 px-6 py-3 rounded-2xl bg-(--color-primario) hover:bg-(--color-primario-oscuro) text-white text-sm font-black uppercase tracking-widest transition-colors shadow-sm disabled:opacity-60"
                 >
                   <Send className="w-4 h-4" />
-                  {mutacion.isPending ? 'Sending...' : 'Send Message'}
+                  {mutacion.isPending ? 'Enviando...' : 'Enviar mensaje'}
                 </button>
                 <button
                   type="button"
@@ -179,7 +179,7 @@ export function MensajesMasivos({ estudioId, plan }: PropsMensajesMasivos) {
                   }}
                   className="px-6 py-3 rounded-2xl border border-slate-200 text-slate-600 text-sm font-bold hover:bg-slate-50 transition-colors"
                 >
-                  Cancel
+                  Cancelar
                 </button>
               </div>
             </div>
@@ -191,7 +191,7 @@ export function MensajesMasivos({ estudioId, plan }: PropsMensajesMasivos) {
       {datosMsg.mensajes.length > 0 && (
         <div className="space-y-3">
           <h4 className="text-sm font-black uppercase tracking-wider text-slate-500">
-            Sent Messages
+            Mensajes enviados
           </h4>
           <div className="space-y-2">
             {datosMsg.mensajes.map((msg) => (

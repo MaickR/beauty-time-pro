@@ -8,6 +8,13 @@ interface PropsSelectorCalendario {
   fechaSeleccionada: Date;
   totalDuracion: number;
   onCambiarFecha: (d: Date) => void;
+  permitirPasado?: boolean;
+  mostrarDuracion?: boolean;
+  titulo?: string;
+  indicadorPaso?: string;
+  etiquetaDuracion?: string;
+  fechasMarcadas?: string[];
+  etiquetaMarcador?: string;
 }
 
 function formatearDuracion(minutos: number): string {
@@ -17,11 +24,41 @@ function formatearDuracion(minutos: number): string {
   return m > 0 ? `${h}h ${m}min` : `${h}h`;
 }
 
+function diaTieneHorarioModificado(estudio: Estudio, fecha: Date): boolean {
+  const claveDia = DIAS_SEMANA[fecha.getDay()];
+  const horarioDia = estudio.schedule?.[claveDia];
+  if (!horarioDia?.isOpen) return false;
+
+  return (estudio.staff ?? []).some((especialista) => {
+    if (!especialista.active) return false;
+    if (especialista.workingDays && !especialista.workingDays.includes(fecha.getDay())) {
+      return true;
+    }
+
+    const inicioEspecialista = especialista.shiftStart ?? horarioDia.openTime;
+    const finEspecialista = especialista.shiftEnd ?? horarioDia.closeTime;
+    const tieneDescanso = Boolean(especialista.breakStart && especialista.breakEnd);
+
+    return (
+      inicioEspecialista !== horarioDia.openTime ||
+      finEspecialista !== horarioDia.closeTime ||
+      tieneDescanso
+    );
+  });
+}
+
 export function SelectorCalendario({
   estudio,
   fechaSeleccionada,
   totalDuracion,
   onCambiarFecha,
+  permitirPasado = false,
+  mostrarDuracion = true,
+  titulo = 'Dia y especialista',
+  indicadorPaso = '2',
+  etiquetaDuracion = 'Duracion estimada',
+  fechasMarcadas = [],
+  etiquetaMarcador = 'Citas',
 }: PropsSelectorCalendario) {
   const cambiarMes = (offset: number) => {
     const siguiente = new Date(
@@ -49,30 +86,44 @@ export function SelectorCalendario({
   const fechaSelStr = obtenerFechaLocalISO(fechaSeleccionada);
   const hoy = new Date();
   hoy.setHours(0, 0, 0, 0);
+  const fechasMarcadasSet = new Set(fechasMarcadas);
 
   return (
     <div className="bg-white rounded-[3rem] border border-slate-200 shadow-lg overflow-hidden">
       <div className="bg-slate-50 p-8 md:p-10 border-b border-slate-100 text-center">
         <h3 className="text-xl md:text-2xl font-black italic uppercase tracking-tighter text-slate-800 flex items-center justify-center gap-3">
           <span className="bg-pink-100 text-pink-600 w-8 h-8 rounded-full flex items-center justify-center text-sm">
-            2
+            {indicadorPaso}
           </span>
-          Día y Especialista
+          {titulo}
         </h3>
-        <p className="text-[10px] font-black text-slate-500 uppercase mt-4 tracking-widest bg-white inline-block px-4 py-2 rounded-xl shadow-sm border border-slate-200">
-          Duración estimada:{' '}
-          <span className="text-pink-600 text-sm">{formatearDuracion(totalDuracion)}</span>
-        </p>
+        {mostrarDuracion && (
+          <p className="text-[10px] font-black text-slate-500 uppercase mt-4 tracking-widest bg-white inline-block px-4 py-2 rounded-xl shadow-sm border border-slate-200">
+            {etiquetaDuracion}:{' '}
+            <span className="text-pink-600 text-sm">{formatearDuracion(totalDuracion)}</span>
+          </p>
+        )}
       </div>
 
       <div className="p-6 md:p-10">
         {/* Leyenda */}
         <div className="flex items-center gap-4 text-[10px] font-black uppercase tracking-widest mb-6 justify-center">
+          {fechasMarcadas.length > 0 && (
+            <span className="flex items-center gap-1.5">
+              <span className="w-3 h-3 rounded-full bg-pink-500 inline-block" /> {etiquetaMarcador}
+            </span>
+          )}
           <span className="flex items-center gap-1.5">
             <span className="w-3 h-3 rounded-full bg-pink-500 inline-block" /> Con disponibilidad
           </span>
           <span className="flex items-center gap-1.5">
             <span className="w-3 h-3 rounded-full bg-slate-300 inline-block" /> Sin disponibilidad
+          </span>
+          <span className="flex items-center gap-1.5">
+            <span className="w-3 h-3 rounded-full bg-red-500 inline-block" /> Cierre
+          </span>
+          <span className="flex items-center gap-1.5">
+            <span className="w-3 h-3 rounded-full bg-blue-500 inline-block" /> Horario modificado
           </span>
         </div>
 
@@ -115,9 +166,13 @@ export function SelectorCalendario({
             const dateStr = obtenerFechaLocalISO(dateObj);
             const seleccionado = dateStr === fechaSelStr;
             const esFestivo = estudio.holidays?.includes(dateStr);
-            const estaAbierto = !!estudio.schedule[DIAS_SEMANA[dateObj.getDay()]]?.isOpen;
+            const turnoDia = estudio.schedule[DIAS_SEMANA[dateObj.getDay()]];
+            const estaAbierto = !!turnoDia?.isOpen;
             const esPasado = dateObj < hoy;
-            const deshabilitado = esFestivo || !estaAbierto || esPasado;
+            const esCierre = Boolean(esFestivo || !estaAbierto);
+            const horarioModificado = !esCierre && diaTieneHorarioModificado(estudio, dateObj);
+            const deshabilitado = esFestivo || !estaAbierto || (!permitirPasado && esPasado);
+            const tieneMarcador = fechasMarcadasSet.has(dateStr);
             return (
               <div key={i} className="flex items-center justify-center">
                 <button
@@ -130,10 +185,21 @@ export function SelectorCalendario({
                       ? 'opacity-40 cursor-not-allowed bg-slate-100 border-slate-200 text-slate-400'
                       : seleccionado
                         ? 'bg-slate-900 border-slate-900 text-white shadow-xl scale-110 z-10'
-                        : 'bg-pink-50 border-pink-200 text-pink-700 hover:border-pink-400 hover:bg-pink-100'
+                        : esPasado
+                          ? 'bg-white border-slate-200 text-slate-500 hover:border-pink-300 hover:bg-pink-50'
+                          : 'bg-pink-50 border-pink-200 text-pink-700 hover:border-pink-400 hover:bg-pink-100'
                   }`}
                 >
-                  {dia}
+                  <span>{dia}</span>
+                  {!seleccionado && (tieneMarcador || esCierre || horarioModificado) && (
+                    <span className="mt-1 flex items-center gap-1">
+                      {tieneMarcador && <span className="h-1.5 w-1.5 rounded-full bg-pink-500" />}
+                      {esCierre && <span className="h-1.5 w-1.5 rounded-full bg-red-500" />}
+                      {horarioModificado && (
+                        <span className="h-1.5 w-1.5 rounded-full bg-blue-500" />
+                      )}
+                    </span>
+                  )}
                 </button>
               </div>
             );

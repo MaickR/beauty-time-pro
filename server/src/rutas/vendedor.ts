@@ -3,6 +3,8 @@ import { z } from 'zod';
 import { prisma } from '../prismaCliente.js';
 import { verificarJWT } from '../middleware/autenticacion.js';
 import { obtenerMensajeValidacion, textoSchema, telefonoSchema } from '../lib/validacion.js';
+import { obtenerSalonDemoVendedor, reiniciarSalonDemoVendedor } from '../lib/demoVendedor.js';
+import { registrarAuditoria } from '../utils/auditoria.js';
 
 // ─── Helpers ─────────────────────────────────────────────────────────────
 function soloVendedor(payload: { rol: string }): boolean {
@@ -25,10 +27,77 @@ const esquemaPreregistro = z.object({
 
 // ─── Plugin de rutas ─────────────────────────────────────────────────────
 export async function rutasVendedor(servidor: FastifyInstance) {
+  servidor.get('/vendedor/demo', { preHandler: verificarJWT }, async (solicitud, respuesta) => {
+    const payload = solicitud.user as { sub: string; rol: string };
+    if (!soloVendedor(payload)) {
+      return respuesta.code(403).send({ error: 'Sin permisos para esta accion' });
+    }
+
+    const salonDemo = await obtenerSalonDemoVendedor(payload.sub);
+    if (!salonDemo) {
+      return respuesta.code(404).send({ error: 'Salon demo no disponible' });
+    }
+
+    return respuesta.send({
+      datos: {
+        id: salonDemo.id,
+        slug: salonDemo.slug,
+        nombre: salonDemo.nombre,
+        plan: salonDemo.plan,
+        estado: salonDemo.estado,
+        activo: salonDemo.activo,
+        fechaVencimiento: salonDemo.fechaVencimiento,
+        actualizadoEn: salonDemo.actualizadoEn.toISOString(),
+        totales: {
+          reservas: salonDemo._count.reservas,
+          pagos: salonDemo._count.pagos,
+          clientes: salonDemo._count.clientes,
+          personal: salonDemo._count.personal,
+          productos: salonDemo._count.productos,
+        },
+      },
+    });
+  });
+
+  servidor.post('/vendedor/demo/reset', { preHandler: verificarJWT }, async (solicitud, respuesta) => {
+    const payload = solicitud.user as { sub: string; rol: string };
+    if (!soloVendedor(payload)) {
+      return respuesta.code(403).send({ error: 'Sin permisos para esta accion' });
+    }
+
+    const salonDemo = await reiniciarSalonDemoVendedor(payload.sub);
+    if (!salonDemo) {
+      return respuesta.code(404).send({ error: 'Salon demo no disponible' });
+    }
+
+    await registrarAuditoria({
+      usuarioId: payload.sub,
+      accion: 'reset_demo_vendedor',
+      entidadTipo: 'Estudio',
+      entidadId: salonDemo.id,
+      detalles: { origen: 'panel_vendedor' },
+    });
+
+    return respuesta.send({
+      datos: {
+        mensaje: 'El salon demo fue reiniciado correctamente.',
+        id: salonDemo.id,
+        slug: salonDemo.slug,
+      },
+    });
+  });
+
   /**
    * GET /vendedor/mis-preregistros — Lista los preregistros creados por el vendedor
    */
-  servidor.get(
+  servidor.get<{
+    Querystring: {
+      busqueda?: string;
+      estado?: 'pendiente' | 'aprobado' | 'rechazado';
+      pagina?: string;
+      limite?: string;
+    };
+  }>(
     '/vendedor/mis-preregistros',
     { preHandler: verificarJWT },
     async (solicitud, respuesta) => {
@@ -37,28 +106,51 @@ export async function rutasVendedor(servidor: FastifyInstance) {
         return respuesta.code(403).send({ error: 'Sin permisos para esta acción' });
       }
 
-      const preregistros = await prisma.preregistroSalon.findMany({
-        where: { vendedorId: payload.sub },
-        orderBy: { creadoEn: 'desc' },
-        select: {
-          id: true,
-          nombreSalon: true,
-          propietario: true,
-          emailPropietario: true,
-          telefonoPropietario: true,
-          pais: true,
-          direccion: true,
-          categorias: true,
-          plan: true,
-          estado: true,
-          motivoRechazo: true,
-          estudioCreadoId: true,
-          notas: true,
-          creadoEn: true,
-        },
-      });
+      const pagina = Math.max(1, Number(solicitud.query.pagina ?? '1') || 1);
+      const limite = Math.min(50, Math.max(1, Number(solicitud.query.limite ?? '10') || 10));
+      const busqueda = solicitud.query.busqueda?.trim();
+      const estado = solicitud.query.estado?.trim();
 
-      return respuesta.send({ datos: preregistros });
+      const where = {
+        vendedorId: payload.sub,
+        ...(estado ? { estado } : {}),
+        ...(busqueda
+          ? {
+              OR: [
+                { nombreSalon: { contains: busqueda } },
+                { propietario: { contains: busqueda } },
+              ],
+            }
+          : {}),
+      };
+
+      const [preregistros, total] = await Promise.all([
+        prisma.preregistroSalon.findMany({
+          where,
+          orderBy: { creadoEn: 'desc' },
+          skip: (pagina - 1) * limite,
+          take: limite,
+          select: {
+            id: true,
+            nombreSalon: true,
+            propietario: true,
+            emailPropietario: true,
+            telefonoPropietario: true,
+            pais: true,
+            direccion: true,
+            categorias: true,
+            plan: true,
+            estado: true,
+            motivoRechazo: true,
+            estudioCreadoId: true,
+            notas: true,
+            creadoEn: true,
+          },
+        }),
+        prisma.preregistroSalon.count({ where }),
+      ]);
+
+      return respuesta.send({ datos: preregistros, total, pagina, limite });
     },
   );
 
@@ -103,7 +195,7 @@ export async function rutasVendedor(servidor: FastifyInstance) {
       });
       if (existente) {
         return respuesta.code(409).send({
-          error: 'There is already a pending pre-registration with this email.',
+          error: 'Ya existe un preregistro pendiente con este correo.',
         });
       }
 
@@ -215,4 +307,62 @@ export async function rutasVendedor(servidor: FastifyInstance) {
       });
     },
   );
+
+  servidor.get<{
+    Querystring: { fechaDesde?: string; fechaHasta?: string };
+  }>('/vendedor/ventas', { preHandler: verificarJWT }, async (solicitud, respuesta) => {
+    const payload = solicitud.user as { sub: string; rol: string };
+    if (!soloVendedor(payload)) {
+      return respuesta.code(403).send({ error: 'Sin permisos para esta acción' });
+    }
+
+    const fechaDesde = solicitud.query.fechaDesde?.trim();
+    const fechaHasta = solicitud.query.fechaHasta?.trim();
+
+    const ventas = await prisma.pago.findMany({
+      where: {
+        estudio: { vendedorId: payload.sub },
+        ...(fechaDesde || fechaHasta
+          ? {
+              fecha: {
+                ...(fechaDesde ? { gte: fechaDesde } : {}),
+                ...(fechaHasta ? { lte: fechaHasta } : {}),
+              },
+            }
+          : {}),
+      },
+      orderBy: [{ fecha: 'desc' }, { creadoEn: 'desc' }],
+      select: {
+        id: true,
+        monto: true,
+        moneda: true,
+        concepto: true,
+        fecha: true,
+        referencia: true,
+        estudio: {
+          select: {
+            id: true,
+            nombre: true,
+            plan: true,
+            pais: true,
+          },
+        },
+      },
+    });
+
+    return respuesta.send({
+      datos: ventas.map((venta) => ({
+        id: venta.id,
+        fecha: venta.fecha,
+        monto: venta.monto,
+        moneda: venta.moneda,
+        concepto: venta.concepto,
+        referencia: venta.referencia,
+        salonId: venta.estudio.id,
+        salonNombre: venta.estudio.nombre,
+        plan: venta.estudio.plan,
+        pais: venta.estudio.pais,
+      })),
+    });
+  });
 }

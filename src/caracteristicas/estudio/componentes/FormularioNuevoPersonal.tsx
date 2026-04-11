@@ -210,7 +210,7 @@ export function FormularioNuevoPersonal({
         </div>
 
         <div className="md:col-span-2">
-          <p className="mb-2 text-sm font-semibold text-slate-700">Services performed</p>
+          <p className="mb-2 text-sm font-semibold text-slate-700">Servicios que realiza</p>
           <div className="flex flex-wrap gap-2">
             {serviciosDisponibles.map((servicio) => {
               const activo = especialidades.includes(servicio.name);
@@ -237,7 +237,7 @@ export function FormularioNuevoPersonal({
             onClick={() => void alCrearExitoso()}
             className="rounded-2xl bg-slate-100 px-5 py-3 text-sm font-semibold text-slate-700 hover:bg-slate-200"
           >
-            Cancel
+            Cancelar
           </button>
         )}
         <button
@@ -247,7 +247,7 @@ export function FormularioNuevoPersonal({
           className="inline-flex items-center justify-center gap-2 rounded-2xl bg-slate-900 px-5 py-3 text-sm font-black text-white transition hover:bg-black disabled:opacity-60"
         >
           <PlusCircle className="h-4 w-4" />
-          {mutacionCrearPersonal.isPending ? 'Saving...' : 'Add Specialist'}
+          {mutacionCrearPersonal.isPending ? 'Guardando...' : 'Agregar especialista'}
         </button>
       </div>
     </div>

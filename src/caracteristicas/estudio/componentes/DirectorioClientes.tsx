@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   Search,
@@ -11,14 +11,16 @@ import {
   ChevronRight,
   ChevronDown,
   Save,
+  FileSpreadsheet,
 } from 'lucide-react';
+import * as XLSX from 'xlsx';
 import { Spinner } from '../../../componentes/ui/Spinner';
 import { formatearDinero } from '../../../utils/formato';
 import {
   obtenerClientesEstudio,
+  exportarClientesEstudio,
   obtenerDetalleCliente,
   actualizarNotasCliente,
-  type ClienteResumen,
   type ClienteDetalle,
 } from '../../../servicios/servicioClientes';
 
@@ -49,10 +51,21 @@ interface PropsPanelCliente {
   onCerrar: () => void;
 }
 
+const HISTORIAL_POR_PAGINA = 3;
+
+function descargarArchivoExcel(filas: Array<Record<string, string | number>>) {
+  const hoja = XLSX.utils.json_to_sheet(filas);
+  const libro = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(libro, hoja, 'Clientes');
+  const sello = new Date().toISOString().slice(0, 10);
+  XLSX.writeFile(libro, `directorio-clientes-${sello}.xlsx`);
+}
+
 function PanelDetalleCliente({ clienteId, onCerrar }: PropsPanelCliente) {
   const queryClient = useQueryClient();
   const [notas, setNotas] = useState('');
   const [notasGuardadas, setNotasGuardadas] = useState(false);
+  const [paginaHistorial, setPaginaHistorial] = useState(1);
 
   const { data: cliente, isLoading } = useQuery<ClienteDetalle>({
     queryKey: ['cliente-detalle', clienteId],
@@ -62,6 +75,10 @@ function PanelDetalleCliente({ clienteId, onCerrar }: PropsPanelCliente) {
   useEffect(() => {
     if (cliente) setNotas(cliente.notas ?? '');
   }, [cliente]);
+
+  useEffect(() => {
+    setPaginaHistorial(1);
+  }, [clienteId]);
 
   const mutacionNotas = useMutation({
     mutationFn: (texto: string) => actualizarNotasCliente(clienteId, texto),
@@ -88,6 +105,12 @@ function PanelDetalleCliente({ clienteId, onCerrar }: PropsPanelCliente) {
   if (!cliente) return null;
 
   const esmenor = cliente.edad < 18;
+  const totalPaginasHistorial = Math.max(
+    1,
+    Math.ceil(cliente.reservas.length / HISTORIAL_POR_PAGINA),
+  );
+  const inicio = (paginaHistorial - 1) * HISTORIAL_POR_PAGINA;
+  const historialPagina = cliente.reservas.slice(inicio, inicio + HISTORIAL_POR_PAGINA);
 
   return (
     <div className="flex flex-col h-full">
@@ -153,40 +176,67 @@ function PanelDetalleCliente({ clienteId, onCerrar }: PropsPanelCliente) {
             Sin visitas registradas aún
           </p>
         ) : (
-          <ul className="space-y-3 overflow-y-auto max-h-80">
-            {cliente.reservas.map((r) => (
-              <li key={r.id} className="bg-slate-50 rounded-2xl p-4 border border-slate-100">
-                <div className="flex justify-between items-start">
-                  <div>
-                    <p className="font-black text-sm">
-                      {formatearFecha(r.fecha)} — {r.horaInicio}
-                    </p>
-                    <p className="text-xs text-slate-400 mt-0.5">{r.sucursal}</p>
-                  </div>
-                  <div className="text-right">
-                    <span
-                      className={`text-[10px] font-black uppercase px-2 py-0.5 rounded-full ${
-                        r.estado === 'completed'
-                          ? 'bg-green-100 text-green-700'
+          <>
+            <ul className="space-y-3 overflow-y-auto max-h-80">
+              {historialPagina.map((r) => (
+                <li key={r.id} className="bg-slate-50 rounded-2xl p-4 border border-slate-100">
+                  <div className="flex justify-between items-start">
+                    <div>
+                      <p className="font-black text-sm">
+                        {formatearFecha(r.fecha)} — {r.horaInicio}
+                      </p>
+                      <p className="text-xs text-slate-400 mt-0.5">{r.sucursal}</p>
+                    </div>
+                    <div className="text-right">
+                      <span
+                        className={`text-[10px] font-black uppercase px-2 py-0.5 rounded-full ${
+                          r.estado === 'completed'
+                            ? 'bg-green-100 text-green-700'
+                            : r.estado === 'cancelled'
+                              ? 'bg-red-100 text-red-700'
+                              : 'bg-yellow-100 text-yellow-700'
+                        }`}
+                      >
+                        {r.estado === 'completed'
+                          ? 'Completada'
                           : r.estado === 'cancelled'
-                            ? 'bg-red-100 text-red-700'
-                            : 'bg-yellow-100 text-yellow-700'
-                      }`}
-                    >
-                      {r.estado === 'completed'
-                        ? 'Completada'
-                        : r.estado === 'cancelled'
-                          ? 'Cancelada'
-                          : 'Pendiente'}
-                    </span>
-                    <p className="text-xs font-black text-slate-700 mt-1">
-                      {formatearDinero(r.precioTotal)}
-                    </p>
+                            ? 'Cancelada'
+                            : 'Pendiente'}
+                      </span>
+                      <p className="text-xs font-black text-slate-700 mt-1">
+                        {formatearDinero(r.precioTotal)}
+                      </p>
+                    </div>
                   </div>
-                </div>
-              </li>
-            ))}
-          </ul>
+                </li>
+              ))}
+            </ul>
+            {totalPaginasHistorial > 1 && (
+              <div className="mt-4 flex items-center justify-between rounded-2xl border border-slate-200 bg-white px-3 py-2">
+                <button
+                  type="button"
+                  disabled={paginaHistorial === 1}
+                  onClick={() => setPaginaHistorial((pagina) => Math.max(1, pagina - 1))}
+                  className="rounded-lg bg-slate-100 px-3 py-1 text-xs font-black text-slate-600 disabled:opacity-40"
+                >
+                  Anterior
+                </button>
+                <span className="text-[10px] font-black uppercase tracking-wide text-slate-500">
+                  Página {paginaHistorial} de {totalPaginasHistorial}
+                </span>
+                <button
+                  type="button"
+                  disabled={paginaHistorial === totalPaginasHistorial}
+                  onClick={() =>
+                    setPaginaHistorial((pagina) => Math.min(totalPaginasHistorial, pagina + 1))
+                  }
+                  className="rounded-lg bg-slate-100 px-3 py-1 text-xs font-black text-slate-600 disabled:opacity-40"
+                >
+                  Siguiente
+                </button>
+              </div>
+            )}
+          </>
         )}
       </div>
     </div>
@@ -194,17 +244,58 @@ function PanelDetalleCliente({ clienteId, onCerrar }: PropsPanelCliente) {
 }
 
 export function DirectorioClientes({ estudioId }: PropsDirectorioClientes) {
+  const LIMITE_CLIENTES = 10;
   const [busqueda, setBusqueda] = useState('');
   const busquedaDebounced = usarDebounce(busqueda, 300);
+  const [pagina, setPagina] = useState(1);
   const [clienteSeleccionado, setClienteSeleccionado] = useState<string | null>(null);
   const [filaExpandida, setFilaExpandida] = useState<string | null>(null);
+  const [exportando, setExportando] = useState(false);
 
-  const { data, isLoading } = useQuery<ClienteResumen[]>({
-    queryKey: ['clientes-estudio', estudioId, busquedaDebounced],
-    queryFn: () => obtenerClientesEstudio(estudioId, busquedaDebounced || undefined),
+  useEffect(() => {
+    setPagina(1);
+  }, [busquedaDebounced]);
+
+  const { data, isLoading } = useQuery({
+    queryKey: ['clientes-estudio', estudioId, busquedaDebounced, pagina],
+    queryFn: () =>
+      obtenerClientesEstudio(estudioId, {
+        buscar: busquedaDebounced || undefined,
+        pagina,
+        limite: LIMITE_CLIENTES,
+      }),
   });
 
-  const clientes = data ?? [];
+  const clientes = data?.datos ?? [];
+  const total = data?.total ?? 0;
+  const totalPaginas = data?.totalPaginas ?? 1;
+
+  const rangoTexto = useMemo(() => {
+    if (!total) return '0 resultados';
+    const inicio = (pagina - 1) * LIMITE_CLIENTES + 1;
+    const fin = Math.min(pagina * LIMITE_CLIENTES, total);
+    return `${inicio}-${fin} de ${total}`;
+  }, [pagina, total]);
+
+  const exportarExcel = async () => {
+    setExportando(true);
+    try {
+      const clientesExportar = await exportarClientesEstudio(
+        estudioId,
+        busquedaDebounced || undefined,
+      );
+      const filas = clientesExportar.map((cliente) => ({
+        Nombre: cliente.nombre,
+        Contacto: cliente.telefono,
+        Correo: cliente.email ?? '',
+        Visitas: cliente.totalReservas,
+        'Última visita': cliente.ultimaVisita ?? '',
+      }));
+      descargarArchivoExcel(filas);
+    } finally {
+      setExportando(false);
+    }
+  };
 
   const alternarFila = (id: string) => {
     setFilaExpandida((prev) => (prev === id ? null : id));
@@ -243,6 +334,19 @@ export function DirectorioClientes({ estudioId }: PropsDirectorioClientes) {
           )}
         </div>
 
+        <div className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-slate-200 bg-white px-4 py-3">
+          <p className="text-xs font-bold text-slate-500">Mostrando {rangoTexto}</p>
+          <button
+            type="button"
+            onClick={() => void exportarExcel()}
+            disabled={exportando || clientes.length === 0}
+            className="inline-flex items-center gap-2 rounded-xl bg-emerald-600 px-3 py-2 text-xs font-black uppercase tracking-wide text-white transition hover:bg-emerald-700 disabled:opacity-50"
+          >
+            <FileSpreadsheet className="h-3.5 w-3.5" />
+            {exportando ? 'Exportando...' : 'Exportar Excel'}
+          </button>
+        </div>
+
         {isLoading ? (
           <div className="flex justify-center py-20" aria-busy="true">
             <Spinner tamaño="lg" />
@@ -267,27 +371,15 @@ export function DirectorioClientes({ estudioId }: PropsDirectorioClientes) {
                   </th>
                   <th
                     scope="col"
+                    className="text-left px-4 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest"
+                  >
+                    Contacto
+                  </th>
+                  <th
+                    scope="col"
                     className="text-left px-4 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest hidden sm:table-cell"
                   >
-                    Teléfono
-                  </th>
-                  <th
-                    scope="col"
-                    className="text-left px-4 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest hidden md:table-cell"
-                  >
-                    Edad
-                  </th>
-                  <th
-                    scope="col"
-                    className="text-left px-4 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest hidden lg:table-cell"
-                  >
-                    Visitas
-                  </th>
-                  <th
-                    scope="col"
-                    className="text-left px-4 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest hidden lg:table-cell"
-                  >
-                    Última visita
+                    Correo
                   </th>
                   <th scope="col" className="px-4 py-4">
                     <span className="sr-only">Acciones</span>
@@ -349,25 +441,17 @@ export function DirectorioClientes({ estudioId }: PropsDirectorioClientes) {
                       </td>
                       {!expandida && (
                         <>
-                          <td className="px-4 py-4 hidden sm:table-cell">
+                          <td className="px-4 py-4">
                             <span className="flex items-center gap-1 text-slate-600 font-medium">
                               <Phone className="w-3 h-3 text-slate-400" aria-hidden="true" />{' '}
                               {c.telefono}
                             </span>
-                            {c.email && (
-                              <span className="flex items-center gap-1 text-xs text-slate-400 mt-0.5">
-                                <Mail className="w-3 h-3" aria-hidden="true" /> {c.email}
-                              </span>
-                            )}
                           </td>
-                          <td className="px-4 py-4 hidden md:table-cell text-slate-600 font-medium">
-                            {calcularEdadTexto(c.edad)}
-                          </td>
-                          <td className="px-4 py-4 hidden lg:table-cell text-slate-600 font-bold">
-                            {c.totalReservas}
-                          </td>
-                          <td className="px-4 py-4 hidden lg:table-cell text-slate-400 text-xs font-medium">
-                            {c.ultimaVisita ? formatearFecha(c.ultimaVisita) : '—'}
+                          <td className="px-4 py-4 hidden sm:table-cell">
+                            <span className="flex items-center gap-1 text-xs text-slate-500 mt-0.5">
+                              <Mail className="w-3 h-3" aria-hidden="true" />{' '}
+                              {c.email ?? 'Sin correo'}
+                            </span>
                           </td>
                           <td className="px-4 py-4 text-right">
                             <ChevronDown
@@ -386,6 +470,30 @@ export function DirectorioClientes({ estudioId }: PropsDirectorioClientes) {
                 })}
               </tbody>
             </table>
+          </div>
+        )}
+
+        {totalPaginas > 1 && (
+          <div className="mt-4 flex items-center justify-end gap-2">
+            <button
+              type="button"
+              onClick={() => setPagina((actual) => Math.max(1, actual - 1))}
+              disabled={pagina === 1}
+              className="rounded-xl bg-slate-100 px-3 py-2 text-xs font-black text-slate-600 disabled:opacity-40"
+            >
+              Anterior
+            </button>
+            <span className="px-2 text-xs font-black text-slate-500">
+              {pagina} / {totalPaginas}
+            </span>
+            <button
+              type="button"
+              onClick={() => setPagina((actual) => Math.min(totalPaginas, actual + 1))}
+              disabled={pagina === totalPaginas}
+              className="rounded-xl bg-slate-100 px-3 py-2 text-xs font-black text-slate-600 disabled:opacity-40"
+            >
+              Siguiente
+            </button>
           </div>
         )}
       </div>

@@ -117,26 +117,44 @@ void (async () => {
     return payload;
   });
 
-  servidor.setErrorHandler((error: FastifyError, _solicitud, respuesta) => {
-    if (error.statusCode === 429) {
+  servidor.setErrorHandler((error: FastifyError | unknown, _solicitud, respuesta) => {
+    const errorConPropiedades =
+      typeof error === 'object' && error !== null ? (error as Record<string, unknown>) : null;
+    const codigoEstado =
+      errorConPropiedades && typeof errorConPropiedades.statusCode === 'number'
+        ? errorConPropiedades.statusCode
+        : undefined;
+    const codigoError =
+      errorConPropiedades && typeof errorConPropiedades.code === 'string'
+        ? errorConPropiedades.code
+        : undefined;
+    const mensajeError =
+      typeof error === 'string'
+        ? error
+        : errorConPropiedades && typeof errorConPropiedades.message === 'string'
+          ? errorConPropiedades.message
+          : errorConPropiedades && typeof errorConPropiedades.error === 'string'
+            ? errorConPropiedades.error
+            : '';
+
+    if (codigoEstado === 429 || codigoError === 'FST_ERR_RATE_LIMIT') {
       return respuesta.code(429).send({ error: 'Demasiados intentos. Espera 15 minutos.' });
     }
 
-    // Algunos handlers de rate-limit pueden propagar solo message sin statusCode.
+    // Algunos handlers de rate-limit pueden propagar solo texto sin statusCode.
     if (
-      !error.statusCode &&
-      typeof error.message === 'string' &&
-      /demasiados intentos|rate limit|too many requests/i.test(error.message)
+      !codigoEstado &&
+      /demasiados intentos|rate limit|too many requests/i.test(mensajeError)
     ) {
       return respuesta.code(429).send({ error: 'Demasiados intentos. Espera 15 minutos.' });
     }
 
-    if (error.statusCode === 401) {
-      return respuesta.code(401).send({ error: error.message || 'No autenticado' });
+    if (codigoEstado === 401) {
+      return respuesta.code(401).send({ error: mensajeError || 'No autenticado' });
     }
 
-    if (error.statusCode && error.statusCode >= 400 && error.statusCode < 500) {
-      return respuesta.code(error.statusCode).send({ error: error.message || 'Solicitud inválida' });
+    if (codigoEstado && codigoEstado >= 400 && codigoEstado < 500) {
+      return respuesta.code(codigoEstado).send({ error: mensajeError || 'Solicitud inválida' });
     }
 
     servidor.log.error(error);

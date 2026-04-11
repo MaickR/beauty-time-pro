@@ -206,7 +206,7 @@ export function ModalTotalSalones({ onCerrar }: PropsModalTotalSalones) {
                     : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
                 }`}
               >
-                {plan}
+                {plan === 'PRO' ? 'Pro' : 'Estándar'}
               </button>
             ))}
             <span className="text-xs font-black text-slate-400 uppercase self-center ml-3 mr-1">
@@ -222,7 +222,7 @@ export function ModalTotalSalones({ onCerrar }: PropsModalTotalSalones) {
                     : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
                 }`}
               >
-                {p}
+                {p === 'Mexico' ? 'México' : p}
               </button>
             ))}
             <span className="text-xs font-black text-slate-400 uppercase self-center ml-3 mr-1">

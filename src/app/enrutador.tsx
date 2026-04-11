@@ -206,7 +206,7 @@ export function Enrutador() {
           />
         </Route>
 
-        <Route element={<GuardiaRuta rolesPermitidos={['dueno']} />}>
+        <Route element={<GuardiaRuta rolesPermitidos={['dueno', 'vendedor']} />}>
           <Route
             path="/estudio/:slug/agenda"
             element={

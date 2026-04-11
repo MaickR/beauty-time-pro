@@ -16,12 +16,25 @@ import { usarToast } from '../../../componentes/ui/ProveedorToast';
 import { usarTiendaAuth } from '../../../tienda/tiendaAuth';
 import type { PerfilClienteApp, ReservaCliente } from '../../../tipos';
 
+const REGEX_TEXTO_PERSONA = /^[A-Za-zÁÉÍÓÚáéíóúÑñÜü\s]+$/;
+const REGEX_CONTRASENA_SEGURA = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[^A-Za-z\d]).{10,}$/;
+
 const esquemaPerfil = z.object({
-  nombre: z.string().min(2, 'Mínimo 2 caracteres'),
-  apellido: z.string().min(2, 'Mínimo 2 caracteres'),
+  nombre: z
+    .string()
+    .trim()
+    .min(2, 'Mínimo 2 caracteres')
+    .max(80, 'Máximo 80 caracteres')
+    .regex(REGEX_TEXTO_PERSONA, 'Solo letras y espacios'),
+  apellido: z
+    .string()
+    .trim()
+    .min(2, 'Mínimo 2 caracteres')
+    .max(80, 'Máximo 80 caracteres')
+    .regex(REGEX_TEXTO_PERSONA, 'Solo letras y espacios'),
   telefono: z
     .string()
-    .regex(/^[0-9]{10}$/, '10 dígitos sin espacios')
+    .regex(/^\d{1,10}$/, 'Solo números, máximo 10 dígitos')
     .or(z.literal(''))
     .optional(),
   fechaNacimiento: z.string().optional(),
@@ -32,9 +45,10 @@ const esquemaContrasena = z
     contrasenaActual: z.string().min(1, 'Campo requerido'),
     contrasenaNueva: z
       .string()
-      .min(8, 'Mínimo 8 caracteres')
-      .regex(/[A-Z]/, 'Debe tener una mayúscula')
-      .regex(/\d/, 'Debe tener un número'),
+      .regex(
+        REGEX_CONTRASENA_SEGURA,
+        'Usa 10+ caracteres con mayúscula, minúscula, número y símbolo',
+      ),
     confirmar: z.string(),
   })
   .refine((d) => d.contrasenaNueva === d.confirmar, {
@@ -178,7 +192,10 @@ export function usarPerfilCliente() {
       cambiarContrasena(datos.contrasenaActual, datos.contrasenaNueva),
     onSuccess: () => {
       formContrasena.reset();
-      mostrarNotificacion({ mensaje: 'Contraseña actualizada', variante: 'exito' });
+      mostrarNotificacion({
+        mensaje: 'Contraseña actualizada. Cerramos otras sesiones abiertas.',
+        variante: 'exito',
+      });
     },
     onError: (err: unknown) => {
       const msg = err instanceof Error ? err.message : 'Error al cambiar la contraseña';

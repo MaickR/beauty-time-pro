@@ -8,16 +8,32 @@ import {
   obtenerFechaLocalISO,
   formatearFechaHumana,
 } from '../../../utils/formato';
-import { generarContrasenaSegura } from '../../../utils/seguridad';
 import { DIAS_SEMANA, CATALOGO_SERVICIOS } from '../../../lib/constantes';
+import {
+  esEmailSalonValido,
+  generarContrasenaSalon,
+  limpiarTelefonoEntrada,
+} from '../../../utils/formularioSalon';
 import type { Estudio, Servicio, Personal, TurnoTrabajo } from '../../../tipos';
+import { subirLogo } from '../../../servicios/servicioPerfil';
 
 const CLAVE_BORRADOR_ALTA_SALON = 'maestro_alta_salon_borrador_v1';
+
+export interface ProductoFormularioSalon {
+  id: string;
+  nombre: string;
+  categoria: string;
+  precio: number;
+}
 
 export interface FormularioEstudio extends Omit<Estudio, 'id' | 'createdAt' | 'updatedAt'> {
   id?: string;
   emailDueno: string;
   contrasenaDueno: string;
+  direccion: string;
+  productos: ProductoFormularioSalon[];
+  reintentosContrasenaDueno: number;
+  tipoVinculacion: 'INDEPENDIENTE' | 'SEDE';
 }
 
 export interface ConfirmacionAltaSalon {
@@ -30,24 +46,21 @@ export interface ConfirmacionAltaSalon {
   urlReserva: string;
 }
 
-function generarContrasenaTemporal() {
-  return generarContrasenaSegura();
-}
-
 const crearEstadoInicial = (): FormularioEstudio => ({
   slug: '',
   name: '',
   owner: '',
   emailDueno: '',
-  contrasenaDueno: generarContrasenaTemporal(),
+  contrasenaDueno: generarContrasenaSalon(''),
   phone: '',
   website: '',
   country: 'Mexico',
   plan: 'STANDARD',
   selectedServices: [],
   customServices: [],
-  branches: [''],
+  branches: [],
   staff: [],
+  productos: [],
   holidays: [],
   schedule: DIAS_SEMANA.reduce<Record<string, TurnoTrabajo>>(
     (acc, dia) => ({ ...acc, [dia]: { isOpen: true, openTime: '09:00', closeTime: '19:00' } }),
@@ -57,6 +70,14 @@ const crearEstadoInicial = (): FormularioEstudio => ({
   clientKey: '',
   subscriptionStart: obtenerFechaLocalISO(new Date()),
   paidUntil: '',
+  direccion: '',
+  estudioPrincipalId: null,
+  estudioPrincipal: null,
+  esSede: false,
+  permiteReservasPublicas: true,
+  sedes: [],
+  reintentosContrasenaDueno: 1,
+  tipoVinculacion: 'INDEPENDIENTE',
 });
 
 function normalizarTextoOpcional(valor?: string | null) {
@@ -76,7 +97,9 @@ function restaurarBorradorAlta(): FormularioEstudio | null {
     return {
       ...crearEstadoInicial(),
       ...datos,
-      contrasenaDueno: datos.contrasenaDueno?.trim() || generarContrasenaTemporal(),
+      contrasenaDueno: datos.contrasenaDueno?.trim() || generarContrasenaSalon(datos.name ?? ''),
+      phone: limpiarTelefonoEntrada(datos.phone ?? ''),
+      reintentosContrasenaDueno: Math.min(5, Math.max(1, datos.reintentosContrasenaDueno ?? 1)),
     };
   } catch {
     return null;
@@ -107,6 +130,7 @@ export function usarFormularioEstudio() {
   const [modoModal, setModoModal] = useState<'ADD' | 'EDIT' | 'CONFIRMACION' | null>(null);
   const [formulario, setFormulario] = useState<FormularioEstudio>(crearEstadoInicial());
   const [confirmacionAlta, setConfirmacionAlta] = useState<ConfirmacionAltaSalon | null>(null);
+  const [logoArchivo, setLogoArchivo] = useState<File | null>(null);
   const [entradaServicioPersonalizado, setEntradaServicioPersonalizado] = useState<
     Record<string, string>
   >({});
@@ -124,7 +148,16 @@ export function usarFormularioEstudio() {
 
   const abrirModalEdicion = (estudio: Estudio) => {
     setConfirmacionAlta(null);
-    setFormulario({ ...estudio, emailDueno: estudio.emailContacto ?? '', contrasenaDueno: '' });
+    setFormulario({
+      ...crearEstadoInicial(),
+      ...estudio,
+      tipoVinculacion: estudio.estudioPrincipalId ? 'SEDE' : 'INDEPENDIENTE',
+      emailDueno: estudio.emailContacto ?? '',
+      contrasenaDueno: '',
+      direccion: estudio.direccion ?? '',
+      productos: [],
+      reintentosContrasenaDueno: 1,
+    });
     setModoModal('EDIT');
   };
 
@@ -136,10 +169,22 @@ export function usarFormularioEstudio() {
   const descartarBorrador = () => {
     limpiarBorradorAlta();
     setFormulario(crearEstadoInicial());
+    setLogoArchivo(null);
   };
 
   const regenerarContrasenaDueno = () => {
-    setFormulario((prev) => ({ ...prev, contrasenaDueno: generarContrasenaTemporal() }));
+    setFormulario((prev) => {
+      if (prev.reintentosContrasenaDueno >= 5) {
+        return prev;
+      }
+
+      const reintentosContrasenaDueno = prev.reintentosContrasenaDueno + 1;
+      return {
+        ...prev,
+        contrasenaDueno: generarContrasenaSalon(prev.name, reintentosContrasenaDueno - 1),
+        reintentosContrasenaDueno,
+      };
+    });
   };
 
   const alternarServicio = (nombre: string) => {
@@ -205,19 +250,29 @@ export function usarFormularioEstudio() {
     e.preventDefault();
     try {
       const sucursales = formulario.branches.map((sucursal) => sucursal.trim()).filter(Boolean);
+      const esSede = formulario.tipoVinculacion === 'SEDE';
       const datosGuardar: FormularioEstudio & { updatedAt: string } = {
         ...formulario,
         name: formulario.name.trim(),
         owner: formulario.owner.trim(),
         emailDueno: formulario.emailDueno.trim().toLowerCase(),
         contrasenaDueno: formulario.contrasenaDueno,
-        phone: formulario.phone.trim(),
+        phone: limpiarTelefonoEntrada(formulario.phone),
         website: normalizarTextoOpcional(formulario.website),
-        branches: sucursales,
+        branches: esSede ? [] : sucursales,
+        estudioPrincipalId: esSede ? (formulario.estudioPrincipalId ?? null) : null,
+        permiteReservasPublicas: formulario.permiteReservasPublicas ?? true,
+        esSede,
+        direccion: formulario.direccion.trim(),
         assignedKey: formulario.assignedKey.trim().toUpperCase(),
         clientKey: formulario.clientKey.trim().toUpperCase(),
         updatedAt: new Date().toISOString(),
       };
+
+      if (esSede && !datosGuardar.estudioPrincipalId) {
+        mostrarError('Selecciona el salón principal antes de guardar esta sede.');
+        return;
+      }
 
       if (modoModal === 'ADD') {
         if (!datosGuardar.emailDueno) {
@@ -225,8 +280,23 @@ export function usarFormularioEstudio() {
           return;
         }
 
+        if (!esEmailSalonValido(datosGuardar.emailDueno)) {
+          mostrarError('Solo se aceptan correos personales @gmail, @hotmail, @outlook o @yahoo.');
+          return;
+        }
+
+        if (datosGuardar.phone.length !== 10) {
+          mostrarError('El teléfono del salón debe tener exactamente 10 dígitos.');
+          return;
+        }
+
+        if (datosGuardar.subscriptionStart < obtenerFechaLocalISO(new Date())) {
+          mostrarError('La fecha de inicio de operaciones no puede ser menor al día de hoy.');
+          return;
+        }
+
         if (datosGuardar.contrasenaDueno.trim().length < 8) {
-          mostrarError('La contraseña inicial del dueño debe tener al menos 8 caracteres.');
+          mostrarError('La contraseña automática del dueño debe tener 8 caracteres.');
           return;
         }
 
@@ -238,8 +308,17 @@ export function usarFormularioEstudio() {
           telefono: datosGuardar.phone,
           pais: datosGuardar.country,
           plan: datosGuardar.plan,
+          estudioPrincipalId: datosGuardar.estudioPrincipalId,
+          permiteReservasPublicas: datosGuardar.permiteReservasPublicas,
           inicioSuscripcion: datosGuardar.subscriptionStart,
+          direccion: datosGuardar.direccion,
+          sucursales: datosGuardar.branches,
           servicios: datosGuardar.selectedServices,
+          productos: datosGuardar.productos.map((producto) => ({
+            nombre: producto.nombre,
+            categoria: producto.categoria,
+            precio: producto.precio,
+          })),
           serviciosCustom: datosGuardar.customServices,
           personal: formulario.staff.map((persona) => ({
             nombre: persona.name,
@@ -250,6 +329,9 @@ export function usarFormularioEstudio() {
             descansoFin: persona.breakEnd ?? undefined,
           })),
         });
+        if (logoArchivo) {
+          await subirLogo(resultado.estudio.id, logoArchivo);
+        }
         setConfirmacionAlta({
           nombreSalon: resultado.estudio.name,
           nombreDueno: resultado.estudio.owner,
@@ -260,6 +342,7 @@ export function usarFormularioEstudio() {
           urlReserva: `${window.location.origin}/reservar/${resultado.acceso.claveClientes}`,
         });
         limpiarBorradorAlta();
+        setLogoArchivo(null);
         setModoModal('CONFIRMACION');
         await alRefrescar();
         mostrarExito(`Salón "${resultado.estudio.name}" creado correctamente.`);
@@ -291,6 +374,8 @@ export function usarFormularioEstudio() {
     cerrarModal,
     descartarBorrador,
     confirmacionAlta,
+    logoArchivo,
+    setLogoArchivo,
     regenerarContrasenaDueno,
     alternarServicio,
     actualizarCampoServicio,

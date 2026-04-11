@@ -136,7 +136,7 @@ export function PanelNotificaciones({
               className="flex items-center justify-center gap-2 w-full rounded-xl bg-green-500 px-4 py-3 text-xs font-black text-white hover:bg-green-600 transition-colors"
             >
               <MessageCircle className="w-4 h-4" aria-hidden="true" />
-              Contact us via WhatsApp
+              Contactar por WhatsApp
             </a>
           </div>
         </div>

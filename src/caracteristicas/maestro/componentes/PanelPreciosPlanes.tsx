@@ -3,7 +3,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { PencilLine, Tags, WalletCards } from 'lucide-react';
 import { usarToast } from '../../../componentes/ui/ProveedorToast';
 import { EsqueletoTarjeta } from '../../../componentes/ui/Esqueleto';
-import { formatearDinero } from '../../../utils/formato';
+import { formatearDinero, formatearPlan } from '../../../utils/formato';
 import {
   actualizarPrecioPlan,
   obtenerGestionPreciosPlanes,
@@ -136,7 +136,7 @@ export function PanelPreciosPlanes({ onActualizado }: PropsPanelPreciosPlanes) {
                 <div className="flex items-start justify-between gap-4">
                   <div>
                     <p className="text-[11px] font-black uppercase tracking-[0.2em] text-slate-500">
-                      {precio.plan === 'PRO' ? 'Pro' : 'Standard'}
+                      {formatearPlan(precio.plan)}
                     </p>
                     <h3 className="mt-2 text-xl font-black text-slate-900">{precio.pais}</h3>
                   </div>
@@ -177,8 +177,7 @@ export function PanelPreciosPlanes({ onActualizado }: PropsPanelPreciosPlanes) {
         <div className="fixed inset-0 z-[220] flex items-center justify-center bg-black/70 backdrop-blur-sm p-4">
           <div className="w-full max-w-md rounded-[2rem] bg-white p-6 shadow-2xl">
             <h3 className="text-2xl font-black text-slate-900">
-              Editar precio {precioEditable.plan === 'PRO' ? 'Pro' : 'Standard'} ·{' '}
-              {precioEditable.pais}
+              Editar precio {formatearPlan(precioEditable.plan)} · {precioEditable.pais}
             </h3>
             <p className="mt-2 text-sm text-slate-500">
               Captura el valor mensual en {precioEditable.moneda}. El sistema programará

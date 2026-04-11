@@ -45,6 +45,7 @@ function serializarPerfilCompat(
   plan: 'STANDARD' | 'PRO';
   colorPrimario: string;
   logoUrl: string | null;
+  estudioPrincipalId: string | null;
 } {
   return {
     id: estudio.id,
@@ -57,6 +58,8 @@ function serializarPerfilCompat(
     plan: normalizarPlanEstudio(typeof estudio.plan === 'string' ? estudio.plan : null),
     colorPrimario: typeof estudio.colorPrimario === 'string' ? estudio.colorPrimario : '#EC4899',
     logoUrl: typeof estudio.logoUrl === 'string' ? estudio.logoUrl : null,
+    estudioPrincipalId:
+      typeof estudio.estudioPrincipalId === 'string' ? estudio.estudioPrincipalId : null,
   };
 }
 
@@ -84,6 +87,7 @@ export async function rutasPerfil(servidor: FastifyInstance): Promise<void> {
         'plan',
         'colorPrimario',
         'logoUrl',
+        'estudioPrincipalId',
       ]) as Prisma.EstudioSelect;
 
       const estudio = await prisma.estudio.findUnique({
@@ -97,10 +101,38 @@ export async function rutasPerfil(servidor: FastifyInstance): Promise<void> {
         select: { email: true },
       });
 
+      const estudioPrincipalId =
+        typeof (estudio as Record<string, unknown>)['estudioPrincipalId'] === 'string'
+          ? ((estudio as Record<string, unknown>)['estudioPrincipalId'] as string)
+          : null;
+
+      const [estudioPrincipal, sedes] = await Promise.all([
+        estudioPrincipalId
+          ? prisma.estudio.findUnique({
+              where: { id: estudioPrincipalId },
+              select: { id: true, nombre: true },
+            })
+          : Promise.resolve(null),
+        prisma.estudio.findMany({
+          where: { estudioPrincipalId: id },
+          orderBy: { creadoEn: 'asc' },
+          select: {
+            id: true,
+            nombre: true,
+            plan: true,
+            estado: true,
+            activo: true,
+            permiteReservasPublicas: true,
+          },
+        }),
+      ]);
+
       return respuesta.send({
         datos: {
           ...serializarPerfilCompat(estudio as Record<string, unknown> & { id: string }),
           emailCuenta: usuarioDueno?.email ?? null,
+          estudioPrincipal,
+          sedes,
         },
       });
     },

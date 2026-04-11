@@ -4,6 +4,7 @@ import { UserPlus, Clock, Coffee } from 'lucide-react';
 import { SelectorHora } from '../../../componentes/ui/SelectorHora';
 import { usarToast } from '../../../componentes/ui/ProveedorToast';
 import type { Personal, Servicio } from '../../../tipos';
+import { limpiarNombrePersonaEntrada } from '../../../utils/formularioSalon';
 
 interface PropsSeccionPersonalFormulario {
   serviciosDisponibles: Servicio[];
@@ -127,19 +128,21 @@ export function SeccionPersonalFormulario({
         autoComplete="off"
         placeholder="Nombre completo"
         value={form.nombre}
-        onChange={(e) => dispatch({ tipo: 'NOMBRE', valor: e.target.value })}
+        onChange={(e) =>
+          dispatch({ tipo: 'NOMBRE', valor: limpiarNombrePersonaEntrada(e.target.value) })
+        }
         className="w-full p-3 bg-white border border-slate-200 rounded-xl font-bold text-sm outline-none focus:ring-2 focus:ring-pink-500"
       />
       <div className="p-4 bg-white rounded-2xl border border-slate-100 space-y-4">
-        <div className="flex items-center gap-3">
+        <div className="grid gap-3 lg:grid-cols-[auto_auto_1fr_auto_1fr] lg:items-center">
           <Clock className="w-3 h-3 text-blue-600 shrink-0" />
-          <span className="text-[9px] font-black text-slate-600 uppercase">Turno:</span>
+          <span className="text-[9px] font-black text-slate-600 uppercase">Turno</span>
           <SelectorHora
             etiqueta="Inicio turno"
             valor={form.turnoInicio}
             alCambiar={(valor) => dispatch({ tipo: 'TURNO_INICIO', valor })}
             ocultarEtiqueta
-            claseContenedor="w-[104px]"
+            claseContenedor="w-full"
             claseSelect="w-full rounded-lg border border-slate-200 bg-slate-50 p-2 text-xs font-bold text-slate-700 outline-none focus:ring-2 focus:ring-pink-500"
           />
           <span className="text-slate-400 text-xs font-bold">a</span>
@@ -148,19 +151,19 @@ export function SeccionPersonalFormulario({
             valor={form.turnoFin}
             alCambiar={(valor) => dispatch({ tipo: 'TURNO_FIN', valor })}
             ocultarEtiqueta
-            claseContenedor="w-[104px]"
+            claseContenedor="w-full"
             claseSelect="w-full rounded-lg border border-slate-200 bg-slate-50 p-2 text-xs font-bold text-slate-700 outline-none focus:ring-2 focus:ring-pink-500"
           />
         </div>
-        <div className="flex items-center gap-3">
+        <div className="grid gap-3 lg:grid-cols-[auto_auto_1fr_auto_1fr] lg:items-center">
           <Coffee className="w-3 h-3 text-yellow-600 shrink-0" />
-          <span className="text-[9px] font-black text-slate-600 uppercase">Comida:</span>
+          <span className="text-[9px] font-black text-slate-600 uppercase">Break</span>
           <SelectorHora
             etiqueta="Inicio descanso"
             valor={form.descansoInicio}
             alCambiar={(valor) => dispatch({ tipo: 'DESCANSO_INICIO', valor })}
             ocultarEtiqueta
-            claseContenedor="w-[104px]"
+            claseContenedor="w-full"
             claseSelect="w-full rounded-lg border border-slate-200 bg-slate-50 p-2 text-xs font-bold text-slate-700 outline-none focus:ring-2 focus:ring-pink-500"
           />
           <span className="text-slate-400 text-xs font-bold">a</span>
@@ -169,7 +172,7 @@ export function SeccionPersonalFormulario({
             valor={form.descansoFin}
             alCambiar={(valor) => dispatch({ tipo: 'DESCANSO_FIN', valor })}
             ocultarEtiqueta
-            claseContenedor="w-[104px]"
+            claseContenedor="w-full"
             claseSelect="w-full rounded-lg border border-slate-200 bg-slate-50 p-2 text-xs font-bold text-slate-700 outline-none focus:ring-2 focus:ring-pink-500"
           />
         </div>

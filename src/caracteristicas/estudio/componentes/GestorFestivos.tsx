@@ -34,10 +34,10 @@ export function GestorFestivos({ estudio }: PropsGestorFestivos) {
   return (
     <div className="bg-white rounded-[3rem] p-6 md:p-8 border border-slate-200 shadow-sm">
       <h3 className="text-sm font-black text-slate-900 uppercase tracking-widest mb-2 flex items-center gap-2">
-        <Calendar className="w-4 h-4 text-pink-600" /> Días de descanso
+        <Calendar className="w-4 h-4 text-pink-600" /> Gestión de horario
       </h3>
       <p className="text-[10px] text-slate-400 font-bold mb-6">
-        Fechas en las que el salón no presta atención ni acepta reservas.
+        Configura cierres del salón para bloquear reservas en fechas específicas.
       </p>
 
       <div className="flex flex-col sm:flex-row gap-2 mb-6">
@@ -75,7 +75,7 @@ export function GestorFestivos({ estudio }: PropsGestorFestivos) {
           </div>
         ))}
         {!estudio.holidays?.length && (
-          <p className="text-xs text-slate-400 italic font-bold">No hay días bloqueados.</p>
+          <p className="text-xs text-slate-400 italic font-bold">No hay cierres programados.</p>
         )}
       </div>
     </div>

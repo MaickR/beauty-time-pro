@@ -44,10 +44,12 @@ model Estudio {
   pais              String       @default("Mexico")
   zonaHoraria       String       @default("America/Mexico_City")
   sucursales        Json         // string[]
+  estudioPrincipalId String?
   claveDueno           String       @unique
   claveCliente         String       @unique
   slug                 String?      @unique
   activo               Boolean      @default(true)
+  permiteReservasPublicas Boolean   @default(true)
   plan                 PlanEstudio  @default(STANDARD)
   pinCancelacionHash   String?
   estado            EstadoSalon  @default(pendiente)
@@ -86,6 +88,8 @@ model Estudio {
   creadoEn          DateTime     @default(now())
   actualizadoEn     DateTime     @updatedAt
 
+  estudioPrincipal  Estudio?     @relation("JerarquiaSedes", fields: [estudioPrincipalId], references: [id], onDelete: SetNull)
+  sedes             Estudio[]    @relation("JerarquiaSedes")
   vendedor          Usuario?     @relation("EstudioVendedor", fields: [vendedorId], references: [id])
   precioPlanActual  PrecioPlan?  @relation("PrecioPlanActual", fields: [precioPlanActualId], references: [id], onDelete: SetNull)
   precioPlanProximo PrecioPlan?  @relation("PrecioPlanProximo", fields: [precioPlanProximoId], references: [id], onDelete: SetNull)
@@ -109,6 +113,8 @@ model Estudio {
   @@index([fechaVencimiento])
   @@index([vendedorAsociado])
   @@index([vendedorId])
+  @@index([estudioPrincipalId])
+  @@index([estudioPrincipalId, estado, activo])
   @@index([precioPlanActualId])
   @@index([precioPlanProximoId])
 }

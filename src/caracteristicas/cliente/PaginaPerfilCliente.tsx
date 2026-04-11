@@ -1,37 +1,17 @@
 import { useEffect, useRef, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
-import { Camera, Lock, Star, Calendar, ChevronRight, Loader2, Mail, Palette } from 'lucide-react';
+import { Camera, Lock, Star, ChevronRight, Loader2, Mail, Palette } from 'lucide-react';
 import { NavegacionCliente } from '../../componentes/diseno/NavegacionCliente';
 import { DialogoConfirmacion } from '../../componentes/ui/DialogoConfirmacion';
 import { Spinner } from '../../componentes/ui/Spinner';
-import { SelectorFecha } from '../../componentes/ui/SelectorFecha';
 import { usarNotificacionesPush } from '../../hooks/usarNotificacionesPush';
 import { usarPerfilCliente } from './hooks/usarPerfilCliente';
-import { formatearDinero } from '../../utils/formato';
-import type { Pais, ReservaCliente, FidelidadSalon } from '../../tipos';
+import { PanelReservasCliente } from './componentes/PanelReservasCliente';
+import type { Pais, FidelidadSalon } from '../../tipos';
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 function inicialesDesdeNombre(n: string, a: string) {
   return (n[0] ?? '') + (a[0] ?? '');
-}
-
-function badgeEstado(estado: string) {
-  const clases: Record<string, string> = {
-    pending: 'bg-amber-50 text-amber-700 border-amber-200',
-    confirmed: 'bg-emerald-50 text-emerald-700 border-emerald-200',
-    completed: 'bg-slate-100 text-slate-700 border-slate-200',
-    cancelled: 'bg-red-50 text-red-700 border-red-200',
-  };
-  const etiquetas: Record<string, string> = {
-    pending: 'Pendiente',
-    confirmed: 'Confirmada',
-    completed: 'Completada',
-    cancelled: 'Cancelada',
-  };
-  return {
-    clase: clases[estado] ?? 'bg-slate-50 text-slate-500 border-slate-200',
-    etiqueta: etiquetas[estado] ?? estado,
-  };
 }
 
 const COLORES_CLIENTE = [
@@ -51,28 +31,15 @@ function formatearPais(pais: Pais): string {
   return pais === 'Mexico' ? 'México' : 'Colombia';
 }
 
-function formatearFechaReservaNatural(fecha: string, horaInicio: string): string {
-  const fechaHora = new Date(`${fecha}T${horaInicio}:00`);
-  return new Intl.DateTimeFormat('es-MX', {
-    weekday: 'long',
-    day: 'numeric',
-    month: 'long',
-    hour: 'numeric',
-    minute: '2-digit',
-    hour12: true,
-  })
-    .format(fechaHora)
-    .replace(',', ' ·')
-    .replace(/^./, (texto) => texto.toUpperCase());
+function normalizarTextoPersona(valor: string): string {
+  return valor
+    .replace(/[^A-Za-zÁÉÍÓÚáéíóúÑñÜü\s]/g, '')
+    .replace(/\s{2,}/g, ' ')
+    .trimStart();
 }
 
-function puedeCancelarReserva(reserva: ReservaCliente): boolean {
-  if (!['pending', 'confirmed'].includes(reserva.estado)) {
-    return false;
-  }
-
-  const fechaHora = new Date(`${reserva.fecha}T${reserva.horaInicio}:00`).getTime();
-  return fechaHora - Date.now() > 2 * 60 * 60 * 1000;
+function normalizarTelefono(valor: string): string {
+  return valor.replace(/\D/g, '').slice(0, 10);
 }
 
 // ── Sección Avatar ───────────────────────────────────────────────────────────
@@ -229,129 +196,6 @@ function SeccionFidelidad({
   );
 }
 
-// ── Sección Reservas ─────────────────────────────────────────────────────────
-function SeccionReservas({
-  reservas,
-  pestanaInicial = 'proximas',
-}: {
-  reservas: ReservaCliente[];
-  pestanaInicial?: 'proximas' | 'historial';
-}) {
-  const [pestana, setPestana] = useState<'proximas' | 'historial'>(pestanaInicial);
-  const hoy = new Date().toISOString().split('T')[0]!;
-  const proximas = reservas
-    .filter((r) => r.fecha >= hoy && r.estado !== 'cancelled')
-    .sort((a, b) => a.fecha.localeCompare(b.fecha));
-  const historial = reservas
-    .filter((r) => r.fecha < hoy || r.estado === 'cancelled')
-    .sort((a, b) => b.fecha.localeCompare(a.fecha));
-  const lista = pestana === 'proximas' ? proximas : historial;
-
-  useEffect(() => {
-    setPestana(pestanaInicial);
-  }, [pestanaInicial]);
-
-  return (
-    <section id="reservas" aria-labelledby="titulo-reservas">
-      <h2
-        id="titulo-reservas"
-        className="font-black text-slate-900 text-lg mb-3 flex items-center gap-2"
-      >
-        <Calendar className="w-5 h-5 text-pink-600" aria-hidden="true" /> Mis reservas
-      </h2>
-      <div className="flex gap-2 mb-4">
-        {(['proximas', 'historial'] as const).map((t) => (
-          <button
-            key={t}
-            onClick={() => setPestana(t)}
-            className={`px-4 py-2 rounded-xl text-sm font-bold transition-colors ${pestana === t ? 'bg-pink-600 text-white' : 'bg-white text-slate-600 border border-slate-200 hover:border-pink-300'}`}
-          >
-            {t === 'proximas' ? `Próximas (${proximas.length})` : `Historial (${historial.length})`}
-          </button>
-        ))}
-      </div>
-      {lista.length === 0 ? (
-        <div className="bg-white border border-slate-100 rounded-2xl p-8 text-center">
-          <p className="text-slate-400 font-bold">
-            No hay reservas {pestana === 'proximas' ? 'próximas' : 'en el historial'}
-          </p>
-        </div>
-      ) : (
-        <div className="space-y-3">
-          {lista.map((r) => {
-            const { clase, etiqueta } = badgeEstado(r.estado);
-            const cancelable = puedeCancelarReserva(r);
-            return (
-              <div
-                key={r.id}
-                className="bg-white border border-slate-100 rounded-3xl p-5 shadow-sm"
-              >
-                <div className="space-y-4">
-                  {/* Fila principal: info + precio */}
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="min-w-0 flex-1 space-y-3">
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <p className="text-lg font-black text-slate-900">{r.salon.nombre}</p>
-                        <span
-                          className={`inline-flex items-center rounded-full border px-3 py-1.5 text-sm font-black ${clase}`}
-                        >
-                          {etiqueta}
-                        </span>
-                      </div>
-                      <p className="text-sm font-medium text-slate-600">
-                        {formatearFechaReservaNatural(r.fecha, r.horaInicio)}
-                      </p>
-                      <div className="flex flex-wrap items-center gap-2 text-sm text-slate-500">
-                        <span>Especialista: {r.especialista.nombre}</span>
-                        {r.especialista.eliminado && (
-                          <span className="inline-flex items-center rounded-full border border-amber-200 bg-amber-50 px-2 py-1 text-[11px] font-black uppercase tracking-wide text-amber-700">
-                            Especialista eliminado
-                          </span>
-                        )}
-                      </div>
-                      <ul className="space-y-1 text-sm text-slate-500">
-                        {r.servicios.map((servicio) => (
-                          <li key={`${r.id}-${servicio.name}`} className="flex items-start gap-2">
-                            <span className="mt-1 h-1.5 w-1.5 rounded-full bg-slate-300 shrink-0" />
-                            <span>{servicio.name}</span>
-                          </li>
-                        ))}
-                      </ul>
-                    </div>
-                    <p className="shrink-0 text-sm font-black text-slate-900">
-                      {formatearDinero(r.precioTotal)}
-                    </p>
-                  </div>
-                  {/* Fila footer: botón cancelar o aviso */}
-                  {cancelable && (
-                    <div className="border-t border-slate-100 pt-3">
-                      <Link
-                        to={`/cancelar-reserva?id=${r.id}&t=${r.tokenCancelacion}`}
-                        className="inline-flex w-full items-center justify-center rounded-2xl border border-red-200 bg-red-50 px-4 py-2.5 text-sm font-black text-red-700 hover:bg-red-100 transition-colors sm:w-auto"
-                      >
-                        Cancelar cita
-                      </Link>
-                    </div>
-                  )}
-                  {pestana === 'proximas' &&
-                    !cancelable &&
-                    ['pending', 'confirmed'].includes(r.estado) && (
-                      <div className="border-t border-slate-100 pt-3">
-                        <p className="text-xs text-slate-400">
-                          La cancelación solo está disponible con más de 2 horas de anticipación.
-                        </p>
-                      </div>
-                    )}
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      )}
-    </section>
-  );
-}
-
 function SeccionApariencia({
   clienteId,
   colorSeleccionado,
@@ -433,6 +277,10 @@ function SeccionContrasena({
           role="form"
           aria-label="Formulario cambiar contraseña"
         >
+          <p className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-xs font-medium text-slate-600">
+            Usa al menos 10 caracteres, con mayúscula, minúscula, número y símbolo. Al confirmarla
+            se cerrarán otras sesiones abiertas.
+          </p>
           {[
             { campo: 'contrasenaActual' as const, label: 'Contraseña actual' },
             { campo: 'contrasenaNueva' as const, label: 'Nueva contraseña' },
@@ -540,11 +388,11 @@ export function PaginaPerfilCliente() {
   } = usarPerfilCliente();
   const { data: perfil, isLoading, isError } = consulta;
   const reservas = consultaReservas.data ?? perfil?.reservas ?? [];
-  const fechaNacimiento = formPerfil.watch('fechaNacimiento') ?? '';
   const [dialogoSalidaAbierto, setDialogoSalidaAbierto] = useState(false);
   const [confirmacionGuardadoVisible, setConfirmacionGuardadoVisible] = useState(false);
   const [emailNuevo, setEmailNuevo] = useState('');
   const [colorCliente, setColorCliente] = useState('#F48FB1');
+  const emailNuevoNormalizado = emailNuevo.trim().toLowerCase();
   const vistaSolicitada = new URLSearchParams(ubicacion.search).get('vista');
   const vistaActiva =
     vistaSolicitada === 'reservas' || ubicacion.hash === '#reservas' ? 'reservas' : 'perfil';
@@ -674,7 +522,11 @@ export function PaginaPerfilCliente() {
         )}
 
         {vistaActiva === 'reservas' && (
-          <SeccionReservas reservas={reservas} pestanaInicial={pestanaReservasInicial} />
+          <PanelReservasCliente
+            reservas={reservas}
+            paisCliente={perfil.pais}
+            pestanaInicial={pestanaReservasInicial}
+          />
         )}
 
         {vistaActiva === 'perfil' && (
@@ -696,40 +548,74 @@ export function PaginaPerfilCliente() {
                 { campo: 'telefono' as const, label: 'Teléfono', type: 'tel' },
               ].map(({ campo, label, type }) => (
                 <div key={campo}>
-                  <label htmlFor={campo} className="block text-xs font-bold text-slate-600 mb-1">
-                    {label}
-                  </label>
-                  <input
-                    id={campo}
-                    type={type}
-                    {...formPerfil.register(campo)}
-                    className="w-full border border-slate-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-pink-400"
-                    aria-describedby={
-                      formPerfil.formState.errors[campo] ? `${campo}-error` : undefined
-                    }
-                  />
-                  {formPerfil.formState.errors[campo] && (
-                    <p id={`${campo}-error`} className="text-xs text-red-500 mt-1" role="alert">
-                      {formPerfil.formState.errors[campo]?.message}
-                    </p>
-                  )}
+                  {(() => {
+                    const registro = formPerfil.register(campo);
+                    const esTelefono = campo === 'telefono';
+
+                    return (
+                      <>
+                        <label
+                          htmlFor={campo}
+                          className="block text-xs font-bold text-slate-600 mb-1"
+                        >
+                          {label}
+                        </label>
+                        <input
+                          id={campo}
+                          type={type}
+                          {...registro}
+                          inputMode={esTelefono ? 'numeric' : 'text'}
+                          autoComplete={esTelefono ? 'tel-national' : 'name'}
+                          maxLength={esTelefono ? 10 : 80}
+                          onChange={(evento) => {
+                            evento.target.value = esTelefono
+                              ? normalizarTelefono(evento.target.value)
+                              : normalizarTextoPersona(evento.target.value);
+                            registro.onChange(evento);
+                          }}
+                          className="w-full border border-slate-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-pink-400"
+                          aria-describedby={
+                            formPerfil.formState.errors[campo] ? `${campo}-error` : undefined
+                          }
+                        />
+                        {formPerfil.formState.errors[campo] && (
+                          <p
+                            id={`${campo}-error`}
+                            className="text-xs text-red-500 mt-1"
+                            role="alert"
+                          >
+                            {formPerfil.formState.errors[campo]?.message}
+                          </p>
+                        )}
+                      </>
+                    );
+                  })()}
                 </div>
               ))}
               <div>
-                <input type="hidden" {...formPerfil.register('fechaNacimiento')} />
-                <SelectorFecha
-                  etiqueta="Fecha de nacimiento"
-                  valor={fechaNacimiento}
+                <label
+                  htmlFor="fechaNacimiento"
+                  className="mb-1 block text-xs font-bold text-slate-600"
+                >
+                  Fecha de nacimiento
+                </label>
+                <input
+                  id="fechaNacimiento"
+                  type="date"
                   max={new Date().toISOString().split('T')[0]}
-                  error={formPerfil.formState.errors.fechaNacimiento?.message}
-                  alCambiar={(valor) =>
-                    formPerfil.setValue('fechaNacimiento', valor, {
-                      shouldDirty: true,
-                      shouldTouch: true,
-                      shouldValidate: true,
-                    })
+                  {...formPerfil.register('fechaNacimiento')}
+                  className="w-full border border-slate-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-pink-400"
+                  aria-describedby={
+                    formPerfil.formState.errors.fechaNacimiento
+                      ? 'fechaNacimiento-error'
+                      : undefined
                   }
                 />
+                {formPerfil.formState.errors.fechaNacimiento && (
+                  <p id="fechaNacimiento-error" className="text-xs text-red-500 mt-1" role="alert">
+                    {formPerfil.formState.errors.fechaNacimiento.message}
+                  </p>
+                )}
               </div>
               <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4 space-y-3">
                 <div className="flex items-center gap-2">
@@ -746,7 +632,9 @@ export function PaginaPerfilCliente() {
                   id="email-actualizacion"
                   type="email"
                   value={emailNuevo}
-                  onChange={(evento) => setEmailNuevo(evento.target.value)}
+                  onChange={(evento) =>
+                    setEmailNuevo(evento.target.value.replace(/\s+/g, '').toLowerCase())
+                  }
                   className="w-full border border-slate-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-pink-400"
                 />
                 <p className="text-xs text-slate-500">
@@ -759,12 +647,12 @@ export function PaginaPerfilCliente() {
                 )}
                 <button
                   type="button"
-                  onClick={() => mutarEmail.mutate(emailNuevo)}
+                  onClick={() => mutarEmail.mutate(emailNuevoNormalizado)}
                   disabled={
                     mutarEmail.isPending ||
-                    !emailNuevo.trim() ||
-                    emailNuevo.trim() === perfil.emailPendiente ||
-                    emailNuevo.trim() === perfil.email
+                    !emailNuevoNormalizado ||
+                    emailNuevoNormalizado === perfil.emailPendiente ||
+                    emailNuevoNormalizado === perfil.email
                   }
                   className="w-full rounded-xl border border-pink-200 bg-pink-50 px-4 py-3 text-sm font-black text-pink-700 transition-colors hover:bg-pink-100 disabled:opacity-60"
                 >

@@ -17,6 +17,7 @@ import {
 } from '../lib/sesionesAuth.js';
 import { registrarAuditoria } from '../utils/auditoria.js';
 import { compararHashContrasena, generarHashContrasena } from '../utils/contrasenas.js';
+import { asegurarSalonDemoVendedor } from '../lib/demoVendedor.js';
 
 const REFRESH_EXPIRA = env.JWT_REFRESH_EXPIRA_EN;
 const COOKIE_REFRESH = 'refresh_token';
@@ -541,11 +542,24 @@ export async function rutasAuth(servidor: FastifyInstance): Promise<void> {
       }
       // vendedor no requiere permisos especiales
 
+      let estudioIdSesion = usuario.estudioId;
+      let slugEstudioSesion = usuario.estudio?.slug ?? null;
+
+      if (usuario.rol === 'vendedor') {
+        const salonDemo = await asegurarSalonDemoVendedor({
+          usuarioId: usuario.id,
+          nombre: usuario.nombre,
+          email: usuario.email,
+        });
+        estudioIdSesion = salonDemo.id;
+        slugEstudioSesion = salonDemo.slug ?? null;
+      }
+
       return emitirTokens(servidor, respuesta, {
         sub: usuario.id,
         rol: usuario.rol,
-        estudioId: usuario.estudioId,
-        slugEstudio: usuario.estudio?.slug ?? null,
+        estudioId: estudioIdSesion,
+        slugEstudio: slugEstudioSesion,
         nombre: usuario.nombre,
         email: usuario.email,
         esMaestroTotal,
@@ -594,7 +608,8 @@ export async function rutasAuth(servidor: FastifyInstance): Promise<void> {
 
       if (!REGEX_CONTRASENA.test(contrasenaNueva)) {
         return respuesta.code(400).send({
-          error: 'The password must have at least 8 characters, one uppercase, one lowercase, one number, and one special character',
+          error:
+            'La contraseña debe tener al menos 8 caracteres, una mayúscula, una minúscula, un número y un carácter especial.',
         });
       }
 
@@ -766,7 +781,8 @@ export async function rutasAuth(servidor: FastifyInstance): Promise<void> {
 
       if (!REGEX_CONTRASENA.test(contrasenaNueva)) {
         return respuesta.code(400).send({
-          error: 'The password must have at least 8 characters, one uppercase, one lowercase, one number, and one special character',
+          error:
+            'La contraseña debe tener al menos 8 caracteres, una mayúscula, una minúscula, un número y un carácter especial.',
         });
       }
 
@@ -1035,7 +1051,7 @@ export async function rutasAuth(servidor: FastifyInstance): Promise<void> {
       if (payload.rol === 'supervisor' || payload.rol === 'vendedor') {
         const usuario = await prisma.usuario.findUnique({
           where: { id: payload.sub },
-          select: { activo: true },
+          select: { activo: true, nombre: true, email: true },
         });
 
         if (!usuario) {
@@ -1044,6 +1060,18 @@ export async function rutasAuth(servidor: FastifyInstance): Promise<void> {
 
         if (!usuario.activo) {
           return respuesta.code(403).send({ error: 'Tu cuenta ha sido desactivada. Contacta al administrador principal.' });
+        }
+
+        if (payload.rol === 'vendedor') {
+          const salonDemo = await asegurarSalonDemoVendedor({
+            usuarioId: payload.sub,
+            nombre: usuario.nombre,
+            email: usuario.email,
+          });
+          payloadActualizado.estudioId = salonDemo.id;
+          payloadActualizado.slugEstudio = salonDemo.slug ?? null;
+          payloadActualizado.nombre = usuario.nombre;
+          payloadActualizado.email = usuario.email;
         }
 
         if (payload.rol === 'supervisor') {

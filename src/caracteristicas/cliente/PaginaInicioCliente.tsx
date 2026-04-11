@@ -1,13 +1,11 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Search, MapPin, Clock, ChevronRight, Star } from 'lucide-react';
+import { Search, MapPin, Clock, ChevronRight, Star, Sparkles, History } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
-import { obtenerMiPerfil, obtenerSalonesPublicos } from '../../servicios/servicioClienteApp';
+import { obtenerMiPerfil } from '../../servicios/servicioClienteApp';
 import { usarTiendaAuth } from '../../tienda/tiendaAuth';
 import { NavegacionCliente } from '../../componentes/diseno/NavegacionCliente';
-import type { Pais, SalonPublico } from '../../tipos';
-
-const CATEGORIAS = ['Corte', 'Color', 'Tratamiento', 'Uñas', 'Maquillaje', 'Depilación'];
+import type { Pais, ReservaCliente } from '../../tipos';
 
 function etiquetaPais(pais: Pais): string {
   return pais === 'Mexico' ? 'México' : 'Colombia';
@@ -22,24 +20,94 @@ function iniciales(nombre: string): string {
     .toUpperCase();
 }
 
+interface SalonClientePrivado {
+  id: string;
+  nombre: string;
+  colorPrimario: string | null;
+  logoUrl: string | null;
+  direccion: string | null;
+  pais: Pais;
+  slug: string | null;
+  categorias: string[];
+  sedes: string[];
+  totalVisitas: number;
+  ultimaVisita: string;
+}
+
+function normalizarCategoria(valor?: string | null): string | null {
+  const categoria = valor?.trim();
+  return categoria ? categoria : null;
+}
+
+function formatearFechaCorta(fecha: string): string {
+  const fechaBase = new Date(`${fecha}T12:00:00`);
+  return new Intl.DateTimeFormat('es-MX', {
+    day: 'numeric',
+    month: 'short',
+    year: 'numeric',
+  }).format(fechaBase);
+}
+
+function construirSalonesPrivados(
+  reservas: ReservaCliente[],
+  paisCliente: Pais,
+): SalonClientePrivado[] {
+  const reservasAtendidas = reservas.filter(
+    (reserva) =>
+      reserva.estado === 'completed' && (reserva.salon.pais ?? paisCliente) === paisCliente,
+  );
+
+  const acumulado = new Map<string, SalonClientePrivado>();
+
+  reservasAtendidas.forEach((reserva) => {
+    const existente = acumulado.get(reserva.salon.id);
+    const categoriasReserva = [
+      ...reserva.servicios.map((servicio) => normalizarCategoria(servicio.category)),
+      ...(reserva.serviciosDetalle ?? []).map((servicio) => normalizarCategoria(servicio.category)),
+    ].filter((categoria): categoria is string => Boolean(categoria));
+
+    if (!existente) {
+      acumulado.set(reserva.salon.id, {
+        id: reserva.salon.id,
+        nombre: reserva.salon.nombre,
+        colorPrimario: reserva.salon.colorPrimario,
+        logoUrl: reserva.salon.logoUrl,
+        direccion: reserva.salon.direccion ?? null,
+        pais: reserva.salon.pais ?? paisCliente,
+        slug: reserva.salon.slug ?? null,
+        categorias: Array.from(new Set(categoriasReserva)).sort((a, b) => a.localeCompare(b, 'es')),
+        sedes: reserva.sucursal ? [reserva.sucursal] : [],
+        totalVisitas: 1,
+        ultimaVisita: reserva.fecha,
+      });
+      return;
+    }
+
+    existente.totalVisitas += 1;
+    existente.ultimaVisita =
+      existente.ultimaVisita > reserva.fecha ? existente.ultimaVisita : reserva.fecha;
+    existente.categorias = Array.from(
+      new Set([...existente.categorias, ...categoriasReserva]),
+    ).sort((a, b) => a.localeCompare(b, 'es'));
+    if (reserva.sucursal && !existente.sedes.includes(reserva.sucursal)) {
+      existente.sedes.push(reserva.sucursal);
+      existente.sedes.sort((a, b) => a.localeCompare(b, 'es'));
+    }
+  });
+
+  return Array.from(acumulado.values()).sort(
+    (a, b) =>
+      b.ultimaVisita.localeCompare(a.ultimaVisita) || a.nombre.localeCompare(b.nombre, 'es'),
+  );
+}
+
 interface PropsTarjetaSalon {
-  salon: SalonPublico;
+  salon: SalonClientePrivado;
 }
 
 function TarjetaSalon({ salon }: PropsTarjetaSalon) {
   const navegar = useNavigate();
   const color = salon.colorPrimario ?? '#C2185B';
-  const chips = salon.categorias
-    ? salon.categorias
-        .split(',')
-        .map((c) => c.trim())
-        .filter(Boolean)
-    : [];
-  const horario =
-    salon.horarioApertura && salon.horarioCierre
-      ? `${salon.horarioApertura}–${salon.horarioCierre}`
-      : null;
-
   return (
     <article
       className="bg-white rounded-3xl border border-slate-100 overflow-hidden shadow-sm hover:shadow-lg hover:-translate-y-1 transition-all duration-200 flex flex-col"
@@ -71,38 +139,40 @@ function TarjetaSalon({ salon }: PropsTarjetaSalon) {
       <div className="p-5 flex flex-col flex-1 gap-3">
         <div>
           <h3 className="font-black text-slate-900 text-base leading-tight">{salon.nombre}</h3>
-          {salon.descripcion && (
-            <p className="text-slate-500 text-xs mt-1 line-clamp-2">{salon.descripcion}</p>
-          )}
+          <p className="mt-1 text-xs font-bold uppercase tracking-[0.18em] text-slate-400">
+            {salon.totalVisitas} visita{salon.totalVisitas === 1 ? '' : 's'} completada
+            {salon.totalVisitas === 1 ? '' : 's'}
+          </p>
         </div>
 
-        {/* Categorías */}
-        {chips.length > 0 && (
+        {salon.categorias.length > 0 && (
           <div className="flex flex-wrap gap-1">
-            {chips.slice(0, 3).map((c) => (
+            {salon.categorias.slice(0, 3).map((categoria) => (
               <span
-                key={c}
+                key={categoria}
                 className="text-[10px] font-bold px-2 py-0.5 rounded-full border"
                 style={{ borderColor: color, color }}
               >
-                {c}
+                {categoria}
               </span>
             ))}
           </div>
         )}
 
-        {/* Info */}
         <div className="space-y-1">
-          {horario && (
-            <p className="flex items-center gap-1.5 text-xs text-slate-400">
-              <Clock className="w-3 h-3 shrink-0" aria-hidden="true" />
-              {horario}
-            </p>
-          )}
           {salon.direccion && (
             <p className="flex items-center gap-1.5 text-xs text-slate-400 truncate">
               <MapPin className="w-3 h-3 shrink-0" aria-hidden="true" />
               {salon.direccion}
+            </p>
+          )}
+          <p className="flex items-center gap-1.5 text-xs text-slate-400">
+            <Clock className="w-3 h-3 shrink-0" aria-hidden="true" />
+            Última visita: {formatearFechaCorta(salon.ultimaVisita)}
+          </p>
+          {salon.sedes.length > 0 && (
+            <p className="text-xs text-slate-500">
+              <span className="font-bold text-slate-600">Sedes:</span> {salon.sedes.join(', ')}
             </p>
           )}
         </div>
@@ -125,7 +195,6 @@ export function PaginaInicioCliente() {
   const [busqueda, setBusqueda] = useState('');
   const [categoriasActivas, setCategoriasActivas] = useState<string[]>([]);
   const [busquedaDelay, setBusquedaDelay] = useState('');
-  const [paisExplorado, setPaisExplorado] = useState<Pais | null>(null);
 
   const { data: perfilCliente } = useQuery({
     queryKey: ['mi-perfil'],
@@ -134,26 +203,38 @@ export function PaginaInicioCliente() {
   });
 
   const paisCliente = perfilCliente?.pais ?? 'Mexico';
-  const paisActivo = paisExplorado ?? paisCliente;
-  const paisAlternativo = paisCliente === 'Mexico' ? 'Colombia' : 'Mexico';
-  const explorandoOtroPais = paisActivo !== paisCliente;
+  const salonesPrivados = useMemo(
+    () => construirSalonesPrivados(perfilCliente?.reservas ?? [], paisCliente),
+    [perfilCliente?.reservas, paisCliente],
+  );
+  const categoriasDisponibles = useMemo(
+    () =>
+      Array.from(new Set(salonesPrivados.flatMap((salon) => salon.categorias))).sort((a, b) =>
+        a.localeCompare(b, 'es'),
+      ),
+    [salonesPrivados],
+  );
+  const salonesFiltrados = useMemo(() => {
+    const termino = busquedaDelay.trim().toLowerCase();
 
-  // Debounce 300ms
+    return salonesPrivados.filter((salon) => {
+      const coincideBusqueda =
+        termino.length === 0 ||
+        salon.nombre.toLowerCase().includes(termino) ||
+        salon.sedes.some((sede) => sede.toLowerCase().includes(termino)) ||
+        salon.categorias.some((categoria) => categoria.toLowerCase().includes(termino));
+      const coincideCategoria =
+        categoriasActivas.length === 0 ||
+        categoriasActivas.every((categoria) => salon.categorias.includes(categoria));
+
+      return coincideBusqueda && coincideCategoria;
+    });
+  }, [busquedaDelay, categoriasActivas, salonesPrivados]);
+
   useEffect(() => {
     const t = window.setTimeout(() => setBusquedaDelay(busqueda), 300);
     return () => clearTimeout(t);
   }, [busqueda]);
-
-  const { data: salones = [], isLoading } = useQuery<SalonPublico[]>({
-    queryKey: ['salones-publicos', busquedaDelay, categoriasActivas.join('|'), paisActivo],
-    queryFn: () =>
-      obtenerSalonesPublicos({
-        buscar: busquedaDelay || undefined,
-        categorias: categoriasActivas,
-        pais: paisActivo,
-      }),
-    staleTime: 1000 * 60,
-  });
 
   const alternarCategoria = useCallback((cat: string) => {
     setCategoriasActivas((prev) =>
@@ -168,27 +249,44 @@ export function PaginaInicioCliente() {
       <NavegacionCliente />
 
       <main className="max-w-7xl mx-auto px-4 md:px-8 pt-8 pb-24">
-        {/* Saludo */}
-        <header className="mb-8">
-          <h1 className="text-3xl md:text-4xl font-black text-slate-900">
-            ¡Hola, <span className="text-pink-600">{nombreCliente}</span>! 👋
-          </h1>
-          <p className="text-slate-500 font-medium mt-1">
-            Encuentra y reserva en tu salón favorito
-          </p>
-          <div className="mt-4 flex flex-wrap items-center gap-3 text-sm">
-            <span className="rounded-full bg-white border border-slate-200 px-3 py-1.5 font-bold text-slate-600">
-              Mostrando salones de {etiquetaPais(paisActivo)}
-            </span>
-            <button
-              type="button"
-              onClick={() => setPaisExplorado(explorandoOtroPais ? null : paisAlternativo)}
-              className="text-xs font-bold text-slate-500 hover:text-pink-600 transition-colors"
-            >
-              {explorandoOtroPais
-                ? `Volver a ${etiquetaPais(paisCliente)}`
-                : `Ver salones de ${etiquetaPais(paisAlternativo)}`}
-            </button>
+        <header className="mb-8 overflow-hidden rounded-4xl border border-slate-200 bg-white shadow-sm">
+          <div className="grid gap-6 px-6 py-7 md:grid-cols-[1.3fr_0.9fr] md:px-8 md:py-8">
+            <div>
+              <div className="mb-3 inline-flex items-center gap-2 rounded-full border border-pink-200 bg-pink-50 px-3 py-1 text-[11px] font-black uppercase tracking-[0.22em] text-pink-700">
+                <Sparkles className="h-3.5 w-3.5" /> Panel del cliente
+              </div>
+              <h1 className="text-3xl font-black text-slate-900 md:text-4xl">
+                Bienvenida de vuelta, <span className="text-pink-600">{nombreCliente}</span>
+              </h1>
+              <p className="mt-3 max-w-2xl text-sm font-medium leading-6 text-slate-500 md:text-base">
+                Aquí solo ves los salones donde ya te atendieron, con las sedes y categorías que
+                realmente forman parte de tu historial.
+              </p>
+            </div>
+            <div className="grid gap-3 sm:grid-cols-2 md:grid-cols-1">
+              <div className="rounded-3xl border border-slate-200 bg-slate-50 px-4 py-4">
+                <p className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-500">
+                  País activo
+                </p>
+                <p className="mt-2 text-lg font-black text-slate-900">
+                  {etiquetaPais(paisCliente)}
+                </p>
+                <p className="mt-1 text-xs text-slate-500">
+                  Los salones visibles quedan restringidos a tu país.
+                </p>
+              </div>
+              <div className="rounded-3xl border border-slate-200 bg-slate-50 px-4 py-4">
+                <p className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-500">
+                  Historial real
+                </p>
+                <p className="mt-2 text-lg font-black text-slate-900">
+                  {salonesPrivados.length} salones
+                </p>
+                <p className="mt-1 text-xs text-slate-500">
+                  Basado solo en citas completadas de tu cuenta.
+                </p>
+              </div>
+            </div>
           </div>
         </header>
 
@@ -204,7 +302,7 @@ export function PaginaInicioCliente() {
             type="search"
             value={busqueda}
             onChange={(e) => setBusqueda(e.target.value)}
-            placeholder="Busca tu salón favorito..."
+            placeholder="Buscar por salón, sede o categoría consumida"
             autoComplete="off"
             className="w-full pl-12 pr-4 py-4 bg-white border border-slate-200 rounded-2xl text-base font-medium placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-pink-400 shadow-sm"
             aria-label="Buscar salones"
@@ -212,7 +310,7 @@ export function PaginaInicioCliente() {
         </div>
 
         <div className="mb-3 flex items-center justify-between gap-3 flex-wrap">
-          <p className="text-sm font-bold text-slate-600">Filtra por servicios</p>
+          <p className="text-sm font-bold text-slate-600">Filtra por categorías consumidas</p>
           {categoriasActivas.length > 0 && (
             <button
               type="button"
@@ -224,9 +322,8 @@ export function PaginaInicioCliente() {
           )}
         </div>
 
-        {/* Chips de categorías */}
         <div className="flex gap-2 flex-wrap mb-8" role="group" aria-label="Filtrar por categoría">
-          {CATEGORIAS.map((cat) => (
+          {categoriasDisponibles.map((cat) => (
             <button
               key={cat}
               type="button"
@@ -243,32 +340,34 @@ export function PaginaInicioCliente() {
           ))}
         </div>
 
-        {/* Estado de carga */}
-        {isLoading && (
-          <div className="flex justify-center py-16" aria-busy="true" aria-label="Cargando salones">
-            <span className="w-10 h-10 border-2 border-pink-600 border-t-transparent rounded-full animate-spin" />
+        {perfilCliente && salonesPrivados.length === 0 && (
+          <div className="flex flex-col items-center py-20 text-center">
+            <History className="w-16 h-16 text-slate-200 mb-4" aria-hidden="true" />
+            <p className="font-black text-slate-900 text-lg">Aún no tienes historial atendido</p>
+            <p className="text-slate-500 mt-1 text-sm max-w-md">
+              Cuando completes tu primera cita, aquí aparecerán el salón, las sedes y las categorías
+              que ya forman parte de tu historial.
+            </p>
           </div>
         )}
 
-        {/* Sin resultados */}
-        {!isLoading && salones.length === 0 && (
+        {perfilCliente && salonesPrivados.length > 0 && salonesFiltrados.length === 0 && (
           <div className="flex flex-col items-center py-20 text-center">
             <Star className="w-16 h-16 text-slate-200 mb-4" aria-hidden="true" />
-            <p className="font-black text-slate-900 text-lg">No encontramos salones</p>
+            <p className="font-black text-slate-900 text-lg">No encontramos coincidencias</p>
             <p className="text-slate-500 mt-1 text-sm">
-              Intenta con otra búsqueda o elimina alguno de los filtros activos
+              Ajusta la búsqueda o limpia los filtros activos para ver más resultados.
             </p>
           </div>
         )}
 
-        {/* Grid de salones */}
-        {!isLoading && salones.length > 0 && (
+        {salonesFiltrados.length > 0 && (
           <section aria-label="Salones disponibles">
             <p className="text-sm text-slate-400 font-medium mb-4">
-              {salones.length} salón{salones.length !== 1 ? 'es' : ''}
+              {salonesFiltrados.length} salón{salonesFiltrados.length !== 1 ? 'es' : ''}
             </p>
             <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
-              {salones.map((salon) => (
+              {salonesFiltrados.map((salon) => (
                 <TarjetaSalon key={salon.id} salon={salon} />
               ))}
             </div>

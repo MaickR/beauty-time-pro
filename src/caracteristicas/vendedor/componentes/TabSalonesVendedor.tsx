@@ -3,11 +3,11 @@ import { Store } from 'lucide-react';
 import { obtenerMisSalones } from '../../../servicios/servicioVendedor';
 
 const ESTADOS_SALON: Record<string, { etiqueta: string; color: string }> = {
-  aprobado: { etiqueta: 'Active', color: 'bg-green-100 text-green-700' },
-  pendiente: { etiqueta: 'Pending', color: 'bg-amber-100 text-amber-700' },
-  suspendido: { etiqueta: 'Suspended', color: 'bg-red-100 text-red-700' },
-  bloqueado: { etiqueta: 'Blocked', color: 'bg-slate-200 text-slate-600' },
-  rechazado: { etiqueta: 'Rejected', color: 'bg-red-100 text-red-700' },
+  aprobado: { etiqueta: 'Activo', color: 'bg-green-100 text-green-700' },
+  pendiente: { etiqueta: 'Pendiente', color: 'bg-amber-100 text-amber-700' },
+  suspendido: { etiqueta: 'Suspendido', color: 'bg-red-100 text-red-700' },
+  bloqueado: { etiqueta: 'Bloqueado', color: 'bg-slate-200 text-slate-600' },
+  rechazado: { etiqueta: 'Rechazado', color: 'bg-red-100 text-red-700' },
 };
 
 export function TabSalonesVendedor() {
@@ -29,9 +29,9 @@ export function TabSalonesVendedor() {
     return (
       <div className="text-center py-16">
         <Store className="w-12 h-12 text-slate-300 mx-auto mb-4" aria-hidden="true" />
-        <p className="text-slate-500 font-medium">No salons assigned yet</p>
+        <p className="text-slate-500 font-medium">Aún no tienes salones asignados</p>
         <p className="text-slate-400 text-sm mt-1">
-          When your pre-registrations are approved, salons will appear here.
+          Cuando aprueben tus pre-registros, los salones aparecerán aquí.
         </p>
       </div>
     );
@@ -39,20 +39,20 @@ export function TabSalonesVendedor() {
 
   return (
     <div>
-      <h2 className="text-lg font-bold text-slate-900 mb-4">My Salons</h2>
+      <h2 className="text-lg font-bold text-slate-900 mb-4">Mis salones</h2>
 
       {/* Tabla desktop */}
       <div className="hidden md:block bg-white rounded-2xl border border-slate-100 overflow-hidden">
         <table className="w-full text-sm">
           <thead>
             <tr className="bg-slate-50 text-left">
-              <th className="px-4 py-3 font-semibold text-slate-600">Salon</th>
-              <th className="px-4 py-3 font-semibold text-slate-600">Owner</th>
+              <th className="px-4 py-3 font-semibold text-slate-600">Salón</th>
+              <th className="px-4 py-3 font-semibold text-slate-600">Propietario</th>
               <th className="px-4 py-3 font-semibold text-slate-600">Plan</th>
-              <th className="px-4 py-3 font-semibold text-slate-600">Country</th>
-              <th className="px-4 py-3 font-semibold text-slate-600 text-center">Bookings</th>
-              <th className="px-4 py-3 font-semibold text-slate-600">Expires</th>
-              <th className="px-4 py-3 font-semibold text-slate-600 text-center">Status</th>
+              <th className="px-4 py-3 font-semibold text-slate-600">País</th>
+              <th className="px-4 py-3 font-semibold text-slate-600 text-center">Reservas</th>
+              <th className="px-4 py-3 font-semibold text-slate-600">Vence</th>
+              <th className="px-4 py-3 font-semibold text-slate-600 text-center">Estado</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-50">
@@ -99,10 +99,10 @@ export function TabSalonesVendedor() {
                   <p className="font-bold text-slate-900">{s.nombre}</p>
                   <p className="text-sm text-slate-500 mt-0.5">{s.propietario}</p>
                   <p className="text-xs text-slate-400 mt-1">
-                    {s.pais} &middot; {s.plan} &middot; Expires: {s.fechaVencimiento}
+                    {s.pais} &middot; {s.plan} &middot; Vence: {s.fechaVencimiento}
                   </p>
                   <p className="text-xs text-slate-500 mt-1">
-                    <strong>{s.totalReservas}</strong> bookings
+                    <strong>{s.totalReservas}</strong> reservas
                   </p>
                 </div>
                 <span

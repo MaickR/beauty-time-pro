@@ -5,6 +5,7 @@ import { z } from 'zod';
 import { prisma } from '../prismaCliente.js';
 import { verificarJWT } from '../middleware/autenticacion.js';
 import { requiereAccesoAdministrativo, requierePermiso } from '../middleware/verificarPermiso.js';
+import { revocarSesionesPorSujeto } from '../lib/sesionesAuth.js';
 import { resolverCategoriasSalon } from '../lib/categoriasSalon.js';
 import { construirSelectDesdeColumnas, obtenerColumnasTabla } from '../lib/compatibilidadEsquema.js';
 import { cacheSalonesPublicos } from '../lib/cache.js';
@@ -17,32 +18,70 @@ import { generarClavesSalonUnicas } from '../lib/clavesSalon.js';
 import { asegurarPrecioActualSalon, obtenerPrecioPlanActual, obtenerResumenSuscripcionesActivas } from '../lib/preciosPlanes.js';
 import { obtenerFechaISOEnZona, obtenerZonaHorariaPorPais } from '../utils/zonasHorarias.js';
 import { generarSlugUnico } from '../utils/generarSlug.js';
+import { esEmailValido } from '../utils/validarEmail.js';
+import {
+  esNombrePersonaRegistroValido,
+  esNombreSalonRegistroValido,
+  esTelefonoSalonRegistroValido,
+  limpiarNombrePersonaRegistro,
+  limpiarNombreSalonRegistro,
+  normalizarTelefonoSalonRegistro,
+} from '../utils/registroSalon.js';
+
+const esquemaNombreSalonRegistro = z
+  .string()
+  .trim()
+  .min(2, 'El nombre del salón debe tener al menos 2 caracteres')
+  .max(120, 'El nombre del salón no puede superar 120 caracteres')
+  .refine(esNombreSalonRegistroValido, 'El nombre del salón solo admite letras, números y espacios')
+  .transform(limpiarNombreSalonRegistro);
+
+const esquemaNombrePersonaRegistro = z
+  .string()
+  .trim()
+  .min(2, 'El nombre completo debe tener al menos 2 caracteres')
+  .max(120, 'El nombre completo no puede superar 120 caracteres')
+  .refine(esNombrePersonaRegistroValido, 'El nombre completo solo admite letras y espacios')
+  .transform(limpiarNombrePersonaRegistro);
+
+const esquemaTelefonoSalonRegistro = telefonoSchema
+  .refine(esTelefonoSalonRegistroValido, 'El teléfono del salón debe tener exactamente 10 dígitos')
+  .transform(normalizarTelefonoSalonRegistro);
 
 const esquemaRechazoSolicitud = z.object({
   motivo: textoSchema('motivo', 500, 10),
 });
 
 const esquemaCrearSalonAdmin = z.object({
-  nombreSalon: textoSchema('nombreSalon', 120, 2),
-  nombreAdmin: textoSchema('nombreAdmin', 120, 2),
-  email: emailSchema,
+  nombreSalon: esquemaNombreSalonRegistro,
+  nombreAdmin: esquemaNombrePersonaRegistro,
+  email: emailSchema.refine(esEmailValido, 'Solo se aceptan correos personales permitidos (@gmail, @hotmail, @outlook o @yahoo)'),
   contrasena: z.string().min(8, 'La contraseña debe tener al menos 8 caracteres'),
-  telefono: telefonoSchema,
+  telefono: esquemaTelefonoSalonRegistro,
   pais: z.enum(['Mexico', 'Colombia']).optional().default('Mexico'),
   plan: z.enum(['STANDARD', 'PRO']).optional().default('STANDARD'),
+  estudioPrincipalId: z.string().trim().min(1, 'Debes seleccionar un salón principal').nullable().optional(),
+  permiteReservasPublicas: z.boolean().optional().default(true),
   inicioSuscripcion: fechaIsoSchema.optional(),
+  direccion: z.string().trim().max(180, 'La dirección no puede superar 180 caracteres').optional(),
+  sucursales: z.array(esquemaNombreSalonRegistro).max(10, 'No puedes registrar más de 10 sucursales').optional().default([]),
   servicios: z.array(z.object({
     name: textoSchema('name', 120, 1),
     duration: z.number().int().min(1).max(480),
     price: z.number().int().min(100).max(999_999_999),
     category: z.string().trim().min(1).max(80).optional(),
   })).optional().default([]),
+  productos: z.array(z.object({
+    nombre: textoSchema('nombre', 120, 1),
+    categoria: textoSchema('categoria', 80, 1).optional(),
+    precio: z.number().int().min(100).max(999_999_999),
+  })).optional().default([]),
   serviciosCustom: z.array(z.object({
     name: textoSchema('name', 120, 1),
     category: textoSchema('category', 80, 1),
   })).optional().default([]),
   personal: z.array(z.object({
-    nombre: textoSchema('nombre', 120, 2),
+    nombre: esquemaNombrePersonaRegistro,
     especialidades: z.array(z.string().trim()).default([]),
     horaInicio: z.string().optional(),
     horaFin: z.string().optional(),
@@ -79,21 +118,18 @@ function formatearFechaISO(fecha: Date): string {
   return fecha.toISOString().split('T')[0]!;
 }
 
-function formatearFechaHoraSQL(fecha: Date): string {
-  return fecha.toISOString().slice(0, 19).replace('T', ' ');
+function formatearFechaHoraSQL(fecha: Date): Date {
+  return fecha;
 }
 
 function fechaInicioEsValidaParaAlta(fecha: Date): boolean {
   const hoy = new Date();
   hoy.setHours(0, 0, 0, 0);
 
-  const fechaMinima = new Date(hoy);
-  fechaMinima.setFullYear(fechaMinima.getFullYear() - 1);
-
   const fechaMaxima = new Date(hoy);
   fechaMaxima.setFullYear(fechaMaxima.getFullYear() + 10);
 
-  return fecha >= fechaMinima && fecha <= fechaMaxima;
+  return fecha >= hoy && fecha <= fechaMaxima;
 }
 
 function obtenerMonedaPorPais(pais?: string | null): 'MXN' | 'COP' {
@@ -154,7 +190,7 @@ function esErrorCompatibilidadAdmin(error: unknown): boolean {
   return (
     codigo === 'P2022' ||
     /Unknown column/i.test(mensaje) ||
-    /(plan|pinCancelacionHash|fechaSolicitud|fechaAprobacion|motivoRechazo|primeraVez|cancelacionSolicitada|fechaSolicitudCancelacion|motivoCancelacion)/i.test(
+    /(plan|pinCancelacionHash|fechaSolicitud|fechaAprobacion|motivoRechazo|primeraVez|cancelacionSolicitada|fechaSolicitudCancelacion|motivoCancelacion|estudioPrincipalId|permiteReservasPublicas)/i.test(
       mensaje,
     )
   );
@@ -181,6 +217,7 @@ const seleccionarDuenoAdmin = {
 const seleccionarSalonAdminModerno = {
   id: true,
   nombre: true,
+  estudioPrincipalId: true,
   propietario: true,
   telefono: true,
   pais: true,
@@ -192,6 +229,7 @@ const seleccionarSalonAdminModerno = {
   fechaSolicitud: true,
   fechaAprobacion: true,
   suscripcion: true,
+  permiteReservasPublicas: true,
   inicioSuscripcion: true,
   fechaVencimiento: true,
   emailContacto: true,
@@ -207,12 +245,14 @@ const seleccionarSalonAdminModerno = {
 const seleccionarSalonAdminCompat = {
   id: true,
   nombre: true,
+  estudioPrincipalId: true,
   propietario: true,
   telefono: true,
   pais: true,
   sucursales: true,
   activo: true,
   suscripcion: true,
+  permiteReservasPublicas: true,
   inicioSuscripcion: true,
   fechaVencimiento: true,
   emailContacto: true,
@@ -228,6 +268,7 @@ const seleccionarSalonAdminCompat = {
 const seleccionarSalonCreadoModerno = {
   id: true,
   nombre: true,
+  estudioPrincipalId: true,
   propietario: true,
   telefono: true,
   pais: true,
@@ -235,6 +276,7 @@ const seleccionarSalonCreadoModerno = {
   activo: true,
   estado: true,
   plan: true,
+  permiteReservasPublicas: true,
   inicioSuscripcion: true,
   fechaVencimiento: true,
   emailContacto: true,
@@ -247,11 +289,13 @@ const seleccionarSalonCreadoModerno = {
 const seleccionarSalonCreadoCompat = {
   id: true,
   nombre: true,
+  estudioPrincipalId: true,
   propietario: true,
   telefono: true,
   pais: true,
   sucursales: true,
   activo: true,
+  permiteReservasPublicas: true,
   inicioSuscripcion: true,
   fechaVencimiento: true,
   emailContacto: true,
@@ -312,10 +356,39 @@ function obtenerFechaSolicitudRegistro(estudio: Record<string, unknown>): Date {
   return convertirFecha(estudio['fechaSolicitud']) ?? convertirFecha(estudio['creadoEn']) ?? new Date();
 }
 
+async function validarEstudioPrincipalParaAlta(estudioPrincipalId: string): Promise<string | null> {
+  const estudioPrincipal = await prisma.estudio.findUnique({
+    where: { id: estudioPrincipalId },
+    select: {
+      id: true,
+      activo: true,
+      estado: true,
+      estudioPrincipalId: true,
+    },
+  });
+
+  if (!estudioPrincipal) {
+    return 'El salón principal seleccionado no existe';
+  }
+
+  if (estudioPrincipal.estudioPrincipalId) {
+    return 'Solo puedes asociar sedes a un salón principal';
+  }
+
+  if (!estudioPrincipal.activo || estudioPrincipal.estado !== 'aprobado') {
+    return 'El salón principal seleccionado no está disponible';
+  }
+
+  return null;
+}
+
 function serializarSalonCreado(estudio: Record<string, unknown>) {
   return {
     ...estudio,
     plan: (estudio['plan'] as string | undefined) ?? 'STANDARD',
+    estudioPrincipalId: (estudio['estudioPrincipalId'] as string | null | undefined) ?? null,
+    permiteReservasPublicas:
+      (estudio['permiteReservasPublicas'] as boolean | undefined) ?? true,
     estado: normalizarEstadoSalonDesdeRegistro(estudio),
     fechaSolicitud: convertirFecha(estudio['fechaSolicitud'])?.toISOString() ?? null,
     fechaAprobacion: convertirFecha(estudio['fechaAprobacion'])?.toISOString() ?? null,
@@ -365,6 +438,8 @@ async function crearSalonAdminCompat(
     nombreAdmin: string;
     telefono: string;
     pais: 'Mexico' | 'Colombia';
+    estudioPrincipalId?: string | null;
+    permiteReservasPublicas: boolean;
     claveDueno: string;
     claveCliente: string;
     emailNorm: string;
@@ -379,7 +454,9 @@ async function crearSalonAdminCompat(
     propietario: datos.nombreAdmin,
     telefono: datos.telefono,
     pais: datos.pais,
-    sucursales: [datos.nombreSalon],
+    estudioPrincipalId: datos.estudioPrincipalId ?? null,
+    permiteReservasPublicas: datos.permiteReservasPublicas,
+    sucursales: [],
     claveDueno: datos.claveDueno,
     claveCliente: datos.claveCliente,
     inicioSuscripcion: datos.fechaInicio,
@@ -1064,12 +1141,35 @@ export async function rutasAdmin(servidor: FastifyInstance): Promise<void> {
           telefono,
           pais,
           plan,
+          estudioPrincipalId,
+          permiteReservasPublicas,
           inicioSuscripcion,
+          direccion,
+          sucursales,
           servicios,
+          productos,
           serviciosCustom,
           personal,
         } = resultado.data;
         const planNormalizado = normalizarPlanEstudio(plan);
+        if (estudioPrincipalId) {
+          const errorEstudioPrincipal = await validarEstudioPrincipalParaAlta(estudioPrincipalId);
+          if (errorEstudioPrincipal) {
+            return respuesta.code(400).send({ error: errorEstudioPrincipal });
+          }
+        }
+        if (planNormalizado === 'STANDARD' && sucursales.length > 0) {
+          return respuesta.code(400).send({
+            error: 'Las sucursales adicionales solo están disponibles para el plan Pro',
+          });
+        }
+
+        if (planNormalizado === 'STANDARD' && productos.length > 0) {
+          return respuesta.code(400).send({
+            error: 'Los productos solo están disponibles para el plan Pro',
+          });
+        }
+
         const errorServiciosPlan = validarCantidadServiciosPlan({
           plan: planNormalizado,
           cantidadNueva: servicios.length,
@@ -1088,6 +1188,16 @@ export async function rutasAdmin(servidor: FastifyInstance): Promise<void> {
 
         const { claveDueno, claveCliente } = await generarClavesSalonUnicas(nombreSalon);
         const slugEstudio = await generarSlugUnico(nombreSalon);
+        const sucursalesNormalizadas =
+          planNormalizado === 'PRO'
+            ? Array.from(
+                new Set(
+                  sucursales
+                    .map((sucursal) => limpiarNombreSalonRegistro(sucursal))
+                    .filter(Boolean),
+                ),
+              )
+            : [];
 
         const fechaInicio = inicioSuscripcion ? crearFechaDesdeISO(inicioSuscripcion) : new Date();
         fechaInicio.setHours(0, 0, 0, 0);
@@ -1138,9 +1248,15 @@ export async function rutasAdmin(servidor: FastifyInstance): Promise<void> {
             propietario: nombreAdmin,
             telefono,
             sitioWeb: null,
+            ...(columnasEstudios.has('estudioPrincipalId') && {
+              estudioPrincipalId: estudioPrincipalId ?? null,
+            }),
             pais,
             ...(columnasEstudios.has('zonaHoraria') && { zonaHoraria: obtenerZonaHorariaPorPais(pais) }),
-            sucursales: [nombreSalon],
+            ...(columnasEstudios.has('permiteReservasPublicas') && {
+              permiteReservasPublicas,
+            }),
+            sucursales: estudioPrincipalId ? [] : sucursalesNormalizadas,
             claveDueno,
             claveCliente,
             activo: true,
@@ -1157,6 +1273,7 @@ export async function rutasAdmin(servidor: FastifyInstance): Promise<void> {
             ...(columnasEstudios.has('plan') && { plan: planNormalizado }),
             ...(columnasEstudios.has('estado') && { estado: 'aprobado' }),
             ...(columnasEstudios.has('emailContacto') && { emailContacto: emailNorm }),
+            ...(columnasEstudios.has('direccion') && { direccion: direccion?.trim() || null }),
             ...(columnasEstudios.has('fechaSolicitud') && { fechaSolicitud: marcaTiempoActual }),
             ...(columnasEstudios.has('fechaAprobacion') && { fechaAprobacion: marcaTiempoActual }),
             ...(columnasEstudios.has('actualizadoEn') && { actualizadoEn: marcaTiempoActual }),
@@ -1200,6 +1317,18 @@ export async function rutasAdmin(servidor: FastifyInstance): Promise<void> {
                 }),
               });
             }
+          }
+
+          if (productos.length > 0) {
+            await prisma.producto.createMany({
+              data: productos.map((producto) => ({
+                estudioId: estudioCreadoId,
+                nombre: producto.nombre.trim(),
+                categoria: producto.categoria?.trim() || 'General',
+                precio: producto.precio,
+                activo: true,
+              })),
+            });
           }
 
           try {
@@ -3042,7 +3171,19 @@ export async function rutasAdmin(servidor: FastifyInstance): Promise<void> {
       const { id } = solicitud.params;
       const body = solicitud.body;
 
-      const estudio = await prisma.estudio.findUnique({ where: { id }, select: { id: true, nombre: true } });
+      const estudio = await prisma.estudio.findUnique({
+        where: { id },
+        select: {
+          id: true,
+          nombre: true,
+          emailContacto: true,
+          usuarios: {
+            where: { rol: 'dueno' },
+            take: 1,
+            select: { id: true, email: true },
+          },
+        },
+      });
       if (!estudio) {
         return respuesta.code(404).send({ error: 'Salón no encontrado' });
       }
@@ -3059,21 +3200,112 @@ export async function rutasAdmin(servidor: FastifyInstance): Promise<void> {
         }
       }
 
-      if (Object.keys(actualizacion).length === 0) {
+      const actualizacionDueno: Record<string, unknown> = {};
+      const emailDueno = typeof body['emailDueno'] === 'string' ? body['emailDueno'].trim().toLowerCase() : null;
+      const contrasenaDueno = typeof body['contrasenaDueno'] === 'string' ? body['contrasenaDueno'].trim() : null;
+
+      if (actualizacion.nombre !== undefined) {
+        const resultado = esquemaNombreSalonRegistro.safeParse(actualizacion.nombre);
+        if (!resultado.success) {
+          return respuesta.code(400).send({ error: resultado.error.issues[0]?.message ?? 'Nombre de salón inválido' });
+        }
+        actualizacion.nombre = resultado.data;
+      }
+
+      if (actualizacion.propietario !== undefined) {
+        const resultado = esquemaNombrePersonaRegistro.safeParse(actualizacion.propietario);
+        if (!resultado.success) {
+          return respuesta.code(400).send({ error: resultado.error.issues[0]?.message ?? 'Nombre del dueño inválido' });
+        }
+        actualizacion.propietario = resultado.data;
+      }
+
+      if (actualizacion.telefono !== undefined) {
+        const resultado = esquemaTelefonoSalonRegistro.safeParse(actualizacion.telefono);
+        if (!resultado.success) {
+          return respuesta.code(400).send({ error: resultado.error.issues[0]?.message ?? 'Teléfono inválido' });
+        }
+        actualizacion.telefono = resultado.data;
+      }
+
+      if (actualizacion.emailContacto !== undefined) {
+        if (typeof actualizacion.emailContacto !== 'string' || !esEmailValido(actualizacion.emailContacto)) {
+          return respuesta.code(400).send({ error: 'Solo se aceptan correos personales permitidos (@gmail, @hotmail, @outlook o @yahoo)' });
+        }
+        actualizacion.emailContacto = actualizacion.emailContacto.trim().toLowerCase();
+      }
+
+      if (emailDueno) {
+        if (!esEmailValido(emailDueno)) {
+          return respuesta.code(400).send({ error: 'El correo del dueño no es válido' });
+        }
+        actualizacionDueno['email'] = emailDueno;
+        if (actualizacion.emailContacto === undefined) {
+          actualizacion.emailContacto = emailDueno;
+        }
+      }
+
+      if (contrasenaDueno) {
+        if (contrasenaDueno.length < 8) {
+          return respuesta.code(400).send({ error: 'La contraseña del dueño debe tener al menos 8 caracteres' });
+        }
+        actualizacionDueno['hashContrasena'] = await generarHashContrasena(contrasenaDueno);
+      }
+
+      if (actualizacion.plan !== undefined && actualizacion.plan !== 'STANDARD' && actualizacion.plan !== 'PRO') {
+        return respuesta.code(400).send({ error: 'Plan inválido' });
+      }
+
+      if (actualizacion.inicioSuscripcion !== undefined) {
+        const resultado = fechaIsoSchema.safeParse(actualizacion.inicioSuscripcion);
+        if (!resultado.success) {
+          return respuesta.code(400).send({ error: 'La fecha de inicio de suscripción no es válida' });
+        }
+      }
+
+      if (actualizacion.fechaVencimiento !== undefined) {
+        const resultado = fechaIsoSchema.safeParse(actualizacion.fechaVencimiento);
+        if (!resultado.success) {
+          return respuesta.code(400).send({ error: 'La fecha de vencimiento no es válida' });
+        }
+      }
+
+      if (Object.keys(actualizacion).length === 0 && Object.keys(actualizacionDueno).length === 0) {
         return respuesta.code(400).send({ error: 'No se proporcionaron campos para actualizar' });
       }
 
-      await prisma.estudio.update({
-        where: { id },
-        data: actualizacion as Prisma.EstudioUpdateInput,
+      await prisma.$transaction(async (tx) => {
+        if (Object.keys(actualizacion).length > 0) {
+          await tx.estudio.update({
+            where: { id },
+            data: actualizacion as Prisma.EstudioUpdateInput,
+          });
+        }
+
+        if (Object.keys(actualizacionDueno).length > 0 && estudio.usuarios[0]?.id) {
+          await tx.usuario.update({
+            where: { id: estudio.usuarios[0].id },
+            data: actualizacionDueno as Prisma.UsuarioUpdateInput,
+          });
+        }
       });
+
+      if (Object.keys(actualizacionDueno).length > 0 && estudio.usuarios[0]?.id) {
+        await revocarSesionesPorSujeto('usuario', estudio.usuarios[0].id, 'credenciales_salon_actualizadas');
+      }
 
       await registrarAuditoria({
         usuarioId: payload.sub,
         accion: 'editar_salon_directorio',
         entidadTipo: 'estudio',
         entidadId: id,
-        detalles: { nombre: estudio.nombre, campos: Object.keys(actualizacion) },
+        detalles: {
+          nombre: estudio.nombre,
+          campos: Object.keys(actualizacion),
+          credencialesActualizadas: Object.keys(actualizacionDueno),
+          emailDuenoAnterior: estudio.usuarios[0]?.email ?? null,
+          emailContactoAnterior: estudio.emailContacto ?? null,
+        },
         ip: solicitud.ip,
       });
 

@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import {
   Store,
@@ -6,13 +6,14 @@ import {
   Calendar,
   Wallet,
   DollarSign,
-  PieChart,
   TrendingUp,
   Users,
   Palette,
   Gift,
   HelpCircle,
   ShoppingBag,
+  CalendarRange,
+  CalendarCheck,
 } from 'lucide-react';
 import { usarContextoApp } from '../../contextos/ContextoApp';
 import { usarTituloPagina } from '../../hooks/usarTituloPagina';
@@ -49,6 +50,11 @@ export function PaginaAdminEstudio() {
   const estudioId = estudio?.id;
   const { notificaciones, marcarLeida } = usarNotificacionesEstudio(estudioId);
 
+  useEffect(() => {
+    if (!estudio?.slug || !slug || slug === estudio.slug) return;
+    navegar(`/estudio/${estudio.slug}/admin`, { replace: true });
+  }, [estudio?.slug, slug, navegar]);
+
   if (cargando)
     return (
       <div className="h-screen bg-slate-50 flex items-center justify-center">
@@ -58,7 +64,7 @@ export function PaginaAdminEstudio() {
   if (!estudio)
     return (
       <div className="h-screen bg-slate-50 flex items-center justify-center">
-        <p className="text-slate-400 font-bold">Studio no encontrado.</p>
+        <p className="text-slate-400 font-bold">Salón no encontrado.</p>
       </div>
     );
 
@@ -66,7 +72,6 @@ export function PaginaAdminEstudio() {
   const reservasEstudio = reservas.filter((r) => r.studioId === estudio.id);
   const hoySrt = obtenerFechaLocalISO(new Date());
   const mesPrefijo = hoySrt.substring(0, 7);
-  const anoPrefijo = hoySrt.substring(0, 4);
   const completadas = reservasEstudio.filter((b) => b.status === 'completed');
   const totalHoy = completadas
     .filter((b) => b.date === hoySrt)
@@ -74,27 +79,32 @@ export function PaginaAdminEstudio() {
   const totalMes = completadas
     .filter((b) => b.date.startsWith(mesPrefijo))
     .reduce((acc, b) => acc + (b.totalPrice ?? 0), 0);
-  const totalAno = completadas
-    .filter((b) => b.date.startsWith(anoPrefijo))
+  const totalSemana = completadas
+    .filter((b) => {
+      const fechaReserva = new Date(`${b.date}T00:00:00`);
+      const fechaHoy = new Date(`${hoySrt}T00:00:00`);
+      const diferenciaDias = Math.floor((fechaHoy.getTime() - fechaReserva.getTime()) / 86400000);
+      return diferenciaDias >= 0 && diferenciaDias < 7;
+    })
     .reduce((acc, b) => acc + (b.totalPrice ?? 0), 0);
 
   const tarjetas = [
     {
-      titulo: "Today's Sales",
+      titulo: 'Ventas del día',
       monto: totalHoy,
       icono: DollarSign,
       color: 'bg-green-100 text-green-700',
     },
     {
-      titulo: 'Monthly Revenue',
-      monto: totalMes,
-      icono: PieChart,
+      titulo: 'Ventas de la semana',
+      monto: totalSemana,
+      icono: CalendarRange,
       color: 'bg-blue-100 text-blue-700',
     },
     {
-      titulo: 'Annual Revenue',
-      monto: totalAno,
-      icono: TrendingUp,
+      titulo: 'Ventas del mes',
+      monto: totalMes,
+      icono: CalendarCheck,
       color: 'bg-pink-100 text-pink-700',
     },
   ];
@@ -161,12 +171,12 @@ export function PaginaAdminEstudio() {
           </button>
         </div>
 
-        <div className="no-imprimir flex flex-wrap gap-1 bg-slate-100 p-1 rounded-2xl w-full sm:w-fit border border-slate-200">
+        <div className="no-imprimir flex flex-wrap justify-center gap-1 bg-slate-100 p-1 rounded-2xl w-full border border-slate-200">
           <button
             onClick={() => setSeccion('ingresos')}
             className={`flex-1 sm:flex-none px-3 sm:px-4 md:px-6 py-2.5 rounded-xl text-[10px] md:text-xs font-black transition-all flex items-center justify-center gap-1.5 ${seccion === 'ingresos' ? 'bg-white shadow-sm text-slate-900' : 'text-slate-500 hover:text-slate-800'}`}
           >
-            <TrendingUp className="w-4 h-4 shrink-0" /> Revenue
+            <TrendingUp className="w-4 h-4 shrink-0" /> Ingresos
           </button>
           <button
             onClick={() => setSeccion('clientes')}
@@ -202,14 +212,14 @@ export function PaginaAdminEstudio() {
             onClick={() => setSeccion('contacto')}
             className={`flex-1 sm:flex-none px-3 sm:px-4 md:px-6 py-2.5 rounded-xl text-[10px] md:text-xs font-black transition-all flex items-center justify-center gap-1.5 ${seccion === 'contacto' ? 'bg-white shadow-sm text-slate-900' : 'text-slate-500 hover:text-slate-800'}`}
           >
-            <HelpCircle className="w-4 h-4 shrink-0" /> Contact Us
+            <HelpCircle className="w-4 h-4 shrink-0" /> Soporte
           </button>
         </div>
 
         {seccion === 'ingresos' && (
           <>
             <h2 className="text-3xl font-black italic uppercase tracking-tighter">
-              Revenue Overview
+              Resumen de ingresos
             </h2>
 
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
@@ -275,7 +285,7 @@ export function PaginaAdminEstudio() {
           </>
         )}
 
-        {seccion === 'contacto' && <SeccionContacto />}
+        {seccion === 'contacto' && <SeccionContacto estudio={estudio} />}
       </main>
 
       {estudio.estado === 'suspendido' && (

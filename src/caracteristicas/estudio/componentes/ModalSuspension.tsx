@@ -1,6 +1,6 @@
 import { ShieldAlert, MessageCircle } from 'lucide-react';
 
-const WHATSAPP_MEXICO = '5255641341516';
+const WHATSAPP_MEXICO = '525564134151';
 const WHATSAPP_COLOMBIA = '573006934216';
 
 interface PropsModalSuspension {
@@ -10,7 +10,8 @@ interface PropsModalSuspension {
 
 export function ModalSuspension({ nombreSalon, pais }: PropsModalSuspension) {
   const numeroWhatsApp = pais === 'Colombia' ? WHATSAPP_COLOMBIA : WHATSAPP_MEXICO;
-  const enlaceWhatsApp = `https://wa.me/${numeroWhatsApp}?text=${encodeURIComponent(`Hola, mi salón "${nombreSalon}" fue suspendido. Necesito ayuda para reactivar mi cuenta.`)}`;
+  const telefonoVisible = pais === 'Colombia' ? '+57 300 6934216' : '+52 55 6413 4151';
+  const enlaceWhatsApp = `https://wa.me/${numeroWhatsApp}?text=${encodeURIComponent(`Hola, mi salón "${nombreSalon}" fue suspendido por falta de pago. Necesito ayuda para renovar la suscripción y reactivar la cuenta.`)}`;
 
   return (
     <div
@@ -25,12 +26,16 @@ export function ModalSuspension({ nombreSalon, pais }: PropsModalSuspension) {
         </div>
 
         <h2 id="titulo-suspension" className="text-2xl font-black text-slate-900 uppercase">
-          Account Suspended
+          Suscripción suspendida
         </h2>
 
         <p className="text-slate-600 mt-4 text-sm leading-relaxed">
-          Your subscription for <strong>{nombreSalon}</strong> has been suspended due to a pending
-          payment. Please contact us to reactivate your account.
+          Tu usuario fue suspendido por falta de pago en <strong>{nombreSalon}</strong>. Comunícate
+          con soporte para renovar la suscripción y reactivar tu acceso.
+        </p>
+
+        <p className="mt-4 rounded-2xl bg-slate-50 px-4 py-3 text-sm font-semibold text-slate-700">
+          Soporte {pais === 'Colombia' ? 'Colombia' : 'México'}: {telefonoVisible}
         </p>
 
         <div className="mt-8 space-y-3">
@@ -41,12 +46,12 @@ export function ModalSuspension({ nombreSalon, pais }: PropsModalSuspension) {
             className="flex items-center justify-center gap-2 w-full rounded-xl bg-green-500 px-4 py-4 text-sm font-black text-white hover:bg-green-600 transition-colors"
           >
             <MessageCircle className="w-5 h-5" aria-hidden="true" />
-            Contact us via WhatsApp
+            Abrir WhatsApp
           </a>
         </div>
 
         <p className="text-[11px] text-slate-400 font-bold mt-6">
-          Once your payment is confirmed, your account will be reactivated automatically.
+          Cuando el pago sea confirmado, el sistema reactivará la cuenta automáticamente.
         </p>
       </div>
     </div>

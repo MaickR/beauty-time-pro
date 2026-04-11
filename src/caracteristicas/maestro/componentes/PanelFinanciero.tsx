@@ -3,8 +3,11 @@ import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { Search, Bell, DollarSign, ShieldAlert } from 'lucide-react';
 import { peticion } from '../../../lib/clienteHTTP';
 import { usarToast } from '../../../componentes/ui/ProveedorToast';
+import { Tooltip } from '../../../componentes/ui/Tooltip';
 import {
   formatearDinero,
+  formatearPais,
+  formatearPlan,
   obtenerEstadoSuscripcion,
   obtenerMonedaPorPais,
   formatearFechaHumana,
@@ -113,7 +116,7 @@ export function PanelFinanciero({ estudios, onAbrirPago, onRecargar }: PropsPane
               onClick={() => cambiarPais(p)}
               className={`px-4 py-2 rounded-lg text-xs font-black uppercase transition-all ${filtroPais === p ? 'bg-white shadow-sm text-slate-900' : 'text-slate-500 hover:text-slate-700'}`}
             >
-              {p}
+              {formatearPais(p)}
             </button>
           ))}
         </div>
@@ -244,12 +247,12 @@ function TarjetasMovil({
             <div>
               <p className="font-black uppercase text-slate-900">{e.name}</p>
               <p className="text-[10px] font-bold uppercase text-slate-500">
-                {e.country} · {moneda}
+                {formatearPais(e.country)} · {moneda}
               </p>
             </div>
             <EtiquetaVigencia sub={sub} />
             <p className="text-sm font-bold text-slate-700">
-              {e.plan} · {formatearDinero(precioActual, moneda)}/mes
+              {formatearPlan(e.plan)} · {formatearDinero(precioActual, moneda)}/mes
             </p>
             {tieneCambioProgramado && precioProximo && fechaCambio && (
               <p className="text-xs font-medium text-slate-500">
@@ -257,28 +260,32 @@ function TarjetasMovil({
                 {formatearFechaHumana(fechaCambio)}
               </p>
             )}
-            <div className="flex flex-col gap-2">
+            <div className="grid grid-cols-3 gap-2">
               <button
                 onClick={() => mutacionRecordatorio.mutate(e.id)}
                 disabled={!puedeRecordar || mutacionRecordatorio.isPending}
-                className="w-full rounded-xl border border-amber-200 bg-amber-50 px-4 py-2.5 text-[10px] font-black uppercase text-amber-800 hover:bg-amber-100 disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center gap-2 transition-colors"
+                title={puedeRecordar ? 'Recordatorio' : 'Disponible solo 10 días antes del corte'}
+                className="rounded-xl border border-amber-200 bg-amber-50 px-2 py-3 text-[10px] font-black uppercase text-amber-800 hover:bg-amber-100 disabled:opacity-40 disabled:cursor-not-allowed flex flex-col items-center justify-center gap-1 text-center transition-colors"
               >
-                <Bell className="w-3 h-3" />{' '}
-                {mutacionRecordatorio.isPending ? 'Enviando...' : 'Recordatorio'}
+                <Bell className="w-3 h-3" />
+                {mutacionRecordatorio.isPending ? 'Enviando' : 'Recordar'}
               </button>
               <button
                 onClick={() => onAbrirPago(e)}
-                className="w-full rounded-xl bg-slate-900 px-4 py-2.5 text-[10px] font-black uppercase text-white shadow-sm hover:bg-black active:scale-95 flex items-center justify-center gap-2 transition-all"
+                title="Registrar pago"
+                className="rounded-xl bg-slate-900 px-2 py-3 text-[10px] font-black uppercase text-white shadow-sm hover:bg-black active:scale-95 flex flex-col items-center justify-center gap-1 text-center transition-all"
               >
-                <DollarSign className="w-3 h-3" /> Registrar pago
+                <DollarSign className="w-3 h-3" />
+                Pagar
               </button>
               <button
                 onClick={() => mutacionSuspension.mutate(e.id)}
                 disabled={estaSuspendido || mutacionSuspension.isPending}
-                className="w-full rounded-xl border border-red-200 bg-red-50 px-4 py-2.5 text-[10px] font-black uppercase text-red-700 hover:bg-red-100 disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center gap-2 transition-colors"
+                title={estaSuspendido ? 'Salón ya suspendido' : 'Suspensión'}
+                className="rounded-xl border border-red-200 bg-red-50 px-2 py-3 text-[10px] font-black uppercase text-red-700 hover:bg-red-100 disabled:opacity-40 disabled:cursor-not-allowed flex flex-col items-center justify-center gap-1 text-center transition-colors"
               >
-                <ShieldAlert className="w-3 h-3" />{' '}
-                {mutacionSuspension.isPending ? 'Processing...' : 'Suspend salon'}
+                <ShieldAlert className="w-3 h-3" />
+                {mutacionSuspension.isPending ? 'Procesando' : 'Suspender'}
               </button>
             </div>
           </div>
@@ -324,14 +331,14 @@ function TablaEscritorio({
                 <td className="px-6 py-5">
                   <p className="font-black text-slate-900 uppercase">{e.name}</p>
                   <p className="text-[10px] text-slate-500 font-bold mt-1">
-                    {e.country} · {moneda}
+                    {formatearPais(e.country)} · {moneda}
                   </p>
                 </td>
                 <td className="px-6 py-5">
                   <EtiquetaVigencia sub={sub} />
                 </td>
                 <td className="px-6 py-5">
-                  <p className="text-sm font-black text-slate-900">{e.plan}</p>
+                  <p className="text-sm font-black text-slate-900">{formatearPlan(e.plan)}</p>
                   <p className="text-xs text-slate-500 mt-1">
                     {formatearDinero(precioActual, moneda)}/mes
                   </p>
@@ -344,36 +351,42 @@ function TablaEscritorio({
                 </td>
                 <td className="px-6 py-5 text-right">
                   <div className="flex items-center justify-end gap-2">
-                    <button
-                      onClick={() => mutacionRecordatorio.mutate(e.id)}
-                      disabled={!puedeRecordar || mutacionRecordatorio.isPending}
-                      aria-label="Enviar recordatorio"
-                      title={
-                        puedeRecordar
-                          ? 'Enviar recordatorio'
-                          : 'Solo disponible ≤10 días antes del corte'
-                      }
-                      className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-amber-800 hover:bg-amber-100 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
-                    >
-                      <Bell className="w-3.5 h-3.5" />
-                    </button>
-                    <button
-                      onClick={() => onAbrirPago(e)}
-                      aria-label="Registrar pago"
-                      title="Registrar pago"
-                      className="rounded-xl bg-slate-900 px-3 py-2 text-white hover:bg-black transition-all shadow-sm active:scale-95"
-                    >
-                      <DollarSign className="w-3.5 h-3.5" />
-                    </button>
-                    <button
-                      onClick={() => mutacionSuspension.mutate(e.id)}
-                      disabled={estaSuspendido || mutacionSuspension.isPending}
-                      aria-label="Suspend salon"
-                      title={estaSuspendido ? 'Salon already unavailable' : 'Suspend salon now'}
-                      className="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-red-700 hover:bg-red-100 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
-                    >
-                      <ShieldAlert className="w-3.5 h-3.5" />
-                    </button>
+                    <Tooltip texto="Recordar">
+                      <button
+                        onClick={() => mutacionRecordatorio.mutate(e.id)}
+                        disabled={!puedeRecordar || mutacionRecordatorio.isPending}
+                        aria-label="Enviar recordatorio"
+                        title={
+                          puedeRecordar
+                            ? 'Enviar recordatorio'
+                            : 'Solo disponible 10 días antes del corte'
+                        }
+                        className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-amber-800 hover:bg-amber-100 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                      >
+                        <Bell className="w-3.5 h-3.5" />
+                      </button>
+                    </Tooltip>
+                    <Tooltip texto="Pagar">
+                      <button
+                        onClick={() => onAbrirPago(e)}
+                        aria-label="Registrar pago"
+                        title="Registrar pago"
+                        className="rounded-xl bg-slate-900 px-3 py-2 text-white hover:bg-black transition-all shadow-sm active:scale-95"
+                      >
+                        <DollarSign className="w-3.5 h-3.5" />
+                      </button>
+                    </Tooltip>
+                    <Tooltip texto="Suspender">
+                      <button
+                        onClick={() => mutacionSuspension.mutate(e.id)}
+                        disabled={estaSuspendido || mutacionSuspension.isPending}
+                        aria-label="Suspender salón"
+                        title={estaSuspendido ? 'Salón ya suspendido' : 'Suspender salón'}
+                        className="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-red-700 hover:bg-red-100 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                      >
+                        <ShieldAlert className="w-3.5 h-3.5" />
+                      </button>
+                    </Tooltip>
                   </div>
                 </td>
               </tr>

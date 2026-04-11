@@ -1,15 +1,31 @@
 import { Mail, MessageCircle, Phone, Clock } from 'lucide-react';
+import type { Estudio } from '../../../tipos';
 
 const DATOS_CONTACTO = {
   email: 'soporte@beautytimepro.com',
-  whatsapp: '+52 55 1234 5678',
-  horario: 'Mon – Fri, 9:00 AM – 6:00 PM (CST)',
+  whatsappMx: '+52 55 1234 5678',
+  whatsappCo: '+57 300 123 4567',
+  horario: 'México y Colombia: 11:00 a. m. a 4:00 p. m. (hora local)',
 };
 
-export function SeccionContacto() {
+interface PropsSeccionContacto {
+  estudio: Estudio;
+}
+
+function obtenerPrimerNombre(nombreCompleto: string): string {
+  return nombreCompleto.trim().split(/\s+/)[0] ?? 'Hola';
+}
+
+export function SeccionContacto({ estudio }: PropsSeccionContacto) {
+  const numeroWhatsapp =
+    estudio.country === 'Colombia' ? DATOS_CONTACTO.whatsappCo : DATOS_CONTACTO.whatsappMx;
+  const mensajeWhatsapp = encodeURIComponent(
+    `Hola, soy ${obtenerPrimerNombre(estudio.owner || estudio.name)} administrador de ${estudio.name} y necesito soporte con mi salón en Beauty Time Pro.`,
+  );
+
   return (
     <div className="space-y-6">
-      <h2 className="text-3xl font-black italic uppercase tracking-tighter">Contact Us</h2>
+      <h2 className="text-3xl font-black italic uppercase tracking-tighter">Soporte</h2>
 
       <div className="grid gap-4 md:grid-cols-2">
         <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
@@ -30,7 +46,8 @@ export function SeccionContacto() {
             </div>
           </div>
           <p className="text-xs text-slate-500">
-            For billing, technical issues, or general inquiries. We usually respond within 24 hours.
+            Para soporte técnico, cobros, accesos o consultas generales. Respondemos en horario de
+            atención.
           </p>
         </div>
 
@@ -44,17 +61,17 @@ export function SeccionContacto() {
                 WhatsApp
               </p>
               <a
-                href={`https://wa.me/${DATOS_CONTACTO.whatsapp.replace(/\D/g, '')}`}
+                href={`https://wa.me/${numeroWhatsapp.replace(/\D/g, '')}?text=${mensajeWhatsapp}`}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="text-sm font-bold text-slate-900 hover:text-green-600 transition-colors"
               >
-                {DATOS_CONTACTO.whatsapp}
+                {numeroWhatsapp}
               </a>
             </div>
           </div>
           <p className="text-xs text-slate-500">
-            Need quick help? Chat with our support team on WhatsApp for faster responses.
+            Abre WhatsApp con un mensaje listo y contextualizado con el nombre del salón.
           </p>
         </div>
 
@@ -71,7 +88,7 @@ export function SeccionContacto() {
             </div>
           </div>
           <p className="text-xs text-slate-500">
-            Messages received outside business hours will be answered the next business day.
+            Si escribes fuera de horario, responderemos el siguiente día hábil.
           </p>
         </div>
 
@@ -82,40 +99,59 @@ export function SeccionContacto() {
             </div>
             <div>
               <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">
-                Urgent Issues
+                Casos prioritarios
               </p>
-              <p className="text-sm font-bold text-slate-900">Billing & Account</p>
+              <p className="text-sm font-bold text-slate-900">Facturación y acceso</p>
             </div>
           </div>
           <p className="text-xs text-slate-500">
-            For urgent billing or account access problems, please email with the subject "URGENT"
-            for priority handling.
+            Si hay bloqueo de acceso o un problema de facturación, escribe por correo indicando el
+            nombre del salón para priorizar el caso.
           </p>
         </div>
       </div>
 
       <div className="rounded-3xl border border-slate-200 bg-slate-50 p-6">
         <h3 className="mb-3 text-sm font-black uppercase tracking-widest text-slate-500">
-          Frequently Asked Questions
+          Preguntas frecuentes
         </h3>
         <ul className="space-y-3 text-sm text-slate-600">
           <li>
-            <p className="font-bold text-slate-800">How do I change my subscription plan?</p>
+            <p className="font-bold text-slate-800">¿Cómo cambio el plan de mi salón?</p>
             <p className="mt-0.5 text-xs text-slate-500">
-              Contact our support team via email or WhatsApp and we'll process your plan change.
+              Escríbenos por correo o WhatsApp y te guiaremos con la mejora o ajuste del plan.
             </p>
           </li>
           <li>
-            <p className="font-bold text-slate-800">Can I add more specialists?</p>
+            <p className="font-bold text-slate-800">¿Puedo agregar más especialistas?</p>
             <p className="mt-0.5 text-xs text-slate-500">
-              Yes! Go to the "My Team" tab to manage your specialists and their schedules.
+              Sí. Desde la pestaña "Mi equipo" puedes crear, editar, activar o desactivar
+              especialistas.
             </p>
           </li>
           <li>
-            <p className="font-bold text-slate-800">How do I update my salon information?</p>
+            <p className="font-bold text-slate-800">¿Cómo actualizo la información del salón?</p>
             <p className="mt-0.5 text-xs text-slate-500">
-              Visit the "My Salon" tab to update your logo, description, location, and business
-              hours.
+              En "Mi salón" puedes actualizar logo, dirección, descripción, horarios y datos
+              públicos.
+            </p>
+          </li>
+          <li>
+            <p className="font-bold text-slate-800">¿Qué pasa si mi suscripción vence?</p>
+            <p className="mt-0.5 text-xs text-slate-500">
+              El sistema restringe la operación del salón hasta que el pago quede regularizado.
+            </p>
+          </li>
+          <li>
+            <p className="font-bold text-slate-800">¿Puedo compartir mi link de reservas?</p>
+            <p className="mt-0.5 text-xs text-slate-500">
+              Sí. El link del salón está pensado para compartirlo por WhatsApp, redes o campañas.
+            </p>
+          </li>
+          <li>
+            <p className="font-bold text-slate-800">¿Cómo gestiono promociones o fidelidad?</p>
+            <p className="mt-0.5 text-xs text-slate-500">
+              Desde "Beneficios" puedes configurar recompensas y mensajes comerciales según tu plan.
             </p>
           </li>
         </ul>

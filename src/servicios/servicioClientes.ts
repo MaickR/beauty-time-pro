@@ -20,6 +20,13 @@ export interface ClienteDetalle extends ClienteResumen {
   reservas: ReservaHistorial[];
 }
 
+export interface RespuestaClientesPaginada {
+  datos: ClienteResumen[];
+  total: number;
+  pagina: number;
+  totalPaginas: number;
+}
+
 export interface ReservaHistorial {
   id: string;
   fecha: string;
@@ -30,15 +37,39 @@ export interface ReservaHistorial {
   sucursal: string;
 }
 
+interface FiltrosClientesEstudio {
+  buscar?: string;
+  pagina?: number;
+  limite?: number;
+}
+
 export async function obtenerClientesEstudio(
+  estudioId: string,
+  filtros: FiltrosClientesEstudio = {},
+): Promise<RespuestaClientesPaginada> {
+  const parametros = new URLSearchParams();
+  if (filtros.buscar?.trim()) parametros.set('buscar', filtros.buscar.trim());
+  if (filtros.pagina) parametros.set('pagina', String(filtros.pagina));
+  if (filtros.limite) parametros.set('limite', String(filtros.limite));
+
+  const queryString = parametros.toString();
+  const url = queryString
+    ? `/estudios/${estudioId}/clientes?${queryString}`
+    : `/estudios/${estudioId}/clientes`;
+
+  return peticion<RespuestaClientesPaginada>(url);
+}
+
+export async function exportarClientesEstudio(
   estudioId: string,
   buscar?: string,
 ): Promise<ClienteResumen[]> {
-  const url = buscar
-    ? `/estudios/${estudioId}/clientes?buscar=${encodeURIComponent(buscar)}`
-    : `/estudios/${estudioId}/clientes`;
-  const res = await peticion<{ datos: ClienteResumen[] }>(url);
-  return res.datos;
+  const respuesta = await obtenerClientesEstudio(estudioId, {
+    buscar,
+    pagina: 1,
+    limite: 10_000,
+  });
+  return respuesta.datos;
 }
 
 export async function obtenerDetalleCliente(id: string): Promise<ClienteDetalle> {
@@ -46,10 +77,7 @@ export async function obtenerDetalleCliente(id: string): Promise<ClienteDetalle>
   return res.datos;
 }
 
-export async function actualizarNotasCliente(
-  id: string,
-  notas: string,
-): Promise<void> {
+export async function actualizarNotasCliente(id: string, notas: string): Promise<void> {
   await peticion(`/clientes/${id}`, {
     method: 'PUT',
     body: JSON.stringify({ notas }),

@@ -8,6 +8,12 @@ import {
 } from '../../../servicios/servicioAdmin';
 import { formatearFechaHumana } from '../../../utils/formato';
 import { EsqueletoTarjeta } from '../../../componentes/ui/Esqueleto';
+import {
+  esEmailSalonValido,
+  limpiarNombrePersonaEntrada,
+  limpiarNombreSalonEntrada,
+  limpiarTelefonoEntrada,
+} from '../../../utils/formularioSalon';
 
 interface PropsModalDetalleSalon {
   salonId: string;
@@ -46,6 +52,7 @@ export function ModalDetalleSalon({ salonId, onCerrar }: PropsModalDetalleSalon)
   };
 
   const hayCambios = Object.keys(camposEditados).length > 0;
+  const emailDuenoActual = salon?.usuarios[0]?.email ?? salon?.emailContacto ?? '';
 
   // Guardar
   const { mutate: guardar, isPending: guardando } = useMutation({
@@ -118,12 +125,14 @@ export function ModalDetalleSalon({ salonId, onCerrar }: PropsModalDetalleSalon)
     >
       <div className="bg-white rounded-3xl w-full max-w-2xl max-h-[90vh] overflow-hidden flex flex-col shadow-2xl">
         {/* Encabezado */}
-        <div className="flex items-center justify-between px-6 py-4 border-b border-slate-200">
+        <div className="flex items-center justify-between gap-4 px-4 py-4 border-b border-slate-200 sm:px-6">
           <h2
             id="modal-detalle-titulo"
-            className="text-lg font-black text-slate-900 uppercase truncate"
+            className="text-sm font-black text-slate-900 uppercase leading-tight sm:text-lg"
           >
-            {cargandoSalon ? 'Cargando...' : (salon?.nombre ?? 'Detalle del salón')}
+            {cargandoSalon
+              ? 'Cargando información del salón'
+              : `Información del salón ${salon?.nombre ?? ''}`}
           </h2>
           <button
             onClick={onCerrar}
@@ -135,12 +144,12 @@ export function ModalDetalleSalon({ salonId, onCerrar }: PropsModalDetalleSalon)
         </div>
 
         {/* Pestañas */}
-        <div className="flex border-b border-slate-200">
+        <div className="grid grid-cols-3 border-b border-slate-200 bg-white">
           {pestanas.map((p) => (
             <button
               key={p.clave}
               onClick={() => setPestana(p.clave)}
-              className={`flex-1 py-3 text-center text-xs font-black uppercase transition-all ${
+              className={`min-w-0 px-2 py-3 text-center text-[10px] font-black uppercase transition-all sm:text-xs ${
                 pestana === p.clave
                   ? 'text-pink-600 border-b-2 border-pink-600 bg-pink-50/50'
                   : 'text-slate-400 hover:text-slate-600'
@@ -152,7 +161,7 @@ export function ModalDetalleSalon({ salonId, onCerrar }: PropsModalDetalleSalon)
         </div>
 
         {/* Contenido */}
-        <div className="flex-1 overflow-auto px-6 py-4">
+        <div className="flex-1 overflow-auto px-4 py-4 sm:px-6">
           {cargandoSalon ? (
             <div className="space-y-3">
               {Array.from({ length: 4 }).map((_, i) => (
@@ -162,27 +171,29 @@ export function ModalDetalleSalon({ salonId, onCerrar }: PropsModalDetalleSalon)
           ) : salon && pestana === 'informacion' ? (
             <div className="space-y-4">
               <CampoEditable
-                etiqueta="Nombre"
+                etiqueta="Nombre del salón"
                 campo="nombre"
                 valor={obtenerValorCampo('nombre', salon.nombre)}
-                onChange={editarCampo}
+                onChange={(campo, valor) => editarCampo(campo, limpiarNombreSalonEntrada(valor))}
               />
               <CampoEditable
-                etiqueta="Propietario"
+                etiqueta="Nombre completo del dueño"
                 campo="propietario"
                 valor={obtenerValorCampo('propietario', salon.propietario)}
-                onChange={editarCampo}
+                onChange={(campo, valor) => editarCampo(campo, limpiarNombrePersonaEntrada(valor))}
               />
               <CampoEditable
                 etiqueta="Teléfono"
                 campo="telefono"
                 valor={obtenerValorCampo('telefono', salon.telefono)}
-                onChange={editarCampo}
+                tipo="tel"
+                onChange={(campo, valor) => editarCampo(campo, limpiarTelefonoEntrada(valor))}
               />
               <CampoEditable
-                etiqueta="Correo de contacto"
-                campo="emailContacto"
-                valor={obtenerValorCampo('emailContacto', salon.emailContacto)}
+                etiqueta="Correo del dueño"
+                campo="emailDueno"
+                valor={obtenerValorCampo('emailDueno', emailDuenoActual)}
+                tipo="email"
                 onChange={editarCampo}
               />
               <CampoEditable
@@ -198,13 +209,47 @@ export function ModalDetalleSalon({ salonId, onCerrar }: PropsModalDetalleSalon)
                 onChange={editarCampo}
               />
 
-              <div className="grid grid-cols-2 gap-3">
+              <CampoEditable
+                etiqueta="Nueva contraseña del dueño"
+                campo="contrasenaDueno"
+                valor={obtenerValorCampo('contrasenaDueno', '')}
+                tipo="password"
+                placeholder="Solo si deseas cambiarla"
+                onChange={editarCampo}
+              />
+
+              {obtenerValorCampo('emailDueno', emailDuenoActual) &&
+              !esEmailSalonValido(obtenerValorCampo('emailDueno', emailDuenoActual)) ? (
+                <p className="text-xs font-bold text-red-500">
+                  El correo del dueño debe ser personal y estar dentro de los dominios permitidos.
+                </p>
+              ) : null}
+
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                 <CampoSoloLectura etiqueta="País" valor={salon.pais} />
-                <CampoSoloLectura etiqueta="Plan" valor={salon.plan} />
+                <CampoEditableSelect
+                  etiqueta="Plan"
+                  campo="plan"
+                  valor={obtenerValorCampo('plan', salon.plan)}
+                  opciones={['STANDARD', 'PRO']}
+                  onChange={editarCampo}
+                />
                 <CampoSoloLectura etiqueta="Estado" valor={salon.estado} />
                 <CampoSoloLectura etiqueta="Creado" valor={formatearFechaHumana(salon.creadoEn)} />
-                <CampoSoloLectura etiqueta="Inicio suscripción" valor={salon.inicioSuscripcion} />
-                <CampoSoloLectura etiqueta="Vencimiento" valor={salon.fechaVencimiento} />
+                <CampoEditable
+                  etiqueta="Inicio de suscripción"
+                  campo="inicioSuscripcion"
+                  valor={obtenerValorCampo('inicioSuscripcion', salon.inicioSuscripcion)}
+                  tipo="date"
+                  onChange={editarCampo}
+                />
+                <CampoEditable
+                  etiqueta="Vencimiento"
+                  campo="fechaVencimiento"
+                  valor={obtenerValorCampo('fechaVencimiento', salon.fechaVencimiento)}
+                  tipo="date"
+                  onChange={editarCampo}
+                />
               </div>
 
               {salon.usuarios.length > 0 && (
@@ -229,7 +274,7 @@ export function ModalDetalleSalon({ salonId, onCerrar }: PropsModalDetalleSalon)
                   className="w-full flex items-center justify-center gap-2 py-3 rounded-2xl bg-pink-600 text-white font-black text-sm hover:bg-pink-700 disabled:opacity-50 transition-colors"
                 >
                   <Save className="w-4 h-4" />
-                  {guardando ? 'Guardando...' : 'Guardar cambios'}
+                  {guardando ? 'Actualizando...' : 'Actualizar'}
                 </button>
               )}
             </div>
@@ -332,7 +377,7 @@ export function ModalDetalleSalon({ salonId, onCerrar }: PropsModalDetalleSalon)
                 <div className="flex justify-center">
                   <img
                     src={`https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(urlReserva)}`}
-                    alt={`QR code for ${salon.nombre}`}
+                    alt={`Código QR de ${salon.nombre}`}
                     className="w-48 h-48 rounded-xl"
                     loading="lazy"
                   />
@@ -380,22 +425,58 @@ function CampoEditable({
   etiqueta,
   campo,
   valor,
+  tipo = 'text',
+  placeholder,
   onChange,
 }: {
   etiqueta: string;
   campo: string;
   valor: string;
+  tipo?: 'text' | 'email' | 'password' | 'date' | 'tel';
+  placeholder?: string;
   onChange: (campo: string, valor: string) => void;
 }) {
   return (
     <label className="block">
       <span className="text-xs font-black text-slate-400 uppercase">{etiqueta}</span>
       <input
-        type="text"
+        type={tipo}
+        value={valor}
+        onChange={(e) => onChange(campo, e.target.value)}
+        placeholder={placeholder}
+        className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm font-medium outline-none focus:ring-2 focus:ring-pink-500"
+      />
+    </label>
+  );
+}
+
+function CampoEditableSelect({
+  etiqueta,
+  campo,
+  valor,
+  opciones,
+  onChange,
+}: {
+  etiqueta: string;
+  campo: string;
+  valor: string;
+  opciones: string[];
+  onChange: (campo: string, valor: string) => void;
+}) {
+  return (
+    <label className="block">
+      <span className="text-xs font-black text-slate-400 uppercase">{etiqueta}</span>
+      <select
         value={valor}
         onChange={(e) => onChange(campo, e.target.value)}
         className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm font-medium outline-none focus:ring-2 focus:ring-pink-500"
-      />
+      >
+        {opciones.map((opcion) => (
+          <option key={opcion} value={opcion}>
+            {opcion}
+          </option>
+        ))}
+      </select>
     </label>
   );
 }

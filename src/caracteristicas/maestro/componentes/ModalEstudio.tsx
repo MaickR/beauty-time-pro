@@ -12,15 +12,25 @@ import {
   EyeOff,
   Copy,
   Download,
+  ImagePlus,
+  RefreshCw,
+  Package,
+  Trash2,
 } from 'lucide-react';
 import { CATALOGO_SERVICIOS, DIAS_SEMANA } from '../../../lib/constantes';
 import { SelectorFecha } from '../../../componentes/ui/SelectorFecha';
 import { SelectorHora } from '../../../componentes/ui/SelectorHora';
 import { SeccionPersonalFormulario } from './SeccionPersonalFormulario';
-import type { Personal } from '../../../tipos';
+import type { Estudio, Personal } from '../../../tipos';
 import type { ConfirmacionAltaSalon, FormularioEstudio } from '../hooks/usarFormularioEstudio';
 import { obtenerDefinicionPlan } from '../../../lib/planes';
 import { convertirCentavosAMoneda, formatearDinero } from '../../../utils/formato';
+import {
+  esEmailSalonValido,
+  limpiarNombrePersonaEntrada,
+  limpiarNombreSalonEntrada,
+  limpiarTelefonoEntrada,
+} from '../../../utils/formularioSalon';
 
 interface PropsCatalogo {
   alternarServicio: (nombre: string) => void;
@@ -33,6 +43,7 @@ interface PropsCatalogo {
 interface PropsModalEstudio {
   modo: 'ADD' | 'EDIT' | 'CONFIRMACION';
   formulario: FormularioEstudio;
+  estudiosPrincipales: Estudio[];
   setFormulario: Dispatch<SetStateAction<FormularioEstudio>>;
   catalogoProps: PropsCatalogo;
   onAgregarPersonal: (personal: Personal) => void;
@@ -41,11 +52,14 @@ interface PropsModalEstudio {
   confirmacionAlta: ConfirmacionAltaSalon | null;
   onRegenerarContrasenaDueno: () => void;
   onDescartarBorrador: () => void;
+  logoArchivo: File | null;
+  onCambiarLogo: (archivo: File | null) => void;
 }
 
 export function ModalEstudio({
   modo,
   formulario,
+  estudiosPrincipales,
   setFormulario,
   catalogoProps,
   onAgregarPersonal,
@@ -54,6 +68,8 @@ export function ModalEstudio({
   confirmacionAlta,
   onRegenerarContrasenaDueno,
   onDescartarBorrador,
+  logoArchivo,
+  onCambiarLogo,
 }: PropsModalEstudio) {
   const [mostrarContrasena, setMostrarContrasena] = useState(false);
   const [prefijoTelefono, setPrefijoTelefono] = useState('+52');
@@ -67,6 +83,9 @@ export function ModalEstudio({
     entradaServicioPersonalizado,
     setEntradaServicioPersonalizado,
   } = catalogoProps;
+  const estudiosPadreDisponibles = estudiosPrincipales.filter(
+    (estudio) => !estudio.estudioPrincipalId && estudio.id !== formulario.id,
+  );
 
   useEffect(() => {
     setPrefijoTelefono(formulario.country === 'Colombia' ? '+57' : '+52');
@@ -120,27 +139,6 @@ export function ModalEstudio({
     enlace.click();
   };
 
-  const requisitosContrasena = {
-    longitudMinima: formulario.contrasenaDueno.length >= 8,
-    tieneMayuscula: /[A-Z]/.test(formulario.contrasenaDueno),
-    tieneNumero: /[0-9]/.test(formulario.contrasenaDueno),
-    tieneEspecial: /[^A-Za-z0-9]/.test(formulario.contrasenaDueno),
-  };
-  const nivelFortaleza = [
-    requisitosContrasena.longitudMinima,
-    requisitosContrasena.tieneMayuscula,
-    requisitosContrasena.tieneNumero,
-    requisitosContrasena.tieneEspecial,
-  ].filter(Boolean).length;
-  const colorFortaleza =
-    nivelFortaleza <= 1
-      ? 'bg-red-500'
-      : nivelFortaleza === 2
-        ? 'bg-orange-500'
-        : nivelFortaleza === 3
-          ? 'bg-yellow-500'
-          : 'bg-green-500';
-
   const formatearPrecioVisual = (precio: number, claveServicio: string) => {
     if (preciosEnEdicion[claveServicio]) {
       return String(convertirCentavosAMoneda(precio ?? 0));
@@ -157,7 +155,7 @@ export function ModalEstudio({
         aria-labelledby="modal-estudio-titulo"
         className="fixed inset-0 z-60 flex items-start justify-center overflow-y-auto bg-black/80 p-3 backdrop-blur-xl sm:items-center sm:p-4"
       >
-        <div className="flex max-h-[calc(100vh-1.5rem)] w-full max-w-3xl flex-col overflow-hidden rounded-[2rem] bg-white shadow-2xl sm:max-h-[90vh] sm:rounded-[3rem]">
+        <div className="flex max-h-[calc(100vh-1.5rem)] w-full max-w-3xl flex-col overflow-hidden rounded-4xl bg-white shadow-2xl sm:max-h-[90vh] sm:rounded-[3rem]">
           <div className="flex items-start justify-between gap-4 border-b bg-slate-50 p-4 sm:items-center sm:p-8">
             <div className="min-w-0">
               <h2
@@ -177,7 +175,7 @@ export function ModalEstudio({
           </div>
 
           <div className="grid flex-1 gap-5 overflow-y-auto p-4 sm:p-6 md:grid-cols-[0.85fr_1.15fr] md:gap-8 md:p-8">
-            <aside className="order-1 rounded-[2rem] border border-slate-200 bg-white p-5 shadow-sm sm:p-6 md:order-2">
+            <aside className="order-1 rounded-4xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6 md:order-2">
               <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                 <div>
                   <p className="text-[11px] font-black uppercase tracking-[0.2em] text-slate-500">
@@ -197,7 +195,7 @@ export function ModalEstudio({
                 </button>
               </div>
 
-              <div className="flex min-h-56 items-center justify-center rounded-[2rem] border border-dashed border-slate-300 bg-slate-50 p-4 sm:min-h-70">
+              <div className="flex min-h-56 items-center justify-center rounded-4xl border border-dashed border-slate-300 bg-slate-50 p-4 sm:min-h-70">
                 {qrReserva ? (
                   <img
                     src={qrReserva}
@@ -219,7 +217,7 @@ export function ModalEstudio({
             </aside>
 
             <div className="order-2 space-y-5 sm:space-y-6 md:order-1">
-              <section className="rounded-[2rem] border border-slate-200 bg-slate-50 p-5 sm:p-6">
+              <section className="rounded-4xl border border-slate-200 bg-slate-50 p-5 sm:p-6">
                 <div className="mb-4 flex items-center gap-2 text-[11px] font-black uppercase tracking-[0.22em] text-pink-600">
                   <Mail className="h-4 w-4" /> Acceso del dueño
                 </div>
@@ -264,7 +262,7 @@ export function ModalEstudio({
                 </div>
               </section>
 
-              <section className="rounded-[2rem] border border-slate-900 bg-slate-950 p-5 text-white sm:p-6">
+              <section className="rounded-4xl border border-slate-900 bg-slate-950 p-5 text-white sm:p-6">
                 <div className="mb-4 flex items-center gap-2 text-[11px] font-black uppercase tracking-[0.22em] text-pink-400">
                   <KeyRound className="h-4 w-4" /> Acceso público a reservas
                 </div>
@@ -339,13 +337,13 @@ export function ModalEstudio({
 
         <form onSubmit={onEnviar} className="flex-1 overflow-y-auto px-4 py-8 sm:p-10 space-y-12">
           {modo === 'ADD' && (
-            <div className="flex flex-col gap-3 rounded-[2rem] border border-slate-200 bg-slate-50 px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex flex-col gap-3 rounded-4xl border border-slate-200 bg-slate-50 px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
               <div>
                 <p className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-500">
-                  Draft protection
+                  Borrador automático
                 </p>
                 <p className="mt-1 text-sm font-medium text-slate-500">
-                  This form saves automatically while you work.
+                  Este formulario guarda tu avance mientras trabajas.
                 </p>
               </div>
               <button
@@ -353,7 +351,7 @@ export function ModalEstudio({
                 onClick={onDescartarBorrador}
                 className="rounded-full border border-slate-200 bg-white px-4 py-2 text-[10px] font-black uppercase text-slate-700"
               >
-                Clear draft
+                Limpiar borrador
               </button>
             </div>
           )}
@@ -377,7 +375,22 @@ export function ModalEstudio({
                 className="w-full p-4 bg-slate-50 border border-slate-100 rounded-2xl font-bold outline-none focus:ring-2 focus:ring-pink-500"
                 placeholder="Nombre"
                 value={formulario.name}
-                onChange={(e) => setFormulario((p) => ({ ...p, name: e.target.value }))}
+                onChange={(e) =>
+                  setFormulario((p) => {
+                    const name = limpiarNombreSalonEntrada(e.target.value);
+                    return {
+                      ...p,
+                      name,
+                      contrasenaDueno:
+                        p.reintentosContrasenaDueno === 1
+                          ? p.contrasenaDueno.replace(
+                              /^.{3}/,
+                              `${`${name.replace(/\s+/g, '').toUpperCase() || 'SAL'}SAL`.slice(0, 3)}`,
+                            )
+                          : p.contrasenaDueno,
+                    };
+                  })
+                }
                 required
               />
             </div>
@@ -386,16 +399,39 @@ export function ModalEstudio({
                 htmlFor="dueno-estudio"
                 className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 ml-1"
               >
-                Dueño
+                Nombre completo del dueño
               </label>
               <input
                 id="dueno-estudio"
                 name="nombreDueno"
                 autoComplete="name"
                 className="p-4 bg-slate-50 border border-slate-100 rounded-2xl font-bold outline-none focus:ring-2 focus:ring-pink-500 w-full"
-                placeholder="Dueño"
+                placeholder="Nombre completo"
                 value={formulario.owner}
-                onChange={(e) => setFormulario((p) => ({ ...p, owner: e.target.value }))}
+                onChange={(e) =>
+                  setFormulario((p) => ({
+                    ...p,
+                    owner: limpiarNombrePersonaEntrada(e.target.value),
+                  }))
+                }
+                required
+              />
+            </div>
+            <div className="col-span-full sm:col-span-2">
+              <label
+                htmlFor="direccion-estudio"
+                className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 ml-1"
+              >
+                Dirección
+              </label>
+              <input
+                id="direccion-estudio"
+                name="direccionSalon"
+                autoComplete="street-address"
+                className="w-full p-4 bg-slate-50 border border-slate-100 rounded-2xl font-bold outline-none focus:ring-2 focus:ring-pink-500"
+                placeholder="Dirección real del salón"
+                value={formulario.direccion}
+                onChange={(e) => setFormulario((p) => ({ ...p, direccion: e.target.value }))}
                 required
               />
             </div>
@@ -414,18 +450,28 @@ export function ModalEstudio({
                     type="email"
                     autoComplete="email"
                     className="w-full p-4 bg-slate-50 border border-slate-100 rounded-2xl font-bold outline-none focus:ring-2 focus:ring-pink-500"
-                    placeholder="dueno@salon.com"
+                    placeholder="dueno@gmail.com"
                     value={formulario.emailDueno}
-                    onChange={(e) => setFormulario((p) => ({ ...p, emailDueno: e.target.value }))}
+                    onChange={(e) =>
+                      setFormulario((p) => ({
+                        ...p,
+                        emailDueno: e.target.value.trim().toLowerCase(),
+                      }))
+                    }
                     required
                   />
+                  {formulario.emailDueno && !esEmailSalonValido(formulario.emailDueno) && (
+                    <p className="mt-2 text-xs font-medium text-red-500">
+                      Solo se aceptan correos personales @gmail, @hotmail, @outlook o @yahoo.
+                    </p>
+                  )}
                 </div>
                 <div>
                   <label
                     htmlFor="contrasena-dueno"
                     className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 ml-1"
                   >
-                    Contraseña inicial del dueño
+                    Contraseña
                   </label>
                   <div className="flex gap-2">
                     <div className="relative flex-1">
@@ -436,9 +482,7 @@ export function ModalEstudio({
                         autoComplete="new-password"
                         className="w-full p-4 pr-12 bg-slate-50 border border-slate-100 rounded-2xl font-bold outline-none focus:ring-2 focus:ring-pink-500"
                         value={formulario.contrasenaDueno}
-                        onChange={(e) =>
-                          setFormulario((p) => ({ ...p, contrasenaDueno: e.target.value }))
-                        }
+                        readOnly
                         required
                         minLength={8}
                       />
@@ -458,35 +502,41 @@ export function ModalEstudio({
                     <button
                       type="button"
                       onClick={onRegenerarContrasenaDueno}
-                      className="rounded-2xl bg-slate-900 px-4 py-3 text-[10px] font-black uppercase text-white"
+                      disabled={formulario.reintentosContrasenaDueno >= 5}
+                      title="Generar otra contraseña"
+                      aria-label="Generar otra contraseña"
+                      className="rounded-2xl bg-slate-900 px-4 py-3 text-white disabled:cursor-not-allowed disabled:opacity-50"
                     >
-                      Auto
+                      <RefreshCw className="h-4 w-4" />
                     </button>
                   </div>
-                  <div className="mt-3 space-y-2">
-                    <div className="flex gap-1">
-                      {[1, 2, 3, 4].map((nivel) => (
-                        <span
-                          key={nivel}
-                          className={`h-1.5 flex-1 rounded-full ${nivel <= nivelFortaleza ? colorFortaleza : 'bg-slate-200'}`}
-                        />
-                      ))}
-                    </div>
-                    <ul className="space-y-1 text-[11px] text-slate-500">
-                      <li className={requisitosContrasena.longitudMinima ? 'text-green-600' : ''}>
-                        • Mínimo 8 caracteres
-                      </li>
-                      <li className={requisitosContrasena.tieneMayuscula ? 'text-green-600' : ''}>
-                        • Una letra mayúscula
-                      </li>
-                      <li className={requisitosContrasena.tieneNumero ? 'text-green-600' : ''}>
-                        • Un número
-                      </li>
-                      <li className={requisitosContrasena.tieneEspecial ? 'text-green-600' : ''}>
-                        • Un carácter especial
-                      </li>
-                    </ul>
-                  </div>
+                  <p className="mt-2 text-xs font-medium text-slate-500">
+                    Generación automática activa. Variantes usadas:{' '}
+                    {formulario.reintentosContrasenaDueno}/5.
+                  </p>
+                </div>
+                <div className="col-span-full sm:col-span-2">
+                  <label className="mb-2 block text-[10px] font-black uppercase tracking-widest text-slate-400">
+                    Ícono del salón (opcional)
+                  </label>
+                  <label className="flex cursor-pointer items-center justify-between gap-3 rounded-2xl border border-dashed border-slate-300 bg-slate-50 px-4 py-4 text-sm font-semibold text-slate-600">
+                    <span className="inline-flex items-center gap-2">
+                      <ImagePlus className="h-4 w-4" />
+                      {logoArchivo ? logoArchivo.name : 'Seleccionar PNG, JPG o JPEG'}
+                    </span>
+                    <input
+                      type="file"
+                      accept="image/png,image/jpeg"
+                      className="hidden"
+                      onChange={(evento) => {
+                        const archivo = evento.target.files?.[0] ?? null;
+                        onCambiarLogo(archivo);
+                      }}
+                    />
+                    <span className="rounded-full bg-white px-3 py-1 text-[10px] font-black uppercase text-slate-700">
+                      Elegir
+                    </span>
+                  </label>
                 </div>
               </>
             )}
@@ -522,10 +572,19 @@ export function ModalEstudio({
                   className="w-full p-4 bg-slate-50 border border-slate-100 rounded-r-2xl font-bold outline-none focus:ring-2 focus:ring-pink-500"
                   placeholder="Ej. 5512345678"
                   value={formulario.phone}
-                  onChange={(e) => setFormulario((p) => ({ ...p, phone: e.target.value }))}
+                  onChange={(e) =>
+                    setFormulario((p) => ({
+                      ...p,
+                      phone: limpiarTelefonoEntrada(e.target.value),
+                    }))
+                  }
+                  maxLength={10}
                   required
                 />
               </div>
+              <p className="mt-2 text-xs font-medium text-slate-500">
+                Solo 10 dígitos, sin repetir el prefijo.
+              </p>
             </div>
             <div>
               <label
@@ -559,16 +618,49 @@ export function ModalEstudio({
                 name="planEstudio"
                 value={formulario.plan}
                 onChange={(e) =>
-                  setFormulario((p) => ({ ...p, plan: e.target.value as 'STANDARD' | 'PRO' }))
+                  setFormulario((p) => {
+                    const plan = e.target.value as 'STANDARD' | 'PRO';
+                    return {
+                      ...p,
+                      plan,
+                      branches: plan === 'PRO' ? p.branches : [],
+                      productos: plan === 'PRO' ? p.productos : [],
+                    };
+                  })
                 }
                 className="w-full p-4 bg-slate-50 border border-slate-100 rounded-2xl font-bold outline-none focus:ring-2 focus:ring-pink-500 appearance-none"
               >
-                <option value="STANDARD">Standard · Hasta 4 servicios</option>
-                <option value="PRO">Pro · Servicios y fidelidad ilimitados</option>
+                <option value="STANDARD">Estándar</option>
+                <option value="PRO">Pro</option>
               </select>
               <p className="mt-2 text-xs font-medium text-slate-500">
                 {obtenerDefinicionPlan(formulario.plan).resumen}
               </p>
+              <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                <div className="rounded-2xl border border-slate-200 bg-white p-3">
+                  <p className="text-[10px] font-black uppercase tracking-[0.2em] text-emerald-600">
+                    Incluye
+                  </p>
+                  <ul className="mt-2 space-y-1 text-xs font-medium text-slate-600">
+                    {obtenerDefinicionPlan(formulario.plan).capacidades.map((item) => (
+                      <li key={item}>• {item}</li>
+                    ))}
+                  </ul>
+                </div>
+                <div className="rounded-2xl border border-slate-200 bg-white p-3">
+                  <p className="text-[10px] font-black uppercase tracking-[0.2em] text-amber-600">
+                    Restricciones
+                  </p>
+                  <ul className="mt-2 space-y-1 text-xs font-medium text-slate-600">
+                    {(obtenerDefinicionPlan(formulario.plan).restricciones.length > 0
+                      ? obtenerDefinicionPlan(formulario.plan).restricciones
+                      : ['Sin restricciones operativas en este bloque.']
+                    ).map((item) => (
+                      <li key={item}>• {item}</li>
+                    ))}
+                  </ul>
+                </div>
+              </div>
             </div>
             <div>
               <SelectorFecha
@@ -576,40 +668,137 @@ export function ModalEstudio({
                 etiqueta="Día de Inicio Operaciones (Cobro)"
                 valor={formulario.subscriptionStart ?? ''}
                 alCambiar={(valor) => setFormulario((p) => ({ ...p, subscriptionStart: valor }))}
+                min={new Date().toISOString().split('T')[0]}
                 requerido
               />
             </div>
-            {formulario.branches.map((b, i) => (
-              <div key={i} className="col-span-full">
-                <input
-                  name={`sucursal-${i + 1}`}
-                  autoComplete="street-address"
-                  className="w-full p-4 bg-slate-50 border border-slate-100 rounded-2xl outline-none"
-                  placeholder={`Sucursal ${i + 1}`}
-                  value={b}
-                  onChange={(e) => {
-                    const copy = [...formulario.branches];
-                    copy[i] = e.target.value;
-                    setFormulario((p) => ({ ...p, branches: copy }));
-                  }}
-                  required
-                />
+            <div className="col-span-full rounded-4xl border border-slate-200 bg-slate-50 p-5">
+              <div className="grid gap-5 lg:grid-cols-2">
+                <div>
+                  <p className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-500">
+                    Estructura comercial
+                  </p>
+                  <p className="mt-1 text-sm font-medium text-slate-500">
+                    Cada sede opera como suscripción independiente y puede tener su propio
+                    administrador.
+                  </p>
+                </div>
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <label className="block">
+                    <span className="mb-2 block text-[10px] font-black uppercase tracking-[0.2em] text-slate-500">
+                      Tipo de registro
+                    </span>
+                    <select
+                      value={formulario.tipoVinculacion}
+                      onChange={(evento) => {
+                        const tipoVinculacion = evento.target.value as 'INDEPENDIENTE' | 'SEDE';
+                        setFormulario((prev) => ({
+                          ...prev,
+                          tipoVinculacion,
+                          estudioPrincipalId:
+                            tipoVinculacion === 'SEDE' ? (prev.estudioPrincipalId ?? null) : null,
+                          permiteReservasPublicas:
+                            tipoVinculacion === 'SEDE'
+                              ? (prev.permiteReservasPublicas ?? true)
+                              : true,
+                          branches: tipoVinculacion === 'SEDE' ? [] : prev.branches,
+                        }));
+                      }}
+                      className="w-full rounded-2xl border border-slate-200 bg-white p-4 font-bold outline-none focus:ring-2 focus:ring-pink-500"
+                    >
+                      <option value="INDEPENDIENTE">Salón independiente</option>
+                      <option value="SEDE">Sede de un salón principal</option>
+                    </select>
+                  </label>
+
+                  <label className="block">
+                    <span className="mb-2 block text-[10px] font-black uppercase tracking-[0.2em] text-slate-500">
+                      Reservas públicas
+                    </span>
+                    <label className="flex items-center gap-3 rounded-2xl border border-slate-200 bg-white px-4 py-4 text-sm font-bold text-slate-700">
+                      <input
+                        type="checkbox"
+                        checked={formulario.permiteReservasPublicas ?? true}
+                        onChange={(evento) =>
+                          setFormulario((prev) => ({
+                            ...prev,
+                            permiteReservasPublicas: evento.target.checked,
+                          }))
+                        }
+                        className="accent-pink-600"
+                      />
+                      Permitir reservas en línea para esta sede
+                    </label>
+                  </label>
+                </div>
               </div>
-            ))}
-            {formulario.branches.length < 5 && (
-              <button
-                type="button"
-                onClick={() => setFormulario((p) => ({ ...p, branches: [...p.branches, ''] }))}
-                className="col-span-full group cursor-pointer overflow-hidden rounded-2xl bg-linear-to-r from-(--color-primario) to-(--color-primario-oscuro) px-5 py-4 text-xs font-black uppercase text-white shadow-lg shadow-[rgb(194_24_91/0.18)] transition-all duration-200 hover:scale-105 hover:brightness-110 hover:shadow-lg hover:shadow-[rgb(194_24_91/0.40)]"
-              >
-                <span className="flex items-center justify-center gap-2">
-                  <span className="text-lg leading-none transition-transform duration-200 group-hover:rotate-90">
-                    +
-                  </span>
-                  Añadir Sucursal
-                </span>
-              </button>
-            )}
+
+              {formulario.tipoVinculacion === 'SEDE' && (
+                <div className="mt-5 grid gap-4 lg:grid-cols-[1.2fr_0.8fr]">
+                  <label className="block">
+                    <span className="mb-2 block text-[10px] font-black uppercase tracking-[0.2em] text-slate-500">
+                      Salón principal
+                    </span>
+                    <select
+                      value={formulario.estudioPrincipalId ?? ''}
+                      onChange={(evento) =>
+                        setFormulario((prev) => ({
+                          ...prev,
+                          estudioPrincipalId: evento.target.value || null,
+                        }))
+                      }
+                      className="w-full rounded-2xl border border-slate-200 bg-white p-4 font-bold outline-none focus:ring-2 focus:ring-pink-500"
+                      required
+                    >
+                      <option value="">Selecciona un salón principal</option>
+                      {estudiosPadreDisponibles.map((estudioPadre) => (
+                        <option key={estudioPadre.id} value={estudioPadre.id}>
+                          {estudioPadre.name}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <div className="rounded-2xl border border-slate-200 bg-white p-4 text-sm text-slate-600">
+                    <p className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-500">
+                      Regla operativa
+                    </p>
+                    <p className="mt-2 font-medium">
+                      El salón principal puede gestionar esta sede, pero la facturación y el plan se
+                      mantienen en este registro.
+                    </p>
+                  </div>
+                </div>
+              )}
+
+              {formulario.sedes && formulario.sedes.length > 0 && (
+                <div className="mt-5 overflow-hidden rounded-2xl border border-slate-200 bg-white">
+                  <table className="min-w-full text-left text-sm">
+                    <thead className="bg-slate-50 text-[10px] font-black uppercase tracking-[0.2em] text-slate-500">
+                      <tr>
+                        <th className="px-4 py-3">Sede</th>
+                        <th className="px-4 py-3">Plan</th>
+                        <th className="px-4 py-3">Estado</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {formulario.sedes.map((sede) => (
+                        <tr key={sede.id} className="border-t border-slate-100">
+                          <td className="px-4 py-3 font-semibold text-slate-700">{sede.nombre}</td>
+                          <td className="px-4 py-3 font-semibold text-slate-700">
+                            {sede.plan === 'PRO' ? 'Pro' : 'Estándar'}
+                          </td>
+                          <td className="px-4 py-3 font-semibold text-slate-700">
+                            {sede.permiteReservasPublicas
+                              ? 'Reservas públicas activas'
+                              : 'Reservas públicas desactivadas'}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
           </section>
 
           {/* SECCIÓN 2: CATÁLOGO */}
@@ -726,12 +915,163 @@ export function ModalEstudio({
             })}
           </section>
 
+          {formulario.plan === 'PRO' && (
+            <section className="space-y-4">
+              <div className="font-black text-xs text-pink-600 uppercase tracking-widest flex items-center gap-2">
+                <Package className="w-4 h-4" /> Productos del salón
+              </div>
+              <div className="space-y-3 rounded-4xl border border-slate-200 bg-slate-50 p-5">
+                {formulario.productos.map((producto) => (
+                  <div
+                    key={producto.id}
+                    className="grid gap-3 md:grid-cols-[1.2fr_0.8fr_auto] md:items-center"
+                  >
+                    <input
+                      value={producto.nombre}
+                      onChange={(e) =>
+                        setFormulario((p) => ({
+                          ...p,
+                          productos: p.productos.map((item) =>
+                            item.id === producto.id
+                              ? { ...item, nombre: limpiarNombreSalonEntrada(e.target.value) }
+                              : item,
+                          ),
+                        }))
+                      }
+                      placeholder="Nombre del producto"
+                      className="rounded-2xl border border-slate-200 bg-white p-4 font-bold outline-none focus:ring-2 focus:ring-pink-500"
+                    />
+                    <input
+                      type="text"
+                      inputMode="numeric"
+                      value={String(convertirCentavosAMoneda(producto.precio))}
+                      onChange={(e) => {
+                        const precio = Number.parseInt(e.target.value.replace(/\D/g, ''), 10);
+                        setFormulario((p) => ({
+                          ...p,
+                          productos: p.productos.map((item) =>
+                            item.id === producto.id
+                              ? {
+                                  ...item,
+                                  precio: Number.isNaN(precio) ? 100 : Math.max(100, precio * 100),
+                                }
+                              : item,
+                          ),
+                        }));
+                      }}
+                      placeholder="Precio"
+                      className="rounded-2xl border border-slate-200 bg-white p-4 font-bold outline-none focus:ring-2 focus:ring-pink-500"
+                    />
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setFormulario((p) => ({
+                          ...p,
+                          productos: p.productos.filter((item) => item.id !== producto.id),
+                        }))
+                      }
+                      className="rounded-2xl border border-slate-200 bg-white p-4 text-slate-500"
+                      aria-label="Eliminar producto"
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </button>
+                  </div>
+                ))}
+
+                <button
+                  type="button"
+                  onClick={() =>
+                    setFormulario((p) => ({
+                      ...p,
+                      productos: [
+                        ...p.productos,
+                        {
+                          id: crypto.randomUUID(),
+                          nombre: '',
+                          categoria: 'General',
+                          precio: 100,
+                        },
+                      ],
+                    }))
+                  }
+                  className="rounded-2xl bg-slate-900 px-4 py-3 text-xs font-black uppercase text-white"
+                >
+                  Añadir producto
+                </button>
+
+                {formulario.productos.filter((producto) => producto.nombre.trim()).length > 0 && (
+                  <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white">
+                    <table className="min-w-full text-left text-sm">
+                      <thead className="bg-slate-50 text-[10px] font-black uppercase tracking-[0.2em] text-slate-500">
+                        <tr>
+                          <th className="px-4 py-3">Producto</th>
+                          <th className="px-4 py-3">Precio</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {formulario.productos
+                          .filter((producto) => producto.nombre.trim())
+                          .map((producto) => (
+                            <tr key={producto.id} className="border-t border-slate-100">
+                              <td className="px-4 py-3 font-semibold text-slate-700">
+                                {producto.nombre}
+                              </td>
+                              <td className="px-4 py-3 font-semibold text-slate-700">
+                                {formatearDinero(
+                                  producto.precio,
+                                  formulario.country === 'Colombia' ? 'COP' : 'MXN',
+                                )}
+                              </td>
+                            </tr>
+                          ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
+            </section>
+          )}
+
           {/* SECCIÓN 3: PERSONAL */}
           <section className="grid grid-cols-1 md:grid-cols-2 gap-8">
-            <SeccionPersonalFormulario
-              serviciosDisponibles={formulario.selectedServices}
-              onAgregarPersonal={onAgregarPersonal}
-            />
+            <div className="space-y-4">
+              <SeccionPersonalFormulario
+                serviciosDisponibles={formulario.selectedServices}
+                onAgregarPersonal={onAgregarPersonal}
+              />
+              {formulario.staff.length > 0 && (
+                <div className="overflow-hidden rounded-4xl border border-slate-200 bg-white shadow-sm">
+                  <table className="min-w-full text-left text-sm">
+                    <thead className="bg-slate-50 text-[10px] font-black uppercase tracking-[0.2em] text-slate-500">
+                      <tr>
+                        <th className="px-4 py-3">Empleado</th>
+                        <th className="px-4 py-3">Turno</th>
+                        <th className="px-4 py-3">Break</th>
+                        <th className="px-4 py-3">Servicios</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {formulario.staff.map((persona) => (
+                        <tr key={persona.id} className="border-t border-slate-100 align-top">
+                          <td className="px-4 py-3 font-semibold text-slate-700">{persona.name}</td>
+                          <td className="px-4 py-3 text-slate-600">
+                            {persona.shiftStart ?? '--'} a {persona.shiftEnd ?? '--'}
+                          </td>
+                          <td className="px-4 py-3 text-slate-600">
+                            {persona.breakStart ?? '--'} a {persona.breakEnd ?? '--'}
+                          </td>
+                          <td className="px-4 py-3 text-slate-600">
+                            {persona.specialties.length > 0
+                              ? persona.specialties.join(', ')
+                              : 'Sin servicios asignados'}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
             {/* SECCIÓN 4: HORARIO OPERATIVO */}
             <div>
               <div className="font-black text-xs text-pink-600 uppercase tracking-widest mb-4 flex items-center gap-2">

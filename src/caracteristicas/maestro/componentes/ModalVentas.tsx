@@ -150,7 +150,7 @@ export function ModalVentas({ onCerrar }: PropsModalVentas) {
                             </div>
                           </div>
                           <div className="flex items-center justify-between">
-                            <span className="text-sm font-bold text-slate-600">STANDARD</span>
+                            <span className="text-sm font-bold text-slate-600">Estándar</span>
                             <div className="text-right">
                               <span className="text-sm font-bold text-slate-700">
                                 {desglose.standard.salones} salones

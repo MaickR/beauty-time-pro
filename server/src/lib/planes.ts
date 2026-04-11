@@ -3,8 +3,8 @@ import type { PlanEstudio } from '../generated/prisma/client.js';
 export const MENSAJE_FUNCION_PRO =
   'Esta función está disponible solo en el plan Pro. Actualiza tu plan para desbloquearla.';
 
-export const LIMITE_SERVICIOS_STANDARD = 5;
-export const LIMITE_SERVICIOS_PRO = 15;
+export const LIMITE_SERVICIOS_STANDARD = Number.POSITIVE_INFINITY;
+export const LIMITE_SERVICIOS_PRO = Number.POSITIVE_INFINITY;
 
 interface DefinicionPlanEstudio {
   codigo: PlanEstudio;
@@ -42,6 +42,10 @@ export function validarCantidadServiciosPlan(params: {
   cantidadActual?: number;
 }): string | null {
   const definicion = obtenerDefinicionPlan(params.plan);
+  if (!Number.isFinite(definicion.maxServicios)) {
+    return null;
+  }
+
   if (params.cantidadNueva <= definicion.maxServicios) {
     return null;
   }

@@ -34,7 +34,7 @@ export function ProveedorContextoApp({ children }: PropsWithChildren) {
   const recargar = useCallback(() => setContador((c) => c + 1), []);
 
   useEffect(() => {
-    if (!usuario || (rol !== 'maestro' && rol !== 'dueno')) return;
+    if (!usuario || (rol !== 'maestro' && rol !== 'dueno' && rol !== 'vendedor')) return;
 
     const refrescarAlEnfocar = () => setContador((valor) => valor + 1);
     const refrescarAlVisibilizar = () => {
@@ -53,9 +53,6 @@ export function ProveedorContextoApp({ children }: PropsWithChildren) {
   }, [usuario, rol]);
 
   useEffect(() => {
-    const tokenSesion =
-      typeof window !== 'undefined' ? sessionStorage.getItem('btp_access_token') : null;
-
     if (rol === 'cliente') {
       setEstudios([]);
       setReservas([]);
@@ -65,14 +62,6 @@ export function ProveedorContextoApp({ children }: PropsWithChildren) {
     }
 
     if (!usuario) {
-      setEstudios([]);
-      setReservas([]);
-      setPagos([]);
-      setCargando(false);
-      return;
-    }
-
-    if (!tokenSesion) {
       setEstudios([]);
       setReservas([]);
       setPagos([]);
@@ -99,7 +88,7 @@ export function ProveedorContextoApp({ children }: PropsWithChildren) {
           setEstudios(estudiosMapeados);
           setReservas(mapearReservas(resReservas.datos, estudiosMap));
           setPagos(mapearPagos(resPagos.datos, estudiosMap));
-        } else if (rol === 'dueno' && estudioActual) {
+        } else if ((rol === 'dueno' || rol === 'vendedor') && estudioActual) {
           const [resEstudio, resReservas, resPagos] = await Promise.all([
             peticion<{ datos: Estudio }>(`/estudios/${estudioActual}`),
             peticion<{ datos: unknown[] }>(`/estudios/${estudioActual}/reservas`),
@@ -118,7 +107,7 @@ export function ProveedorContextoApp({ children }: PropsWithChildren) {
           error instanceof ErrorAPI &&
           error.estado === 404 &&
           Boolean(estudioActual) &&
-          rol === 'dueno';
+          (rol === 'dueno' || rol === 'vendedor');
 
         const sesionInvalida = error instanceof ErrorAPI && error.estado === 401;
 

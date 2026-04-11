@@ -23,12 +23,12 @@ interface PropsPanelProductos {
 
 const CATEGORIAS_PRODUCTO = [
   'General',
-  'Hair Care',
-  'Skin Care',
-  'Nails',
-  'Makeup',
-  'Tools',
-  'Other',
+  'Cabello',
+  'Piel',
+  'Uñas',
+  'Maquillaje',
+  'Herramientas',
+  'Otra',
 ] as const;
 
 export function PanelProductos({ estudioId, moneda }: PropsPanelProductos) {
@@ -74,10 +74,10 @@ export function PanelProductos({ estudioId, moneda }: PropsPanelProductos) {
       crearProducto(estudioId, datos),
     onSuccess: () => {
       void clienteConsulta.invalidateQueries({ queryKey: claveConsulta });
-      mostrarToast('Product created');
+      mostrarToast('Producto creado');
       limpiarFormulario();
     },
-    onError: () => mostrarToast('Could not create product'),
+    onError: () => mostrarToast('No se pudo crear el producto'),
   });
 
   const mutacionEditar = useMutation({
@@ -89,19 +89,19 @@ export function PanelProductos({ estudioId, moneda }: PropsPanelProductos) {
       }),
     onSuccess: () => {
       void clienteConsulta.invalidateQueries({ queryKey: claveConsulta });
-      mostrarToast('Product updated');
+      mostrarToast('Producto actualizado');
       limpiarFormulario();
     },
-    onError: () => mostrarToast('Could not update product'),
+    onError: () => mostrarToast('No se pudo actualizar el producto'),
   });
 
   const mutacionEliminar = useMutation({
     mutationFn: (id: string) => eliminarProducto(estudioId, id),
     onSuccess: () => {
       void clienteConsulta.invalidateQueries({ queryKey: claveConsulta });
-      mostrarToast('Product deleted');
+      mostrarToast('Producto eliminado');
     },
-    onError: () => mostrarToast('Could not delete product'),
+    onError: () => mostrarToast('No se pudo eliminar el producto'),
   });
 
   const mutacionToggle = useMutation({
@@ -129,13 +129,13 @@ export function PanelProductos({ estudioId, moneda }: PropsPanelProductos) {
 
   function enviar() {
     if (!nombre.trim()) {
-      mostrarToast('Product name is required');
+      mostrarToast('El nombre del producto es obligatorio');
       return;
     }
 
     const precioNum = Number(precioTexto);
     if (!precioNum || precioNum <= 0) {
-      mostrarToast('Price must be greater than 0');
+      mostrarToast('El precio debe ser mayor a 0');
       return;
     }
 
@@ -173,7 +173,7 @@ export function PanelProductos({ estudioId, moneda }: PropsPanelProductos) {
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
           <input
             type="text"
-            placeholder="Search products..."
+            placeholder="Buscar productos..."
             value={busqueda}
             onChange={(e) => setBusqueda(e.target.value)}
             className="w-full pl-10 pr-4 py-2.5 border border-slate-200 rounded-2xl text-sm"
@@ -185,9 +185,9 @@ export function PanelProductos({ estudioId, moneda }: PropsPanelProductos) {
               value={filtroCategoria}
               onChange={(e) => setFiltroCategoria(e.target.value)}
               className="border border-slate-200 rounded-2xl px-3 py-2.5 text-sm"
-              aria-label="Filter by category"
+              aria-label="Filtrar por categoría"
             >
-              <option value="">All categories</option>
+              <option value="">Todas las categorías</option>
               {categoriasExistentes.map((cat) => (
                 <option key={cat} value={cat}>
                   {cat}
@@ -201,7 +201,7 @@ export function PanelProductos({ estudioId, moneda }: PropsPanelProductos) {
               onClick={() => setMostrarFormulario(true)}
               className="inline-flex items-center gap-2 px-5 py-2.5 rounded-2xl bg-(--color-primario) hover:bg-(--color-primario-oscuro) text-white text-sm font-black uppercase tracking-widest transition-colors shadow-sm"
             >
-              <Plus className="w-4 h-4" /> Add Product
+              <Plus className="w-4 h-4" /> Agregar producto
             </button>
           )}
         </div>
@@ -212,13 +212,13 @@ export function PanelProductos({ estudioId, moneda }: PropsPanelProductos) {
         <div className="bg-white rounded-[2.5rem] p-6 border border-slate-200 shadow-sm space-y-4">
           <div className="flex justify-between items-center">
             <h3 className="text-lg font-black uppercase tracking-tight">
-              {editando ? 'Edit Product' : 'New Product'}
+              {editando ? 'Editar producto' : 'Nuevo producto'}
             </h3>
             <button
               type="button"
               onClick={limpiarFormulario}
               className="text-slate-400 hover:text-slate-600"
-              aria-label="Close form"
+              aria-label="Cerrar formulario"
             >
               <X className="w-5 h-5" />
             </button>
@@ -230,14 +230,14 @@ export function PanelProductos({ estudioId, moneda }: PropsPanelProductos) {
                 htmlFor="nombreProducto"
                 className="block text-sm font-bold text-slate-700 mb-1"
               >
-                Name
+                Nombre
               </label>
               <input
                 id="nombreProducto"
                 type="text"
                 value={nombre}
                 onChange={(e) => setNombre(e.target.value)}
-                placeholder="e.g., Keratin Shampoo"
+                placeholder="Ej: Shampoo de queratina"
                 className="w-full border border-slate-200 rounded-2xl px-4 py-2.5 text-sm"
               />
             </div>
@@ -246,7 +246,7 @@ export function PanelProductos({ estudioId, moneda }: PropsPanelProductos) {
                 htmlFor="categoriaProducto"
                 className="block text-sm font-bold text-slate-700 mb-1"
               >
-                Category
+                Categoría
               </label>
               <select
                 id="categoriaProducto"
@@ -266,7 +266,7 @@ export function PanelProductos({ estudioId, moneda }: PropsPanelProductos) {
                 htmlFor="precioProducto"
                 className="block text-sm font-bold text-slate-700 mb-1"
               >
-                Price ({moneda})
+                Precio
               </label>
               <input
                 id="precioProducto"
@@ -288,10 +288,10 @@ export function PanelProductos({ estudioId, moneda }: PropsPanelProductos) {
             className="px-6 py-2.5 rounded-2xl bg-(--color-primario) hover:bg-(--color-primario-oscuro) text-white text-sm font-black uppercase tracking-widest transition-colors shadow-sm disabled:opacity-60"
           >
             {mutacionCrear.isPending || mutacionEditar.isPending
-              ? 'Saving...'
+              ? 'Guardando...'
               : editando
-                ? 'Save Changes'
-                : 'Add Product'}
+                ? 'Guardar cambios'
+                : 'Agregar producto'}
           </button>
         </div>
       )}
@@ -301,8 +301,8 @@ export function PanelProductos({ estudioId, moneda }: PropsPanelProductos) {
         <div className="bg-white rounded-[2.5rem] p-12 border border-slate-200 shadow-sm text-center">
           <p className="text-slate-400 font-bold">
             {productos.length === 0
-              ? 'No products yet. Add your first product above.'
-              : 'No products match your search.'}
+              ? 'Aún no tienes productos. Agrega el primero.'
+              : 'No hay productos que coincidan con tu búsqueda.'}
           </p>
         </div>
       ) : (
@@ -328,7 +328,7 @@ export function PanelProductos({ estudioId, moneda }: PropsPanelProductos) {
                   type="button"
                   onClick={() => iniciarEdicion(producto)}
                   className="p-1.5 rounded-lg hover:bg-slate-100 text-slate-400 hover:text-slate-600"
-                  aria-label={`Edit ${producto.nombre}`}
+                  aria-label={`Editar ${producto.nombre}`}
                 >
                   <Pencil className="w-4 h-4" />
                 </button>
@@ -337,17 +337,17 @@ export function PanelProductos({ estudioId, moneda }: PropsPanelProductos) {
                   onClick={() => mutacionToggle.mutate(producto)}
                   className={`text-xs font-bold px-3 py-1 rounded-full border transition-colors ${producto.activo ? 'border-emerald-200 bg-emerald-50 text-emerald-700' : 'border-slate-200 bg-slate-50 text-slate-500'}`}
                 >
-                  {producto.activo ? 'Active' : 'Inactive'}
+                  {producto.activo ? 'Activo' : 'Inactivo'}
                 </button>
                 <button
                   type="button"
                   onClick={() => {
-                    if (confirm('Delete this product?')) {
+                    if (confirm('¿Deseas eliminar este producto?')) {
                       mutacionEliminar.mutate(producto.id);
                     }
                   }}
                   className="p-1.5 rounded-lg hover:bg-red-50 text-slate-400 hover:text-red-500"
-                  aria-label={`Delete ${producto.nombre}`}
+                  aria-label={`Eliminar ${producto.nombre}`}
                 >
                   <Trash2 className="w-4 h-4" />
                 </button>

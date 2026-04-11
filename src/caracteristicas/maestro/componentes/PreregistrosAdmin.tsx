@@ -23,16 +23,16 @@ import { usarToast } from '../../../componentes/ui/ProveedorToast';
 // ─── Constantes ──────────────────────────────────────────────────────────────
 
 const ESTADOS_BADGE: Record<string, { etiqueta: string; color: string; icono: typeof Clock }> = {
-  pendiente: { etiqueta: 'Pending', color: 'bg-amber-100 text-amber-700', icono: Clock },
-  aprobado: { etiqueta: 'Approved', color: 'bg-green-100 text-green-700', icono: CheckCircle },
-  rechazado: { etiqueta: 'Rejected', color: 'bg-red-100 text-red-700', icono: XCircle },
+  pendiente: { etiqueta: 'Pendiente', color: 'bg-amber-100 text-amber-700', icono: Clock },
+  aprobado: { etiqueta: 'Aprobado', color: 'bg-green-100 text-green-700', icono: CheckCircle },
+  rechazado: { etiqueta: 'Rechazado', color: 'bg-red-100 text-red-700', icono: XCircle },
 };
 
 const FILTROS_ESTADO = [
-  { valor: '', etiqueta: 'All' },
-  { valor: 'pendiente', etiqueta: 'Pending' },
-  { valor: 'aprobado', etiqueta: 'Approved' },
-  { valor: 'rechazado', etiqueta: 'Rejected' },
+  { valor: '', etiqueta: 'Todos' },
+  { valor: 'pendiente', etiqueta: 'Pendientes' },
+  { valor: 'aprobado', etiqueta: 'Aprobados' },
+  { valor: 'rechazado', etiqueta: 'Rechazados' },
 ];
 
 // ─── Componente principal ────────────────────────────────────────────────────
@@ -58,10 +58,10 @@ export function PreregistrosAdmin() {
     onSuccess: (res) => {
       clienteConsulta.invalidateQueries({ queryKey: ['admin', 'preregistros'] });
       mostrarToast(
-        `Salon created. Email: ${res.datos.acceso.emailDueno} — Password: ${res.datos.acceso.contrasena}`,
+        `Salón creado. Correo: ${res.datos.acceso.emailDueno} — Contraseña: ${res.datos.acceso.contrasena}`,
       );
     },
-    onError: () => mostrarToast('Could not approve this pre-registration.'),
+    onError: () => mostrarToast('No se pudo aprobar este pre-registro.'),
   });
 
   const mutacionRechazar = useMutation({
@@ -70,9 +70,9 @@ export function PreregistrosAdmin() {
       clienteConsulta.invalidateQueries({ queryKey: ['admin', 'preregistros'] });
       setRechazandoId(null);
       setMotivoRechazo('');
-      mostrarToast('Pre-registration rejected.');
+      mostrarToast('Pre-registro rechazado.');
     },
-    onError: () => mostrarToast('Could not reject this pre-registration.'),
+    onError: () => mostrarToast('No se pudo rechazar este pre-registro.'),
   });
 
   const preregistros = data?.datos ?? [];
@@ -89,9 +89,9 @@ export function PreregistrosAdmin() {
     <section>
       <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-6">
         <div>
-          <h2 className="text-2xl font-black text-slate-900">Vendor Pre-registrations</h2>
+          <h2 className="text-2xl font-black text-slate-900">Pre-registros</h2>
           <p className="text-sm text-slate-500 font-medium mt-1">
-            Review and approve salon pre-registrations submitted by vendors.
+            Revisa y aprueba los pre-registros de salones enviados por vendedores.
           </p>
         </div>
 
@@ -131,7 +131,7 @@ export function PreregistrosAdmin() {
       {!isLoading && preregistros.length === 0 && (
         <div className="text-center py-16 bg-white rounded-2xl border border-slate-200">
           <FileText className="w-12 h-12 text-slate-300 mx-auto mb-4" aria-hidden="true" />
-          <p className="text-slate-500 font-medium">No pre-registrations found</p>
+          <p className="text-slate-500 font-medium">No se encontraron pre-registros</p>
         </div>
       )}
 
@@ -165,7 +165,7 @@ export function PreregistrosAdmin() {
             onClick={() => setPagina((p) => p - 1)}
             className="px-4 py-2 text-sm font-bold rounded-xl bg-slate-100 text-slate-700 disabled:opacity-40 hover:bg-slate-200 transition-colors"
           >
-            Previous
+            Anterior
           </button>
           <span className="px-4 py-2 text-sm font-semibold text-slate-600">
             {pagina} / {totalPaginas}
@@ -175,7 +175,7 @@ export function PreregistrosAdmin() {
             onClick={() => setPagina((p) => p + 1)}
             className="px-4 py-2 text-sm font-bold rounded-xl bg-slate-100 text-slate-700 disabled:opacity-40 hover:bg-slate-200 transition-colors"
           >
-            Next
+            Siguiente
           </button>
         </div>
       )}
@@ -231,7 +231,7 @@ function TarjetaPreregistro({
           <div className="min-w-0">
             <p className="font-bold text-slate-900 truncate">{pr.nombreSalon}</p>
             <p className="text-xs text-slate-500 truncate">
-              {pr.propietario} · {pr.vendedor?.nombre ?? 'Vendor'}
+              {pr.propietario} · {pr.vendedor?.nombre ?? 'Vendedor'}
             </p>
           </div>
         </div>
@@ -280,33 +280,33 @@ function TarjetaPreregistro({
 
           {pr.categorias && (
             <div className="text-sm text-slate-600">
-              <span className="font-semibold">Categories:</span> {pr.categorias}
+              <span className="font-semibold">Categorías:</span> {pr.categorias}
             </div>
           )}
           {pr.descripcion && (
             <div className="text-sm text-slate-600">
-              <span className="font-semibold">Description:</span> {pr.descripcion}
+              <span className="font-semibold">Descripción:</span> {pr.descripcion}
             </div>
           )}
           {pr.notas && (
             <div className="text-sm text-slate-500 italic">
-              <span className="font-semibold not-italic">Notes:</span> {pr.notas}
+              <span className="font-semibold not-italic">Notas:</span> {pr.notas}
             </div>
           )}
           <div className="text-sm text-slate-500">
-            <span className="font-semibold">Vendor:</span> {pr.vendedor?.nombre ?? '—'} (
+            <span className="font-semibold">Vendedor:</span> {pr.vendedor?.nombre ?? '—'} (
             {pr.vendedor?.email})
           </div>
 
           {pr.estado === 'rechazado' && pr.motivoRechazo && (
             <div className="bg-red-50 text-red-700 text-sm px-4 py-3 rounded-xl">
-              <span className="font-bold">Rejection reason:</span> {pr.motivoRechazo}
+              <span className="font-bold">Motivo del rechazo:</span> {pr.motivoRechazo}
             </div>
           )}
 
           {pr.estado === 'aprobado' && pr.estudioCreadoId && (
             <div className="bg-green-50 text-green-700 text-sm px-4 py-3 rounded-xl">
-              <span className="font-bold">Salon created:</span> ID {pr.estudioCreadoId}
+              <span className="font-bold">Salón creado:</span> ID {pr.estudioCreadoId}
             </div>
           )}
 
@@ -319,7 +319,7 @@ function TarjetaPreregistro({
                     htmlFor={`motivo-${pr.id}`}
                     className="text-sm font-semibold text-slate-700"
                   >
-                    Rejection reason (min 10 characters)
+                    Motivo del rechazo (mínimo 10 caracteres)
                   </label>
                   <textarea
                     id={`motivo-${pr.id}`}
@@ -327,11 +327,11 @@ function TarjetaPreregistro({
                     onChange={(e) => onSetMotivoRechazo(e.target.value)}
                     className="w-full px-3 py-2 border border-slate-300 rounded-xl text-sm resize-none focus:ring-2 focus:ring-pink-500 focus:border-pink-500"
                     rows={3}
-                    placeholder="Explain the reason for rejection..."
+                    placeholder="Explica el motivo del rechazo..."
                     aria-describedby={`motivo-desc-${pr.id}`}
                   />
                   <p id={`motivo-desc-${pr.id}`} className="text-xs text-slate-400">
-                    {motivoRechazo.length}/500 characters
+                    {motivoRechazo.length}/500 caracteres
                   </p>
                   <div className="flex gap-2 justify-end">
                     <button
@@ -341,14 +341,14 @@ function TarjetaPreregistro({
                       }}
                       className="px-4 py-2 text-sm font-semibold text-slate-600 rounded-lg hover:bg-slate-100 transition-colors"
                     >
-                      Cancel
+                      Cancelar
                     </button>
                     <button
                       onClick={onRechazar}
                       disabled={motivoRechazo.trim().length < 10 || rechazando}
                       className="px-5 py-2 text-sm font-bold text-white bg-red-600 rounded-lg hover:bg-red-700 disabled:opacity-50 transition-colors"
                     >
-                      {rechazando ? 'Rejecting...' : 'Confirm Rejection'}
+                      {rechazando ? 'Rechazando...' : 'Confirmar rechazo'}
                     </button>
                   </div>
                 </div>
@@ -358,14 +358,14 @@ function TarjetaPreregistro({
                     onClick={() => onSetRechazandoId(pr.id)}
                     className="px-5 py-2.5 text-sm font-bold text-red-600 bg-red-50 rounded-xl hover:bg-red-100 transition-colors"
                   >
-                    Reject
+                    Rechazar
                   </button>
                   <button
                     onClick={onAprobar}
                     disabled={aprobando}
                     className="px-5 py-2.5 text-sm font-bold text-white bg-green-600 rounded-xl hover:bg-green-700 disabled:opacity-50 transition-colors"
                   >
-                    {aprobando ? 'Approving...' : 'Approve & Create Salon'}
+                    {aprobando ? 'Aprobando...' : 'Aprobar y crear salón'}
                   </button>
                 </div>
               )}

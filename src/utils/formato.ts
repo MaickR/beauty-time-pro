@@ -6,9 +6,21 @@ export function obtenerMonedaPorPais(pais: string | null | undefined): 'MXN' | '
   return pais === 'Colombia' ? 'COP' : 'MXN';
 }
 
+export function formatearPais(pais: string | null | undefined): string {
+  if (pais === 'Colombia') return 'Colombia';
+  if (pais === 'Mexico') return 'México';
+  return pais?.trim() || 'México';
+}
+
+export function formatearPlan(plan: string | null | undefined): string {
+  if (plan === 'PRO') return 'Pro';
+  if (plan === 'STANDARD') return 'Estándar';
+  return plan?.trim() || 'Sin plan';
+}
+
 export function formatearPaisMoneda(pais: string | null | undefined): string {
   const paisNormalizado = pais === 'Colombia' ? 'Colombia' : 'Mexico';
-  return `${paisNormalizado} / ${obtenerMonedaPorPais(paisNormalizado)}`;
+  return `${formatearPais(paisNormalizado)} / ${obtenerMonedaPorPais(paisNormalizado)}`;
 }
 
 export function formatearFechaHumana(fechaISO: string | null | undefined): string {
@@ -40,13 +52,25 @@ export function convertirCentavosAMoneda(montoCentavos: number): number {
 /** Formatea un monto expresado en centavos. Por defecto usa MXN y locale es-MX. */
 export function formatearDinero(monto: number, moneda: string = 'MXN'): string {
   const locale = moneda === 'COP' ? 'es-CO' : 'es-MX';
-  const decimales = moneda === 'COP' ? 0 : 2;
+  const montoMoneda = convertirCentavosAMoneda(monto || 0);
+  const tieneCentavos = Math.abs(Math.trunc(monto || 0)) % FACTOR_CENTAVOS !== 0;
+  const decimales = moneda === 'COP' ? 0 : tieneCentavos ? 2 : 0;
   return new Intl.NumberFormat(locale, {
     style: 'currency',
     currency: moneda,
     minimumFractionDigits: decimales,
     maximumFractionDigits: decimales,
-  }).format(convertirCentavosAMoneda(monto || 0));
+  }).format(montoMoneda);
+}
+
+export function formatearDineroEntero(monto: number, moneda: string = 'MXN'): string {
+  const locale = moneda === 'COP' ? 'es-CO' : 'es-MX';
+  return new Intl.NumberFormat(locale, {
+    style: 'currency',
+    currency: moneda,
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 0,
+  }).format(Math.round(convertirCentavosAMoneda(monto || 0)));
 }
 
 /** Convierte un objeto Date a cadena "YYYY-MM-DD" usando la zona horaria local del dispositivo. */

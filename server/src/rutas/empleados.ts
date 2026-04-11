@@ -60,7 +60,7 @@ export async function rutasEmpleados(servidor: FastifyInstance): Promise<void> {
       }
 
       const reservas = await prisma.reserva.findMany({
-        where: { personalId: payload.personalId, fecha, estado: { not: 'cancelled' } },
+        where: { personalId: payload.personalId, fecha },
         orderBy: { horaInicio: 'asc' },
         include: incluirServiciosDetalleReserva,
       });
@@ -96,7 +96,6 @@ export async function rutasEmpleados(servidor: FastifyInstance): Promise<void> {
         where: {
           personalId: payload.personalId,
           fecha: { gte: inicioMes, lte: finMes },
-          estado: { not: 'cancelled' },
         },
         orderBy: [{ fecha: 'asc' }, { horaInicio: 'asc' }],
         include: incluirServiciosDetalleReserva,
@@ -271,12 +270,16 @@ export async function rutasEmpleados(servidor: FastifyInstance): Promise<void> {
               logoUrl: true,
               direccion: true,
               telefono: true,
+              emailContacto: true,
               horarioApertura: true,
               horarioCierre: true,
               diasAtencion: true,
+              horario: true,
+              festivos: true,
               estado: true,
               pais: true,
               claveCliente: true,
+              slug: true,
               servicios: true,
             },
           },

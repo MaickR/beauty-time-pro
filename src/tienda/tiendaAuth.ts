@@ -42,7 +42,7 @@ interface EstadoAuth {
   iniciarSesion: (email: string, contrasena: string) => Promise<ResultadoInicioSesion>;
   iniciarSesionConClave: (clave: string) => Promise<ResultadoInicioSesion>;
   cerrarSesion: () => Promise<void>;
-  establecerEstudio: (estudioId: string | null) => void;
+  establecerEstudio: (estudioId: string | null, slugEstudio?: string | null) => void;
   completarCambioContrasenaEmpleado: () => void;
 }
 
@@ -350,8 +350,8 @@ export const usarTiendaAuth = create<EstadoAuth>((set) => ({
     }
   },
 
-  establecerEstudio: (estudioId) => {
-    set({ estudioActual: estudioId });
+  establecerEstudio: (estudioId, slugEstudio = null) => {
+    set({ estudioActual: estudioId, slugEstudioActual: slugEstudio });
   },
 
   completarCambioContrasenaEmpleado: () => {
