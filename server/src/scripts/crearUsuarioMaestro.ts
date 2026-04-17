@@ -1,6 +1,7 @@
 import 'dotenv/config';
 import { prisma } from '../prismaCliente.js';
 import { generarHashContrasena } from '../utils/contrasenas.js';
+import { asegurarCampoPorcentajeComisionUsuario } from '../lib/comisionVendedor.js';
 
 const REGEX_CONTRASENA = /^(?=.*[A-Z])(?=.*[0-9]).{8,}$/;
 
@@ -34,7 +35,8 @@ function leerMaestrosDesdeEnv(): DatosMaestro[] {
 
 async function asegurarMaestro(datos: DatosMaestro): Promise<void> {
 	if (!REGEX_CONTRASENA.test(datos.contrasena)) {
-		throw new Error(`La contraseña de ${datos.email} debe tener al menos 8 caracteres, una mayúscula y un número`);
+		console.error(`[maestro] La contraseña de ${datos.email} no cumple requisitos — omitiendo`);
+		return;
 	}
 
 	const hashContrasena = await generarHashContrasena(datos.contrasena);
@@ -92,6 +94,8 @@ async function crearUsuarioMaestro(): Promise<void> {
 		return;
 	}
 
+	await asegurarCampoPorcentajeComisionUsuario();
+
 	for (const maestro of maestros) {
 		await asegurarMaestro(maestro);
 	}
@@ -99,8 +103,7 @@ async function crearUsuarioMaestro(): Promise<void> {
 
 crearUsuarioMaestro()
 	.catch((error: unknown) => {
-		console.error('❌ No se pudo crear el usuario maestro:', error);
-		process.exitCode = 1;
+		console.error('[maestro] Error (no bloquea arranque):', error);
 	})
 	.finally(async () => {
 		await prisma.$disconnect();

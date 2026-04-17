@@ -9,11 +9,6 @@ function normalizarListaPatrones(valor: string | undefined): string[] {
     .filter(Boolean);
 }
 
-const ORIGENES_FRONTEND_OFICIALES = [
-  'https://salonpromaster.com',
-  'https://www.salonpromaster.com',
-] as const;
-
 function normalizarPatronExacto(patron: string): string | null {
   try {
     return new URL(patron).origin;
@@ -63,11 +58,9 @@ export function obtenerPatronesOrigenFrontend(
   frontendUrl: string,
   origenesAdicionales?: string,
 ): string[] {
-  const patrones = [
-    ...ORIGENES_FRONTEND_OFICIALES,
-    frontendUrl,
-    ...normalizarListaPatrones(origenesAdicionales),
-  ].map((patron) => (patron.includes('*') ? patron.trim() : normalizarPatronExacto(patron) ?? patron.trim()));
+  const patrones = [frontendUrl, ...normalizarListaPatrones(origenesAdicionales)].map((patron) =>
+    patron.includes('*') ? patron.trim() : normalizarPatronExacto(patron) ?? patron.trim(),
+  );
 
   return Array.from(new Set(patrones.filter(Boolean)));
 }

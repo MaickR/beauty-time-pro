@@ -8,17 +8,6 @@ import {
 } from './origenesFrontend';
 
 describe('origenesFrontend', () => {
-  it('incluye el dominio oficial aunque la configuracion principal apunte a otro host', () => {
-    expect(
-      obtenerPatronesOrigenFrontend('https://panel.salonpromaster.com', 'https://beauty-time-pro-git-*.vercel.app'),
-    ).toEqual([
-      'https://salonpromaster.com',
-      'https://www.salonpromaster.com',
-      'https://panel.salonpromaster.com',
-      'https://beauty-time-pro-git-*.vercel.app',
-    ]);
-  });
-
   it('normaliza el origen principal y los adicionales exactos', () => {
     expect(
       obtenerPatronesOrigenFrontend(
@@ -27,7 +16,6 @@ describe('origenesFrontend', () => {
       ),
     ).toEqual([
       'https://salonpromaster.com',
-      'https://www.salonpromaster.com',
       'https://beauty-time-pro.vercel.app',
       'https://demo.salonpromaster.com',
     ]);
