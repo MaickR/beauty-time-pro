@@ -103,7 +103,7 @@ describe('rutasAuth', () => {
       method: 'POST',
       url: '/auth/iniciar-sesion',
       headers: {
-        origin: 'https://panel.salonpromaster.com',
+        origin: 'https://salonpromaster.com',
       },
       payload: {
         clave: 'SALON1234',
