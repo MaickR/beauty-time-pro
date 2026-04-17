@@ -1,7 +1,5 @@
-import { spawnSync } from 'node:child_process';
-import { dirname, resolve } from 'node:path';
-import { fileURLToPath } from 'node:url';
 import { asegurarColumnaTabla, obtenerTablasDisponibles } from '../lib/compatibilidadEsquema.js';
+import { ejecutarPrisma } from '../lib/prismaCli.js';
 import { prisma } from '../prismaCliente.js';
 
 interface ReparacionMigracion {
@@ -36,26 +34,8 @@ interface EstadoMigracion {
   rolled_back_at: Date | null;
 }
 
-function obtenerDirectorioServidor(): string {
-  const archivoActual = fileURLToPath(import.meta.url);
-  return resolve(dirname(archivoActual), '..', '..');
-}
-
-function ejecutarResolveMigracion(nombreMigracion: string): void {
-  const comando = process.platform === 'win32' ? 'npx.cmd' : 'npx';
-  const resultado = spawnSync(
-    comando,
-    ['prisma', 'migrate', 'resolve', '--applied', nombreMigracion],
-    {
-      cwd: obtenerDirectorioServidor(),
-      env: process.env,
-      stdio: 'inherit',
-    },
-  );
-
-  if (resultado.status !== 0) {
-    throw new Error(`No se pudo resolver la migracion ${nombreMigracion}. Codigo: ${resultado.status ?? 'sin-codigo'}`);
-  }
+async function ejecutarResolveMigracion(nombreMigracion: string): Promise<void> {
+  await ejecutarPrisma(['migrate', 'resolve', '--applied', nombreMigracion]);
 }
 
 async function obtenerEstadosMigracion(nombreMigracion: string): Promise<EstadoMigracion[]> {
@@ -92,7 +72,7 @@ async function repararMigracionParcial(configuracion: ReparacionMigracion): Prom
     throw new Error(`No fue posible completar las columnas requeridas para ${configuracion.nombre}`);
   }
 
-  ejecutarResolveMigracion(configuracion.nombre);
+  await ejecutarResolveMigracion(configuracion.nombre);
 }
 
 async function repararMigracionesPendientes(): Promise<void> {
