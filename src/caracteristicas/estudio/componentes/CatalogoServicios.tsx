@@ -12,7 +12,11 @@ import { DialogoConfirmacion } from '../../../componentes/ui/DialogoConfirmacion
 import { usarContextoApp } from '../../../contextos/ContextoApp';
 import { FormularioNuevoServicio } from './FormularioNuevoServicio';
 import type { Estudio, Moneda, Servicio } from '../../../tipos';
-import { CATALOGO_SERVICIOS, type CategoriaServicio } from '../../../lib/constantes';
+import {
+  CATALOGO_SERVICIOS,
+  obtenerEtiquetaServicioCatalogo,
+  type CategoriaServicio,
+} from '../../../lib/constantes';
 import { MENSAJE_FUNCION_PRO, obtenerDefinicionPlan } from '../../../lib/planes';
 
 const obtenerLocaleMoneda = (moneda: Moneda) => (moneda === 'COP' ? 'es-CO' : 'es-MX');
@@ -162,14 +166,15 @@ export function CatalogoServicios({ estudio }: PropsCatalogoServicios) {
       : serviciosConCategoria.filter((s) => s.category === categoriaFiltro);
 
   const serviciosOrdenados = [...serviciosFiltrados].sort((a, b) =>
-    a.name.localeCompare(b.name, 'es'),
+    obtenerEtiquetaServicioCatalogo(a.name).localeCompare(
+      obtenerEtiquetaServicioCatalogo(b.name),
+      'es',
+    ),
   );
+  const tieneLimiteServicios = Number.isFinite(definicionPlan.maxServicios);
 
   const agregarServicio = (servicioNuevo: Servicio) => {
-    if (
-      definicionPlan.maxServicios !== null &&
-      serviciosLocales.length >= definicionPlan.maxServicios
-    ) {
+    if (tieneLimiteServicios && serviciosLocales.length >= definicionPlan.maxServicios) {
       mostrarToast({
         mensaje: `El plan ${definicionPlan.nombre} permite hasta ${definicionPlan.maxServicios} servicios activos. ${MENSAJE_FUNCION_PRO}`,
         variante: 'error',
@@ -194,7 +199,7 @@ export function CatalogoServicios({ estudio }: PropsCatalogoServicios) {
   };
 
   const llegoLimitePlan =
-    definicionPlan.maxServicios !== null && serviciosLocales.length >= definicionPlan.maxServicios;
+    tieneLimiteServicios && serviciosLocales.length >= definicionPlan.maxServicios;
 
   return (
     <div className="bg-white rounded-[3rem] p-6 md:p-8 border border-slate-200 shadow-sm">
@@ -226,7 +231,7 @@ export function CatalogoServicios({ estudio }: PropsCatalogoServicios) {
           Plan actual: {definicionPlan.nombre}
         </p>
         <p className="mt-2 text-sm font-medium text-slate-600">
-          {definicionPlan.maxServicios === null
+          {!tieneLimiteServicios
             ? 'Puedes administrar un catálogo de servicios sin límite.'
             : `Tienes ${serviciosLocales.length} de ${definicionPlan.maxServicios} servicios activos disponibles.`}
         </p>
@@ -267,7 +272,11 @@ export function CatalogoServicios({ estudio }: PropsCatalogoServicios) {
       <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
         {serviciosOrdenados
           .filter((servicio) => {
-            const coincideBusqueda = servicio.name
+            const coincideBusqueda = [
+              servicio.name,
+              obtenerEtiquetaServicioCatalogo(servicio.name),
+            ]
+              .join(' ')
               .toLowerCase()
               .includes(busquedaServicio.trim().toLowerCase());
             const categoriaServicio = servicio.category || inferirCategoria(servicio.name);
@@ -276,14 +285,14 @@ export function CatalogoServicios({ estudio }: PropsCatalogoServicios) {
 
             return coincideBusqueda && coincideCategoria;
           })
-          .map((s) => {
+          .map((s, indiceServicio) => {
             const editando = servicioEditando === s.name;
             const porEliminar = borrandoServicio === s.name;
             const servicioActual = obtenerServicio(s.name) ?? s;
 
             return (
               <div
-                key={s.name}
+                key={`${s.name}-${indiceServicio}`}
                 className="rounded-2xl border border-pink-100 bg-white p-4 transition-all hover:border-pink-300 hover:shadow-md"
               >
                 <div className="mb-3 flex items-start justify-between gap-4">
@@ -292,7 +301,7 @@ export function CatalogoServicios({ estudio }: PropsCatalogoServicios) {
                       className="block text-sm font-medium"
                       style={{ color: 'var(--color-texto)' }}
                     >
-                      {s.name}
+                      {obtenerEtiquetaServicioCatalogo(s.name)}
                     </span>
                     <span className="mt-0.5 block text-[10px] font-bold uppercase tracking-wider text-pink-500">
                       {s.category || inferirCategoria(s.name)}
@@ -405,7 +414,11 @@ export function CatalogoServicios({ estudio }: PropsCatalogoServicios) {
           })}
         {serviciosOrdenados.length > 0 &&
           serviciosOrdenados.filter((servicio) => {
-            const coincideBusqueda = servicio.name
+            const coincideBusqueda = [
+              servicio.name,
+              obtenerEtiquetaServicioCatalogo(servicio.name),
+            ]
+              .join(' ')
               .toLowerCase()
               .includes(busquedaServicio.trim().toLowerCase());
             const categoriaServicio = servicio.category || inferirCategoria(servicio.name);
@@ -429,7 +442,9 @@ export function CatalogoServicios({ estudio }: PropsCatalogoServicios) {
         abierto={Boolean(borrandoServicio)}
         mensaje="Eliminar servicio"
         descripcion={
-          borrandoServicio ? `Se quitará ${borrandoServicio} del catálogo del salón.` : undefined
+          borrandoServicio
+            ? `Se quitará ${obtenerEtiquetaServicioCatalogo(borrandoServicio)} del catálogo del salón.`
+            : undefined
         }
         variante="peligro"
         textoConfirmar="Eliminar"

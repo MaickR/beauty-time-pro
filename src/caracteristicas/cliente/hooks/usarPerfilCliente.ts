@@ -16,7 +16,7 @@ import { usarToast } from '../../../componentes/ui/ProveedorToast';
 import { usarTiendaAuth } from '../../../tienda/tiendaAuth';
 import type { PerfilClienteApp, ReservaCliente } from '../../../tipos';
 
-const REGEX_TEXTO_PERSONA = /^[A-Za-zÁÉÍÓÚáéíóúÑñÜü\s]+$/;
+const REGEX_TEXTO_PERSONA = /^[\p{L}\p{M}\s'’-]+$/u;
 const REGEX_CONTRASENA_SEGURA = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[^A-Za-z\d]).{10,}$/;
 
 const esquemaPerfil = z.object({
@@ -25,13 +25,13 @@ const esquemaPerfil = z.object({
     .trim()
     .min(2, 'Mínimo 2 caracteres')
     .max(80, 'Máximo 80 caracteres')
-    .regex(REGEX_TEXTO_PERSONA, 'Solo letras y espacios'),
+    .regex(REGEX_TEXTO_PERSONA, 'Solo letras, espacios, apóstrofes y guiones'),
   apellido: z
     .string()
     .trim()
     .min(2, 'Mínimo 2 caracteres')
     .max(80, 'Máximo 80 caracteres')
-    .regex(REGEX_TEXTO_PERSONA, 'Solo letras y espacios'),
+    .regex(REGEX_TEXTO_PERSONA, 'Solo letras, espacios, apóstrofes y guiones'),
   telefono: z
     .string()
     .regex(/^\d{1,10}$/, 'Solo números, máximo 10 dígitos')
@@ -69,7 +69,9 @@ const CLAVE_NOTIFICACION_PERFIL = 'btp_notificacion_perfil';
 export function usarPerfilCliente() {
   const { mostrarToast } = usarToast();
   const queryClient = useQueryClient();
+  const { usuario, iniciando } = usarTiendaAuth();
   const [notificacion, setNotificacion] = useState<NotificacionPerfil | null>(null);
+  const puedeConsultarPerfil = !iniciando && usuario?.rol === 'cliente';
 
   function mostrarNotificacion(entrada: NotificacionPerfil) {
     sessionStorage.setItem(CLAVE_NOTIFICACION_PERFIL, JSON.stringify(entrada));
@@ -126,18 +128,21 @@ export function usarPerfilCliente() {
   const consulta = useQuery<PerfilClienteApp>({
     queryKey: ['mi-perfil'],
     queryFn: obtenerMiPerfil,
+    enabled: puedeConsultarPerfil,
     staleTime: 0,
   });
 
   const consultaReservas = useQuery<ReservaCliente[]>({
     queryKey: ['mis-reservas'],
     queryFn: obtenerMisReservas,
+    enabled: puedeConsultarPerfil,
     staleTime: 0,
   });
 
   const consultaReservasProximas = useQuery<ReservaCliente[]>({
     queryKey: ['reservas-proximas'],
     queryFn: obtenerReservasProximas,
+    enabled: puedeConsultarPerfil,
     staleTime: 0,
   });
 

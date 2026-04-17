@@ -67,7 +67,9 @@ const CLAVE_DUENO_MIKELOV = 'MIKELOV123';
 const EMAIL_DUENO_MIKELOV = 'hola@mikelovstudio.com';
 const CONTRASENA_ADMIN_PRINCIPAL = process.env.ADMIN_PRINCIPAL_CONTRASENA?.trim() || generarContrasenaTemporal();
 const CONTRASENA_ADMIN_SECUNDARIO = process.env.ADMIN_SECUNDARIO_CONTRASENA?.trim() || generarContrasenaTemporal();
-const CONTRASENA_DUENO_DEMO = process.env.DEMO_CONTRASENA_DUENO?.trim() || generarContrasenaTemporal();
+const CONTRASENA_DUENO_DEMO = process.env.DEMO_CONTRASENA_DUENO?.trim() || 'MikelovPro2026!';
+const EMAIL_EMPLEADO_DEMO_MIKELOV = 'andrea.color@mikelovstudio.com';
+const CONTRASENA_EMPLEADO_DEMO_MIKELOV = process.env.DEMO_CONTRASENA_EMPLEADO_MIKELOV?.trim() || 'MikelovEmp2026!';
 const ADMINS_SEMILLA = [
   {
     email: 'miguel@beautytimepro.com',
@@ -95,6 +97,7 @@ function informarCredencialesSemilla() {
   console.log(`   Maestro principal: miguel@beautytimepro.com / ${CONTRASENA_ADMIN_PRINCIPAL}`);
   console.log(`   Maestro secundario: admin.secundario@beautytimepro.com / ${CONTRASENA_ADMIN_SECUNDARIO}`);
   console.log(`   Dueño demo MIKELOV: ${EMAIL_DUENO_MIKELOV} / ${CONTRASENA_DUENO_DEMO}`);
+  console.log(`   Empleado demo MIKELOV: ${EMAIL_EMPLEADO_DEMO_MIKELOV} / ${CONTRASENA_EMPLEADO_DEMO_MIKELOV}`);
 }
 
 function obtenerFechaLocalISO(fecha: Date): string {
@@ -104,6 +107,153 @@ function obtenerFechaLocalISO(fecha: Date): string {
 }
 
 const DIAS = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'];
+
+type ServicioSemilla = {
+  name: string;
+  duration: number;
+  price: number;
+};
+
+type EmpleadoSemilla = {
+  nombre: string;
+  email: string;
+  contrasena: string;
+  especialidades: string[];
+  horaInicio: string;
+  horaFin: string;
+  descansoInicio: string;
+  descansoFin: string;
+  diasTrabajo?: number[];
+  compartirCredenciales?: boolean;
+};
+
+type ClienteSemilla = {
+  nombre: string;
+  telefono: string;
+  email: string;
+  fechaNacimiento: string;
+  notas?: string;
+};
+
+const SUCURSALES_MIKELOV = [
+  'Av. Presidente Masaryk 123, Polanco, CDMX',
+  'Insurgentes Sur 456, Roma, CDMX',
+  'Av. Universidad 920, Del Valle, CDMX',
+];
+
+const SERVICIOS_MIKELOV: ServicioSemilla[] = [
+  { name: 'Corte Dama / Niña', duration: 60, price: 80000 },
+  { name: 'Balayage', duration: 240, price: 350000 },
+  { name: 'Tinte Global', duration: 120, price: 180000 },
+  { name: 'Diseño de Ceja', duration: 30, price: 40000 },
+  { name: 'Lash Lifting', duration: 90, price: 95000 },
+  { name: 'Mani Spa', duration: 60, price: 60000 },
+  { name: 'Pedi Spa', duration: 60, price: 70000 },
+  { name: 'Gel Semi Permanente', duration: 60, price: 50000 },
+  { name: 'Peinado Social', duration: 75, price: 85000 },
+  { name: 'Tratamiento Capilar Premium', duration: 50, price: 65000 },
+];
+
+const EMPLEADOS_MIKELOV: EmpleadoSemilla[] = [
+  {
+    nombre: 'Andrea López',
+    email: EMAIL_EMPLEADO_DEMO_MIKELOV,
+    contrasena: CONTRASENA_EMPLEADO_DEMO_MIKELOV,
+    especialidades: ['Corte Dama / Niña', 'Balayage', 'Tinte Global', 'Tratamiento Capilar Premium'],
+    horaInicio: '10:00',
+    horaFin: '20:00',
+    descansoInicio: '14:00',
+    descansoFin: '15:00',
+    diasTrabajo: [1, 2, 3, 4, 5, 6],
+    compartirCredenciales: true,
+  },
+  {
+    nombre: 'Sofía Ramírez',
+    email: 'sofia.brows@mikelovstudio.com',
+    contrasena: 'SofiaBrows2026!',
+    especialidades: ['Diseño de Ceja', 'Lash Lifting'],
+    horaInicio: '09:00',
+    horaFin: '18:00',
+    descansoInicio: '13:30',
+    descansoFin: '14:15',
+    diasTrabajo: [1, 2, 3, 4, 5],
+  },
+  {
+    nombre: 'Valeria Torres',
+    email: 'valeria.nails@mikelovstudio.com',
+    contrasena: 'ValeriaNails2026!',
+    especialidades: ['Mani Spa', 'Pedi Spa', 'Gel Semi Permanente'],
+    horaInicio: '11:00',
+    horaFin: '20:00',
+    descansoInicio: '15:00',
+    descansoFin: '16:00',
+    diasTrabajo: [2, 3, 4, 5, 6],
+  },
+  {
+    nombre: 'Fernanda Cruz',
+    email: 'fernanda.social@mikelovstudio.com',
+    contrasena: 'FernandaSocial2026!',
+    especialidades: ['Peinado Social', 'Corte Dama / Niña', 'Diseño de Ceja'],
+    horaInicio: '09:30',
+    horaFin: '18:30',
+    descansoInicio: '13:00',
+    descansoFin: '14:00',
+    diasTrabajo: [4, 5, 6, 0],
+  },
+  {
+    nombre: 'Daniela García',
+    email: 'daniela.spa@mikelovstudio.com',
+    contrasena: 'DanielaSpa2026!',
+    especialidades: ['Tratamiento Capilar Premium', 'Mani Spa', 'Pedi Spa'],
+    horaInicio: '10:00',
+    horaFin: '19:00',
+    descansoInicio: '14:30',
+    descansoFin: '15:30',
+    diasTrabajo: [1, 2, 4, 5, 6],
+  },
+];
+
+const CLIENTES_MIKELOV: ClienteSemilla[] = [
+  { nombre: 'Carla Ruiz', telefono: '5598765432', email: 'carla@correo.com', fechaNacimiento: '1994-03-10', notas: 'Prefiere tonos fríos y recordatorios por WhatsApp.' },
+  { nombre: 'Mónica Hernández', telefono: '5511223344', email: 'monica@correo.com', fechaNacimiento: '1990-06-22', notas: 'Balayage cada 8 semanas.' },
+  { nombre: 'Lucía Fernández', telefono: '5544556677', email: 'lucia@correo.com', fechaNacimiento: '1998-09-14' },
+  { nombre: 'Paola Jiménez', telefono: '5588112233', email: 'paola@correo.com', fechaNacimiento: '1992-12-03', notas: 'Siempre agenda los sábados.' },
+  { nombre: 'Daniela Moreno', telefono: '5577331199', email: 'daniela@correo.com', fechaNacimiento: '1989-01-19' },
+  { nombre: 'Andrea Soto', telefono: '5555667788', email: 'andrea.soto@correo.com', fechaNacimiento: '1996-05-01' },
+  { nombre: 'Mariana Vega', telefono: '5533001122', email: 'mariana.vega@correo.com', fechaNacimiento: '1991-07-18', notas: 'Compra productos en cada visita.' },
+  { nombre: 'Regina Campos', telefono: '5522110099', email: 'regina.campos@correo.com', fechaNacimiento: '1997-02-11' },
+  { nombre: 'Karla Mejía', telefono: '5544002211', email: 'karla.mejia@correo.com', fechaNacimiento: '1988-08-28' },
+  { nombre: 'Natalia Flores', telefono: '5599001122', email: 'natalia.flores@correo.com', fechaNacimiento: '1995-10-09' },
+];
+
+function sumarDias(fecha: Date, dias: number): Date {
+  const resultado = new Date(fecha);
+  resultado.setDate(resultado.getDate() + dias);
+  return resultado;
+}
+
+function construirServicioIndice() {
+  return new Map(SERVICIOS_MIKELOV.map((servicio) => [servicio.name, servicio]));
+}
+
+function calcularTotalesServicios(nombresServicios: string[]) {
+  const indiceServicios = construirServicioIndice();
+  const servicios = nombresServicios.map((nombre) => {
+    const servicio = indiceServicios.get(nombre);
+
+    if (!servicio) {
+      throw new Error(`Servicio de semilla no encontrado: ${nombre}`);
+    }
+
+    return servicio;
+  });
+
+  return {
+    servicios,
+    duracion: servicios.reduce((total, servicio) => total + servicio.duration, 0),
+    precioTotal: servicios.reduce((total, servicio) => total + servicio.price, 0),
+  };
+}
 
 function construirHorarioMikelov() {
   return DIAS.reduce(
@@ -126,7 +276,23 @@ async function sembrarMikelovStudio(): Promise<void> {
   due.setMonth(due.getMonth() + 1);
   const tomorrow = new Date();
   tomorrow.setDate(tomorrow.getDate() + 1);
-  const tomorrowStr = obtenerFechaLocalISO(tomorrow);
+  const precioPlanPro =
+    (await prisma.precioPlan.findFirst({
+      where: { plan: 'PRO', pais: 'Mexico' },
+      orderBy: [{ version: 'desc' }],
+      select: { id: true },
+    })) ??
+    (await prisma.precioPlan.create({
+      data: {
+        plan: 'PRO',
+        pais: 'Mexico',
+        moneda: 'MXN',
+        monto: 70000,
+        version: 1,
+        vigenteDesde: new Date('2026-01-01T00:00:00.000Z'),
+      },
+      select: { id: true },
+    }));
 
   const horario = construirHorarioMikelov();
   const datosEstudioMikelov = {
@@ -135,33 +301,29 @@ async function sembrarMikelovStudio(): Promise<void> {
     telefono: '55 1234 5678',
     sitioWeb: 'www.mikelovstudio.com',
     pais: 'Mexico' as const,
-    sucursales: [
-      'Av. Presidente Masaryk 123, Polanco, CDMX',
-      'Insurgentes Sur 456, Roma, CDMX',
-    ],
+    plan: 'PRO' as const,
+    sucursales: SUCURSALES_MIKELOV,
     claveDueno: CLAVE_DUENO_MIKELOV,
     claveCliente: 'MIKELOVSTUDIO',
     estado: 'aprobado' as const,
     fechaAprobacion: new Date(),
     inicioSuscripcion: '2026-02-15',
     fechaVencimiento: obtenerFechaLocalISO(due),
-    festivos: [],
+    precioPlanActualId: precioPlanPro.id,
+    precioPlanProximoId: null,
+    fechaAplicacionPrecioProximo: null,
+    festivos: [obtenerFechaLocalISO(sumarDias(new Date(), 11)), obtenerFechaLocalISO(sumarDias(new Date(), 18))],
     colorPrimario: '#C2185B',
-    descripcion: 'Color, uñas y estética premium con atención personalizada.',
+    descripcion: 'Color, uñas, brows y tratamientos premium con atención personalizada y operación multi-sede.',
     direccion: 'Av. Presidente Masaryk 123, Polanco, CDMX',
     emailContacto: EMAIL_DUENO_MIKELOV,
     horario,
-    servicios: [
-      { name: 'Corte Dama / Niña', duration: 60, price: 80000 },
-      { name: 'Balayage', duration: 240, price: 350000 },
-      { name: 'Tinte Global', duration: 120, price: 180000 },
-      { name: 'Diseño de Ceja', duration: 30, price: 40000 },
-      { name: 'Lash Lifting', duration: 90, price: 95000 },
-      { name: 'Mani Spa', duration: 60, price: 60000 },
-      { name: 'Pedi Spa', duration: 60, price: 70000 },
-      { name: 'Gel Semi Permanente', duration: 60, price: 50000 },
-    ],
+    servicios: SERVICIOS_MIKELOV,
     serviciosCustom: [],
+    numeroEspecialistas: EMPLEADOS_MIKELOV.length,
+    categorias: 'Cabello, Uñas, Cejas, Lashes, Tratamientos',
+    mensajesMasivosExtra: 2,
+    primeraVez: false,
   };
 
   const estudio = existe
@@ -206,152 +368,250 @@ async function sembrarMikelovStudio(): Promise<void> {
   await prisma.configFidelidad.deleteMany({ where: { estudioId: estudio.id } });
   await prisma.pago.deleteMany({ where: { estudioId: estudio.id } });
   await prisma.diaFestivo.deleteMany({ where: { estudioId: estudio.id } });
+  await prisma.notificacionEstudio.deleteMany({ where: { estudioId: estudio.id } });
+  await prisma.mensajeMasivo.deleteMany({ where: { estudioId: estudio.id } });
+  await prisma.producto.deleteMany({ where: { estudioId: estudio.id } });
   await prisma.empleadoAcceso.deleteMany({ where: { personal: { estudioId: estudio.id } } });
   await prisma.cliente.deleteMany({ where: { estudioId: estudio.id } });
   await prisma.personal.deleteMany({ where: { estudioId: estudio.id } });
 
-  // Personal
-  const [andrea, sofia, valeria] = await Promise.all([
-    prisma.personal.create({
-      data: {
-        estudioId: estudio.id,
-        nombre: 'Andrea (Master Colorista)',
-        especialidades: ['Corte Dama / Niña', 'Balayage', 'Tinte Global'],
-        horaInicio: '10:00',
-        horaFin: '20:00',
-        descansoInicio: '14:00',
-        descansoFin: '15:00',
-      },
-    }),
-    prisma.personal.create({
-      data: {
-        estudioId: estudio.id,
-        nombre: 'Sofía (Lashes & Brows)',
-        especialidades: ['Diseño de Ceja', 'Lash Lifting'],
-        horaInicio: '09:00',
-        horaFin: '18:00',
-        descansoInicio: '13:30',
-        descansoFin: '14:30',
-      },
-    }),
-    prisma.personal.create({
-      data: {
-        estudioId: estudio.id,
-        nombre: 'Valeria (Nail Artist)',
-        especialidades: ['Mani Spa', 'Pedi Spa', 'Gel Semi Permanente'],
-        horaInicio: '11:00',
-        horaFin: '20:00',
-        descansoInicio: '15:00',
-        descansoFin: '16:00',
-      },
-    }),
-  ]);
+  const personalCreado = await Promise.all(
+    EMPLEADOS_MIKELOV.map(async (empleado) => {
+      const personal = await prisma.personal.create({
+        data: {
+          estudioId: estudio.id,
+          nombre: empleado.nombre,
+          especialidades: empleado.especialidades,
+          horaInicio: empleado.horaInicio,
+          horaFin: empleado.horaFin,
+          descansoInicio: empleado.descansoInicio,
+          descansoFin: empleado.descansoFin,
+          diasTrabajo: empleado.diasTrabajo ?? null,
+        },
+      });
 
-  const [carla, monica, lucia] = await Promise.all([
-    prisma.cliente.create({
-      data: {
-        estudioId: estudio.id,
-        nombre: 'Carla Ruiz',
-        telefono: '5598765432',
-        fechaNacimiento: new Date('1994-03-10'),
-        email: 'carla@correo.com',
-      },
+      await prisma.empleadoAcceso.create({
+        data: {
+          personalId: personal.id,
+          email: empleado.email,
+          hashContrasena: await bcrypt.hash(empleado.contrasena, 12),
+          activo: true,
+          forzarCambioContrasena: !empleado.compartirCredenciales,
+        },
+      });
+
+      return { ...personal, email: empleado.email };
     }),
-    prisma.cliente.create({
-      data: {
-        estudioId: estudio.id,
-        nombre: 'Mónica Hernández',
-        telefono: '5511223344',
-        fechaNacimiento: new Date('1990-06-22'),
-        email: 'monica@correo.com',
-      },
-    }),
-    prisma.cliente.create({
-      data: {
-        estudioId: estudio.id,
-        nombre: 'Lucía Fernández',
-        telefono: '5544556677',
-        fechaNacimiento: new Date('1998-09-14'),
-        email: 'lucia@correo.com',
-      },
-    }),
-  ]);
+  );
+
+  const clientesCreados = await Promise.all(
+    CLIENTES_MIKELOV.map((cliente) =>
+      prisma.cliente.create({
+        data: {
+          estudioId: estudio.id,
+          nombre: cliente.nombre,
+          telefono: cliente.telefono,
+          fechaNacimiento: new Date(cliente.fechaNacimiento),
+          email: cliente.email,
+          notas: cliente.notas,
+        },
+      }),
+    ),
+  );
+
+  await prisma.producto.createMany({
+    data: [
+      { estudioId: estudio.id, nombre: 'Shampoo Matizante Pro', categoria: 'Cabello', precio: 42000, activo: true },
+      { estudioId: estudio.id, nombre: 'Mascarilla Reparadora', categoria: 'Cabello', precio: 38000, activo: true },
+      { estudioId: estudio.id, nombre: 'Aceite de Cutícula', categoria: 'Uñas', precio: 19000, activo: true },
+      { estudioId: estudio.id, nombre: 'Sérum de Pestañas', categoria: 'Lashes', precio: 45000, activo: true },
+      { estudioId: estudio.id, nombre: 'Protector Térmico', categoria: 'Cabello', precio: 29000, activo: true },
+      { estudioId: estudio.id, nombre: 'Gift Card Spa', categoria: 'Retail', precio: 100000, activo: false },
+    ],
+  });
 
   await prisma.configFidelidad.create({
     data: {
       estudioId: estudio.id,
       activo: true,
-      visitasRequeridas: 3,
+      visitasRequeridas: 4,
       tipoRecompensa: 'descuento',
-      porcentajeDescuento: 100,
-      descripcionRecompensa: 'Tu próximo servicio es completamente gratis',
+      porcentajeDescuento: 25,
+      descripcionRecompensa: '25% off en tu próxima visita premium',
     },
   });
 
-  // Reservas de demostración
-  await Promise.all([
-    prisma.reserva.create({
+  const empleadosPorNombre = new Map(personalCreado.map((empleado) => [empleado.nombre, empleado]));
+  const clientesPorNombre = new Map(clientesCreados.map((cliente) => [cliente.nombre, cliente]));
+  const planesReserva = [
+    {
+      cliente: 'Carla Ruiz',
+      empleado: 'Andrea López',
+      servicios: ['Corte Dama / Niña', 'Tratamiento Capilar Premium'],
+      fecha: obtenerFechaLocalISO(sumarDias(new Date(), -21)),
+      horaInicio: '10:00',
+      estado: 'completed',
+      sucursal: SUCURSALES_MIKELOV[0],
+      observaciones: 'Cliente VIP, pidió sellado ligero.',
+    },
+    {
+      cliente: 'Mónica Hernández',
+      empleado: 'Andrea López',
+      servicios: ['Balayage'],
+      fecha: obtenerFechaLocalISO(sumarDias(new Date(), -15)),
+      horaInicio: '11:30',
+      estado: 'completed',
+      sucursal: SUCURSALES_MIKELOV[0],
+      marcaTinte: "L'Oréal",
+      tonalidad: '8.1',
+    },
+    {
+      cliente: 'Lucía Fernández',
+      empleado: 'Valeria Torres',
+      servicios: ['Mani Spa', 'Gel Semi Permanente'],
+      fecha: obtenerFechaLocalISO(sumarDias(new Date(), -12)),
+      horaInicio: '16:00',
+      estado: 'completed',
+      sucursal: SUCURSALES_MIKELOV[1],
+    },
+    {
+      cliente: 'Paola Jiménez',
+      empleado: 'Sofía Ramírez',
+      servicios: ['Diseño de Ceja', 'Lash Lifting'],
+      fecha: obtenerFechaLocalISO(sumarDias(new Date(), -9)),
+      horaInicio: '13:00',
+      estado: 'completed',
+      sucursal: SUCURSALES_MIKELOV[0],
+    },
+    {
+      cliente: 'Daniela Moreno',
+      empleado: 'Fernanda Cruz',
+      servicios: ['Peinado Social'],
+      fecha: obtenerFechaLocalISO(sumarDias(new Date(), -6)),
+      horaInicio: '17:00',
+      estado: 'cancelled',
+      sucursal: SUCURSALES_MIKELOV[2],
+      observaciones: 'Canceló por viaje de trabajo.',
+    },
+    {
+      cliente: 'Andrea Soto',
+      empleado: 'Daniela García',
+      servicios: ['Pedi Spa'],
+      fecha: obtenerFechaLocalISO(sumarDias(new Date(), -4)),
+      horaInicio: '12:00',
+      estado: 'completed',
+      sucursal: SUCURSALES_MIKELOV[1],
+    },
+    {
+      cliente: 'Mariana Vega',
+      empleado: 'Andrea López',
+      servicios: ['Tinte Global', 'Tratamiento Capilar Premium'],
+      fecha: obtenerFechaLocalISO(sumarDias(new Date(), -1)),
+      horaInicio: '15:30',
+      estado: 'confirmed',
+      sucursal: SUCURSALES_MIKELOV[0],
+      marcaTinte: 'Wella',
+      tonalidad: '7.43',
+    },
+    {
+      cliente: 'Regina Campos',
+      empleado: 'Sofía Ramírez',
+      servicios: ['Diseño de Ceja'],
+      fecha: todayStr,
+      horaInicio: '09:30',
+      estado: 'pending',
+      sucursal: SUCURSALES_MIKELOV[0],
+    },
+    {
+      cliente: 'Karla Mejía',
+      empleado: 'Valeria Torres',
+      servicios: ['Mani Spa', 'Pedi Spa'],
+      fecha: todayStr,
+      horaInicio: '13:00',
+      estado: 'confirmed',
+      sucursal: SUCURSALES_MIKELOV[1],
+    },
+    {
+      cliente: 'Natalia Flores',
+      empleado: 'Fernanda Cruz',
+      servicios: ['Peinado Social', 'Diseño de Ceja'],
+      fecha: obtenerFechaLocalISO(sumarDias(new Date(), 1)),
+      horaInicio: '11:00',
+      estado: 'pending',
+      sucursal: SUCURSALES_MIKELOV[2],
+      observaciones: 'Preparación para boda civil.',
+    },
+    {
+      cliente: 'Carla Ruiz',
+      empleado: 'Daniela García',
+      servicios: ['Tratamiento Capilar Premium'],
+      fecha: obtenerFechaLocalISO(sumarDias(new Date(), 3)),
+      horaInicio: '18:00',
+      estado: 'confirmed',
+      sucursal: SUCURSALES_MIKELOV[0],
+    },
+    {
+      cliente: 'Mónica Hernández',
+      empleado: 'Andrea López',
+      servicios: ['Balayage', 'Corte Dama / Niña'],
+      fecha: obtenerFechaLocalISO(sumarDias(new Date(), 6)),
+      horaInicio: '10:30',
+      estado: 'pending',
+      sucursal: SUCURSALES_MIKELOV[0],
+      marcaTinte: 'Redken',
+      tonalidad: '9N',
+    },
+  ] as const;
+
+  for (const planReserva of planesReserva) {
+    const cliente = clientesPorNombre.get(planReserva.cliente);
+    const empleado = empleadosPorNombre.get(planReserva.empleado);
+
+    if (!cliente || !empleado) {
+      throw new Error(`No fue posible construir la reserva de ${planReserva.cliente}.`);
+    }
+
+    const totales = calcularTotalesServicios([...planReserva.servicios]);
+
+    const reserva = await prisma.reserva.create({
       data: {
         estudioId: estudio.id,
-        personalId: andrea.id,
-        clienteId: carla.id,
-        nombreCliente: 'Carla Ruiz',
-        telefonoCliente: '5598765432',
-        servicios: [{ name: 'Corte Dama / Niña', duration: 60, price: 80000 }],
-        duracion: 60,
-        precioTotal: 80000,
-        estado: 'completed',
-        sucursal: 'Av. Presidente Masaryk 123, Polanco, CDMX',
-        fecha: todayStr,
-        horaInicio: '10:00',
+        personalId: empleado.id,
+        clienteId: cliente.id,
+        nombreCliente: cliente.nombre,
+        telefonoCliente: cliente.telefono,
+        servicios: totales.servicios,
+        duracion: totales.duracion,
+        precioTotal: totales.precioTotal,
+        estado: planReserva.estado,
+        sucursal: planReserva.sucursal,
+        fecha: planReserva.fecha,
+        horaInicio: planReserva.horaInicio,
+        marcaTinte: planReserva.marcaTinte,
+        tonalidad: planReserva.tonalidad,
+        observaciones: planReserva.observaciones,
       },
-    }),
-    prisma.reserva.create({
-      data: {
-        estudioId: estudio.id,
-        personalId: andrea.id,
-        clienteId: monica.id,
-        nombreCliente: 'Mónica Hernández',
-        telefonoCliente: '5511223344',
-        servicios: [{ name: 'Balayage', duration: 240, price: 350000 }],
-        duracion: 240,
-        precioTotal: 350000,
-        estado: 'pending',
-        sucursal: 'Av. Presidente Masaryk 123, Polanco, CDMX',
-        marcaTinte: "L'Oréal",
-        tonalidad: '8.1',
-        fecha: todayStr,
-        horaInicio: '15:00',
-      },
-    }),
-    prisma.reserva.create({
-      data: {
-        estudioId: estudio.id,
-        personalId: valeria.id,
-        clienteId: lucia.id,
-        nombreCliente: 'Lucía Fernández',
-        telefonoCliente: '5544556677',
-        servicios: [
-          { name: 'Mani Spa', duration: 60, price: 60000 },
-          { name: 'Gel Semi Permanente', duration: 60, price: 50000 },
-        ],
-        duracion: 120,
-        precioTotal: 110000,
-        estado: 'pending',
-        sucursal: 'Insurgentes Sur 456, Roma, CDMX',
-        fecha: tomorrowStr,
-        horaInicio: '12:00',
-      },
-    }),
-  ]);
+    });
+
+    await prisma.reservaServicio.createMany({
+      data: totales.servicios.map((servicio, indice) => ({
+        reservaId: reserva.id,
+        nombre: servicio.name,
+        duracion: servicio.duration,
+        precio: servicio.price,
+        orden: indice,
+        estado: planReserva.estado,
+      })),
+    });
+  }
 
   await Promise.all([
     prisma.puntosFidelidad.create({
       data: {
-        clienteId: carla.id,
+        clienteId: clientesPorNombre.get('Carla Ruiz')!.id,
         estudioId: estudio.id,
-        visitasAcumuladas: 3,
-        visitasUsadas: 3,
+        visitasAcumuladas: 4,
+        visitasUsadas: 1,
         recompensasGanadas: 1,
         recompensasUsadas: 0,
         ultimaVisita: new Date(),
@@ -359,7 +619,18 @@ async function sembrarMikelovStudio(): Promise<void> {
     }),
     prisma.puntosFidelidad.create({
       data: {
-        clienteId: monica.id,
+        clienteId: clientesPorNombre.get('Mónica Hernández')!.id,
+        estudioId: estudio.id,
+        visitasAcumuladas: 3,
+        visitasUsadas: 0,
+        recompensasGanadas: 0,
+        recompensasUsadas: 0,
+        ultimaVisita: new Date(),
+      },
+    }),
+    prisma.puntosFidelidad.create({
+      data: {
+        clienteId: clientesPorNombre.get('Lucía Fernández')!.id,
         estudioId: estudio.id,
         visitasAcumuladas: 2,
         visitasUsadas: 0,
@@ -370,22 +641,86 @@ async function sembrarMikelovStudio(): Promise<void> {
     }),
     prisma.puntosFidelidad.create({
       data: {
-        clienteId: lucia.id,
+        clienteId: clientesPorNombre.get('Paola Jiménez')!.id,
         estudioId: estudio.id,
-        visitasAcumuladas: 1,
-        visitasUsadas: 0,
-        recompensasGanadas: 0,
-        recompensasUsadas: 0,
+        visitasAcumuladas: 5,
+        visitasUsadas: 4,
+        recompensasGanadas: 1,
+        recompensasUsadas: 1,
         ultimaVisita: new Date(),
       },
     }),
   ]);
 
+  await prisma.diaFestivo.createMany({
+    data: [
+      {
+        estudioId: estudio.id,
+        fecha: obtenerFechaLocalISO(sumarDias(new Date(), 11)),
+        descripcion: 'Capacitación interna de técnicas de color',
+      },
+      {
+        estudioId: estudio.id,
+        fecha: obtenerFechaLocalISO(sumarDias(new Date(), 18)),
+        descripcion: 'Mantenimiento general de la sede Polanco',
+      },
+    ],
+  });
+
+  await prisma.pago.createMany({
+    data: [
+      { estudioId: estudio.id, monto: 70000, moneda: 'MXN', concepto: 'Plan PRO febrero 2026', fecha: '2026-02-15', tipo: 'suscripcion', referencia: 'MIKELOV-FEB-2026' },
+      { estudioId: estudio.id, monto: 70000, moneda: 'MXN', concepto: 'Plan PRO marzo 2026', fecha: '2026-03-15', tipo: 'suscripcion', referencia: 'MIKELOV-MAR-2026' },
+      { estudioId: estudio.id, monto: 70000, moneda: 'MXN', concepto: 'Plan PRO abril 2026', fecha: '2026-04-11', tipo: 'suscripcion', referencia: 'MIKELOV-APR-2026' },
+      { estudioId: estudio.id, monto: 250000, moneda: 'MXN', concepto: 'Venta retail quincenal', fecha: '2026-04-10', tipo: 'otro', referencia: 'MIKELOV-RETAIL-01' },
+    ],
+  });
+
+  await prisma.notificacionEstudio.createMany({
+    data: [
+      {
+        estudioId: estudio.id,
+        tipo: 'pago_confirmado',
+        titulo: 'Subscription updated',
+        mensaje: 'Your PRO subscription was renewed successfully.',
+      },
+      {
+        estudioId: estudio.id,
+        tipo: 'recordatorio_pago',
+        titulo: 'Top seller this week',
+        mensaje: 'Andrea López closed 3 premium services this week.',
+      },
+      {
+        estudioId: estudio.id,
+        tipo: 'mensaje_masivo',
+        titulo: 'Campaign ready',
+        mensaje: 'Mother’s Day campaign is scheduled for next Monday.',
+      },
+    ],
+  });
+
+  await prisma.mensajeMasivo.createMany({
+    data: [
+      {
+        estudioId: estudio.id,
+        titulo: 'Mother’s Day Beauty Week',
+        texto: 'Book your beauty session this week and get an exclusive add-on for free.',
+        fechaEnvio: sumarDias(new Date(), 2),
+        enviado: false,
+      },
+      {
+        estudioId: estudio.id,
+        titulo: 'Thanks for your visit',
+        texto: 'Thank you for choosing Mikelov Studio. Your loyalty rewards are waiting for you.',
+        fechaEnvio: sumarDias(new Date(), -3),
+        enviado: true,
+      },
+    ],
+  });
+
   console.log(
-    `✅ MIKELOV STUDIO (id: ${estudio.id}) sincronizado con 3 empleados y 3 citas de demostración.`,
+    `✅ MIKELOV STUDIO (id: ${estudio.id}) sincronizado como PRO con ${personalCreado.length} empleados, ${clientesCreados.length} clientes y ${planesReserva.length} citas.`,
   );
-  // sofia is created but only used structurally to avoid TS unused var warning
-  void sofia;
 }
 
 async function crearUsuarioMaestro(): Promise<void> {
@@ -477,6 +812,9 @@ async function limpiarPruebas(): Promise<void> {
     await prisma.configFidelidad.deleteMany({ where: { estudioId: estudioMikelov.id } });
     await prisma.pago.deleteMany({ where: { estudioId: estudioMikelov.id } });
     await prisma.diaFestivo.deleteMany({ where: { estudioId: estudioMikelov.id } });
+    await prisma.notificacionEstudio.deleteMany({ where: { estudioId: estudioMikelov.id } });
+    await prisma.mensajeMasivo.deleteMany({ where: { estudioId: estudioMikelov.id } });
+    await prisma.producto.deleteMany({ where: { estudioId: estudioMikelov.id } });
     await prisma.empleadoAcceso.deleteMany({ where: { personal: { estudioId: estudioMikelov.id } } });
     await prisma.cliente.deleteMany({ where: { estudioId: estudioMikelov.id } });
     await prisma.personal.deleteMany({ where: { estudioId: estudioMikelov.id } });
@@ -489,6 +827,9 @@ async function limpiarPruebas(): Promise<void> {
     await prisma.configFidelidad.deleteMany({ where: { estudioId: { in: idsEstudiosAEliminar } } });
     await prisma.pago.deleteMany({ where: { estudioId: { in: idsEstudiosAEliminar } } });
     await prisma.diaFestivo.deleteMany({ where: { estudioId: { in: idsEstudiosAEliminar } } });
+    await prisma.notificacionEstudio.deleteMany({ where: { estudioId: { in: idsEstudiosAEliminar } } });
+    await prisma.mensajeMasivo.deleteMany({ where: { estudioId: { in: idsEstudiosAEliminar } } });
+    await prisma.producto.deleteMany({ where: { estudioId: { in: idsEstudiosAEliminar } } });
     await prisma.empleadoAcceso.deleteMany({ where: { personal: { estudioId: { in: idsEstudiosAEliminar } } } });
     await prisma.cliente.deleteMany({ where: { estudioId: { in: idsEstudiosAEliminar } } });
     await prisma.personal.deleteMany({ where: { estudioId: { in: idsEstudiosAEliminar } } });

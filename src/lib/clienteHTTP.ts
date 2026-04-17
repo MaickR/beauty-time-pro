@@ -24,6 +24,7 @@ export class ErrorAPI extends Error {
 export const URL_BASE = env.VITE_URL_API;
 const URL_BASE_DESARROLLO_LOCAL = 'http://localhost:3000';
 const CLAVE_CSRF = 'btp_csrf_token';
+const CLAVE_SESION = 'btp_tiene_sesion';
 const CODIGOS_BLOQUEO_SESION = new Set([
   'CUENTA_SUSPENDIDA',
   'SALON_SUSPENDIDO',
@@ -53,21 +54,95 @@ function puedeUsarFallbackLocal(error: unknown): boolean {
   return Boolean(env.DEV && URL_BASE !== URL_BASE_DESARROLLO_LOCAL && error instanceof TypeError);
 }
 
+function debeUsarProxyAuthLocal(ruta: string): boolean {
+  return Boolean(env.DEV && typeof window !== 'undefined' && /^\/auth(?:\/|$)/.test(ruta));
+}
+
+function construirUrlPeticion(ruta: string): string {
+  if (debeUsarProxyAuthLocal(ruta)) {
+    return `${window.location.origin}${ruta}`;
+  }
+
+  return `${URL_BASE}${ruta}`;
+}
+
+function construirUrlFallback(ruta: string, error: unknown): string | null {
+  if (!(error instanceof TypeError)) {
+    return null;
+  }
+
+  if (debeUsarProxyAuthLocal(ruta)) {
+    return `${URL_BASE}${ruta}`;
+  }
+
+  if (puedeUsarFallbackLocal(error)) {
+    return `${URL_BASE_DESARROLLO_LOCAL}${ruta}`;
+  }
+
+  return null;
+}
+
+function esperar(ms: number): Promise<void> {
+  return new Promise((resolve) => globalThis.setTimeout(resolve, ms));
+}
+
 async function fetchConFallbackLocal(ruta: string, init: RequestInit): Promise<Response> {
+  const urlPrincipal = construirUrlPeticion(ruta);
+
   try {
-    return await fetch(`${URL_BASE}${ruta}`, init);
-  } catch (error) {
-    if (!puedeUsarFallbackLocal(error)) {
-      throw error;
+    return await fetch(urlPrincipal, init);
+  } catch (errorPrimario) {
+    const urlFallback = construirUrlFallback(ruta, errorPrimario);
+    if (urlFallback) {
+      try {
+        return await fetch(urlFallback, init);
+      } catch {
+        // continuar al reintento corto en desarrollo
+      }
     }
 
-    return fetch(`${URL_BASE_DESARROLLO_LOCAL}${ruta}`, init);
+    if (env.DEV && errorPrimario instanceof TypeError) {
+      await esperar(450);
+      try {
+        return await fetch(urlPrincipal, init);
+      } catch (errorReintento) {
+        const fallbackReintento = construirUrlFallback(ruta, errorReintento);
+        if (fallbackReintento) {
+          return fetch(fallbackReintento, init);
+        }
+        throw errorReintento;
+      }
+    }
+
+    throw errorPrimario;
   }
+}
+
+export async function peticionCruda(ruta: string, init: RequestInit): Promise<Response> {
+  return fetchConFallbackLocal(ruta, init);
 }
 
 /** Lee el token del almacenamiento de sesión. */
 function leerToken(): string | null {
   return tokenEnMemoria;
+}
+
+export function obtenerCabecerasAutenticadas(
+  metodo: string,
+  cabecerasIniciales?: HeadersInit,
+): Headers {
+  const cabeceras = new Headers(cabecerasIniciales);
+  const token = leerToken();
+  if (token) {
+    cabeceras.set('Authorization', `Bearer ${token}`);
+  }
+
+  const csrfToken = obtenerTokenCsrf();
+  if (csrfToken && metodo !== 'GET' && metodo !== 'HEAD') {
+    cabeceras.set('x-csrf-token', csrfToken);
+  }
+
+  return cabeceras;
 }
 
 export function obtenerTokenCsrf(): string | null {
@@ -96,8 +171,20 @@ export function limpiarToken(): void {
   localStorage.removeItem(CLAVE_CSRF);
 }
 
+function tieneSesionPersistida(): boolean {
+  if (typeof window === 'undefined') {
+    return true;
+  }
+
+  return localStorage.getItem(CLAVE_SESION) === '1';
+}
+
 /** Intenta refrescar el access token usando la cookie httpOnly de refresh. */
 async function intentarRefrescar(): Promise<string | null> {
+  if (!tieneSesionPersistida()) {
+    return null;
+  }
+
   try {
     const cabeceras = new Headers();
     const csrfToken = obtenerTokenCsrf();
@@ -112,7 +199,13 @@ async function intentarRefrescar(): Promise<string | null> {
       headers: cabeceras,
       body: '{}',
     });
-    if (!res.ok) return null;
+    if (!res.ok) {
+      if (res.status === 401 && typeof window !== 'undefined') {
+        localStorage.removeItem(CLAVE_SESION);
+        limpiarToken();
+      }
+      return null;
+    }
     const json = (await res.json()) as { datos: { token: string; csrfToken?: string } };
     guardarSesionAutenticacion(json.datos);
     return json.datos.token;
@@ -167,14 +260,7 @@ export async function peticion<T>(ruta: string, opciones: RequestInit = {}): Pro
     opciones.body === undefined && (metodo === 'POST' || metodo === 'PUT' || metodo === 'PATCH')
       ? '{}'
       : opciones.body;
-  const cabeceras = new Headers(opciones.headers);
-
-  const token = leerToken();
-  if (token) cabeceras.set('Authorization', `Bearer ${token}`);
-  const csrfToken = obtenerTokenCsrf();
-  if (csrfToken && metodo !== 'GET' && metodo !== 'HEAD') {
-    cabeceras.set('x-csrf-token', csrfToken);
-  }
+  const cabeceras = obtenerCabecerasAutenticadas(metodo, opciones.headers);
   if (
     !cabeceras.has('Content-Type') &&
     cuerpoNormalizado &&
@@ -183,12 +269,25 @@ export async function peticion<T>(ruta: string, opciones: RequestInit = {}): Pro
     cabeceras.set('Content-Type', 'application/json');
   }
 
-  const respuesta = await fetchConFallbackLocal(ruta, {
-    ...opciones,
-    body: cuerpoNormalizado,
-    headers: cabeceras,
-    credentials: 'include',
-  });
+  let respuesta: Response;
+  try {
+    respuesta = await fetchConFallbackLocal(ruta, {
+      ...opciones,
+      body: cuerpoNormalizado,
+      headers: cabeceras,
+      credentials: 'include',
+    });
+  } catch (error) {
+    if (error instanceof TypeError) {
+      throw new ErrorAPI(
+        'No fue posible conectar con el servidor en este momento. Intenta nuevamente en unos segundos.',
+        503,
+        'SERVIDOR_NO_DISPONIBLE',
+      );
+    }
+
+    throw error;
+  }
 
   // Intento único de refresh ante 401
   if (respuesta.status === 401) {

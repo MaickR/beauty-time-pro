@@ -45,9 +45,9 @@ export function ConfigFidelidad({ estudioId, plan }: PropsConfigFidelidad) {
   if (!planPermiteFidelidad) {
     return (
       <section className="max-w-4xl rounded-[2.5rem] border border-amber-200 bg-amber-50 p-8 shadow-sm space-y-6">
-        <p className="text-xs font-black uppercase tracking-widest text-amber-700">PRO Feature</p>
+        <p className="text-xs font-black uppercase tracking-widest text-amber-700">Función Pro</p>
         <h3 className="mt-3 text-2xl font-black tracking-tight text-slate-900">
-          The loyalty program is not included in the {definicionPlan.nombre} plan
+          El programa de fidelidad no está incluido en el plan {definicionPlan.nombre}
         </h3>
         <p className="mt-3 text-sm font-medium leading-relaxed text-slate-600">
           {MENSAJE_FUNCION_PRO}
@@ -59,7 +59,7 @@ export function ConfigFidelidad({ estudioId, plan }: PropsConfigFidelidad) {
           className="inline-flex items-center gap-2 px-6 py-3 rounded-2xl bg-green-600 hover:bg-green-700 text-white text-sm font-black uppercase tracking-widest transition-colors shadow-sm"
         >
           <MessageCircle className="w-4 h-4" />
-          Upgrade to Pro via WhatsApp
+          Mejorar a Pro por WhatsApp
         </a>
       </section>
     );

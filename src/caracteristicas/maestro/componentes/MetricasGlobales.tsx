@@ -3,7 +3,6 @@ import { useQuery } from '@tanstack/react-query';
 import { Store, ShieldCheck, CalendarDays, Wallet } from 'lucide-react';
 import { peticion } from '../../../lib/clienteHTTP';
 import { EsqueletoTarjeta } from '../../../componentes/ui/Esqueleto';
-import { formatearDinero } from '../../../utils/formato';
 import { ModalTotalSalones } from './ModalTotalSalones';
 import { ModalControlSalones } from './ModalControlSalones';
 import { ModalReservas } from './ModalReservas';
@@ -85,11 +84,13 @@ function TarjetaMetrica({
   );
 }
 
-function resumirIngresos(ingresos: IngresoPorMoneda[]) {
-  if (ingresos.length === 0) return 'Sin pagos';
-  return ingresos
-    .map((ingreso) => formatearDinero(ingreso.actual, ingreso.moneda === 'COP' ? 'COP' : 'MXN'))
-    .join(' · ');
+function resumirVentasOcultas(ingresos: IngresoPorMoneda[]) {
+  const activos = ingresos.filter((ingreso) => ingreso.actual > 0);
+  if (activos.length === 0) {
+    return 'Sin ventas registradas';
+  }
+
+  return activos.length === 1 ? '1 mercado con ventas' : `${activos.length} mercados con ventas`;
 }
 
 export function MetricasGlobales() {
@@ -153,7 +154,8 @@ export function MetricasGlobales() {
         <TarjetaMetrica
           icono={<Wallet className="w-5 h-5" />}
           etiqueta="Ventas"
-          valor={resumirIngresos(data.ingresosPorMoneda)}
+          valor="Ver detalle"
+          descripcion={resumirVentasOcultas(data.ingresosPorMoneda)}
           colorFondo="bg-emerald-100"
           colorIcono="text-emerald-700"
           onClick={() => setModalActivo('ventas')}

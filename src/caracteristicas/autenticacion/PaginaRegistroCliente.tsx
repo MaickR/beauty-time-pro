@@ -2,102 +2,22 @@ import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
-import { z } from 'zod';
 import { Eye, EyeOff, Mail, Scissors, UserRound } from 'lucide-react';
-import { SelectorFecha } from '../../componentes/ui/SelectorFecha';
-import { ErrorServicioRegistro, registrarCliente } from '../../servicios/servicioRegistro';
+import { MedidorContrasena } from '../../componentes/ui/MedidorContrasena';
+import { SelectorCumpleanos } from '../../componentes/ui/SelectorCumpleanos';
 import { usarTituloPagina } from '../../hooks/usarTituloPagina';
+import {
+  esquemaRegistroCliente,
+  limpiarCorreoCliente,
+  limpiarTelefonoCliente,
+  limpiarTextoSoloLetras,
+  MENSAJE_DOMINIO_CLIENTE,
+  type CamposRegistroCliente,
+} from '../../lib/registroCliente';
+import { ErrorServicioRegistro, registrarCliente } from '../../servicios/servicioRegistro';
+import type { Pais } from '../../tipos';
 import { ModalPrivacidad } from './componentes/ModalPrivacidad';
 import { ModalTerminos } from './componentes/ModalTerminos';
-import type { Pais } from '../../tipos';
-
-const DOMINIOS = [
-  'gmail.com',
-  'googlemail.com',
-  'hotmail.com',
-  'hotmail.es',
-  'hotmail.com.mx',
-  'hotmail.com.co',
-  'outlook.com',
-  'outlook.es',
-  'outlook.com.mx',
-  'yahoo.com',
-  'yahoo.es',
-  'yahoo.com.mx',
-  'yahoo.com.co',
-];
-const MENSAJE_DOMINIO = 'Usa un correo personal de Gmail, Hotmail, Outlook o Yahoo';
-
-function esDominioPermitido(email: string): boolean {
-  const dominio = email.split('@')[1]?.toLowerCase();
-  return dominio !== undefined && DOMINIOS.includes(dominio);
-}
-
-const esquema = z
-  .object({
-    nombreCompleto: z
-      .string()
-      .trim()
-      .min(3, 'Ingresa tu nombre completo')
-      .max(120, 'Máximo 120 caracteres'),
-    email: z
-      .string()
-      .trim()
-      .email('Ingresa un correo válido')
-      .refine(esDominioPermitido, MENSAJE_DOMINIO),
-    telefono: z
-      .string()
-      .trim()
-      .regex(/^\d{10}$/, 'Usa 10 dígitos sin espacios')
-      .optional()
-      .or(z.literal('')),
-    ciudad: z.string().trim().max(80, 'Máximo 80 caracteres').optional().or(z.literal('')),
-    pais: z.enum(['Mexico', 'Colombia']),
-    fechaNacimiento: z.string().min(1, 'Selecciona tu fecha de nacimiento'),
-    contrasena: z
-      .string()
-      .min(8, 'Usa al menos 8 caracteres')
-      .regex(/[A-Z]/, 'Agrega una letra mayúscula')
-      .regex(/[a-z]/, 'Agrega una letra minúscula')
-      .regex(/[0-9]/, 'Agrega un número')
-      .regex(/[^A-Za-z0-9]/, 'Agrega un carácter especial'),
-    confirmarContrasena: z.string(),
-    aceptaTerminos: z.literal(true, 'Debes aceptar los términos para continuar'),
-  })
-  .refine((datos) => datos.contrasena === datos.confirmarContrasena, {
-    path: ['confirmarContrasena'],
-    message: 'Las contraseñas no coinciden',
-  })
-  .superRefine((datos, contexto) => {
-    const fecha = new Date(`${datos.fechaNacimiento}T00:00:00`);
-    if (Number.isNaN(fecha.getTime())) {
-      contexto.addIssue({
-        code: z.ZodIssueCode.custom,
-        path: ['fechaNacimiento'],
-        message: 'Ingresa una fecha de nacimiento válida',
-      });
-      return;
-    }
-
-    const hoy = new Date();
-    let edad = hoy.getFullYear() - fecha.getFullYear();
-    const noHaCumplido =
-      hoy.getMonth() < fecha.getMonth() ||
-      (hoy.getMonth() === fecha.getMonth() && hoy.getDate() < fecha.getDate());
-    if (noHaCumplido) {
-      edad -= 1;
-    }
-
-    if (edad < 13) {
-      contexto.addIssue({
-        code: z.ZodIssueCode.custom,
-        path: ['fechaNacimiento'],
-        message: 'Debes tener al menos 13 años',
-      });
-    }
-  });
-
-type CamposFormulario = z.infer<typeof esquema>;
 
 export function PaginaRegistroCliente() {
   usarTituloPagina('Crear cuenta de cliente');
@@ -108,18 +28,14 @@ export function PaginaRegistroCliente() {
   const [mostrarPrivacidad, setMostrarPrivacidad] = useState(false);
   const [errorServidor, setErrorServidor] = useState('');
 
-  const hoy = new Date();
-  const fechaMaxima = `${hoy.getFullYear() - 13}-${String(hoy.getMonth() + 1).padStart(2, '0')}-${String(hoy.getDate()).padStart(2, '0')}`;
-  const fechaMinima = `${hoy.getFullYear() - 100}-${String(hoy.getMonth() + 1).padStart(2, '0')}-${String(hoy.getDate()).padStart(2, '0')}`;
-
   const {
     register,
     handleSubmit,
     setValue,
     watch,
     formState: { errors, isSubmitting },
-  } = useForm<CamposFormulario>({
-    resolver: zodResolver(esquema),
+  } = useForm<CamposRegistroCliente>({
+    resolver: zodResolver(esquemaRegistroCliente),
     defaultValues: {
       nombreCompleto: '',
       email: '',
@@ -129,17 +45,18 @@ export function PaginaRegistroCliente() {
       fechaNacimiento: '',
       contrasena: '',
       confirmarContrasena: '',
+      aceptaTerminos: false,
     },
   });
 
   const contrasena = watch('contrasena') ?? '';
 
-  const alEnviar = async (datos: CamposFormulario) => {
+  const alEnviar = async (datos: CamposRegistroCliente) => {
     setErrorServidor('');
     try {
       const resultado = await registrarCliente({
         nombreCompleto: datos.nombreCompleto,
-        email: datos.email,
+        email: limpiarCorreoCliente(datos.email),
         telefono: datos.telefono || undefined,
         ciudad: datos.ciudad || undefined,
         pais: datos.pais,
@@ -204,7 +121,7 @@ export function PaginaRegistroCliente() {
 
           <div className="mt-10 space-y-4">
             {[
-              'Los dominios están restringidos a proveedores personales confiables.',
+              MENSAJE_DOMINIO_CLIENTE,
               'El código vence y puede reenviarse después de 60 segundos.',
               'La misma cuenta funciona en los salones compatibles una vez verificada.',
             ].map((texto) => (
@@ -254,7 +171,11 @@ export function PaginaRegistroCliente() {
                 autoComplete="name"
                 className="w-full rounded-2xl border border-[#dacbb8] bg-white px-4 py-3.5 text-sm outline-none transition focus:border-slate-900 focus:ring-2 focus:ring-[#f0d7bb]"
                 aria-invalid={Boolean(errors.nombreCompleto)}
-                {...register('nombreCompleto')}
+                {...register('nombreCompleto', {
+                  onChange: (evento) => {
+                    evento.target.value = limpiarTextoSoloLetras(evento.target.value);
+                  },
+                })}
               />
               {errors.nombreCompleto ? (
                 <p className="mt-1 text-xs text-red-600">{errors.nombreCompleto.message}</p>
@@ -277,7 +198,11 @@ export function PaginaRegistroCliente() {
                     autoComplete="email"
                     className="w-full rounded-2xl border border-[#dacbb8] bg-white px-10 py-3.5 text-sm outline-none transition focus:border-slate-900 focus:ring-2 focus:ring-[#f0d7bb]"
                     aria-invalid={Boolean(errors.email)}
-                    {...register('email')}
+                    {...register('email', {
+                      onChange: (evento) => {
+                        evento.target.value = limpiarCorreoCliente(evento.target.value);
+                      },
+                    })}
                   />
                 </div>
                 {errors.email ? (
@@ -297,9 +222,14 @@ export function PaginaRegistroCliente() {
                   type="tel"
                   autoComplete="tel"
                   inputMode="numeric"
+                  maxLength={10}
                   className="w-full rounded-2xl border border-[#dacbb8] bg-white px-4 py-3.5 text-sm outline-none transition focus:border-slate-900 focus:ring-2 focus:ring-[#f0d7bb]"
                   aria-invalid={Boolean(errors.telefono)}
-                  {...register('telefono')}
+                  {...register('telefono', {
+                    onChange: (evento) => {
+                      evento.target.value = limpiarTelefonoCliente(evento.target.value);
+                    },
+                  })}
                 />
                 {errors.telefono ? (
                   <p className="mt-1 text-xs text-red-600">{errors.telefono.message}</p>
@@ -334,7 +264,11 @@ export function PaginaRegistroCliente() {
                   type="text"
                   autoComplete="address-level2"
                   className="w-full rounded-2xl border border-[#dacbb8] bg-white px-4 py-3.5 text-sm outline-none transition focus:border-slate-900 focus:ring-2 focus:ring-[#f0d7bb]"
-                  {...register('ciudad')}
+                  {...register('ciudad', {
+                    onChange: (evento) => {
+                      evento.target.value = limpiarTextoSoloLetras(evento.target.value);
+                    },
+                  })}
                 />
                 {errors.ciudad ? (
                   <p className="mt-1 text-xs text-red-600">{errors.ciudad.message}</p>
@@ -344,10 +278,9 @@ export function PaginaRegistroCliente() {
 
             <div>
               <label className="mb-1.5 block text-sm font-medium text-slate-700">
-                Fecha de nacimiento
+                Fecha de cumpleaños
               </label>
-              <SelectorFecha
-                etiqueta="Fecha de nacimiento"
+              <SelectorCumpleanos
                 valor={watch('fechaNacimiento') ?? ''}
                 alCambiar={(valor) =>
                   setValue('fechaNacimiento', valor, {
@@ -356,9 +289,6 @@ export function PaginaRegistroCliente() {
                     shouldValidate: true,
                   })
                 }
-                max={fechaMaxima}
-                min={fechaMinima}
-                ocultarEtiqueta
               />
               {errors.fechaNacimiento ? (
                 <p className="mt-1 text-xs text-red-600">{errors.fechaNacimiento.message}</p>
@@ -388,11 +318,7 @@ export function PaginaRegistroCliente() {
                     className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-700"
                     aria-label={mostrarContrasena ? 'Ocultar contraseña' : 'Mostrar contraseña'}
                   >
-                    {mostrarContrasena ? (
-                      <EyeOff className="h-4 w-4" />
-                    ) : (
-                      <Eye className="h-4 w-4" />
-                    )}
+                    {mostrarContrasena ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                   </button>
                 </div>
                 {errors.contrasena ? (
@@ -420,15 +346,9 @@ export function PaginaRegistroCliente() {
                     type="button"
                     onClick={() => setMostrarConfirmacion((valor) => !valor)}
                     className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-700"
-                    aria-label={
-                      mostrarConfirmacion ? 'Ocultar confirmación' : 'Mostrar confirmación'
-                    }
+                    aria-label={mostrarConfirmacion ? 'Ocultar confirmación' : 'Mostrar confirmación'}
                   >
-                    {mostrarConfirmacion ? (
-                      <EyeOff className="h-4 w-4" />
-                    ) : (
-                      <Eye className="h-4 w-4" />
-                    )}
+                    {mostrarConfirmacion ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                   </button>
                 </div>
                 {errors.confirmarContrasena ? (
@@ -437,13 +357,7 @@ export function PaginaRegistroCliente() {
               </div>
             </div>
 
-            <div className="rounded-2xl border border-[#eadfce] bg-[#f8f3ec] px-4 py-3 text-sm text-slate-600">
-              <p className="font-medium text-slate-900">Reglas de la contraseña</p>
-              <p className="mt-1 leading-6">
-                Mínimo 8 caracteres, con mayúscula, minúscula, número y carácter especial. Longitud
-                actual: {contrasena.length}.
-              </p>
-            </div>
+            <MedidorContrasena contrasena={contrasena} />
 
             <label className="flex items-start gap-3 rounded-2xl border border-[#eadfce] bg-[#fffaf3] px-4 py-3 text-sm text-slate-600">
               <input

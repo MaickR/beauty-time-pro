@@ -15,12 +15,23 @@ import {
   validarRefreshSesion,
   type TipoSujetoSesion,
 } from '../lib/sesionesAuth.js';
+import {
+  obtenerNombreCookieRefreshActual,
+  obtenerRefreshTokenCookie,
+  obtenerVariantesLimpiezaCookieRefresh,
+} from '../lib/cookiesRefresh.js';
+import {
+  extraerOrigenDesdeUrl,
+  obtenerPatronesOrigenFrontend,
+  tieneOrigenFrontendPermitido,
+} from '../lib/origenesFrontend.js';
 import { registrarAuditoria } from '../utils/auditoria.js';
 import { compararHashContrasena, generarHashContrasena } from '../utils/contrasenas.js';
 import { asegurarSalonDemoVendedor } from '../lib/demoVendedor.js';
+import { generarSlugUnico } from '../utils/generarSlug.js';
 
 const REFRESH_EXPIRA = env.JWT_REFRESH_EXPIRA_EN;
-const COOKIE_REFRESH = 'refresh_token';
+const COOKIE_REFRESH = obtenerNombreCookieRefreshActual();
 const CABECERA_CSRF = 'x-csrf-token';
 
 function obtenerMaxAgeRefreshSegundos() {
@@ -50,9 +61,17 @@ function obtenerOpcionesCookieRefresh() {
   return {
     httpOnly: true,
     secure: env.ENTORNO === 'production',
-    sameSite: env.ENTORNO === 'production' ? 'strict' : 'lax',
+    sameSite: env.ENTORNO === 'production' ? 'none' : 'lax',
     path: '/auth',
   } as const;
+}
+
+function limpiarCookiesRefresh(respuesta: import('fastify').FastifyReply) {
+  const opcionesBase = obtenerOpcionesCookieRefresh();
+
+  for (const variante of obtenerVariantesLimpiezaCookieRefresh(opcionesBase)) {
+    respuesta.clearCookie(variante.nombre, variante.opciones);
+  }
 }
 
 function tieneOrigenPermitidoParaCookie(origen?: string, referer?: string): boolean {
@@ -60,21 +79,23 @@ function tieneOrigenPermitidoParaCookie(origen?: string, referer?: string): bool
     return true;
   }
 
-  const origenFrontend = new URL(env.FRONTEND_URL).origin;
+  const patronesOrigenFrontend = obtenerPatronesOrigenFrontend(
+    env.FRONTEND_URL,
+    env.FRONTEND_ORIGENES_PERMITIDOS,
+  );
 
   if (origen) {
-    return origen === origenFrontend;
+    return tieneOrigenFrontendPermitido(origen, patronesOrigenFrontend);
   }
 
   if (!referer) {
     return false;
   }
 
-  try {
-    return new URL(referer).origin === origenFrontend;
-  } catch {
-    return false;
-  }
+  return tieneOrigenFrontendPermitido(
+    extraerOrigenDesdeUrl(referer) ?? undefined,
+    patronesOrigenFrontend,
+  );
 }
 
 const REGEX_CONTRASENA = /^(?=.*[A-Z])(?=.*[a-z])(?=.*[0-9])(?=.*[^A-Za-z0-9]).{8,}$/;
@@ -106,6 +127,59 @@ interface PermisosSupervisorJWT {
   verPreregistros: boolean;
 }
 
+interface ClienteAppAcceso {
+  id: string;
+  email: string;
+  telefono: string | null;
+  hashContrasena: string;
+  emailVerificado: boolean;
+  activo: boolean;
+  nombre: string;
+  apellido: string;
+}
+
+interface EmpleadoAccesoLogin {
+  id: string;
+  email: string;
+  hashContrasena: string;
+  activo: boolean;
+  forzarCambioContrasena: boolean;
+  personalId: string;
+  personal: {
+    id: string;
+    nombre: string;
+    estudioId: string;
+    activo: boolean;
+    estudio: {
+      activo: boolean;
+      estado: string;
+    };
+  };
+}
+
+interface UsuarioAccesoLogin {
+  id: string;
+  email: string;
+  hashContrasena: string;
+  nombre: string;
+  rol: string;
+  activo: boolean;
+  estudioId: string | null;
+  estudio: {
+    id: string;
+    nombre: string;
+    slug: string | null;
+    activo: boolean;
+    estado: string;
+    motivoRechazo: string | null;
+  } | null;
+}
+
+type CoincidenciaAcceso =
+  | { tipo: 'cliente'; datos: ClienteAppAcceso; metodo: 'correo' | 'telefono' | 'solo_contrasena' }
+  | { tipo: 'empleado'; datos: EmpleadoAccesoLogin; metodo: 'correo' | 'solo_contrasena' }
+  | { tipo: 'usuario'; datos: UsuarioAccesoLogin; metodo: 'correo' | 'solo_contrasena' };
+
 function crearPermisosVacios(): PermisosJWT {
   return {
     aprobarSalones: false,
@@ -131,6 +205,51 @@ function crearPermisosSupervisorVacios(): PermisosSupervisorJWT {
     accionSuspension: false,
     activarSalones: false,
     verPreregistros: false,
+  };
+}
+
+async function asegurarSlugEstudioUsuario(
+  estudio:
+    | {
+        id: string;
+        nombre: string;
+        slug: string | null;
+      }
+    | null
+    | undefined,
+) {
+  if (!estudio) {
+    return null;
+  }
+
+  if (estudio.slug?.trim()) {
+    return estudio.slug;
+  }
+
+  const slugGenerado = await generarSlugUnico(estudio.nombre);
+  await prisma.estudio.update({
+    where: { id: estudio.id },
+    data: { slug: slugGenerado },
+  });
+
+  return slugGenerado;
+}
+
+function normalizarIdentificadorAcceso(identificador: string) {
+  const valorLimpio = identificador.trim();
+  const esCorreo = valorLimpio.includes('@');
+
+  if (esCorreo) {
+    return {
+      valor: valorLimpio.toLowerCase(),
+      esCorreo: true,
+    };
+  }
+
+  const telefono = valorLimpio.replace(/\D/g, '');
+  return {
+    valor: telefono || valorLimpio,
+    esCorreo: false,
   };
 }
 
@@ -203,7 +322,7 @@ export async function rutasAuth(servidor: FastifyInstance): Promise<void> {
    * Acepta { email, contrasena } para usuarios en base de datos.
    * También acepta { clave } para compatibilidad con la ruta de clientes.
    */
-  servidor.post<{ Body: { email?: string; contrasena?: string; clave?: string } }>(
+  servidor.post<{ Body: { email?: string; identificador?: string; contrasena?: string; clave?: string } }>(
     '/auth/iniciar-sesion',
     {
       config: {
@@ -217,7 +336,7 @@ export async function rutasAuth(servidor: FastifyInstance): Promise<void> {
       },
     },
     async (solicitud, respuesta) => {
-      const { email, contrasena, clave } = solicitud.body;
+      const { email, identificador, contrasena, clave } = solicitud.body;
 
       // ─── Modo clave (clientes + dueños legados) ───────────────────────────
       if (clave && !email) {
@@ -303,29 +422,230 @@ export async function rutasAuth(servidor: FastifyInstance): Promise<void> {
         return respuesta.code(401).send({ error: 'Credenciales incorrectas' });
       }
 
-      // ─── Modo email/teléfono + contraseña ────────────────────────────────
-      if (!email || !contrasena) {
-        return respuesta.code(400).send({ error: 'Email/teléfono y contraseña son requeridos' });
+      // ─── Modo identificador inteligente + contraseña ─────────────────────
+      if (!contrasena) {
+        return respuesta.code(400).send({ error: 'La contraseña es requerida' });
       }
 
-      const credencial = email.trim().toLowerCase();
-      const esBusquedaPorEmail = credencial.includes('@');
+      const identificadorAcceso = (identificador ?? email ?? '').trim();
+      if (!identificadorAcceso) {
+        return respuesta.code(400).send({
+          error: 'Debes ingresar un correo o teléfono para iniciar sesión.',
+          codigo: 'IDENTIFICADOR_REQUERIDO',
+        });
+      }
+      const coincidencias: CoincidenciaAcceso[] = [];
+      let usuario: UsuarioAccesoLogin | null = null;
+      let empleadoAcceso: EmpleadoAccesoLogin | null = null;
+      let clienteApp: ClienteAppAcceso | null = null;
+      let metodoAcceso: CoincidenciaAcceso['metodo'] = 'correo';
 
-      // ─── Verificar si es un ClienteApp (cliente final con cuenta) ──────────
-      const clienteApp = esBusquedaPorEmail
-        ? await prisma.clienteApp.findUnique({
-            where: { email: credencial },
-            select: { id: true, email: true, hashContrasena: true, emailVerificado: true, activo: true, nombre: true, apellido: true },
-          })
-        : await prisma.clienteApp.findUnique({
-            where: { telefono: credencial },
-            select: { id: true, email: true, hashContrasena: true, emailVerificado: true, activo: true, nombre: true, apellido: true },
+      const registrarCoincidencia = async (coincidencia: CoincidenciaAcceso | null) => {
+        if (!coincidencia) {
+          return;
+        }
+
+        if (await compararHashContrasena(contrasena, coincidencia.datos.hashContrasena)) {
+          coincidencias.push(coincidencia);
+        }
+      };
+
+      if (identificadorAcceso) {
+        const credencial = normalizarIdentificadorAcceso(identificadorAcceso);
+
+        if (credencial.esCorreo) {
+          const [clientePorCorreo, empleadoPorCorreo, usuarioPorCorreo] = await Promise.all([
+            prisma.clienteApp.findUnique({
+              where: { email: credencial.valor },
+              select: {
+                id: true,
+                email: true,
+                telefono: true,
+                hashContrasena: true,
+                emailVerificado: true,
+                activo: true,
+                nombre: true,
+                apellido: true,
+              },
+            }),
+            prisma.empleadoAcceso.findUnique({
+              where: { email: credencial.valor },
+              include: {
+                personal: {
+                  select: {
+                    id: true,
+                    nombre: true,
+                    estudioId: true,
+                    activo: true,
+                    estudio: {
+                      select: {
+                        activo: true,
+                        estado: true,
+                      },
+                    },
+                  },
+                },
+              },
+            }),
+            prisma.usuario.findUnique({
+              where: { email: credencial.valor },
+              include: {
+                estudio: {
+                  select: {
+                    id: true,
+                    nombre: true,
+                    slug: true,
+                    activo: true,
+                    estado: true,
+                    motivoRechazo: true,
+                  },
+                },
+              },
+            }),
+          ]);
+
+          const existeIdentificador = Boolean(clientePorCorreo || empleadoPorCorreo || usuarioPorCorreo);
+
+          await registrarCoincidencia(
+            clientePorCorreo
+              ? { tipo: 'cliente', datos: clientePorCorreo, metodo: 'correo' }
+              : null,
+          );
+          await registrarCoincidencia(
+            empleadoPorCorreo
+              ? { tipo: 'empleado', datos: empleadoPorCorreo, metodo: 'correo' }
+              : null,
+          );
+          await registrarCoincidencia(
+            usuarioPorCorreo
+              ? { tipo: 'usuario', datos: usuarioPorCorreo, metodo: 'correo' }
+              : null,
+          );
+
+          if (!coincidencias.length && !existeIdentificador) {
+            return respuesta.code(404).send({
+              error:
+                'Ese correo no está registrado. Si eres cliente nuevo, crea tu cuenta para continuar.',
+              codigo: 'EMAIL_NO_REGISTRADO',
+            });
+          }
+        } else {
+          const clientePorTelefono = await prisma.clienteApp.findUnique({
+            where: { telefono: credencial.valor },
+            select: {
+              id: true,
+              email: true,
+              telefono: true,
+              hashContrasena: true,
+              emailVerificado: true,
+              activo: true,
+              nombre: true,
+              apellido: true,
+            },
           });
 
-      if (clienteApp) {
-        if (!(await compararHashContrasena(contrasena, clienteApp.hashContrasena))) {
-          return respuesta.code(401).send({ error: 'Credenciales incorrectas', codigo: 'CREDENCIALES_INVALIDAS' });
+          await registrarCoincidencia(
+            clientePorTelefono
+              ? { tipo: 'cliente', datos: clientePorTelefono, metodo: 'telefono' }
+              : null,
+          );
         }
+      } else {
+        const [clientes, empleados, usuarios] = await Promise.all([
+          prisma.clienteApp.findMany({
+            select: {
+              id: true,
+              email: true,
+              telefono: true,
+              hashContrasena: true,
+              emailVerificado: true,
+              activo: true,
+              nombre: true,
+              apellido: true,
+            },
+          }),
+          prisma.empleadoAcceso.findMany({
+            include: {
+              personal: {
+                select: {
+                  id: true,
+                  nombre: true,
+                  estudioId: true,
+                  activo: true,
+                  estudio: {
+                    select: {
+                      activo: true,
+                      estado: true,
+                    },
+                  },
+                },
+              },
+            },
+          }),
+          prisma.usuario.findMany({
+            include: {
+              estudio: {
+                select: {
+                  id: true,
+                  nombre: true,
+                  slug: true,
+                  activo: true,
+                  estado: true,
+                  motivoRechazo: true,
+                },
+              },
+            },
+          }),
+        ]);
+
+        for (const cliente of clientes) {
+          await registrarCoincidencia({ tipo: 'cliente', datos: cliente, metodo: 'solo_contrasena' });
+        }
+        for (const empleado of empleados) {
+          await registrarCoincidencia({ tipo: 'empleado', datos: empleado, metodo: 'solo_contrasena' });
+        }
+        for (const candidato of usuarios) {
+          await registrarCoincidencia({ tipo: 'usuario', datos: candidato, metodo: 'solo_contrasena' });
+        }
+      }
+
+      if (coincidencias.length === 0) {
+        return respuesta.code(401).send({
+          error: 'Credenciales incorrectas',
+          codigo: 'CREDENCIALES_INVALIDAS',
+        });
+      }
+
+      if (coincidencias.length > 1) {
+        return respuesta.code(409).send({
+          error: 'Ingresa tu correo electrónico para completar el acceso.',
+          codigo: 'IDENTIFICADOR_REQUERIDO',
+        });
+      }
+
+      const coincidencia = coincidencias[0];
+      if (!coincidencia) {
+        return respuesta.code(401).send({
+          error: 'Credenciales incorrectas',
+          codigo: 'CREDENCIALES_INVALIDAS',
+        });
+      }
+
+      metodoAcceso = coincidencia.metodo;
+
+      switch (coincidencia.tipo) {
+        case 'cliente':
+          clienteApp = coincidencia.datos;
+          break;
+        case 'empleado':
+          empleadoAcceso = coincidencia.datos;
+          break;
+        case 'usuario':
+          usuario = coincidencia.datos;
+          break;
+      }
+
+      if (clienteApp) {
         if (!clienteApp.activo) {
           return respuesta.code(403).send({ error: 'Cuenta suspendida. Contacta al administrador.' });
         }
@@ -345,35 +665,9 @@ export async function rutasAuth(servidor: FastifyInstance): Promise<void> {
           userAgent: solicitud.headers['user-agent'],
           solicitud,
           accionAuditoria: 'login_exitoso',
-          detallesAuditoria: { metodo: esBusquedaPorEmail ? 'correo' : 'telefono' },
+          detallesAuditoria: { metodo: metodoAcceso },
         });
       }
-
-      // Si la credencial no contiene @, no buscar como empleado o usuario
-      if (!esBusquedaPorEmail) {
-        return respuesta.code(401).send({ error: 'Credenciales incorrectas' });
-      }
-
-      // ─── Verificar EmpleadoAcceso ─────────────────────────────────────────
-      const empleadoAcceso = await prisma.empleadoAcceso.findUnique({
-        where: { email: credencial },
-        include: {
-          personal: {
-            select: {
-              id: true,
-              nombre: true,
-              estudioId: true,
-              activo: true,
-              estudio: {
-                select: {
-                  activo: true,
-                  estado: true,
-                },
-              },
-            },
-          },
-        },
-      });
 
       if (empleadoAcceso) {
         if (!empleadoAcceso.activo) {
@@ -388,9 +682,6 @@ export async function rutasAuth(servidor: FastifyInstance): Promise<void> {
             error: `${errorSalon.error}. Contacta al dueño del salón.`,
             codigo: errorSalon.codigo,
           });
-        }
-        if (!(await compararHashContrasena(contrasena, empleadoAcceso.hashContrasena))) {
-          return respuesta.code(401).send({ error: 'Credenciales incorrectas', codigo: 'CREDENCIALES_INVALIDAS' });
         }
         void prisma.empleadoAcceso.update({ where: { id: empleadoAcceso.id }, data: { ultimoAcceso: new Date() } });
         return emitirTokens(servidor, respuesta, {
@@ -407,25 +698,15 @@ export async function rutasAuth(servidor: FastifyInstance): Promise<void> {
           userAgent: solicitud.headers['user-agent'],
           solicitud,
           accionAuditoria: 'login_exitoso',
-          detallesAuditoria: { metodo: 'correo' },
+          detallesAuditoria: { metodo: metodoAcceso },
         });
       }
-
-      // ─── Verificar Usuario (dueño / maestro) ─────────────────────────────
-      const usuario = await prisma.usuario.findUnique({
-        where: { email: credencial },
-        include: { estudio: { select: { id: true, slug: true, activo: true, estado: true, motivoRechazo: true } } },
-      });
 
       if (!usuario) {
         return respuesta.code(401).send({
           error: 'Credenciales incorrectas',
           codigo: 'CREDENCIALES_INVALIDAS',
         });
-      }
-
-      if (!(await compararHashContrasena(contrasena, usuario.hashContrasena))) {
-        return respuesta.code(401).send({ error: 'Credenciales incorrectas', codigo: 'CREDENCIALES_INVALIDAS' });
       }
 
       if (!usuario.activo) {
@@ -543,7 +824,7 @@ export async function rutasAuth(servidor: FastifyInstance): Promise<void> {
       // vendedor no requiere permisos especiales
 
       let estudioIdSesion = usuario.estudioId;
-      let slugEstudioSesion = usuario.estudio?.slug ?? null;
+      let slugEstudioSesion = await asegurarSlugEstudioUsuario(usuario.estudio);
 
       if (usuario.rol === 'vendedor') {
         const salonDemo = await asegurarSalonDemoVendedor({
@@ -571,7 +852,7 @@ export async function rutasAuth(servidor: FastifyInstance): Promise<void> {
         userAgent: solicitud.headers['user-agent'],
         solicitud,
         accionAuditoria: 'login_exitoso',
-        detallesAuditoria: { metodo: 'correo' },
+        detallesAuditoria: { metodo: metodoAcceso },
       });
     },
   );
@@ -822,7 +1103,7 @@ export async function rutasAuth(servidor: FastifyInstance): Promise<void> {
       return respuesta.code(403).send({ error: 'Origen no permitido' });
     }
 
-    const refreshToken = solicitud.cookies[COOKIE_REFRESH];
+    const refreshToken = obtenerRefreshTokenCookie(solicitud.cookies);
     const csrfToken = obtenerTokenCsrfCabecera(solicitud);
     if (!refreshToken) return respuesta.code(401).send({ error: 'No autenticado' });
     if (!csrfToken) {
@@ -844,7 +1125,7 @@ export async function rutasAuth(servidor: FastifyInstance): Promise<void> {
       }>(refreshToken);
 
       if (!payload.sesionId || !payload.refreshTokenId || payload.tipoToken !== 'refresh') {
-        respuesta.clearCookie(COOKIE_REFRESH, obtenerOpcionesCookieRefresh());
+        limpiarCookiesRefresh(respuesta);
         return respuesta.code(401).send({ error: 'Sesión expirada. Inicia sesión nuevamente.' });
       }
 
@@ -859,7 +1140,7 @@ export async function rutasAuth(servidor: FastifyInstance): Promise<void> {
       );
 
       if (!sesionRotada) {
-        respuesta.clearCookie(COOKIE_REFRESH, obtenerOpcionesCookieRefresh());
+        limpiarCookiesRefresh(respuesta);
         return respuesta.code(401).send({ error: 'Sesión expirada. Inicia sesión nuevamente.' });
       }
 
@@ -941,6 +1222,8 @@ export async function rutasAuth(servidor: FastifyInstance): Promise<void> {
             estudioId: true,
             estudio: {
               select: {
+                id: true,
+                nombre: true,
                 activo: true,
                 estado: true,
                 slug: true,
@@ -959,7 +1242,7 @@ export async function rutasAuth(servidor: FastifyInstance): Promise<void> {
         }
 
         payloadActualizado.estudioId = usuario.estudioId ?? null;
-        payloadActualizado.slugEstudio = usuario.estudio?.slug ?? null;
+        payloadActualizado.slugEstudio = await asegurarSlugEstudioUsuario(usuario.estudio);
         payloadActualizado.nombre = usuario.nombre;
         payloadActualizado.email = usuario.email;
       }
@@ -1113,7 +1396,7 @@ export async function rutasAuth(servidor: FastifyInstance): Promise<void> {
         sesionRotada,
       });
     } catch {
-      respuesta.clearCookie(COOKIE_REFRESH, obtenerOpcionesCookieRefresh());
+      limpiarCookiesRefresh(respuesta);
       return respuesta.code(401).send({ error: 'Sesión expirada. Inicia sesión nuevamente.' });
     }
   });
@@ -1155,7 +1438,7 @@ export async function rutasAuth(servidor: FastifyInstance): Promise<void> {
       }
     } catch {
       try {
-        const refreshToken = solicitud.cookies[COOKIE_REFRESH];
+        const refreshToken = obtenerRefreshTokenCookie(solicitud.cookies);
         if (refreshToken) {
           const payloadRefresh = servidor.jwt.verify<{
             rol: string;
@@ -1186,7 +1469,7 @@ export async function rutasAuth(servidor: FastifyInstance): Promise<void> {
       }
     }
 
-    respuesta.clearCookie(COOKIE_REFRESH, obtenerOpcionesCookieRefresh());
+    limpiarCookiesRefresh(respuesta);
 
     if (datosAuditoria) {
       await registrarAuditoriaAcceso('logout_sesion', solicitud, datosAuditoria);
@@ -1257,6 +1540,7 @@ async function emitirTokens(
     { expiresIn: REFRESH_EXPIRA },
   );
 
+  limpiarCookiesRefresh(respuesta);
   respuesta.setCookie(COOKIE_REFRESH, refreshToken, {
     ...obtenerOpcionesCookieRefresh(),
     maxAge: obtenerMaxAgeRefreshSegundos(),

@@ -1,4 +1,5 @@
 import type { Prisma } from '../generated/prisma/client.js';
+import { sanitizarTexto } from '../utils/sanitizar.js';
 
 interface ServicioDetallePersistido {
   id: string;
@@ -8,6 +9,7 @@ interface ServicioDetallePersistido {
   categoria: string | null;
   orden: number;
   estado: string;
+  motivo?: string | null;
 }
 
 interface ReservaConServicios {
@@ -28,10 +30,22 @@ interface ReservaConServicios {
   tonalidad: string | null;
   notasMenorEdad?: string | null;
   observaciones?: string | null;
+  metodoPago?: string | null;
+  motivoCancelacion?: string | null;
+  productosAdicionales?: unknown;
   clienteAppId?: string | null;
   tokenCancelacion?: string;
   creadoEn: Date;
   serviciosDetalle?: ServicioDetallePersistido[];
+}
+
+interface ProductoAdicionalNormalizado {
+  id: string;
+  nombre: string;
+  categoria?: string;
+  cantidad: number;
+  precioUnitario: number;
+  total: number;
 }
 
 export interface ServicioReservaNormalizado {
@@ -42,6 +56,7 @@ export interface ServicioReservaNormalizado {
   category?: string;
   status?: string;
   order?: number;
+  motivo?: string | null;
 }
 
 function esObjetoRegistro(valor: unknown): valor is Record<string, unknown> {
@@ -58,7 +73,7 @@ function normalizarNumero(valor: unknown): number {
 }
 
 function normalizarTexto(valor: unknown): string {
-  return typeof valor === 'string' ? valor.trim() : '';
+  return typeof valor === 'string' ? sanitizarTexto(valor) : '';
 }
 
 function normalizarClaveServicio(valor: string): string {
@@ -69,11 +84,45 @@ function normalizarClaveServicio(valor: string): string {
     .toLowerCase();
 }
 
+function normalizarProductosAdicionales(productos: unknown): ProductoAdicionalNormalizado[] {
+  if (!Array.isArray(productos)) return [];
+
+  return productos
+    .map((producto): ProductoAdicionalNormalizado | null => {
+      if (!esObjetoRegistro(producto)) return null;
+
+      const nombre = normalizarTexto(producto['nombre']);
+      if (!nombre) return null;
+
+      const cantidad = Math.max(1, normalizarNumero(producto['cantidad']));
+      const precioUnitario = Math.max(0, normalizarNumero(producto['precioUnitario']));
+      const total = Math.max(
+        precioUnitario * cantidad,
+        normalizarNumero(producto['total']) || precioUnitario * cantidad,
+      );
+      const categoria = normalizarTexto(producto['categoria']);
+
+      return {
+        id: normalizarTexto(producto['id']) || nombre,
+        nombre,
+        categoria: categoria || undefined,
+        cantidad,
+        precioUnitario,
+        total,
+      };
+    })
+    .filter((producto): producto is ProductoAdicionalNormalizado => Boolean(producto));
+}
+
+function obtenerPrecioTotalProductosAdicionales(productos: ProductoAdicionalNormalizado[]): number {
+  return productos.reduce((acumulado, producto) => acumulado + producto.total, 0);
+}
+
 export function normalizarServiciosEntrada(servicios: unknown): ServicioReservaNormalizado[] {
   if (!Array.isArray(servicios)) return [];
 
   return servicios
-    .map((servicio) => {
+    .map((servicio): ServicioReservaNormalizado | null => {
       if (typeof servicio === 'string') {
         const nombre = servicio.trim();
         if (!nombre) return null;
@@ -95,6 +144,7 @@ export function normalizarServiciosEntrada(servicios: unknown): ServicioReservaN
         category: categoria || undefined,
         status: normalizarTexto(servicio['status'] ?? servicio['estado']) || undefined,
         order: normalizarNumero(servicio['order'] ?? servicio['orden']) || undefined,
+        motivo: normalizarTexto(servicio['motivo']) || undefined,
       } satisfies ServicioReservaNormalizado;
     })
     .filter((servicio): servicio is ServicioReservaNormalizado => Boolean(servicio));
@@ -124,6 +174,7 @@ export function recalcularServiciosContraCatalogo(
       category: servicioCatalogo.category,
       status: servicioSolicitado.status,
       order: servicioSolicitado.order ?? indice,
+      motivo: servicioSolicitado.motivo ?? null,
     } satisfies ServicioReservaNormalizado;
   });
 }
@@ -150,6 +201,7 @@ export function obtenerServiciosNormalizados(reserva: {
           category: categoria || undefined,
           status: normalizarTexto(servicio['estado'] ?? servicio['status']) || undefined,
           order: normalizarNumero(servicio['orden'] ?? servicio['order']) || undefined,
+          motivo: normalizarTexto(servicio['motivo']) || undefined,
         };
       })
       .filter((servicio): servicio is ServicioReservaNormalizado => Boolean(servicio));
@@ -183,6 +235,8 @@ export function obtenerPrecioTotalServicios(servicios: ServicioReservaNormalizad
 export function serializarReservaApi(reserva: ReservaConServicios) {
   const serviciosNormalizados = obtenerServiciosNormalizados(reserva);
   const resumen = calcularResumenServicios(serviciosNormalizados);
+  const productosAdicionales = normalizarProductosAdicionales(reserva.productosAdicionales);
+  const totalCalculado = resumen.precioTotal + obtenerPrecioTotalProductosAdicionales(productosAdicionales);
 
   return {
     id: reserva.id,
@@ -208,13 +262,17 @@ export function serializarReservaApi(reserva: ReservaConServicios) {
       ...(servicio.category ? { category: servicio.category } : {}),
       status: servicio.status ?? reserva.estado,
       order: servicio.order ?? indice,
+      motivo: servicio.motivo ?? null,
     })),
-    precioTotal: resumen.precioTotal || reserva.precioTotal,
+    precioTotal: totalCalculado || reserva.precioTotal,
     estado: reserva.estado,
     sucursal: reserva.sucursal,
     marcaTinte: reserva.marcaTinte,
     tonalidad: reserva.tonalidad,
     observaciones: reserva.observaciones ?? null,
+    metodoPago: reserva.metodoPago ?? null,
+    motivoCancelacion: reserva.motivoCancelacion ?? null,
+    productosAdicionales,
     notasMenorEdad: reserva.notasMenorEdad ?? null,
     clienteAppId: reserva.clienteAppId ?? null,
     tokenCancelacion: reserva.tokenCancelacion,

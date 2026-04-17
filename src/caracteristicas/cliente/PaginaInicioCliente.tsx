@@ -191,7 +191,7 @@ function TarjetaSalon({ salon }: PropsTarjetaSalon) {
 }
 
 export function PaginaInicioCliente() {
-  const { usuario } = usarTiendaAuth();
+  const { usuario, iniciando } = usarTiendaAuth();
   const [busqueda, setBusqueda] = useState('');
   const [categoriasActivas, setCategoriasActivas] = useState<string[]>([]);
   const [busquedaDelay, setBusquedaDelay] = useState('');
@@ -199,6 +199,7 @@ export function PaginaInicioCliente() {
   const { data: perfilCliente } = useQuery({
     queryKey: ['mi-perfil'],
     queryFn: obtenerMiPerfil,
+    enabled: !iniciando && usuario?.rol === 'cliente',
     staleTime: 1000 * 60,
   });
 

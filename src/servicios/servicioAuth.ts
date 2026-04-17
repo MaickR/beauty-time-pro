@@ -6,10 +6,10 @@
 import {
   ErrorAPI,
   peticion,
+  peticionCruda,
   guardarSesionAutenticacion,
   limpiarToken,
   obtenerTokenCsrf,
-  URL_BASE,
 } from '../lib/clienteHTTP';
 import { obtenerSalonPublicoPorClave } from './servicioClienteApp';
 
@@ -65,8 +65,6 @@ interface RespuestaInicioSesion {
 }
 
 const RETRASO_REINTENTO_LOGIN_MS = 450;
-const URL_BASE_DESARROLLO_LOCAL = 'http://localhost:3000';
-
 function esperar(ms: number): Promise<void> {
   return new Promise((resolver) => {
     setTimeout(resolver, ms);
@@ -78,23 +76,8 @@ function esErrorTransitorioLogin(error: unknown): boolean {
   return error.estado === 404 || error.estado >= 500;
 }
 
-async function fetchRefrescoConFallback(init: RequestInit): Promise<Response> {
-  try {
-    return await fetch(`${URL_BASE}/auth/refrescar`, init);
-  } catch (error) {
-    if (
-      !(error instanceof TypeError) ||
-      !import.meta.env.DEV ||
-      URL_BASE === URL_BASE_DESARROLLO_LOCAL
-    ) {
-      throw error;
-    }
-
-    return fetch(`${URL_BASE_DESARROLLO_LOCAL}/auth/refrescar`, init);
-  }
-}
-
 async function autenticarConReintento(payload: {
+  identificador?: string;
   email?: string;
   contrasena?: string;
   clave?: string;
@@ -125,11 +108,14 @@ async function autenticarConReintento(payload: {
  * Autentica con email y contraseña — para maestro y dueño.
  * El refresh token llega en una cookie httpOnly automáticamente.
  */
-export async function iniciarSesionConEmailAPI(
-  email: string,
+export async function iniciarSesionInteligenteAPI(
+  identificador: string | null,
   contrasena: string,
 ): Promise<DatosSesion> {
-  return autenticarConReintento({ email, contrasena });
+  return autenticarConReintento({
+    ...(identificador ? { identificador } : {}),
+    contrasena,
+  });
 }
 
 export async function iniciarSesionConClaveAPI(clave: string): Promise<DatosSesion> {
@@ -176,7 +162,7 @@ export async function refrescarSesion(): Promise<{
       cabeceras.set('x-csrf-token', csrfToken);
     }
 
-    const res = await fetchRefrescoConFallback({
+    const res = await peticionCruda('/auth/refrescar', {
       method: 'POST',
       credentials: 'include',
       headers: cabeceras,

@@ -2,7 +2,12 @@ import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import { prisma } from '../prismaCliente.js';
 import { verificarJWT } from '../middleware/autenticacion.js';
-import { emailSchema, obtenerMensajeValidacion, textoSchema } from '../lib/validacion.js';
+import {
+  calcularEdadDesdeFechaNacimiento,
+  emailSchema,
+  obtenerMensajeValidacion,
+  textoSchema,
+} from '../lib/validacion.js';
 import { sanitizarTexto } from '../utils/sanitizar.js';
 
 const esquemaBusquedaClientes = z.object({
@@ -28,7 +33,7 @@ export async function rutasClientes(servidor: FastifyInstance): Promise<void> {
     async (solicitud, respuesta) => {
       const payload = solicitud.user as { sub: string; rol: string; estudioId: string | null };
       const { id } = solicitud.params;
-      if (payload.rol !== 'maestro' && payload.estudioId !== id) {
+      if (!(payload.rol === 'maestro' || (payload.rol === 'dueno' && payload.estudioId === id))) {
         return respuesta.code(403).send({ error: 'Sin permisos para esta acción' });
       }
       if (payload.rol === 'dueno') {
@@ -82,11 +87,7 @@ export async function rutasClientes(servidor: FastifyInstance): Promise<void> {
       const resultado = clientes.map((c) => {
         const total = c.reservas.length;
         const ultimaVisita = c.reservas[0]?.fecha ?? null;
-        const hoy = new Date();
-        const nacimiento = new Date(c.fechaNacimiento);
-        let edad = hoy.getFullYear() - nacimiento.getFullYear();
-        const cumpleEsteAnio = new Date(hoy.getFullYear(), nacimiento.getMonth(), nacimiento.getDate());
-        if (hoy < cumpleEsteAnio) edad--;
+        const edad = calcularEdadDesdeFechaNacimiento(c.fechaNacimiento);
 
         return {
           id: c.id,
@@ -121,15 +122,11 @@ export async function rutasClientes(servidor: FastifyInstance): Promise<void> {
         },
       });
       if (!cliente) return respuesta.code(404).send({ error: 'Cliente no encontrado' });
-      if (payload.rol !== 'maestro' && payload.estudioId !== cliente.estudioId) {
+      if (!(payload.rol === 'maestro' || (payload.rol === 'dueno' && payload.estudioId === cliente.estudioId))) {
         return respuesta.code(403).send({ error: 'Sin permisos para esta acción' });
       }
 
-      const hoy = new Date();
-      const nacimiento = new Date(cliente.fechaNacimiento);
-      let edad = hoy.getFullYear() - nacimiento.getFullYear();
-      const cumpleEsteAnio = new Date(hoy.getFullYear(), nacimiento.getMonth(), nacimiento.getDate());
-      if (hoy < cumpleEsteAnio) edad--;
+      const edad = calcularEdadDesdeFechaNacimiento(cliente.fechaNacimiento);
 
       return respuesta.send({
         datos: {
@@ -155,7 +152,7 @@ export async function rutasClientes(servidor: FastifyInstance): Promise<void> {
         select: { estudioId: true },
       });
       if (!clienteExistente) return respuesta.code(404).send({ error: 'Cliente no encontrado' });
-      if (payload.rol !== 'maestro' && payload.estudioId !== clienteExistente.estudioId) {
+      if (!(payload.rol === 'maestro' || (payload.rol === 'dueno' && payload.estudioId === clienteExistente.estudioId))) {
         return respuesta.code(403).send({ error: 'Sin permisos para esta acción' });
       }
 
@@ -168,7 +165,7 @@ export async function rutasClientes(servidor: FastifyInstance): Promise<void> {
       const actualizado = await prisma.cliente.update({
         where: { id: solicitud.params.id },
         data: {
-          ...(nombre !== undefined && { nombre }),
+          ...(nombre !== undefined && { nombre: sanitizarTexto(nombre) }),
           ...(email !== undefined && { email }),
           ...(notas !== undefined && { notas: notas !== null ? sanitizarTexto(notas) : null }),
         },

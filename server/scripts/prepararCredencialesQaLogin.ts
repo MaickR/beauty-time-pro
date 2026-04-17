@@ -2,6 +2,8 @@
 import { generarHashContrasena } from '../src/utils/contrasenas.js';
 
 const CLAVE = 'QaLogin2026!';
+const EMAIL_EMPLEADO_QA = 'qa.empleado@beautytimepro.com';
+const NOMBRE_EMPLEADO_QA = 'QA Especialista';
 
 async function asegurarUsuario({ email, nombre, rol, estudioId = null }) {
   const hash = await generarHashContrasena(CLAVE);
@@ -27,6 +29,58 @@ async function asegurarUsuario({ email, nombre, rol, estudioId = null }) {
     select: { id: true, email: true, rol: true },
   });
   return usuario;
+}
+
+async function asegurarPersonalQa(estudioId: string) {
+  const accesoQaExistente = await prisma.empleadoAcceso.findUnique({
+    where: { email: EMAIL_EMPLEADO_QA },
+    select: {
+      personalId: true,
+      personal: {
+        select: {
+          id: true,
+          estudioId: true,
+        },
+      },
+    },
+  });
+
+  if (accesoQaExistente?.personal?.estudioId === estudioId) {
+    return accesoQaExistente.personalId;
+  }
+
+  const personalQaExistente = await prisma.personal.findFirst({
+    where: {
+      estudioId,
+      nombre: NOMBRE_EMPLEADO_QA,
+      activo: true,
+    },
+    orderBy: { creadoEn: 'asc' },
+    select: { id: true },
+  });
+
+  if (personalQaExistente) {
+    const accesoVinculado = await prisma.empleadoAcceso.findUnique({
+      where: { personalId: personalQaExistente.id },
+      select: { email: true },
+    });
+
+    if (!accesoVinculado || accesoVinculado.email === EMAIL_EMPLEADO_QA) {
+      return personalQaExistente.id;
+    }
+  }
+
+  const personalQaCreado = await prisma.personal.create({
+    data: {
+      estudioId,
+      nombre: NOMBRE_EMPLEADO_QA,
+      especialidades: ['Corte Dama / Niña'],
+      activo: true,
+    },
+    select: { id: true },
+  });
+
+  return personalQaCreado.id;
 }
 
 async function main() {
@@ -99,27 +153,10 @@ async function main() {
   await asegurarUsuario({ email: 'qa.vendedor@beautytimepro.com', nombre: 'QA Vendedor', rol: 'vendedor' });
   await asegurarUsuario({ email: 'qa.dueno@beautytimepro.com', nombre: 'QA Dueño', rol: 'dueno', estudioId: estudio.id });
 
-  const personal = await prisma.personal.findFirst({
-    where: { estudioId: estudio.id, activo: true },
-    select: { id: true, nombre: true },
-  });
-
-  let personalId = personal?.id;
-  if (!personalId) {
-    const creado = await prisma.personal.create({
-      data: {
-        estudioId: estudio.id,
-        nombre: 'QA Especialista',
-        especialidades: ['Corte Dama / Niña'],
-        activo: true,
-      },
-      select: { id: true },
-    });
-    personalId = creado.id;
-  }
+  const personalId = await asegurarPersonalQa(estudio.id);
 
   await prisma.empleadoAcceso.upsert({
-    where: { email: 'qa.empleado@beautytimepro.com' },
+    where: { email: EMAIL_EMPLEADO_QA },
     update: {
       personalId,
       activo: true,
@@ -128,7 +165,7 @@ async function main() {
     },
     create: {
       personalId,
-      email: 'qa.empleado@beautytimepro.com',
+      email: EMAIL_EMPLEADO_QA,
       activo: true,
       forzarCambioContrasena: false,
       hashContrasena: await generarHashContrasena(CLAVE),
@@ -163,7 +200,7 @@ async function main() {
       supervisor: 'qa.supervisor@beautytimepro.com',
       vendedor: 'qa.vendedor@beautytimepro.com',
       dueno: 'qa.dueno@beautytimepro.com',
-      empleado: 'qa.empleado@beautytimepro.com',
+      empleado: EMAIL_EMPLEADO_QA,
       cliente: 'qa.cliente@beautytimepro.com',
       contrasenaComun: CLAVE,
     }

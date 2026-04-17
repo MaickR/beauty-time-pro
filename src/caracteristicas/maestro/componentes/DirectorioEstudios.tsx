@@ -139,12 +139,12 @@ export function DirectorioEstudios({
                       <Pencil className="w-5 h-5" />
                     </button>
                   </Tooltip>
-                  <Tooltip texto="Eliminar salón">
+                  <Tooltip texto="Cerrar salón">
                     <button
                       onClick={() => setIdEliminar(s.id)}
                       className="no-imprimir p-2 bg-red-50 rounded-full text-red-400 hover:text-red-600 transition-all"
-                      title="Eliminar salón"
-                      aria-label="Eliminar salón"
+                      title="Cerrar salón"
+                      aria-label="Cerrar salón"
                     >
                       <Trash2 className="w-5 h-5" />
                     </button>
@@ -214,9 +214,9 @@ export function DirectorioEstudios({
 
       <DialogoConfirmacion
         abierto={idEliminar !== null}
-        mensaje="¿Borrar salón?"
-        descripcion="Esta acción eliminará el salón permanentemente y no se puede deshacer."
-        textoConfirmar="Sí, eliminar"
+        mensaje="¿Cerrar salón?"
+        descripcion="Esta acción suspenderá el salón, desactivará sus accesos y conservará el historial operativo."
+        textoConfirmar="Sí, cerrar"
         variante="peligro"
         cargando={eliminando}
         onConfirmar={manejarEliminar}

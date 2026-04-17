@@ -1,0 +1,17 @@
+{
+	"version": "2.0.0",
+	"tasks": [
+		{
+			"label": "Desarrollo Full Stack",
+			"type": "shell",
+			"command": "npm",
+			"args": [
+				"run",
+				"dev:all"
+			],
+			"isBackground": true,
+			"problemMatcher": [],
+			"group": "build"
+		}
+	]
+}

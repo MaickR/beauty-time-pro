@@ -6,6 +6,7 @@ import { obtenerSalonPublico } from '../../servicios/servicioClienteApp';
 import { NavegacionCliente } from '../../componentes/diseno/NavegacionCliente';
 import { Spinner } from '../../componentes/ui/Spinner';
 import { usarToast } from '../../componentes/ui/ProveedorToast';
+import { obtenerExcepcionDisponibilidadAplicada } from '../../lib/disponibilidadExcepciones';
 import { formatearDinero, obtenerFechaLocalISO } from '../../utils/formato';
 import { DIAS_SEMANA } from '../../lib/constantes';
 import { usarFlujoReservaCliente } from './hooks/usarFlujoReservaCliente';
@@ -18,31 +19,6 @@ function iniciales(nombre: string) {
     .map((p) => p[0])
     .join('')
     .toUpperCase();
-}
-
-function tieneHorarioModificadoSalon(salon: SalonDetalle, fecha: Date): boolean {
-  const claveDia = DIAS_SEMANA[fecha.getDay()];
-  const horarioDia = salon.horario?.[claveDia];
-  if (!horarioDia?.isOpen) return false;
-
-  return salon.personal.some((especialista) => {
-    const diasTrabajo = Array.isArray(especialista.diasTrabajo)
-      ? (especialista.diasTrabajo as number[])
-      : null;
-    if (diasTrabajo && !diasTrabajo.includes(fecha.getDay())) {
-      return true;
-    }
-
-    const inicioEspecialista = especialista.horaInicio ?? horarioDia.openTime;
-    const finEspecialista = especialista.horaFin ?? horarioDia.closeTime;
-    const tieneDescanso = Boolean(especialista.descansoInicio && especialista.descansoFin);
-
-    return (
-      inicioEspecialista !== horarioDia.openTime ||
-      finEspecialista !== horarioDia.closeTime ||
-      tieneDescanso
-    );
-  });
 }
 
 // ── Selector de Especialista ─────────────────────────────────────────────────
@@ -131,10 +107,10 @@ function PasoServicios({
         Elige los servicios
       </h2>
       <ul className="space-y-2 mb-6">
-        {salon.servicios.map((s) => {
+        {salon.servicios.map((s, indiceServicio) => {
           const activo = seleccionados.some((sel) => sel.name === s.name);
           return (
-            <li key={s.name}>
+            <li key={`${s.name}-${indiceServicio}`}>
               <button
                 onClick={() => onAlternar(s)}
                 className={`w-full flex items-center gap-3 p-4 rounded-2xl border-2 text-left transition-all ${
@@ -193,10 +169,12 @@ function PasoServicios({
 function PasoFecha({
   salon,
   fechaSeleccionada,
+  sucursalSeleccionada,
   onSeleccionar,
 }: {
   salon: SalonDetalle;
   fechaSeleccionada: Date;
+  sucursalSeleccionada: string;
   onSeleccionar: (d: Date) => void;
 }) {
   const hoy = new Date();
@@ -250,7 +228,14 @@ function PasoFecha({
             const turno = salon.horario?.[nombreDia];
             const estaCerrado = turno ? !turno.isOpen : false;
             const esFestivo = salon.festivos.includes(dStr);
-            const deshabilitado = esPasado || estaCerrado || esFestivo;
+            const excepcionDisponibilidad = obtenerExcepcionDisponibilidadAplicada({
+              excepciones: salon.availabilityExceptions,
+              fecha: dStr,
+              sucursal: sucursalSeleccionada || salon.nombre,
+            });
+            const esCierreEspecial = excepcionDisponibilidad?.tipo === 'cerrado';
+            const tieneHorarioModificado = excepcionDisponibilidad?.tipo === 'horario_modificado';
+            const deshabilitado = esPasado || estaCerrado || esFestivo || esCierreEspecial;
             const seleccionado = dStr === fechaStr;
             return (
               <button
@@ -269,14 +254,12 @@ function PasoFecha({
               >
                 {dia}
                 {!seleccionado &&
-                  (esFestivo || estaCerrado || tieneHorarioModificadoSalon(salon, dateObj)) && (
+                  (esFestivo || estaCerrado || esCierreEspecial || tieneHorarioModificado) && (
                     <span className="mt-1 flex items-center gap-1">
-                      {(esFestivo || estaCerrado) && (
+                      {(esFestivo || estaCerrado || esCierreEspecial) && (
                         <span className="h-1.5 w-1.5 rounded-full bg-red-500" />
                       )}
-                      {!esFestivo &&
-                        !estaCerrado &&
-                        tieneHorarioModificadoSalon(salon, dateObj) && (
+                      {!esFestivo && !estaCerrado && !esCierreEspecial && tieneHorarioModificado && (
                           <span className="h-1.5 w-1.5 rounded-full bg-blue-500" />
                         )}
                     </span>
@@ -417,8 +400,8 @@ function PasoConfirmar({
             <p className="text-xs text-slate-400 font-bold uppercase tracking-wide mb-1">
               Servicios
             </p>
-            {servicios.map((s) => (
-              <div key={s.name} className="flex justify-between text-sm">
+            {servicios.map((s, indiceServicio) => (
+              <div key={`${s.name}-${indiceServicio}`} className="flex justify-between text-sm">
                 <span className="text-slate-800">{s.name}</span>
                 {s.price > 0 && (
                   <span className="font-bold text-slate-600">
@@ -627,6 +610,7 @@ function ContenidoReserva({
           <PasoFecha
             salon={salon}
             fechaSeleccionada={flujo.fechaSeleccionada}
+            sucursalSeleccionada={flujo.sucursalSeleccionada}
             onSeleccionar={flujo.seleccionarFecha}
           />
         )}
@@ -657,10 +641,7 @@ function ContenidoReserva({
             salon={salon}
             fecha={flujo.fechaSeleccionada}
             hora={flujo.horaSeleccionada}
-            onNuevaReserva={() => {
-              void 0;
-              window.location.reload();
-            }}
+            onNuevaReserva={flujo.reiniciar}
           />
         )}
       </main>

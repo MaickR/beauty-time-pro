@@ -21,8 +21,7 @@ export default tseslint.config(
 
   {
     rules: {
-      // Advertencia en lugar de error para facilitar la migración progresiva
-      '@typescript-eslint/no-explicit-any': 'warn',
+      '@typescript-eslint/no-explicit-any': 'error',
       // Desactivar la regla base en favor de la versión TypeScript
       'no-unused-vars': 'off',
       '@typescript-eslint/no-unused-vars': [

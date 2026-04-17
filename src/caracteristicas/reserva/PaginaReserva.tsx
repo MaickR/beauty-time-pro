@@ -11,25 +11,12 @@ import { SelectorCalendario } from './componentes/SelectorCalendario';
 import { SelectorEspecialistaHorario } from './componentes/SelectorEspecialistaHorario';
 import { FormularioContacto } from './componentes/FormularioContacto';
 import { ConfirmacionReserva } from './componentes/ConfirmacionReserva';
+import { PanelIdentificacionReserva, type ClienteReservaVinculado } from './componentes/PanelIdentificacionReserva';
+import { SelectorProductosPublicos } from './componentes/SelectorProductosPublicos';
 import { Spinner } from '../../componentes/ui/Spinner';
 import { URL_BASE } from '../../lib/clienteHTTP';
-import {
-  obtenerSalonPublico,
-  obtenerSalonPublicoPorClave,
-} from '../../servicios/servicioClienteApp';
+import { obtenerSalonPublicoPorClave } from '../../servicios/servicioClienteApp';
 import type { Estudio, Moneda, SalonDetalle } from '../../tipos';
-
-const PALABRAS_COLOR = [
-  'tinte',
-  'color',
-  'balayage',
-  'babylights',
-  'canas',
-  'ombré',
-  'decoloración',
-  'rayitos',
-  'mechas',
-];
 
 export function PaginaReserva() {
   const { claveEstudio } = useParams<{ claveEstudio: string }>();
@@ -40,6 +27,7 @@ export function PaginaReserva() {
   const [estudio, setEstudio] = useState<Estudio | null>(null);
   const [estudioActivo, setEstudioActivo] = useState<Estudio | null>(null);
   const [cargando, setCargando] = useState(true);
+  const [clienteVinculado, setClienteVinculado] = useState<ClienteReservaVinculado | null>(null);
 
   useEffect(() => {
     let cancelado = false;
@@ -93,44 +81,6 @@ export function PaginaReserva() {
     };
   }, [estudio?.name]);
 
-  useEffect(() => {
-    const sedesReservables = estudio?.sedes ?? [];
-    if (sedesReservables.length === 1 && !flujo.sucursalSeleccionada) {
-      flujo.seleccionarSucursal(sedesReservables[0]?.id ?? '');
-    }
-  }, [estudio?.id, estudio?.sedes, flujo.sucursalSeleccionada]);
-
-  useEffect(() => {
-    if (!estudio) return;
-
-    const sedesReservables = estudio.sedes ?? [];
-    const sedeActiva =
-      sedesReservables.find((sede) => sede.id === flujo.sucursalSeleccionada) ?? null;
-
-    if (!sedeActiva || sedeActiva.id === estudio.id) {
-      setEstudioActivo(estudio);
-      return;
-    }
-
-    let cancelado = false;
-    void obtenerSalonPublico(sedeActiva.id)
-      .then((salon) => {
-        if (cancelado) return;
-        setEstudioActivo(
-          mapearSalonDetalleAEstudio(salon, claveEstudio?.trim() ?? sedeActiva.slug ?? ''),
-        );
-      })
-      .catch(() => {
-        if (!cancelado) {
-          setEstudioActivo(estudio);
-        }
-      });
-
-    return () => {
-      cancelado = true;
-    };
-  }, [claveEstudio, estudio, flujo.sucursalSeleccionada]);
-
   const totalDuracion = useMemo(
     () => flujo.serviciosSeleccionados.reduce((acc, s) => acc + s.duration, 0),
     [flujo.serviciosSeleccionados],
@@ -149,17 +99,26 @@ export function PaginaReserva() {
       </div>
     );
 
-  const sedesReservables = estudio.sedes ?? [];
-  const sedeActiva =
-    sedesReservables.find((sede) => sede.id === flujo.sucursalSeleccionada) ??
-    (sedesReservables.length === 1 ? sedesReservables[0] : null);
-  const requiereSucursal = sedesReservables.length > 1;
-  const sucursalActiva = sedeActiva?.nombre ?? estudioActivo.name ?? 'Main location';
+  const sucursalActiva = estudioActivo.name ?? 'Main location';
   const moneda: Moneda = estudioActivo.country === 'Colombia' ? 'COP' : 'MXN';
-  const requiereColor = flujo.serviciosSeleccionados.some((s) =>
-    PALABRAS_COLOR.some((kw) => s.name.toLowerCase().includes(kw)),
-  );
   const fechaStr = obtenerFechaLocalISO(flujo.fechaSeleccionada);
+  const productosPublicos = estudioActivo.productos ?? [];
+  const clienteListo = Boolean(clienteVinculado);
+
+  const manejarVinculacionCliente = (cliente: ClienteReservaVinculado) => {
+    setClienteVinculado(cliente);
+    flujo.precargarContacto({
+      nombreCliente: `${cliente.nombre} ${cliente.apellido}`.trim(),
+      telefonoCliente: cliente.telefono,
+      fechaNacimiento: cliente.fechaNacimiento,
+      email: cliente.email,
+    });
+  };
+
+  const limpiarClienteVinculado = () => {
+    setClienteVinculado(null);
+    flujo.reiniciar(estudioActivo.id);
+  };
 
   return (
     <div className="min-h-screen bg-white flex flex-col font-sans">
@@ -168,25 +127,18 @@ export function PaginaReserva() {
           nombreCliente={flujo.nombreClienteReservado}
           descripcionRecompensa={flujo.descripcionRecompensaGanada}
           salon={estudio.name}
-          sucursal={sucursalActiva}
           especialista={flujo.resumenReservaConfirmada?.especialista ?? ''}
           servicios={flujo.resumenReservaConfirmada?.servicios ?? []}
+          productos={flujo.resumenReservaConfirmada?.productos ?? []}
           duracion={flujo.resumenReservaConfirmada?.duracion ?? 0}
           total={flujo.resumenReservaConfirmada?.total ?? 0}
           fecha={flujo.resumenReservaConfirmada?.fecha ?? ''}
           hora={flujo.resumenReservaConfirmada?.hora ?? ''}
           moneda={moneda}
           onCerrar={() => {
-            flujo.reiniciar(requiereSucursal ? '' : (sedeActiva?.id ?? estudioActivo.id));
-            if (rol === 'empleado') {
-              navegar('/empleado/agenda');
-              return;
-            }
-            if (rol === 'dueno') {
-              navegar(`/estudio/${estudio.slug || estudio.id}/agenda`);
-              return;
-            }
-            window.scrollTo({ top: 0, behavior: 'smooth' });
+            flujo.reiniciar(estudioActivo.id);
+            void cerrarSesion();
+            navegar('/iniciar-sesion');
           }}
         />
       )}
@@ -243,64 +195,67 @@ export function PaginaReserva() {
         </div>
       )}
 
-      <main className="max-w-4xl mx-auto w-full p-4 md:p-8 space-y-8 pb-32">
+      <main className="mx-auto w-full max-w-5xl space-y-8 p-4 pb-32 md:p-8">
         <section className="rounded-4xl border border-slate-200 bg-white p-5 shadow-sm">
           <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
             <div>
               <p className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-500">
                 Reserva pública
               </p>
-              <h2 className="mt-2 text-lg font-black text-slate-900">Elige sede y continúa</h2>
+              <h2 className="mt-2 text-lg font-black text-slate-900">Reserva en este salón</h2>
             </div>
-            {requiereSucursal ? (
-              <label className="block w-full md:max-w-sm">
-                <span className="mb-2 flex items-center gap-2 text-[10px] font-black uppercase tracking-[0.18em] text-slate-500">
-                  <Building2 className="h-4 w-4" /> Sede
-                </span>
-                <select
-                  value={flujo.sucursalSeleccionada}
-                  onChange={(evento) => flujo.seleccionarSucursal(evento.target.value)}
-                  className="w-full rounded-2xl border border-slate-200 px-4 py-3 text-sm font-bold text-slate-700 outline-none focus:border-pink-400"
-                >
-                  <option value="">Selecciona una sede</option>
-                  {sedesReservables.map((sede) => (
-                    <option key={sede.id} value={sede.id}>
-                      {sede.nombre}
-                    </option>
-                  ))}
-                </select>
-              </label>
-            ) : (
-              <div className="inline-flex items-center gap-2 rounded-2xl bg-slate-50 px-4 py-3 text-sm font-bold text-slate-700">
-                <MapPin className="h-4 w-4 text-pink-500" /> {sucursalActiva}
-              </div>
-            )}
+            <div className="inline-flex items-center gap-2 rounded-2xl bg-slate-50 px-4 py-3 text-sm font-bold text-slate-700">
+              <MapPin className="h-4 w-4 text-pink-500" /> {sucursalActiva}
+            </div>
           </div>
         </section>
 
-        {/* Paso 1: Servicios */}
-        <SelectorServicio
-          estudio={estudioActivo}
-          sucursalSeleccionada={sucursalActiva}
-          requiereSucursal={requiereSucursal}
-          serviciosSeleccionados={flujo.serviciosSeleccionados}
-          moneda={moneda}
-          onAlternar={flujo.alternarServicio}
+        <PanelIdentificacionReserva
+          salonId={estudioActivo.id}
+          clienteVinculado={clienteVinculado}
+          onVincularCliente={manejarVinculacionCliente}
+          onLimpiarCliente={limpiarClienteVinculado}
         />
 
-        {/* Paso 2: Calendario — solo cuando hay servicios seleccionados */}
-        {(!requiereSucursal || Boolean(flujo.sucursalSeleccionada)) &&
-          flujo.serviciosSeleccionados.length > 0 && (
+        {clienteListo ? (
+          <>
             <SelectorCalendario
               estudio={estudioActivo}
               fechaSeleccionada={flujo.fechaSeleccionada}
-              totalDuracion={totalDuracion}
+              totalDuracion={0}
               onCambiarFecha={flujo.seleccionarFecha}
+              mostrarDuracion={false}
+              titulo="Selecciona la fecha de tu cita"
+              indicadorPaso="1"
             />
-          )}
 
-        {/* Paso 3: Especialistas disponibles para el día elegido */}
-        {(!requiereSucursal || Boolean(flujo.sucursalSeleccionada)) &&
+            <SelectorServicio
+              estudio={estudioActivo}
+              sucursalSeleccionada={sucursalActiva}
+              requiereSucursal={false}
+              serviciosSeleccionados={flujo.serviciosSeleccionados}
+              moneda={moneda}
+              onAlternar={flujo.alternarServicio}
+              indicadorPaso="2"
+            />
+
+            {estudioActivo.plan === 'PRO' && productosPublicos.length > 0 ? (
+              <SelectorProductosPublicos
+                productos={productosPublicos}
+                productosSeleccionados={flujo.productosSeleccionados}
+                moneda={moneda}
+                onAlternarProducto={flujo.alternarProducto}
+                onActualizarCantidad={flujo.actualizarCantidadProducto}
+              />
+            ) : null}
+          </>
+        ) : (
+          <section className="rounded-4xl border border-dashed border-slate-300 bg-slate-50 px-5 py-8 text-center text-sm font-semibold text-slate-600">
+            Primero identifica al cliente o crea su cuenta para habilitar el calendario y el resto del flujo de reserva.
+          </section>
+        )}
+
+        {clienteListo &&
           flujo.serviciosSeleccionados.length > 0 &&
           totalDuracion > 0 && (
             <SelectorEspecialistaHorario
@@ -316,11 +271,10 @@ export function PaginaReserva() {
           )}
 
         {/* Paso 4: Formulario de contacto */}
-        {flujo.horaSeleccionada && flujo.personalSeleccionado && (
+        {clienteListo && flujo.horaSeleccionada && flujo.personalSeleccionado && (
           <FormularioContacto
             estudio={estudioActivo}
             flujo={flujo}
-            requiereColor={requiereColor}
             onEnviar={(datos) => flujo.enviarReserva(estudioActivo, mostrarToast, datos)}
           />
         )}
@@ -337,8 +291,8 @@ function mapearSalonDetalleAEstudio(salon: SalonDetalle, claveSalon: string): Es
     owner: '',
     phone: salon.telefono,
     country: salon.pais,
-    plan: 'STANDARD',
-    branches: salon.sucursales && salon.sucursales.length > 0 ? salon.sucursales : ['Principal'],
+    plan: salon.plan,
+    branches: [salon.nombre],
     assignedKey: '',
     clientKey: claveSalon,
     subscriptionStart: '',
@@ -346,6 +300,7 @@ function mapearSalonDetalleAEstudio(salon: SalonDetalle, claveSalon: string): Es
     holidays: salon.festivos,
     schedule: salon.horario,
     selectedServices: salon.servicios,
+    productos: salon.productos,
     customServices: [],
     staff: salon.personal.map((miembro) => ({
       id: miembro.id,
@@ -368,6 +323,6 @@ function mapearSalonDetalleAEstudio(salon: SalonDetalle, claveSalon: string): Es
     estudioPrincipalId: salon.estudioPrincipalId ?? null,
     esSede: Boolean(salon.estudioPrincipalId),
     permiteReservasPublicas: salon.permiteReservasPublicas ?? true,
-    sedes: salon.sedesReservables ?? [],
+    sedes: [],
   };
 }

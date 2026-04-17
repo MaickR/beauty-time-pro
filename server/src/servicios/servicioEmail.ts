@@ -7,10 +7,8 @@ import { crearTemplateRechazoSalon } from '../lib/templates/rechazoSalon.js';
 import { crearTemplateRecordatorioReserva } from '../lib/templates/recordatorioReserva.js';
 import { crearTemplateResetContrasena } from '../lib/templates/resetContrasena.js';
 import { crearTemplateVerificacionCliente } from '../lib/templates/verificacionCliente.js';
-import {
-  incluirReservaConRelaciones,
-  obtenerServiciosNormalizados,
-} from '../lib/serializacionReservas.js';
+import { obtenerServiciosNormalizados } from '../lib/serializacionReservas.js';
+import { obtenerReservaConRelacionesPorId, type ReservaConRelaciones } from '../utils/notificarReserva.js';
 import { prisma } from '../prismaCliente.js';
 
 const TIPO_RECORDATORIO_RESERVA = 'recordatorio_reserva';
@@ -50,31 +48,37 @@ function normalizarLogo(logoUrl: string | null): string | null {
 }
 
 async function obtenerReservaCompleta(reservaId: string) {
-  return prisma.reserva.findUnique({
-    where: { id: reservaId },
-    include: incluirReservaConRelaciones,
-  });
+  return obtenerReservaConRelacionesPorId(reservaId);
 }
 
 function obtenerServicios(reserva: { servicios: unknown; serviciosDetalle?: unknown[] }): string[] {
   return obtenerServiciosNormalizados(reserva).map((servicio) => servicio.name || 'Servicio');
 }
 
-export async function enviarEmailConfirmacion(
-  reservaId: string,
-  opciones?: { recompensaAplicada?: boolean; descripcionRecompensa?: string | null },
-) : Promise<boolean> {
-  const reserva = await obtenerReservaCompleta(reservaId);
-  if (!reserva?.cliente.email) return false;
+function obtenerDatosCorreoConfirmacion(reserva: ReservaConRelaciones | null) {
+  if (
+    !reserva?.id ||
+    !reserva.tokenCancelacion ||
+    !reserva.cliente?.email ||
+    !reserva.estudio?.nombre ||
+    !reserva.estudio.telefono ||
+    !reserva.estudio.claveCliente ||
+    !reserva.empleado?.nombre ||
+    reserva.duracion === undefined ||
+    reserva.precioTotal === undefined
+  ) {
+    return null;
+  }
 
-  const html = crearTemplateConfirmacionReserva({
+  return {
     reservaId: reserva.id,
     tokenCancelacion: reserva.tokenCancelacion,
+    emailCliente: reserva.cliente.email,
     salon: {
       nombre: reserva.estudio.nombre,
-      colorPrimario: reserva.estudio.colorPrimario,
-      logoUrl: normalizarLogo(reserva.estudio.logoUrl),
-      direccion: reserva.estudio.direccion,
+      colorPrimario: reserva.estudio.colorPrimario ?? null,
+      logoUrl: normalizarLogo(reserva.estudio.logoUrl ?? null),
+      direccion: reserva.estudio.direccion ?? null,
       telefono: reserva.estudio.telefono,
       claveCliente: reserva.estudio.claveCliente,
     },
@@ -86,14 +90,68 @@ export async function enviarEmailConfirmacion(
     duracionTotal: reserva.duracion,
     precioTotal: reserva.precioTotal,
     esMenorDeEdad: Boolean(reserva.notasMenorEdad),
+  };
+}
+
+function obtenerDatosCorreoRecordatorio(reserva: ReservaConRelaciones | null) {
+  if (
+    !reserva?.id ||
+    !reserva.tokenCancelacion ||
+    !reserva.cliente?.email ||
+    !reserva.estudio?.nombre ||
+    !reserva.estudio.claveCliente ||
+    !reserva.empleado?.nombre
+  ) {
+    return null;
+  }
+
+  return {
+    reservaId: reserva.id,
+    tokenCancelacion: reserva.tokenCancelacion,
+    emailCliente: reserva.cliente.email,
+    salon: {
+      nombre: reserva.estudio.nombre,
+      colorPrimario: reserva.estudio.colorPrimario ?? null,
+      logoUrl: normalizarLogo(reserva.estudio.logoUrl ?? null),
+      direccion: reserva.estudio.direccion ?? null,
+      claveCliente: reserva.estudio.claveCliente,
+    },
+    cliente: { nombre: reserva.nombreCliente },
+    especialista: reserva.empleado.nombre,
+    servicios: obtenerServicios(reserva),
+    fecha: reserva.fecha,
+    hora: reserva.horaInicio,
+  };
+}
+
+export async function enviarEmailConfirmacion(
+  reservaId: string,
+  opciones?: { recompensaAplicada?: boolean; descripcionRecompensa?: string | null },
+) : Promise<boolean> {
+  const reserva = await obtenerReservaCompleta(reservaId);
+  const datosCorreo = obtenerDatosCorreoConfirmacion(reserva);
+  if (!datosCorreo) return false;
+
+  const html = crearTemplateConfirmacionReserva({
+    reservaId: datosCorreo.reservaId,
+    tokenCancelacion: datosCorreo.tokenCancelacion,
+    salon: datosCorreo.salon,
+    cliente: datosCorreo.cliente,
+    especialista: datosCorreo.especialista,
+    servicios: datosCorreo.servicios,
+    fecha: datosCorreo.fecha,
+    hora: datosCorreo.hora,
+    duracionTotal: datosCorreo.duracionTotal,
+    precioTotal: datosCorreo.precioTotal,
+    esMenorDeEdad: datosCorreo.esMenorDeEdad,
     recompensaAplicada: opciones?.recompensaAplicada ? (opciones.descripcionRecompensa ?? undefined) : undefined,
   });
 
   await encolarEmailRenderizado({
-    destinatario: reserva.cliente.email,
-    asunto: `Confirmación de cita — ${reserva.estudio.nombre}`,
+    destinatario: datosCorreo.emailCliente,
+    asunto: `Confirmación de cita — ${datosCorreo.salon.nombre}`,
     html,
-    claveUnica: `confirmacion_reserva:${reserva.id}`,
+    claveUnica: `confirmacion_reserva:${datosCorreo.reservaId}`,
   });
 
   return true;
@@ -103,32 +161,27 @@ export async function programarEmailRecordatorioReserva(
   reservaId: string,
 ): Promise<ResultadoEncoladoCorreo | false> {
   const reserva = await obtenerReservaCompleta(reservaId);
-  if (!reserva?.cliente.email) return false;
+  const datosCorreo = obtenerDatosCorreoRecordatorio(reserva);
+  if (!datosCorreo) return false;
 
   const html = crearTemplateRecordatorioReserva({
-    reservaId: reserva.id,
-    tokenCancelacion: reserva.tokenCancelacion,
-    salon: {
-      nombre: reserva.estudio.nombre,
-      colorPrimario: reserva.estudio.colorPrimario,
-      logoUrl: normalizarLogo(reserva.estudio.logoUrl),
-      direccion: reserva.estudio.direccion,
-      claveCliente: reserva.estudio.claveCliente,
-    },
-    cliente: { nombre: reserva.nombreCliente },
-    especialista: reserva.empleado.nombre,
-    servicios: obtenerServicios(reserva),
-    fecha: reserva.fecha,
-    hora: reserva.horaInicio,
+    reservaId: datosCorreo.reservaId,
+    tokenCancelacion: datosCorreo.tokenCancelacion,
+    salon: datosCorreo.salon,
+    cliente: datosCorreo.cliente,
+    especialista: datosCorreo.especialista,
+    servicios: datosCorreo.servicios,
+    fecha: datosCorreo.fecha,
+    hora: datosCorreo.hora,
   });
 
   return encolarEmailRenderizado({
-    destinatario: reserva.cliente.email,
+    destinatario: datosCorreo.emailCliente,
     asunto: '⏰ Recordatorio: tu cita es mañana',
     html,
     tipoEvento: TIPO_RECORDATORIO_RESERVA,
-    referenciaId: reserva.id,
-    claveUnica: `recordatorio_reserva:${reserva.id}`,
+    referenciaId: datosCorreo.reservaId,
+    claveUnica: `recordatorio_reserva:${datosCorreo.reservaId}`,
   });
 }
 

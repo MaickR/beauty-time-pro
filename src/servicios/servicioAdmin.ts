@@ -255,6 +255,38 @@ export async function obtenerSalonesBloqueados(
   );
 }
 
+async function obtenerTodosLosSalonesPaginados<T>(
+  cargador: (pagina: number, limite: number) => Promise<RespuestaListaPaginada<T>>,
+): Promise<T[]> {
+  const limite = 100;
+  const primeraPagina = await cargador(1, limite);
+
+  if (primeraPagina.totalPaginas <= 1) {
+    return primeraPagina.datos;
+  }
+
+  const paginasRestantes = await Promise.all(
+    Array.from({ length: primeraPagina.totalPaginas - 1 }, (_, indice) => cargador(indice + 2, limite)),
+  );
+
+  return [
+    ...primeraPagina.datos,
+    ...paginasRestantes.flatMap((pagina) => pagina.datos),
+  ];
+}
+
+export function obtenerTodosLosSalonesActivos(): Promise<SalonActivo[]> {
+  return obtenerTodosLosSalonesPaginados(obtenerSalonesActivos);
+}
+
+export function obtenerTodosLosSalonesSuspendidos(): Promise<SalonSuspendido[]> {
+  return obtenerTodosLosSalonesPaginados(obtenerSalonesSuspendidos);
+}
+
+export function obtenerTodosLosSalonesBloqueados(): Promise<SalonBloqueado[]> {
+  return obtenerTodosLosSalonesPaginados(obtenerSalonesBloqueados);
+}
+
 export async function suspenderSalon(id: string): Promise<void> {
   await peticion(`/admin/salones/${id}/suspender`, { method: 'PUT' });
 }

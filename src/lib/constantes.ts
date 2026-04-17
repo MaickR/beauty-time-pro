@@ -75,3 +75,20 @@ export const CATALOGO_SERVICIOS: Record<string, readonly string[]> = {
 } as const;
 
 export type CategoriaServicio = keyof typeof CATALOGO_SERVICIOS;
+
+const ETIQUETAS_SERVICIOS_BASE: Record<string, string> = {
+  'Brow lamination': 'Laminado de cejas',
+  'Lash Lifting': 'Lifting de pestañas',
+  'Curly / Alaciado Express': 'Definición de rizos / alaciado exprés',
+  'Pedi Spa': 'Pedicure spa',
+  'Pedi Express': 'Pedicure exprés',
+  'Mani Spa': 'Manicure spa',
+  'Mani Express': 'Manicure exprés',
+  'Gel Semi Permanente': 'Gel semipermanente',
+  Babyboomer: 'Efecto baby boomer',
+  'Baby Lips': 'Efecto baby lips',
+};
+
+export function obtenerEtiquetaServicioCatalogo(nombreServicio: string): string {
+  return ETIQUETAS_SERVICIOS_BASE[nombreServicio] ?? nombreServicio;
+}

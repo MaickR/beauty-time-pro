@@ -1,6 +1,7 @@
 import { useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { usarTituloPagina } from '../../hooks/usarTituloPagina';
+import { guardarAvisoInicioSesion } from '../../tienda/tiendaAuth';
 
 export function PaginaEsperaAprobacion() {
   usarTituloPagina('Solicitud enviada — Beauty Time Pro');
@@ -8,10 +9,11 @@ export function PaginaEsperaAprobacion() {
 
   useEffect(() => {
     const temporizador = setTimeout(() => {
-      navegar(
-        '/iniciar-sesion?mensaje=' +
-          encodeURIComponent('Tu solicitud fue enviada. Te notificaremos cuando sea aprobada.'),
-      );
+      guardarAvisoInicioSesion({
+        mensaje: 'Your request was sent. We will email you as soon as it is approved.',
+        tono: 'blue',
+      });
+      navegar('/iniciar-sesion');
     }, 3000);
     return () => clearTimeout(temporizador);
   }, [navegar]);

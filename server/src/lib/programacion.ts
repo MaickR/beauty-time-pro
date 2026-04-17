@@ -1,3 +1,4 @@
+import { obtenerExcepcionDisponibilidadAplicada } from './disponibilidadExcepciones.js';
 import { obtenerFechaISOEnZona, obtenerMinutosActualesEnZona } from '../utils/zonasHorarias.js';
 
 /** Convierte "HH:mm" a minutos desde medianoche. Devuelve null si la entrada está vacía. */
@@ -65,7 +66,16 @@ interface MiembroHorario {
 interface ReservaBreve {
   horaInicio: string;
   duracion: number;
+  estado?: string;
 }
+
+const ESTADOS_QUE_OCUPAN_HORARIO = new Set([
+  'pending',
+  'confirmed',
+  'working',
+  'completed',
+  'no_show',
+]);
 
 interface TurnoEstudio {
   isOpen: boolean;
@@ -80,6 +90,8 @@ interface ParametrosSlotsBackend {
   duracionMin: number;
   reservas: ReservaBreve[];
   zonaHoraria?: string | null;
+  sucursal?: string | null;
+  excepcionesDisponibilidad?: unknown;
 }
 
 export interface SlotDisponible {
@@ -94,11 +106,29 @@ export function obtenerSlotsDisponiblesBackend({
   duracionMin,
   reservas,
   zonaHoraria,
+  sucursal,
+  excepcionesDisponibilidad,
 }: ParametrosSlotsBackend): SlotDisponible[] {
   const fechaObj = new Date(`${fecha}T12:00:00`);
   const indiceDia = fechaObj.getDay();
   const diaSemana = DIAS_SEMANA[indiceDia];
-  const horarioDia = obtenerHorarioDia(horario, diaSemana ?? '');
+  const horarioBaseDia = obtenerHorarioDia(horario, diaSemana ?? '');
+  const excepcionDia = obtenerExcepcionDisponibilidadAplicada({
+    excepciones: excepcionesDisponibilidad,
+    fecha,
+    sucursal,
+  });
+
+  if (excepcionDia?.tipo === 'cerrado') return [];
+
+  const horarioDia =
+    excepcionDia?.tipo === 'horario_modificado' && excepcionDia.horaInicio && excepcionDia.horaFin
+      ? {
+          isOpen: true,
+          openTime: excepcionDia.horaInicio,
+          closeTime: excepcionDia.horaFin,
+        }
+      : horarioBaseDia;
 
   if (!horarioDia?.isOpen) return [];
   if (!miembroTrabajaEseDia(miembro.diasTrabajo, indiceDia, diaSemana ?? '')) return [];
@@ -121,6 +151,11 @@ export function obtenerSlotsDisponiblesBackend({
   const hoy = obtenerFechaISOEnZona(ahora, zonaHoraria);
   const minutosAhora = fecha === hoy ? obtenerMinutosActualesEnZona(ahora, zonaHoraria) : -1;
 
+  const reservasActivas = reservas.filter((reserva) => {
+    if (!reserva.estado) return true;
+    return ESTADOS_QUE_OCUPAN_HORARIO.has(reserva.estado);
+  });
+
   const slots: SlotDisponible[] = [];
 
   for (let tiempo = inicioEfectivo; tiempo < finEfectivo; tiempo += 30) {
@@ -138,7 +173,7 @@ export function obtenerSlotsDisponiblesBackend({
 
     // Verificar colisión con reservas existentes
     let ocupado = false;
-    for (const r of reservas) {
+    for (const r of reservasActivas) {
       const inicioR = tiempoAMinutos(r.horaInicio) ?? 0;
       const finR = inicioR + r.duracion;
       if (tiempo < finR && finSlot > inicioR) {

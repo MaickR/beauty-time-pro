@@ -7,7 +7,7 @@ export function limpiarNombreSalonRegistro(valor: string): string {
 }
 
 export function limpiarNombrePersonaRegistro(valor: string): string {
-  return normalizarEspacios(valor.replace(/[^\p{L}\s]/gu, ''));
+  return normalizarEspacios(valor.normalize('NFC').replace(/[^\p{L}\p{M}\s'’-]/gu, ''));
 }
 
 export function esNombreSalonRegistroValido(valor: string): boolean {
@@ -17,7 +17,7 @@ export function esNombreSalonRegistroValido(valor: string): boolean {
 
 export function esNombrePersonaRegistroValido(valor: string): boolean {
   const limpio = normalizarEspacios(valor);
-  return limpio.length >= 2 && /^[\p{L}\s]+$/u.test(limpio);
+  return limpio.length >= 2 && /^[\p{L}\p{M}\s'’-]+$/u.test(limpio);
 }
 
 export function normalizarTelefonoSalonRegistro(valor: string): string {

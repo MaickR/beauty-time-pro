@@ -7,13 +7,29 @@ export interface TurnoTrabajo {
   closeTime: string; // "HH:mm"
 }
 
+export type TipoExcepcionDisponibilidad = 'cerrado' | 'horario_modificado';
+
+export interface ExcepcionDisponibilidad {
+  id: string;
+  fecha: string;
+  tipo: TipoExcepcionDisponibilidad;
+  horaInicio: string | null;
+  horaFin: string | null;
+  aplicaTodasLasSedes: boolean;
+  sedes: string[];
+  motivo: string | null;
+  activa: boolean;
+  creadoEn: string | null;
+  actualizadoEn: string | null;
+}
+
 /** Fecha bloqueada para reservas. Formato "YYYY-MM-DD" */
 export type DiaFestivo = string;
 
 export type Moneda = 'MXN' | 'COP';
 export type Pais = 'Mexico' | 'Colombia';
 export type PlanEstudio = 'STANDARD' | 'PRO';
-export type EstadoReserva = 'pending' | 'confirmed' | 'completed' | 'cancelled' | 'no_show';
+export type EstadoReserva = 'pending' | 'confirmed' | 'working' | 'completed' | 'cancelled' | 'no_show';
 export type EstadoSlot = 'AVAILABLE' | 'OCCUPIED' | 'BREAK_TIME' | 'TOO_SHORT';
 
 export interface SlotTiempo {
@@ -32,6 +48,23 @@ export interface DetalleServicioReserva extends Servicio {
   id?: string;
   status: string;
   order: number;
+  motivo?: string | null;
+}
+
+export interface ProductoAdicionalReserva {
+  id: string;
+  nombre: string;
+  categoria?: string | null;
+  cantidad: number;
+  precioUnitario: number;
+  total: number;
+}
+
+export interface ProductoPublicoReserva {
+  id: string;
+  nombre: string;
+  categoria: string;
+  precio: number;
 }
 
 export interface ServicioPersonalizado {
@@ -45,6 +78,7 @@ export interface Personal {
   avatarUrl?: string | null;
   specialties: string[];
   active: boolean;
+  inactiveUntil?: string | null;
   shiftStart: string | null; // "HH:mm"
   shiftEnd: string | null; // "HH:mm"
   breakStart: string | null; // "HH:mm"
@@ -67,8 +101,10 @@ export interface Estudio {
   subscriptionStart: string; // "YYYY-MM-DD"
   paidUntil: string; // "YYYY-MM-DD"
   holidays: DiaFestivo[];
+  availabilityExceptions?: ExcepcionDisponibilidad[];
   schedule: Record<string, TurnoTrabajo>;
   selectedServices: Servicio[];
+  productos?: ProductoPublicoReserva[];
   customServices: ServicioPersonalizado[];
   staff: Personal[];
   colorPrimario?: string | null;
@@ -176,6 +212,9 @@ export interface Reserva {
   colorBrand: string | null;
   colorNumber: string | null;
   observaciones?: string | null;
+  paymentMethod?: string | null;
+  cancellationReason?: string | null;
+  productItems?: ProductoAdicionalReserva[];
   createdAt: string; // ISO datetime
 }
 
@@ -210,14 +249,28 @@ export interface EspecialistaPublico {
 
 export interface SalonDetalle extends SalonPublico {
   slug?: string;
+  plan: PlanEstudio;
   estudioPrincipalId?: string | null;
   permiteReservasPublicas?: boolean;
   sucursales?: string[];
   sedesReservables?: SedeEstudio[];
   servicios: Servicio[];
+  productos: ProductoPublicoReserva[];
   horario: Record<string, TurnoTrabajo>;
   festivos: string[];
+  availabilityExceptions?: ExcepcionDisponibilidad[];
   personal: EspecialistaPublico[];
+}
+
+export interface PerfilClienteReservaPublica {
+  encontrado: boolean;
+  email: string;
+  nombre: string;
+  apellido: string;
+  telefono: string | null;
+  fechaNacimiento: string | null;
+  ciudad: string | null;
+  pais: Pais;
 }
 
 export interface DisponibilidadEspecialista {
@@ -340,6 +393,8 @@ export interface EmpleadoAccesoInfo {
   email: string;
   forzarCambioContrasena: boolean;
   activo: boolean;
+  personalActivo?: boolean;
+  desactivadoHasta?: string | null;
   ultimoAcceso: string | null;
   creadoEn: string;
 }
@@ -364,6 +419,8 @@ export interface ReservaEmpleado {
   tonalidad?: string | null;
   observaciones?: string | null;
   notasMenorEdad?: string | null;
+  metodoPago?: string | null;
+  productosAdicionales?: ProductoAdicionalReserva[];
   tokenCancelacion?: string;
   creadoEn?: string;
 }
@@ -372,6 +429,7 @@ export interface PerfilEmpleado {
   id: string;
   nombre: string;
   email: string;
+  creadoEn: string;
   avatarUrl?: string | null;
   especialidades: string[];
   activo: boolean;
@@ -383,6 +441,7 @@ export interface PerfilEmpleado {
   estudio: {
     id: string;
     nombre: string;
+    plan: PlanEstudio;
     colorPrimario: string | null;
     logoUrl: string | null;
     direccion: string | null;

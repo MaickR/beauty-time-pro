@@ -37,7 +37,10 @@ function usarDebounce(valor: string, ms: number): string {
   return valorDebounced;
 }
 
-function calcularEdadTexto(edad: number): string {
+function calcularEdadTexto(edad: number | null): string {
+  if (edad === null) {
+    return 'Cumpleaños registrado';
+  }
   return `${edad} años`;
 }
 
@@ -104,7 +107,7 @@ function PanelDetalleCliente({ clienteId, onCerrar }: PropsPanelCliente) {
 
   if (!cliente) return null;
 
-  const esmenor = cliente.edad < 18;
+  const esmenor = cliente.edad !== null && cliente.edad < 18;
   const totalPaginasHistorial = Math.max(
     1,
     Math.ceil(cliente.reservas.length / HISTORIAL_POR_PAGINA),
@@ -113,21 +116,21 @@ function PanelDetalleCliente({ clienteId, onCerrar }: PropsPanelCliente) {
   const historialPagina = cliente.reservas.slice(inicio, inicio + HISTORIAL_POR_PAGINA);
 
   return (
-    <div className="flex flex-col h-full">
-      <div className="flex items-start justify-between mb-6">
+    <div className="flex h-full flex-col">
+      <div className="mb-6 flex flex-wrap items-start justify-between gap-3">
         <div>
-          <div className="flex items-center gap-3 mb-1">
-            <h3 className="text-xl font-black">{cliente.nombre}</h3>
+          <div className="mb-1 flex flex-wrap items-center gap-3">
+            <h3 className="break-words text-lg font-black sm:text-xl">{cliente.nombre}</h3>
             {esmenor && (
               <span className="px-2 py-0.5 bg-yellow-100 text-yellow-800 text-[10px] font-black uppercase rounded-full">
                 Menor
               </span>
             )}
           </div>
-          <p className="text-sm text-slate-500 font-bold">
+          <p className="break-all text-sm font-bold text-slate-500">
             {calcularEdadTexto(cliente.edad)} · {cliente.telefono}
           </p>
-          {cliente.email && <p className="text-xs text-slate-400 mt-0.5">{cliente.email}</p>}
+          {cliente.email && <p className="mt-0.5 break-all text-xs text-slate-400">{cliente.email}</p>}
         </div>
         <button
           onClick={onCerrar}
@@ -359,7 +362,83 @@ export function DirectorioClientes({ estudioId }: PropsDirectorioClientes) {
             </p>
           </div>
         ) : (
-          <div className="overflow-x-auto rounded-3xl border border-slate-200 bg-white shadow-sm">
+          <>
+            <div className="space-y-3 md:hidden">
+              {clientes.map((cliente) => {
+                const expandida = filaExpandida === cliente.id;
+
+                return (
+                  <article
+                    key={cliente.id}
+                    className={`overflow-hidden rounded-3xl border bg-white shadow-sm transition-colors ${expandida ? 'border-pink-300' : 'border-slate-200'}`}
+                  >
+                    <button
+                      type="button"
+                      onClick={() => alternarFila(cliente.id)}
+                      className="flex w-full flex-col gap-4 px-4 py-4 text-left"
+                      aria-expanded={expandida}
+                      aria-controls={`detalle-cliente-${cliente.id}`}
+                    >
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="min-w-0">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <p className="break-words text-sm font-black text-slate-800">
+                              {cliente.nombre}
+                            </p>
+                            {cliente.edad !== null && cliente.edad < 18 && (
+                              <span className="rounded-full bg-yellow-100 px-2 py-0.5 text-[9px] font-black uppercase text-yellow-800">
+                                Menor
+                              </span>
+                            )}
+                          </div>
+                          <p className="mt-1 text-xs font-medium text-slate-500">
+                            {calcularEdadTexto(cliente.edad)}
+                          </p>
+                        </div>
+
+                        {expandida ? (
+                          <ChevronDown className="mt-0.5 h-4 w-4 shrink-0 text-slate-400" />
+                        ) : (
+                          <ChevronRight className="mt-0.5 h-4 w-4 shrink-0 text-slate-400" />
+                        )}
+                      </div>
+
+                      <div className="grid gap-2 text-xs text-slate-600">
+                        <div className="flex items-start gap-2">
+                          <Phone className="mt-0.5 h-3.5 w-3.5 shrink-0 text-slate-400" />
+                          <span className="break-all">{cliente.telefono}</span>
+                        </div>
+                        <div className="flex items-start gap-2">
+                          <Mail className="mt-0.5 h-3.5 w-3.5 shrink-0 text-slate-400" />
+                          <span className="break-all">{cliente.email ?? 'Sin correo'}</span>
+                        </div>
+                        <div className="flex flex-wrap items-center gap-2 text-[11px] font-bold text-slate-500">
+                          <span className="rounded-full bg-slate-100 px-2.5 py-1">
+                            {cliente.totalReservas} visita(s)
+                          </span>
+                          <span className="rounded-full bg-slate-100 px-2.5 py-1">
+                            {cliente.ultimaVisita
+                              ? `Última visita: ${formatearFecha(cliente.ultimaVisita)}`
+                              : 'Sin visitas'}
+                          </span>
+                        </div>
+                      </div>
+                    </button>
+
+                    {expandida && (
+                      <div id={`detalle-cliente-${cliente.id}`} className="border-t border-slate-100 px-4 py-4">
+                        <PanelDetalleCliente
+                          clienteId={cliente.id}
+                          onCerrar={() => setFilaExpandida(null)}
+                        />
+                      </div>
+                    )}
+                  </article>
+                );
+              })}
+            </div>
+
+            <div className="hidden overflow-x-auto rounded-3xl border border-slate-200 bg-white shadow-sm md:block">
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-slate-100">
@@ -393,31 +472,20 @@ export function DirectorioClientes({ estudioId }: PropsDirectorioClientes) {
                     <tr
                       key={c.id}
                       className={`border-b border-slate-50 hover:bg-slate-50 transition-colors cursor-pointer ${clienteSeleccionado === c.id ? 'bg-pink-50' : ''}`}
-                      onClick={() => {
-                        if (window.innerWidth < 768) {
-                          alternarFila(c.id);
-                        } else {
-                          setClienteSeleccionado(c.id);
-                        }
-                      }}
+                      onClick={() => setClienteSeleccionado(c.id)}
                       role="button"
                       tabIndex={0}
                       onKeyDown={(e) => {
                         if (e.key === 'Enter' || e.key === ' ') {
-                          if (window.innerWidth < 768) {
-                            alternarFila(c.id);
-                          } else {
-                            setClienteSeleccionado(c.id);
-                          }
+                          setClienteSeleccionado(c.id);
                         }
                       }}
                       aria-label={`Ver detalle de ${c.nombre}`}
-                      aria-expanded={expandida}
                     >
-                      <td className="px-6 py-4" colSpan={expandida ? 6 : 1}>
+                      <td className="px-6 py-4">
                         <div className="flex items-center gap-2">
                           <span className="font-black text-slate-800">{c.nombre}</span>
-                          {c.edad < 18 && (
+                          {c.edad !== null && c.edad < 18 && (
                             <span className="px-2 py-0.5 bg-yellow-100 text-yellow-800 text-[9px] font-black uppercase rounded-full shrink-0">
                               Menor
                             </span>
@@ -429,48 +497,28 @@ export function DirectorioClientes({ estudioId }: PropsDirectorioClientes) {
                             {c.telefono}
                           </span>
                         </div>
-
-                        {expandida && (
-                          <div className="mt-4 md:hidden">
-                            <PanelDetalleCliente
-                              clienteId={c.id}
-                              onCerrar={() => setFilaExpandida(null)}
-                            />
-                          </div>
-                        )}
                       </td>
-                      {!expandida && (
-                        <>
-                          <td className="px-4 py-4">
-                            <span className="flex items-center gap-1 text-slate-600 font-medium">
-                              <Phone className="w-3 h-3 text-slate-400" aria-hidden="true" />{' '}
-                              {c.telefono}
-                            </span>
-                          </td>
-                          <td className="px-4 py-4 hidden sm:table-cell">
-                            <span className="flex items-center gap-1 text-xs text-slate-500 mt-0.5">
-                              <Mail className="w-3 h-3" aria-hidden="true" />{' '}
-                              {c.email ?? 'Sin correo'}
-                            </span>
-                          </td>
-                          <td className="px-4 py-4 text-right">
-                            <ChevronDown
-                              className="w-4 h-4 text-slate-300 ml-auto md:hidden"
-                              aria-hidden="true"
-                            />
-                            <ChevronRight
-                              className="w-4 h-4 text-slate-300 ml-auto hidden md:block"
-                              aria-hidden="true"
-                            />
-                          </td>
-                        </>
-                      )}
+                      <td className="px-4 py-4">
+                        <span className="flex items-center gap-1 text-slate-600 font-medium">
+                          <Phone className="w-3 h-3 text-slate-400" aria-hidden="true" />{' '}
+                          {c.telefono}
+                        </span>
+                      </td>
+                      <td className="px-4 py-4 hidden sm:table-cell">
+                        <span className="flex items-center gap-1 text-xs text-slate-500 mt-0.5">
+                          <Mail className="w-3 h-3" aria-hidden="true" /> {c.email ?? 'Sin correo'}
+                        </span>
+                      </td>
+                      <td className="px-4 py-4 text-right">
+                        <ChevronRight className="ml-auto h-4 w-4 text-slate-300" aria-hidden="true" />
+                      </td>
                     </tr>
                   );
                 })}
               </tbody>
             </table>
-          </div>
+            </div>
+          </>
         )}
 
         {totalPaginas > 1 && (

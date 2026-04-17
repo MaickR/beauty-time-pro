@@ -145,11 +145,11 @@ export function PaginaMaestro() {
 
       <main className="max-w-7xl mx-auto p-8">
         {tabsDisponibles.length > 0 && (
-          <nav className="no-imprimir flex bg-slate-100 p-1 rounded-2xl mb-8 border border-slate-200 flex-wrap gap-1 justify-center md:justify-start">
+          <nav className="no-imprimir mb-8 flex flex-col gap-1 rounded-2xl border border-slate-200 bg-slate-100 p-1 sm:flex-row sm:flex-wrap sm:justify-start">
             {tabsDisponibles.includes('directorio') && (
               <button
                 onClick={() => setTabActiva('directorio')}
-                className={`px-6 py-3 rounded-xl text-xs font-black transition-all flex items-center gap-2 ${tabActiva === 'directorio' ? 'bg-white shadow-sm text-slate-900' : 'text-slate-500 hover:text-slate-800'}`}
+                className={`flex w-full items-center justify-center gap-2 rounded-xl px-6 py-3 text-xs font-black transition-all sm:w-auto sm:justify-start ${tabActiva === 'directorio' ? 'bg-white shadow-sm text-slate-900' : 'text-slate-500 hover:text-slate-800'}`}
               >
                 <Store className="w-4 h-4" /> {tituloSeccionDirectorio}
               </button>
@@ -157,7 +157,7 @@ export function PaginaMaestro() {
             {tabsDisponibles.includes('estado-cuenta') && (
               <button
                 onClick={() => setTabActiva('estado-cuenta')}
-                className={`px-6 py-3 rounded-xl text-xs font-black transition-all flex items-center gap-2 ${tabActiva === 'estado-cuenta' ? 'bg-white shadow-sm text-slate-900' : 'text-slate-500 hover:text-slate-800'}`}
+                className={`flex w-full items-center justify-center gap-2 rounded-xl px-6 py-3 text-xs font-black transition-all sm:w-auto sm:justify-start ${tabActiva === 'estado-cuenta' ? 'bg-white shadow-sm text-slate-900' : 'text-slate-500 hover:text-slate-800'}`}
               >
                 <PieChart className="w-4 h-4" /> Control de cobros
               </button>
@@ -165,7 +165,7 @@ export function PaginaMaestro() {
             {tabsDisponibles.includes('administradores') && (
               <button
                 onClick={() => setTabActiva('administradores')}
-                className={`px-6 py-3 rounded-xl text-xs font-black transition-all flex items-center gap-2 ${tabActiva === 'administradores' ? 'bg-white shadow-sm text-slate-900' : 'text-slate-500 hover:text-slate-800'}`}
+                className={`flex w-full items-center justify-center gap-2 rounded-xl px-6 py-3 text-xs font-black transition-all sm:w-auto sm:justify-start ${tabActiva === 'administradores' ? 'bg-white shadow-sm text-slate-900' : 'text-slate-500 hover:text-slate-800'}`}
               >
                 <Users className="w-4 h-4" /> Colaboradores
               </button>
@@ -173,7 +173,7 @@ export function PaginaMaestro() {
             {tabsDisponibles.includes('preregistros') && (
               <button
                 onClick={() => setTabActiva('preregistros')}
-                className={`px-6 py-3 rounded-xl text-xs font-black transition-all flex items-center gap-2 ${tabActiva === 'preregistros' ? 'bg-white shadow-sm text-slate-900' : 'text-slate-500 hover:text-slate-800'}`}
+                className={`flex w-full items-center justify-center gap-2 rounded-xl px-6 py-3 text-xs font-black transition-all sm:w-auto sm:justify-start ${tabActiva === 'preregistros' ? 'bg-white shadow-sm text-slate-900' : 'text-slate-500 hover:text-slate-800'}`}
               >
                 <ClipboardList className="w-4 h-4" /> Pre-registros
               </button>
@@ -181,7 +181,7 @@ export function PaginaMaestro() {
             {tabsDisponibles.includes('base-datos') && (
               <button
                 onClick={() => setTabActiva('base-datos')}
-                className={`px-6 py-3 rounded-xl text-xs font-black transition-all flex items-center gap-2 ${tabActiva === 'base-datos' ? 'bg-white shadow-sm text-slate-900' : 'text-slate-500 hover:text-slate-800'}`}
+                className={`flex w-full items-center justify-center gap-2 rounded-xl px-6 py-3 text-xs font-black transition-all sm:w-auto sm:justify-start ${tabActiva === 'base-datos' ? 'bg-white shadow-sm text-slate-900' : 'text-slate-500 hover:text-slate-800'}`}
               >
                 <Database className="w-4 h-4" /> Base de Datos
               </button>

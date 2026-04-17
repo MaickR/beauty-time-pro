@@ -29,6 +29,14 @@ interface ReservaMinima {
   status?: string;
 }
 
+const ESTADOS_QUE_OCUPAN_HORARIO = new Set([
+  'pending',
+  'confirmed',
+  'working',
+  'completed',
+  'no_show',
+]);
+
 interface ParametrosSlots {
   /** Horario del día para el estudio (apertura/cierre). */
   horarioDia: TurnoTrabajo;
@@ -79,7 +87,10 @@ export function obtenerSlotsDisponibles({
   const tieneDescanso =
     inicioDescanso !== null && finDescanso !== null && inicioDescanso < finDescanso;
 
-  const reservasActivas = reservasExistentes.filter((r) => r.status !== 'cancelled');
+  const reservasActivas = reservasExistentes.filter((reserva) => {
+    if (!reserva.status) return true;
+    return ESTADOS_QUE_OCUPAN_HORARIO.has(reserva.status);
+  });
 
   // Minutos actuales — solo relevante si es el día de hoy y filtrarPasados = true
   let minutosAhora = -1;

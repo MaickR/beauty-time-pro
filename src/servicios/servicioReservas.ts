@@ -4,6 +4,10 @@
 import type { Reserva, EstadoReserva, SlotTiempo } from '../tipos/index';
 import { peticion } from '../lib/clienteHTTP';
 
+type ServicioReservaPayload = Reserva['services'][number] & {
+  motivo?: string | null;
+};
+
 interface SlotBackend {
   hora?: string;
   disponible?: boolean;
@@ -46,10 +50,12 @@ function normalizarSlots(slots: SlotBackend[]): SlotTiempo[] {
     .filter((slot): slot is SlotTiempo => slot !== null);
 }
 
-interface DatosCrearReserva extends Omit<Reserva, 'id'> {
+interface DatosCrearReserva extends Omit<Reserva, 'id' | 'services'> {
+  services: ServicioReservaPayload[];
   fechaNacimiento: string; // "YYYY-MM-DD"
   email: string;
   usarRecompensa?: boolean;
+  productosSeleccionados?: Array<{ productoId: string; cantidad: number }>;
 }
 
 export interface ResultadoCrearReserva {
@@ -107,6 +113,8 @@ export async function crearReserva(datos: DatosCrearReserva): Promise<ResultadoC
       marcaTinte: datos.colorBrand ?? null,
       tonalidad: datos.colorNumber ?? null,
       observaciones: datos.observaciones ?? null,
+      metodoPago: datos.paymentMethod ?? null,
+      productosSeleccionados: datos.productosSeleccionados ?? [],
       usarRecompensa: datos.usarRecompensa ?? false,
     }),
   });
@@ -116,11 +124,11 @@ export async function crearReserva(datos: DatosCrearReserva): Promise<ResultadoC
 export async function actualizarEstadoReserva(
   id: string,
   estado: EstadoReserva,
-  pinCancelacion?: string,
+  motivoCancelacion?: string,
 ): Promise<void> {
   await peticion(`/reservas/${id}/estado`, {
     method: 'PUT',
-    body: JSON.stringify({ estado, pinCancelacion }),
+    body: JSON.stringify({ estado, ...(motivoCancelacion ? { motivo: motivoCancelacion } : {}) }),
   });
 }
 
@@ -139,13 +147,24 @@ export async function actualizarEstadoServicioReserva(
   reservaId: string,
   servicioId: string,
   estado: string,
-  pinCancelacion: string,
   motivo?: string,
 ): Promise<void> {
   await peticion(`/reservas/${reservaId}/servicios/${servicioId}/estado`, {
     method: 'PUT',
-    body: JSON.stringify({ estado, pinCancelacion, ...(motivo ? { motivo } : {}) }),
+    body: JSON.stringify({ estado, ...(motivo ? { motivo } : {}) }),
   });
+}
+
+export async function agregarProductoAReserva(
+  reservaId: string,
+  productoId: string,
+  cantidad = 1,
+): Promise<Reserva> {
+  const respuesta = await peticion<{ datos: Reserva }>(`/reservas/${reservaId}/productos`, {
+    method: 'POST',
+    body: JSON.stringify({ productoId, cantidad }),
+  });
+  return respuesta.datos;
 }
 
 /** Agrega un servicio adicional a una reserva existente. */

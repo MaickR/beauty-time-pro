@@ -1,0 +1,1282 @@
+﻿
+> beauty-time-pro@1.0.0 test
+> vitest run src/caracteristicas/empleado/PaginaAgendaEmpleado.test.tsx
+
+
+[1m[46m RUN [49m[22m [36mv4.0.18 [39m[90mD:/Desarrollo/Proyectos/beauty-time-pro[39m
+
+ [31mÔØ»[39m src/caracteristicas/empleado/PaginaAgendaEmpleado.test.tsx [2m([22m[2m4 tests[22m[2m | [22m[31m1 failed[39m[2m)[22m[33m 4998[2mms[22m[39m
+     [33m[2mÔ£ô[22m[39m permite copiar la clave del sal├│n y agregar productos en plan PRO [33m 1573[2mms[22m[39m
+     [33m[2mÔ£ô[22m[39m bloquea la pesta├▒a de productos cuando el sal├│n no es PRO [33m 788[2mms[22m[39m
+     [33m[2mÔ£ô[22m[39m muestra los productos ya asociados a la cita del empleado [33m 400[2mms[22m[39m
+[31m     [31m├ù[31m pagina los agendamientos de cuatro en cuatro[39m[33m 2235[2mms[22m[39m
+node.exe : 
+En línea: 1 Carácter: 1
++ & "C:\Program Files\nodejs/node.exe" "C:\Program Files\nodejs/node_mo ...
++ ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: (:String) [], RemoteException
+    + FullyQualifiedErrorId : NativeCommandError
+ 
+[31mÔÄ»ÔÄ»ÔÄ»ÔÄ»ÔÄ»ÔÄ»ÔÄ»[39m[1m[41m Failed Tests 1 
+[49m[22m[31mÔÄ»ÔÄ»ÔÄ»ÔÄ»ÔÄ»ÔÄ»ÔÄ»[39m
+
+[41m[1m FAIL [22m[49m 
+src/caracteristicas/empleado/PaginaAgendaEmpleado.test.tsx[2m > 
+[22mPaginaAgendaEmpleado[2m > [22mpagina los agendamientos de cuatro en 
+cuatro
+[31m[1mTestingLibraryElementError[22m[39m: Unable to find an accessible 
+element with the role "button" and name "Siguiente p├ígina"
+
+Here are the accessible roles:
+
+  main:
+
+  Name "":
+  [36m<main[39m
+    [33mclass[39m=[32m"mx-auto max-w-6xl space-y-6 px-4 py-6"[39m
+  [36m/>[39m
+
+  --------------------------------------------------
+  paragraph:
+
+  Name "":
+  [36m<p[39m
+    [33mclass[39m=[32m"text-xs font-black uppercase tracking-[0.28em] 
+text-pink-200"[39m
+  [36m/>[39m
+
+  Name "":
+  [36m<p[39m
+    [33mclass[39m=[32m"mt-3 max-w-2xl text-sm font-medium text-slate-200 
+md:text-base"[39m
+  [36m/>[39m
+
+  Name "":
+  [36m<p[39m
+    [33mclass[39m=[32m"text-[10px] font-black uppercase tracking-[0.24em] 
+text-pink-100"[39m
+  [36m/>[39m
+
+  Name "":
+  [36m<p[39m
+    [33mclass[39m=[32m"mt-3 text-2xl font-black text-white"[39m
+  [36m/>[39m
+
+  Name "":
+  [36m<p[39m
+    [33mclass[39m=[32m"mt-2 text-sm text-slate-200"[39m
+  [36m/>[39m
+
+  Name "":
+  [36m<p />[39m
+
+  Name "":
+  [36m<p />[39m
+
+  Name "":
+  [36m<p[39m
+    [33mclass[39m=[32m"text-[10px] font-black uppercase tracking-[0.22em] 
+text-pink-100"[39m
+  [36m/>[39m
+
+  Name "":
+  [36m<p[39m
+    [33mclass[39m=[32m"text-2xl font-black text-white"[39m
+  [36m/>[39m
+
+  Name "":
+  [36m<p[39m
+    [33mclass[39m=[32m"mt-3 text-xs font-medium text-slate-200"[39m
+  [36m/>[39m
+
+  Name "":
+  [36m<p[39m
+    [33mclass[39m=[32m"text-[10px] font-black uppercase tracking-[0.22em] 
+text-pink-100"[39m
+  [36m/>[39m
+
+  Name "":
+  [36m<p[39m
+    [33mclass[39m=[32m"text-2xl font-black text-white"[39m
+  [36m/>[39m
+
+  Name "":
+  [36m<p[39m
+    [33mclass[39m=[32m"mt-3 text-xs font-medium text-slate-200"[39m
+  [36m/>[39m
+
+  Name "":
+  [36m<p[39m
+    [33mclass[39m=[32m"text-[10px] font-black uppercase tracking-[0.22em] 
+text-pink-100"[39m
+  [36m/>[39m
+
+  Name "":
+  [36m<p[39m
+    [33mclass[39m=[32m"text-2xl font-black text-white"[39m
+  [36m/>[39m
+
+  Name "":
+  [36m<p[39m
+    [33mclass[39m=[32m"mt-3 text-xs font-medium text-slate-200"[39m
+  [36m/>[39m
+
+  Name "":
+  [36m<p[39m
+    [33mclass[39m=[32m"text-[10px] font-black uppercase tracking-[0.24em] 
+text-pink-600"[39m
+  [36m/>[39m
+
+  Name "":
+  [36m<p[39m
+    [33mclass[39m=[32m"mt-2 text-sm text-slate-500"[39m
+  [36m/>[39m
+
+  Name "":
+  [36m<p[39m
+    [33mclass[39m=[32m"font-serif text-2xl font-normal leading-none 
+tracking-tight text-slate-900"[39m
+  [36m/>[39m
+
+  Name "":
+  [36m<p[39m
+    [33mclass[39m=[32m"mt-0.5 text-[11px] text-slate-400"[39m
+  [36m/>[39m
+
+  Name "":
+  [36m<p[39m
+    [33mclass[39m=[32m"mt-1 text-[11px] font-black uppercase tracking-wide 
+text-slate-500"[39m
+  [36m/>[39m
+
+  Name "":
+  [36m<p[39m
+    [33mclass[39m=[32m"mb-2 text-[9.5px] font-semibold uppercase 
+tracking-wide text-slate-400"[39m
+  [36m/>[39m
+
+  Name "":
+  [36m<p[39m
+    [33mclass[39m=[32m"truncate text-sm font-semibold leading-tight 
+text-slate-900"[39m
+  [36m/>[39m
+
+  Name "":
+  [36m<p[39m
+    [33mclass[39m=[32m"mb-2 flex items-center gap-1.5 text-[9.5px] 
+font-semibold uppercase tracking-wide text-slate-400"[39m
+  [36m/>[39m
+
+  Name "":
+  [36m<p[39m
+    [33mclass[39m=[32m"text-[9.5px] font-semibold uppercase tracking-wide 
+text-slate-400"[39m
+  [36m/>[39m
+
+  Name "":
+  [36m<p[39m
+    [33mclass[39m=[32m"mt-1 text-[13px] font-semibold leading-tight 
+text-slate-900"[39m
+  [36m/>[39m
+
+  Name "":
+  [36m<p[39m
+    [33mclass[39m=[32m"text-[9.5px] font-semibold uppercase tracking-wide 
+text-slate-400"[39m
+  [36m/>[39m
+
+  Name "":
+  [36m<p[39m
+    [33mclass[39m=[32m"mt-1 text-[13px] font-semibold leading-tight 
+text-slate-900"[39m
+  [36m/>[39m
+
+  Name "":
+  [36m<p[39m
+    [33mclass[39m=[32m"text-[9.5px] font-semibold uppercase tracking-wide 
+text-slate-400"[39m
+  [36m/>[39m
+
+  Name "":
+  [36m<p[39m
+    [33mclass[39m=[32m"mt-1 text-[13px] font-semibold leading-tight 
+text-slate-900"[39m
+  [36m/>[39m
+
+  Name "":
+  [36m<p[39m
+    [33mclass[39m=[32m"text-[9.5px] font-semibold uppercase tracking-wide 
+text-slate-400"[39m
+  [36m/>[39m
+
+  Name "":
+  [36m<p[39m
+    [33mclass[39m=[32m"mt-1 text-[13px] font-semibold leading-tight 
+text-pink-700"[39m
+  [36m/>[39m
+
+  Name "":
+  [36m<p[39m
+    [33mclass[39m=[32m"font-serif text-2xl font-normal leading-none 
+tracking-tight text-slate-900"[39m
+  [36m/>[39m
+
+  Name "":
+  [36m<p[39m
+    [33mclass[39m=[32m"mt-0.5 text-[11px] text-slate-400"[39m
+  [36m/>[39m
+
+  Name "":
+  [36m<p[39m
+    [33mclass[39m=[32m"mt-1 text-[11px] font-black uppercase tracking-wide 
+text-slate-500"[39m
+  [36m/>[39m
+
+  Name "":
+  [36m<p[39m
+    [33mclass[39m=[32m"mb-2 text-[9.5px] font-semibold uppercase 
+tracking-wide text-slate-400"[39m
+  [36m/>[39m
+
+  Name "":
+  [36m<p[39m
+    [33mclass[39m=[32m"truncate text-sm font-semibold leading-tight 
+text-slate-900"[39m
+  [36m/>[39m
+
+  Name "":
+  [36m<p[39m
+    [33mclass[39m=[32m"mb-2 flex items-center gap-1.5 text-[9.5px] 
+font-semibold uppercase tracking-wide text-slate-400"[39m
+  [36m/>[39m
+
+  Name "":
+  [36m<p[39m
+    [33mclass[39m=[32m"text-[9.5px] font-semibold uppercase tracking-wide 
+text-slate-400"[39m
+  [36m/>[39m
+
+  Name "":
+  [36m<p[39m
+    [33mclass[39m=[32m"mt-1 text-[13px] font-semibold leading-tight 
+text-slate-900"[39m
+  [36m/>[39m
+
+  Name "":
+  [36m<p[39m
+    [33mclass[39m=[32m"text-[9.5px] font-semibold uppercase tracking-wide 
+text-slate-400"[39m
+  [36m/>[39m
+
+  Name "":
+  [36m<p[39m
+    [33mclass[39m=[32m"mt-1 text-[13px] font-semibold leading-tight 
+text-slate-900"[39m
+  [36m/>[39m
+
+  Name "":
+  [36m<p[39m
+    [33mclass[39m=[32m"text-[9.5px] font-semibold uppercase tracking-wide 
+text-slate-400"[39m
+  [36m/>[39m
+
+  Name "":
+  [36m<p[39m
+    [33mclass[39m=[32m"mt-1 text-[13px] font-semibold leading-tight 
+text-slate-900"[39m
+  [36m/>[39m
+
+  Name "":
+  [36m<p[39m
+    [33mclass[39m=[32m"text-[9.5px] font-semibold uppercase tracking-wide 
+text-slate-400"[39m
+  [36m/>[39m
+
+  Name "":
+  [36m<p[39m
+    [33mclass[39m=[32m"mt-1 text-[13px] font-semibold leading-tight 
+text-pink-700"[39m
+  [36m/>[39m
+
+  Name "":
+  [36m<p[39m
+    [33mclass[39m=[32m"font-serif text-2xl font-normal leading-none 
+tracking-tight text-slate-900"[39m
+  [36m/>[39m
+
+  Name "":
+  [36m<p[39m
+    [33mclass[39m=[32m"mt-0.5 text-[11px] text-slate-400"[39m
+  [36m/>[39m
+
+  Name "":
+  [36m<p[39m
+    [33mclass[39m=[32m"mt-1 text-[11px] font-black uppercase tracking-wide 
+text-slate-500"[39m
+  [36m/>[39m
+
+  Name "":
+  [36m<p[39m
+    [33mclass[39m=[32m"mb-2 text-[9.5px] font-semibold uppercase 
+tracking-wide text-slate-400"[39m
+  [36m/>[39m
+
+  Name "":
+  [36m<p[39m
+    [33mclass[39m=[32m"truncate text-sm font-semibold leading-tight 
+text-slate-900"[39m
+  [36m/>[39m
+
+  Name "":
+  [36m<p[39m
+    [33mclass[39m=[32m"mb-2 flex items-center gap-1.5 text-[9.5px] 
+font-semibold uppercase tracking-wide text-slate-400"[39m
+  [36m/>[39m
+
+  Name "":
+  [36m<p[39m
+    [33mclass[39m=[32m"text-[9.5px] font-semibold uppercase tracking-wide 
+text-slate-400"[39m
+  [36m/>[39m
+
+  Name "":
+  [36m<p[39m
+    [33mclass[39m=[32m"mt-1 text-[13px] font-semibold leading-tight 
+text-slate-900"[39m
+  [36m/>[39m
+
+  Name "":
+  [36m<p[39m
+    [33mclass[39m=[32m"text-[9.5px] font-semibold uppercase tracking-wide 
+text-slate-400"[39m
+  [36m/>[39m
+
+  Name "":
+  [36m<p[39m
+    [33mclass[39m=[32m"mt-1 text-[13px] font-semibold leading-tight 
+text-slate-900"[39m
+  [36m/>[39m
+
+  Name "":
+  [36m<p[39m
+    [33mclass[39m=[32m"text-[9.5px] font-semibold uppercase tracking-wide 
+text-slate-400"[39m
+  [36m/>[39m
+
+  Name "":
+  [36m<p[39m
+    [33mclass[39m=[32m"mt-1 text-[13px] font-semibold leading-tight 
+text-slate-900"[39m
+  [36m/>[39m
+
+  Name "":
+  [36m<p[39m
+    [33mclass[39m=[32m"text-[9.5px] font-semibold uppercase tracking-wide 
+text-slate-400"[39m
+  [36m/>[39m
+
+  Name "":
+  [36m<p[39m
+    [33mclass[39m=[32m"mt-1 text-[13px] font-semibold leading-tight 
+text-pink-700"[39m
+  [36m/>[39m
+
+  Name "":
+  [36m<p[39m
+    [33mclass[39m=[32m"font-serif text-2xl font-normal leading-none 
+tracking-tight text-slate-900"[39m
+  [36m/>[39m
+
+  Name "":
+  [36m<p[39m
+    [33mclass[39m=[32m"mt-0.5 text-[11px] text-slate-400"[39m
+  [36m/>[39m
+
+  Name "":
+  [36m<p[39m
+    [33mclass[39m=[32m"mt-1 text-[11px] font-black uppercase tracking-wide 
+text-slate-500"[39m
+  [36m/>[39m
+
+  Name "":
+  [36m<p[39m
+    [33mclass[39m=[32m"mb-2 text-[9.5px] font-semibold uppercase 
+tracking-wide text-slate-400"[39m
+  [36m/>[39m
+
+  Name "":
+  [36m<p[39m
+    [33mclass[39m=[32m"truncate text-sm font-semibold leading-tight 
+text-slate-900"[39m
+  [36m/>[39m
+
+  Name "":
+  [36m<p[39m
+    [33mclass[39m=[32m"mb-2 flex items-center gap-1.5 text-[9.5px] 
+font-semibold uppercase tracking-wide text-slate-400"[39m
+  [36m/>[39m
+
+  Name "":
+  [36m<p[39m
+    [33mclass[39m=[32m"text-[9.5px] font-semibold uppercase tracking-wide 
+text-slate-400"[39m
+  [36m/>[39m
+
+  Name "":
+  [36m<p[39m
+    [33mclass[39m=[32m"mt-1 text-[13px] font-semibold leading-tight 
+text-slate-900"[39m
+  [36m/>[39m
+
+  Name "":
+  [36m<p[39m
+    [33mclass[39m=[32m"text-[9.5px] font-semibold uppercase tracking-wide 
+text-slate-400"[39m
+  [36m/>[39m
+
+  Name "":
+  [36m<p[39m
+    [33mclass[39m=[32m"mt-1 text-[13px] font-semibold leading-tight 
+text-slate-900"[39m
+  [36m/>[39m
+
+  Name "":
+  [36m<p[39m
+    [33mclass[39m=[32m"text-[9.5px] font-semibold uppercase tracking-wide 
+text-slate-400"[39m
+  [36m/>[39m
+
+  Name "":
+  [36m<p[39m
+    [33mclass[39m=[32m"mt-1 text-[13px] font-semibold leading-tight 
+text-slate-900"[39m
+  [36m/>[39m
+
+  Name "":
+  [36m<p[39m
+    [33mclass[39m=[32m"text-[9.5px] font-semibold uppercase tracking-wide 
+text-slate-400"[39m
+  [36m/>[39m
+
+  Name "":
+  [36m<p[39m
+    [33mclass[39m=[32m"mt-1 text-[13px] font-semibold leading-tight 
+text-pink-700"[39m
+  [36m/>[39m
+
+  Name "":
+  [36m<p[39m
+    [33mclass[39m=[32m"mb-3 text-xs text-slate-500"[39m
+  [36m/>[39m
+
+  Name "":
+  [36m<p[39m
+    [33mclass[39m=[32m"text-[10px] font-black uppercase tracking-[0.22em] 
+text-emerald-700"[39m
+  [36m/>[39m
+
+  Name "":
+  [36m<p[39m
+    [33mclass[39m=[32m"mt-2 font-mono text-sm font-black 
+text-emerald-900"[39m
+  [36m/>[39m
+
+  Name "":
+  [36m<p[39m
+    [33mclass[39m=[32m"mt-2 text-xs text-emerald-800"[39m
+  [36m/>[39m
+
+  Name "":
+  [36m<p[39m
+    [33mclass[39m=[32m"text-xs font-medium text-slate-500"[39m
+  [36m/>[39m
+
+  Name "":
+  [36m<p[39m
+    [33mclass[39m=[32m"min-w-full text-[11px] font-medium text-slate-500 
+sm:min-w-0 sm:flex-1"[39m
+  [36m/>[39m
+
+  Name "":
+  [36m<p[39m
+    [33mclass[39m=[32m"text-[10px] font-black uppercase tracking-[0.22em] 
+text-slate-500"[39m
+  [36m/>[39m
+
+  Name "":
+  [36m<p[39m
+    [33mclass[39m=[32m"text-xs font-bold uppercase tracking-wide 
+text-slate-500"[39m
+  [36m/>[39m
+
+  Name "":
+  [36m<p[39m
+    [33mclass[39m=[32m"mt-2 text-sm font-black text-slate-900"[39m
+  [36m/>[39m
+
+  Name "":
+  [36m<p[39m
+    [33mclass[39m=[32m"mt-2 text-sm text-slate-500"[39m
+  [36m/>[39m
+
+  Name "":
+  [36m<p[39m
+    [33mclass[39m=[32m"text-xs font-bold uppercase tracking-wide 
+text-slate-500"[39m
+  [36m/>[39m
+
+  Name "":
+  [36m<p[39m
+    [33mclass[39m=[32m"text-[9.5px] font-semibold uppercase tracking-wide 
+text-slate-400"[39m
+  [36m/>[39m
+
+  Name "":
+  [36m<p[39m
+    [33mclass[39m=[32m"mt-1 text-[13px] font-semibold leading-tight 
+text-slate-900"[39m
+  [36m/>[39m
+
+  Name "":
+  [36m<p[39m
+    [33mclass[39m=[32m"text-[9.5px] font-semibold uppercase tracking-wide 
+text-slate-400"[39m
+  [36m/>[39m
+
+  Name "":
+  [36m<p[39m
+    [33mclass[39m=[32m"mt-1 text-[13px] font-semibold leading-tight 
+text-slate-900"[39m
+  [36m/>[39m
+
+  Name "":
+  [36m<p[39m
+    [33mclass[39m=[32m"text-[9.5px] font-semibold uppercase tracking-wide 
+text-slate-400"[39m
+  [36m/>[39m
+
+  Name "":
+  [36m<p[39m
+    [33mclass[39m=[32m"mt-1 text-[13px] font-semibold leading-tight 
+text-pink-700"[39m
+  [36m/>[39m
+
+  Name "":
+  [36m<p[39m
+    [33mclass[39m=[32m"text-[9.5px] font-semibold uppercase tracking-wide 
+text-slate-400"[39m
+  [36m/>[39m
+
+  Name "":
+  [36m<p[39m
+    [33mclass[39m=[32m"mt-1 text-[13px] font-semibold leading-tight 
+text-slate-900"[39m
+  [36m/>[39m
+
+  Name "":
+  [36m<p[39m
+    [33mclass[39m=[32m"truncate text-sm font-black text-slate-900"[39m
+  [36m/>[39m
+
+  Name "":
+  [36m<p[39m
+    [33mclass[39m=[32m"text-[11px] text-slate-500"[39m
+  [36m/>[39m
+
+  Name "":
+  [36m<p[39m
+    [33mclass[39m=[32m"truncate text-sm font-black text-slate-900"[39m
+  [36m/>[39m
+
+  Name "":
+  [36m<p[39m
+    [33mclass[39m=[32m"text-[11px] text-slate-500"[39m
+  [36m/>[39m
+
+  Name "":
+  [36m<p[39m
+    [33mclass[39m=[32m"truncate text-sm font-black text-slate-900"[39m
+  [36m/>[39m
+
+  Name "":
+  [36m<p[39m
+    [33mclass[39m=[32m"text-[11px] text-slate-500"[39m
+  [36m/>[39m
+
+  Name "":
+  [36m<p[39m
+    [33mclass[39m=[32m"text-sm text-slate-600"[39m
+  [36m/>[39m
+
+  Name "":
+  [36m<p[39m
+    [33mclass[39m=[32m"mt-3 text-xs font-medium text-slate-500"[39m
+  [36m/>[39m
+
+  --------------------------------------------------
+  heading:
+
+  Name "Buenas tardes, Andrea L├│pez":
+  [36m<h1[39m
+    [33mclass[39m=[32m"mt-2 text-3xl font-black tracking-tight 
+md:text-4xl"[39m
+  [36m/>[39m
+
+  Name "jueves, 16 de abril":
+  [36m<h2[39m
+    [33mclass[39m=[32m"mt-2 text-2xl font-black capitalize 
+text-slate-900"[39m
+  [36m/>[39m
+
+  Name "Link de reservas del sal├│n":
+  [36m<h2[39m
+    [33mclass[39m=[32m"text-sm font-black uppercase tracking-wide 
+text-slate-700"[39m
+  [36m/>[39m
+
+  Name "jueves, 16 de abril":
+  [36m<h2[39m
+    [33mclass[39m=[32m"mt-2 text-xl font-black capitalize 
+text-slate-900"[39m
+  [36m/>[39m
+
+  Name "Alertas del sal├│n":
+  [36m<h2[39m
+    [33mclass[39m=[32m"text-sm font-black uppercase tracking-wide 
+text-slate-700"[39m
+  [36m/>[39m
+
+  --------------------------------------------------
+  button:
+
+  Name "Hoy 1 Abre el detalle del d├¡a con tabla, filtros y ordenaci├│n ├║til 
+para operar mejor.":
+  [36m<button[39m
+    [33mclass[39m=[32m"rounded-[1.75rem] border border-white/10 bg-white/10 
+p-4 text-left backdrop-blur-sm transition hover:border-pink-200/30 
+hover:bg-white/15"[39m
+    [33mtype[39m=[32m"button"[39m
+  [36m/>[39m
+
+  Name "Semana 1 Consulta tu semana en una vista elegante con cliente, 
+servicio, valor y estado.":
+  [36m<button[39m
+    [33mclass[39m=[32m"rounded-[1.75rem] border border-white/10 bg-white/10 
+p-4 text-left backdrop-blur-sm transition hover:border-pink-200/30 
+hover:bg-white/15"[39m
+    [33mtype[39m=[32m"button"[39m
+  [36m/>[39m
+
+  Name "Mes 1 Revisa tu volumen mensual y ord├®nalo en ascendente o 
+descendente dentro del modal.":
+  [36m<button[39m
+    [33mclass[39m=[32m"rounded-[1.75rem] border border-white/10 bg-white/10 
+p-4 text-left backdrop-blur-sm transition hover:border-pink-200/30 
+hover:bg-white/15"[39m
+    [33mtype[39m=[32m"button"[39m
+  [36m/>[39m
+
+  Name "Agenda del d├¡a":
+  [36m<button[39m
+    [33mclass[39m=[32m"rounded-xl px-3 py-2 text-xs font-black transition 
+bg-white text-slate-900 shadow-sm disabled:cursor-not-allowed 
+disabled:opacity-40"[39m
+    [33mtype[39m=[32m"button"[39m
+  [36m/>[39m
+
+  Name "Historial":
+  [36m<button[39m
+    [33mclass[39m=[32m"rounded-xl px-3 py-2 text-xs font-black transition 
+text-slate-500 hover:text-slate-700"[39m
+    [33mtype[39m=[32m"button"[39m
+  [36m/>[39m
+
+  Name "Crear cita manual":
+  [36m<button[39m
+    [33mclass[39m=[32m"inline-flex items-center gap-2 rounded-2xl 
+bg-pink-600 px-4 py-2 text-xs font-black text-white transition 
+hover:bg-pink-700"[39m
+    [33mtype[39m=[32m"button"[39m
+  [36m/>[39m
+
+  Name "Detalle":
+  [36m<button[39m
+    [33mclass[39m=[32m"inline-flex items-center justify-center gap-2 
+rounded-xl border border-slate-200 bg-white px-3 py-2 text-[10px] 
+font-semibold uppercase tracking-wide text-slate-700 transition-colors 
+hover:bg-slate-100"[39m
+    [33mtype[39m=[32m"button"[39m
+  [36m/>[39m
+
+  Name "Extra":
+  [36m<button[39m
+    [33mclass[39m=[32m"inline-flex items-center justify-center gap-2 
+rounded-xl border border-blue-200 bg-blue-50 px-3 py-2 text-[10px] 
+font-semibold uppercase tracking-wide text-blue-700 transition-colors 
+hover:bg-blue-100"[39m
+    [33mtype[39m=[32m"button"[39m
+  [36m/>[39m
+
+  Name "Iniciar":
+  [36m<button[39m
+    [33mclass[39m=[32m"inline-flex items-center justify-center rounded-xl 
+border border-sky-200 bg-sky-50 px-3 py-2 text-[10px] font-semibold uppercase 
+tracking-wide text-sky-800 transition-colors hover:bg-sky-100 
+disabled:opacity-60"[39m
+    [33mtype[39m=[32m"button"[39m
+  [36m/>[39m
+
+  Name "No show":
+  [36m<button[39m
+    [33mclass[39m=[32m"inline-flex items-center justify-center rounded-xl 
+border border-orange-200 bg-orange-50 px-3 py-2 text-[10px] font-semibold 
+uppercase tracking-wide text-orange-700 transition-colors hover:bg-orange-100 
+disabled:opacity-60"[39m
+    [33mtype[39m=[32m"button"[39m
+  [36m/>[39m
+
+  Name "Detalle":
+  [36m<button[39m
+    [33mclass[39m=[32m"inline-flex items-center justify-center gap-2 
+rounded-xl border border-slate-200 bg-white px-3 py-2 text-[10px] 
+font-semibold uppercase tracking-wide text-slate-700 transition-colors 
+hover:bg-slate-100"[39m
+    [33mtype[39m=[32m"button"[39m
+  [36m/>[39m
+
+  Name "Extra":
+  [36m<button[39m
+    [33mclass[39m=[32m"inline-flex items-center justify-center gap-2 
+rounded-xl border border-blue-200 bg-blue-50 px-3 py-2 text-[10px] 
+font-semibold uppercase tracking-wide text-blue-700 transition-colors 
+hover:bg-blue-100"[39m
+    [33mtype[39m=[32m"button"[39m
+  [36m/>[39m
+
+  Name "Iniciar":
+  [36m<button[39m
+    [33mclass[39m=[32m"inline-flex items-center justify-center rounded-xl 
+border border-sky-200 bg-sky-50 px-3 py-2 text-[10px] font-semibold uppercase 
+tracking-wide text-sky-800 transition-colors hover:bg-sky-100 
+disabled:opacity-60"[39m
+    [33mtype[39m=[32m"button"[39m
+  [36m/>[39m
+
+  Name "No show":
+  [36m<button[39m
+    [33mclass[39m=[32m"inline-flex items-center justify-center rounded-xl 
+border border-orange-200 bg-orange-50 px-3 py-2 text-[10px] font-semibold 
+uppercase tracking-wide text-orange-700 transition-colors hover:bg-orange-100 
+disabled:opacity-60"[39m
+    [33mtype[39m=[32m"button"[39m
+  [36m/>[39m
+
+  Name "Detalle":
+  [36m<button[39m
+    [33mclass[39m=[32m"inline-flex items-center justify-center gap-2 
+rounded-xl border border-slate-200 bg-white px-3 py-2 text-[10px] 
+font-semibold uppercase tracking-wide text-slate-700 transition-colors 
+hover:bg-slate-100"[39m
+    [33mtype[39m=[32m"button"[39m
+  [36m/>[39m
+
+  Name "Extra":
+  [36m<button[39m
+    [33mclass[39m=[32m"inline-flex items-center justify-center gap-2 
+rounded-xl border border-blue-200 bg-blue-50 px-3 py-2 text-[10px] 
+font-semibold uppercase tracking-wide text-blue-700 transition-colors 
+hover:bg-blue-100"[39m
+    [33mtype[39m=[32m"button"[39m
+  [36m/>[39m
+
+  Name "Iniciar":
+  [36m<button[39m
+    [33mclass[39m=[32m"inline-flex items-center justify-center rounded-xl 
+border border-sky-200 bg-sky-50 px-3 py-2 text-[10px] font-semibold uppercase 
+tracking-wide text-sky-800 transition-colors hover:bg-sky-100 
+disabled:opacity-60"[39m
+    [33mtype[39m=[32m"button"[39m
+  [36m/>[39m
+
+  Name "No show":
+  [36m<button[39m
+    [33mclass[39m=[32m"inline-flex items-center justify-center rounded-xl 
+border border-orange-200 bg-orange-50 px-3 py-2 text-[10px] font-semibold 
+uppercase tracking-wide text-orange-700 transition-colors hover:bg-orange-100 
+disabled:opacity-60"[39m
+    [33mtype[39m=[32m"button"[39m
+  [36m/>[39m
+
+  Name "Detalle":
+  [36m<button[39m
+    [33mclass[39m=[32m"inline-flex items-center justify-center gap-2 
+rounded-xl border border-slate-200 bg-white px-3 py-2 text-[10px] 
+font-semibold uppercase tracking-wide text-slate-700 transition-colors 
+hover:bg-slate-100"[39m
+    [33mtype[39m=[32m"button"[39m
+  [36m/>[39m
+
+  Name "Extra":
+  [36m<button[39m
+    [33mclass[39m=[32m"inline-flex items-center justify-center gap-2 
+rounded-xl border border-blue-200 bg-blue-50 px-3 py-2 text-[10px] 
+font-semibold uppercase tracking-wide text-blue-700 transition-colors 
+hover:bg-blue-100"[39m
+    [33mtype[39m=[32m"button"[39m
+  [36m/>[39m
+
+  Name "Iniciar":
+  [36m<button[39m
+    [33mclass[39m=[32m"inline-flex items-center justify-center rounded-xl 
+border border-sky-200 bg-sky-50 px-3 py-2 text-[10px] font-semibold uppercase 
+tracking-wide text-sky-800 transition-colors hover:bg-sky-100 
+disabled:opacity-60"[39m
+    [33mtype[39m=[32m"button"[39m
+  [36m/>[39m
+
+  Name "No show":
+  [36m<button[39m
+    [33mclass[39m=[32m"inline-flex items-center justify-center rounded-xl 
+border border-orange-200 bg-orange-50 px-3 py-2 text-[10px] font-semibold 
+uppercase tracking-wide text-orange-700 transition-colors hover:bg-orange-100 
+disabled:opacity-60"[39m
+    [33mtype[39m=[32m"button"[39m
+  [36m/>[39m
+
+  Name "Anterior":
+  [36m<button[39m
+    [33mclass[39m=[32m"rounded-xl bg-white px-3 py-2 text-xs font-black 
+text-slate-700 shadow-sm transition hover:bg-slate-100 
+disabled:opacity-40"[39m
+    [33mdisabled[39m=[32m""[39m
+    [33mtype[39m=[32m"button"[39m
+  [36m/>[39m
+
+  Name "Siguiente":
+  [36m<button[39m
+    [33mclass[39m=[32m"rounded-xl bg-white px-3 py-2 text-xs font-black 
+text-slate-700 shadow-sm transition hover:bg-slate-100 
+disabled:opacity-40"[39m
+    [33mtype[39m=[32m"button"[39m
+  [36m/>[39m
+
+  Name "Copiar clave":
+  [36m<button[39m
+    [33mclass[39m=[32m"inline-flex items-center gap-2 rounded-2xl border 
+border-emerald-200 bg-white px-3 py-2 text-xs font-black text-emerald-700 
+transition hover:bg-emerald-100"[39m
+    [33mtype[39m=[32m"button"[39m
+  [36m/>[39m
+
+  Name "Copiar enlace de reservas":
+  [36m<button[39m
+    [33maria-label[39m=[32m"Copiar enlace de reservas"[39m
+    [33mclass[39m=[32m"inline-flex h-10 w-10 items-center justify-center 
+rounded-2xl border transition-colors disabled:cursor-not-allowed 
+disabled:opacity-50 border-slate-200 bg-white text-slate-500 
+hover:border-slate-300 hover:bg-slate-50 hover:text-slate-700"[39m
+    [33mtype[39m=[32m"button"[39m
+  [36m/>[39m
+
+  Name "Abrir link de reservas":
+  [36m<button[39m
+    [33maria-label[39m=[32m"Abrir link de reservas"[39m
+    [33mclass[39m=[32m"inline-flex h-10 w-10 items-center justify-center 
+rounded-2xl border transition-colors disabled:cursor-not-allowed 
+disabled:opacity-50 border-slate-200 bg-white text-slate-500 
+hover:border-slate-300 hover:bg-slate-50 hover:text-slate-700"[39m
+    [33mtype[39m=[32m"button"[39m
+  [36m/>[39m
+
+  Name "Enviar link por WhatsApp":
+  [36m<button[39m
+    [33maria-label[39m=[32m"Enviar link por WhatsApp"[39m
+    [33mclass[39m=[32m"inline-flex h-10 w-10 items-center justify-center 
+rounded-2xl border transition-colors disabled:cursor-not-allowed 
+disabled:opacity-50 border-emerald-200 bg-emerald-50 text-emerald-700 
+hover:border-emerald-300 hover:bg-emerald-100"[39m
+    [33mtype[39m=[32m"button"[39m
+  [36m/>[39m
+
+  Name "Descargar c├│digo QR":
+  [36m<button[39m
+    [33maria-label[39m=[32m"Descargar c├│digo QR"[39m
+    [33mclass[39m=[32m"inline-flex h-10 w-10 items-center justify-center 
+rounded-2xl border transition-colors disabled:cursor-not-allowed 
+disabled:opacity-50 border-slate-200 bg-white text-slate-500 
+hover:border-slate-300 hover:bg-slate-50 hover:text-slate-700 bg-slate-900 
+text-white hover:border-slate-900 hover:bg-black hover:text-white"[39m
+    [33mtype[39m=[32m"button"[39m
+  [36m/>[39m
+
+  --------------------------------------------------
+  textbox:
+
+  Name "":
+  [36m<input[39m
+    [33mclass[39m=[32m"w-full rounded-2xl border border-slate-200 py-3 
+pl-10 pr-4 text-sm font-medium text-slate-700 outline-none transition 
+focus:border-pink-300 focus:ring-2 focus:ring-pink-200"[39m
+    [33mplaceholder[39m=[32m"Buscar por cliente, tel├®fono o servicio"[39m
+    [33mtype[39m=[32m"text"[39m
+    [33mvalue[39m=[32m""[39m
+  [36m/>[39m
+
+  --------------------------------------------------
+  combobox:
+
+  Name "":
+  [36m<select[39m
+    [33mclass[39m=[32m"w-full rounded-2xl border border-slate-200 px-4 py-3 
+text-sm font-medium text-slate-700 outline-none transition 
+focus:border-pink-300 focus:ring-2 focus:ring-pink-200"[39m
+  [36m/>[39m
+
+  Name "":
+  [36m<select[39m
+    [33mclass[39m=[32m"w-full rounded-2xl border border-slate-200 px-4 py-3 
+text-sm font-medium text-slate-700 outline-none transition 
+focus:border-pink-300 focus:ring-2 focus:ring-pink-200"[39m
+  [36m/>[39m
+
+  Name "":
+  [36m<select[39m
+    [33mclass[39m=[32m"w-full rounded-2xl border border-slate-200 px-4 py-3 
+text-sm font-medium text-slate-700 outline-none transition 
+focus:border-pink-300 focus:ring-2 focus:ring-pink-200"[39m
+  [36m/>[39m
+
+  --------------------------------------------------
+  option:
+
+  Name "Todos los estados":
+  [36m<option[39m
+    [33mvalue[39m=[32m"todos"[39m
+  [36m/>[39m
+
+  Name "Confirmadas":
+  [36m<option[39m
+    [33mvalue[39m=[32m"confirmed"[39m
+  [36m/>[39m
+
+  Name "En proceso":
+  [36m<option[39m
+    [33mvalue[39m=[32m"working"[39m
+  [36m/>[39m
+
+  Name "Finalizadas":
+  [36m<option[39m
+    [33mvalue[39m=[32m"completed"[39m
+  [36m/>[39m
+
+  Name "Canceladas":
+  [36m<option[39m
+    [33mvalue[39m=[32m"cancelled"[39m
+  [36m/>[39m
+
+  Name "No asisti├│":
+  [36m<option[39m
+    [33mvalue[39m=[32m"no_show"[39m
+  [36m/>[39m
+
+  Name "Todos los servicios":
+  [36m<option[39m
+    [33mvalue[39m=[32m"todos"[39m
+  [36m/>[39m
+
+  Name "Balayage":
+  [36m<option[39m
+    [33mvalue[39m=[32m"Balayage"[39m
+  [36m/>[39m
+
+  Name "Orden: ascendente":
+  [36m<option[39m
+    [33mvalue[39m=[32m"tempranas"[39m
+  [36m/>[39m
+
+  Name "Orden: descendente":
+  [36m<option[39m
+    [33mvalue[39m=[32m"tardias"[39m
+  [36m/>[39m
+
+  --------------------------------------------------
+  article:
+
+  Name "":
+  [36m<article[39m
+    [33mclass[39m=[32m"overflow-hidden rounded-2xl border transition-all 
+border-slate-100 bg-white hover:border-pink-200 hover:shadow-sm"[39m
+  [36m/>[39m
+
+  Name "":
+  [36m<article[39m
+    [33mclass[39m=[32m"overflow-hidden rounded-2xl border transition-all 
+border-slate-100 bg-white hover:border-pink-200 hover:shadow-sm"[39m
+  [36m/>[39m
+
+  Name "":
+  [36m<article[39m
+    [33mclass[39m=[32m"overflow-hidden rounded-2xl border transition-all 
+border-slate-100 bg-white hover:border-pink-200 hover:shadow-sm"[39m
+  [36m/>[39m
+
+  Name "":
+  [36m<article[39m
+    [33mclass[39m=[32m"overflow-hidden rounded-2xl border transition-all 
+border-slate-100 bg-white hover:border-pink-200 hover:shadow-sm"[39m
+  [36m/>[39m
+
+  --------------------------------------------------
+  link:
+
+  Name "5511223344":
+  [36m<a[39m
+    [33mclass[39m=[32m"flex items-center gap-1.5 text-[11.5px] font-medium 
+text-slate-500 transition hover:text-pink-600 sm:justify-end"[39m
+    [33mhref[39m=[32m"tel:5511223344"[39m
+  [36m/>[39m
+
+  Name "5511223344":
+  [36m<a[39m
+    [33mclass[39m=[32m"flex items-center gap-1.5 text-[11.5px] font-medium 
+text-slate-500 transition hover:text-pink-600 sm:justify-end"[39m
+    [33mhref[39m=[32m"tel:5511223344"[39m
+  [36m/>[39m
+
+  Name "5511223344":
+  [36m<a[39m
+    [33mclass[39m=[32m"flex items-center gap-1.5 text-[11.5px] font-medium 
+text-slate-500 transition hover:text-pink-600 sm:justify-end"[39m
+    [33mhref[39m=[32m"tel:5511223344"[39m
+  [36m/>[39m
+
+  Name "5511223344":
+  [36m<a[39m
+    [33mclass[39m=[32m"flex items-center gap-1.5 text-[11.5px] font-medium 
+text-slate-500 transition hover:text-pink-600 sm:justify-end"[39m
+    [33mhref[39m=[32m"tel:5511223344"[39m
+  [36m/>[39m
+
+  --------------------------------------------------
+  complementary:
+
+  Name "":
+  [36m<aside[39m
+    [33mclass[39m=[32m"space-y-4"[39m
+  [36m/>[39m
+
+  --------------------------------------------------
+  img:
+
+  Name "QR del enlace de reservas del sal├│n":
+  [36m<img[39m
+    [33malt[39m=[32m"QR del enlace de reservas del sal├│n"[39m
+    [33mclass[39m=[32m"h-20 w-20 rounded-2xl bg-white p-2"[39m
+    [33msrc[39m=[32m"data:image/png;base64,qr"[39m
+  [36m/>[39m
+
+  --------------------------------------------------
+
+Ignored nodes: comments, script, style
+[36m<body>[39m
+  [36m<div>[39m
+    [36m<div[39m
+      [33mclass[39m=[32m"min-h-screen bg-slate-50 pb-20 md:pb-0"[39m
+    [36m>[39m
+      [36m<div>[39m
+        [0mnavegacion empleado[0m
+      [36m</div>[39m
+      [36m<main[39m
+        [33mclass[39m=[32m"mx-auto max-w-6xl space-y-6 px-4 py-6"[39m
+      [36m>[39m
+        [36m<section[39m
+          [33mclass[39m=[32m"overflow-hidden rounded-[2.75rem] 
+bg-linear-to-br from-slate-950 via-slate-900 to-pink-700 text-white 
+shadow-xl"[39m
+        [36m>[39m
+          [36m<div[39m
+            [33mclass[39m=[32m"grid gap-6 p-6 md:p-8 
+lg:grid-cols-[minmax(0,1fr)_280px] lg:items-end"[39m
+          [36m>[39m
+            [36m<div>[39m
+              [36m<p[39m
+                [33mclass[39m=[32m"text-xs font-black uppercase 
+tracking-[0.28em] text-pink-200"[39m
+              [36m>[39m
+                [0mPanel del empleado[0m
+              [36m</p>[39m
+              [36m<h1[39m
+                [33mclass[39m=[32m"mt-2 text-3xl font-black tracking-tight 
+md:text-4xl"[39m
+              [36m>[39m
+                [0mBuenas tardes[0m
+                [0m, [0m
+                [0mAndrea L├│pez[0m
+              [36m</h1>[39m
+              [36m<p[39m
+                [33mclass[39m=[32m"mt-3 max-w-2xl text-sm font-medium 
+text-slate-200 md:text-base"[39m
+              [36m>[39m
+                [0mRevisa tu agenda activa, consulta historial por d├¡a, 
+semana o mes, crea citas manuales cuando el sal├│n lo permita y mant├®n el 
+flujo operativo con estados claros.[0m
+              [36m</p>[39m
+            [36m</div>[39m
+            [36m<div[39m
+              [33mclass[39m=[32m"rounded-4xl border border-white/15 
+bg-white/10 p-5 backdrop-blur-sm"[39m
+            [36m>[39m
+              [36m<p[39m
+                [33mclass[39m=[32m"text-[10px] font-black uppercase 
+tracking-[0.24em] text-pink-100"[39m
+              [36m>[39m
+                [0mJornada actual[0m
+              [36m</p>[39m
+              [36m<p[39m
+                [33mclass[39m=[32m"mt-3 text-2xl font-black text-white"[39m
+              [36m>[39m
+                [0m09:00[0m
+                [0m - [0m
+                [0m18:00[0m
+              [36m</p>[39m
+              [36m<p[39m
+                [33mclass[39m=[32m"mt-2 text-sm text-slate-200"[39m
+              [36m>[39m
+                [0mSal├│n Norte[0m
+              [36m</p>[39m
+              [36m<div[39m
+                [33mclass[39m=[32m"mt-3 space-y-2 text-xs font-bold 
+uppercase tracking-wide text-pink-100"[39m
+              [36m>[39m
+                [36m<p>[39m
+                  [0mSin servicio en proceso ahora[0m
+                [36m</p>[39m
+                [36m<p>[39m
+                  [0mHistorial visible desde [0m
+                  [0m9 de abril de 2026[0m
+                [36m</p>[39m
+              [36m</div>[39m
+            [36m</div>[39m
+          [36m</div>[39m
+          [36m<div[39m
+            [33mclass[39m=[32m"grid gap-3 border-t border-white/10 
+bg-slate-950/30 p-4 md:grid-cols-3 md:p-6"[39m
+          [36m>[39m
+            [36m<button[39m
+              [33mclass[39m=[32m"rounded-[1.75rem] border border-white/10 
+bg-white/10 p-4 text-left backdrop-blur-sm transition hover:border-pink-200/30 
+hover:bg-white/15"[39m
+              [33mtype[39m=[32m"button"[39m
+            [36m>[39m
+              [36m<div[39m
+                [33mclass[39m=[32m"flex items-center gap-3"[39m
+              [36m>[39m
+                [36m<div[39m
+                  [33mclass[39m=[32m"flex h-11 w-11 items-center 
+justify-center rounded-2xl bg-white/10"[39m
+                [36m>[39m
+                  [36m<svg[39m
+                    [33maria-hidden[39m=[32m"true"[39m
+                    [33mclass[39m=[32m"lucide lucide-calendar-days h-5 w-5 
+text-pink-100"[39m
+                    [33mfill[39m=[32m"none"[39m
+                    [33mheight[39m=[32m"24"[39m
+                    [33mstroke[39m=[32m"currentColor"[39m
+                    [33mstroke-linecap[39m=[32m"round"[39m
+                    [33mstroke-linejoin[39m=[32m"round"[39m
+                    [33mstroke-width[39m=[32m"2"[39m
+                    [33mviewBox[39m=[32m"0 0 24 24"[39m
+                    [33mwidth[39m=[32m"24"[39m
+                    [33mxmlns[39m=[32m"http://www.w3.org/2000/svg"[39m
+                  [36m>[39m
+                    [36m<path[39m
+                      [33md[39m=[32m"M8 2v4"[39m
+                    [36m/>[39m
+
+[2m Test Files [22m [1m[31m1 failed[39m[22m[90m (1)[39m
+[2m      Tests [22m [1m[31m1 failed[39m[22m[2m | [22m[1m[32m3 passed[39m[22m[90m (4)[39m
+[2m   Start at [22m 18:34:22
+[2m   Duration [22m 6.77s[2m (transform 431ms, setup 209ms, import 635ms, tests 5.00s, environment 752ms)[22m
+
+                    [36m<path[39m
+                      [33md[39m=[32m"M16 2v4"[39m
+                    [36m/>[39m
+                    [36m<rect[39m
+                      [33mheight[39m=[32m"18"[39m
+                      [33mrx[39m=[32m"2"[39m
+                      [33mwidth[39m=[32m"18"[39m
+                      [33mx[39m=[32m"3"[39m
+                      [33my[39m=[32m"4"[39m
+                    [36m/>[39m
+                    [36m<path[39m
+                      [33md[39m=[32m"M3 10h18"[39m
+                    [36m/>[39m
+                    [36m<path[39m
+                      [33md[39m=[32m"M8 14h.01"[39m
+                    [36m/>[39m
+                    [36m<path[39m
+                      [33md[39m=[32m"M12 14h.01"[39m
+                    [36m/>[39m
+                    [36m<path[39m
+                      [33md[39m=[32m"M16 14h.01"[39m
+                    [36m/>[39m
+                    [36m<path[39m
+                      [33md[39m=[32m"M8 18h.01"[39m
+                    [36m/>[39m
+                    [36m<path[39m
+                      [33md[39m=[32m"M12 18h.01"[39m
+                    [36m/>[39m
+                    [36m<path[39m
+                      [33md[39m=[32m"M16 18h.01"[39m
+                    [36m/>[39m
+                  [36m</svg>[39m
+                [36m</div>[39m
+                [36m<div>[39m
+                  [36m<p[39m
+                    [33mclass[39m=[32m"text-[10px] font-black uppercase 
+tracking-[0.22em] text-pink-100"[39m
+                  [36m>[39m
+                    [0mHoy[0m
+                  [36m</p>[39m
+                  [36m<p[39m
+                    [33mclass[39m=[32m"text-2xl font-black text-white"[39m
+                  [36m>[39m
+                    [0m1[0m
+                  [36m</p>[39m
+                [36m</div>[39m
+              [36m</div>[39m
+              [36m<p[39m
+                [33mclass[39m=[32m"mt-3 text-xs font-medium 
+text-slate-200"[39m
+              [36m>[39m
+                [0mAbre el detalle del d├¡a con tabla, filtros y ordenaci├│n 
+├║til para operar mejor.[0m
+              [36m</p>[39m
+            [36m</button>[39m
+            [36m<button[39m
+              [33mclass[39m=[32m"rounded-[1.75rem] border border-white/10 
+bg-white/10 p-4 text-left backdrop-blur-sm tr...
+[90m [2mÔØ»[22m Object.getElementError 
+node_modules/@testing-library/dom/dist/config.js:[2m37:19[22m[39m
+[90m [2mÔØ»[22m 
+node_modules/@testing-library/dom/dist/query-helpers.js:[2m76:38[22m[39m
+[90m [2mÔØ»[22m 
+node_modules/@testing-library/dom/dist/query-helpers.js:[2m52:17[22m[39m
+[90m [2mÔØ»[22m 
+node_modules/@testing-library/dom/dist/query-helpers.js:[2m95:19[22m[39m
+[36m [2mÔØ»[22m 
+src/caracteristicas/empleado/PaginaAgendaEmpleado.test.tsx:[2m269:28[22m[39m
+    [90m267| [39m    
+[34mexpect[39m(screen[33m.[39m[34mqueryByText[39m([32m'Cliente 
+5'[39m))[33m.[39mnot[33m.[39m[34mtoBeInTheDocument[39m()[33m;[39m
+    [90m268| [39m
+    [90m269| [39m    fireEvent.click(screen.getByRole('button', { name: 
+'Siguiente p├ígiÔÇª
+    [90m   | [39m                           [31m^[39m
+    [90m270| [39m
+    [90m271| [39m    expect(await screen.findByText('Mostrando 5-5 de 5 
+cita(s).')).toBÔÇª
+
+[31m[2mÔÄ»ÔÄ»ÔÄ»ÔÄ»ÔÄ»ÔÄ»ÔÄ»ÔÄ»ÔÄ»ÔÄ»ÔÄ»ÔÄ»ÔÄ»ÔÄ»ÔÄ»ÔÄ»ÔÄ»ÔÄ»ÔÄ»ÔÄ»ÔÄ»ÔÄ»ÔÄ»Ô
+Ä»[1/1]ÔÄ»[22m[39m
+

@@ -1,6 +1,7 @@
 import type { FastifyRequest, FastifyReply } from 'fastify';
 import { prisma } from '../prismaCliente.js';
 import { env } from '../lib/env.js';
+import { tieneCookieRefresh } from '../lib/cookiesRefresh.js';
 import { obtenerErrorAccesoSalon, salonEstaDisponible } from '../lib/estadoSalon.js';
 import { obtenerSesionActiva } from '../lib/sesionesAuth.js';
 
@@ -218,7 +219,7 @@ export async function verificarJWTOpcional(
   respuesta: FastifyReply,
 ): Promise<void> {
   const cabeceraAuth = solicitud.headers.authorization;
-  const tieneRefreshCookie = Boolean(solicitud.cookies?.refresh_token);
+  const tieneRefreshCookie = tieneCookieRefresh(solicitud.cookies);
 
   if (!cabeceraAuth && !tieneRefreshCookie) {
     return;

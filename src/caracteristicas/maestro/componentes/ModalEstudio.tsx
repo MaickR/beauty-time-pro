@@ -17,7 +17,11 @@ import {
   Package,
   Trash2,
 } from 'lucide-react';
-import { CATALOGO_SERVICIOS, DIAS_SEMANA } from '../../../lib/constantes';
+import {
+  CATALOGO_SERVICIOS,
+  DIAS_SEMANA,
+  obtenerEtiquetaServicioCatalogo,
+} from '../../../lib/constantes';
 import { SelectorFecha } from '../../../componentes/ui/SelectorFecha';
 import { SelectorHora } from '../../../componentes/ui/SelectorHora';
 import { SeccionPersonalFormulario } from './SeccionPersonalFormulario';
@@ -835,7 +839,7 @@ export function ModalEstudio({
                             className={`text-left text-[10px] font-bold flex items-center gap-2 ${sel ? 'text-pink-700' : 'text-slate-500'}`}
                           >
                             <span>{sel ? '✓' : '○'}</span>
-                            <span>{s}</span>
+                            <span>{obtenerEtiquetaServicioCatalogo(s)}</span>
                           </button>
                           {sel && (
                             <div className="flex items-center gap-3">

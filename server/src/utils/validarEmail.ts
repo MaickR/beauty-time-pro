@@ -14,6 +14,14 @@ const DOMINIOS_PERMITIDOS = [
 	'yahoo.com.co',
 ];
 
+const DOMINIOS_CLIENTE_PERMITIDOS = [
+	'gmail.com',
+	'outlook.com',
+	'hotmail.com',
+	'icloud.com',
+	'yahoo.com',
+];
+
 const DOMINIOS_TEMPORALES_BLOQUEADOS = [
 	'mailinator.com',
 	'guerrillamail.com',
@@ -30,9 +38,19 @@ export function esDominioPermitido(email: string): boolean {
 	return dominio !== undefined && DOMINIOS_PERMITIDOS.includes(dominio);
 }
 
+export function esDominioClientePermitido(email: string): boolean {
+	const dominio = email.split('@')[1]?.toLowerCase();
+	return dominio !== undefined && DOMINIOS_CLIENTE_PERMITIDOS.includes(dominio);
+}
+
 export function esEmailValido(email: string): boolean {
 	const regex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 	return regex.test(email) && esDominioPermitido(email);
+}
+
+export function esEmailClienteValido(email: string): boolean {
+	const regex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+	return regex.test(email) && esDominioClientePermitido(email);
 }
 
 export function esEmailColaboradorValido(email: string): boolean {

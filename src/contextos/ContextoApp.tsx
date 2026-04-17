@@ -53,6 +53,22 @@ export function ProveedorContextoApp({ children }: PropsWithChildren) {
   }, [usuario, rol]);
 
   useEffect(() => {
+    if (!usuario || (rol !== 'dueno' && rol !== 'vendedor')) {
+      return;
+    }
+
+    const intervalo = window.setInterval(() => {
+      if (document.visibilityState === 'visible') {
+        setContador((valor) => valor + 1);
+      }
+    }, 20_000);
+
+    return () => {
+      window.clearInterval(intervalo);
+    };
+  }, [usuario, rol]);
+
+  useEffect(() => {
     if (rol === 'cliente') {
       setEstudios([]);
       setReservas([]);
@@ -116,6 +132,16 @@ export function ProveedorContextoApp({ children }: PropsWithChildren) {
           setReservas([]);
           setPagos([]);
           await cerrarSesion();
+          return;
+        }
+
+        const servidorTemporalmenteNoDisponible =
+          (error instanceof ErrorAPI &&
+            (error.estado === 503 || error.codigo === 'SERVIDOR_NO_DISPONIBLE')) ||
+          error instanceof TypeError;
+
+        if (servidorTemporalmenteNoDisponible) {
+          console.warn('Servidor temporalmente no disponible. Conservando los datos actuales.');
           return;
         }
 
@@ -237,6 +263,10 @@ function mapearReservas(datos: unknown[], estudiosMap: Map<string, Estudio>): Re
       colorBrand: (d['marcaTinte'] as string | null) ?? null,
       colorNumber: (d['tonalidad'] as string | null) ?? null,
       observaciones: (d['observaciones'] as string | null) ?? null,
+      paymentMethod: (d['metodoPago'] as string | null | undefined) ?? null,
+      cancellationReason: (d['motivoCancelacion'] as string | null | undefined) ?? null,
+      productItems:
+        ((d['productosAdicionales'] as import('../tipos').ProductoAdicionalReserva[] | null | undefined) ?? []) as import('../tipos').ProductoAdicionalReserva[],
       createdAt: (d['creadoEn'] as string) ?? '',
     };
   });

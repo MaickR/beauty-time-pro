@@ -280,11 +280,11 @@ export function PanelPersonal({ estudio, reservas, fechaVista }: PropsPanelPerso
                     Especialidades activas:
                   </p>
                   <div className="flex flex-wrap gap-2">
-                    {serviciosDisponibles.map((srv) => {
+                    {serviciosDisponibles.map((srv, indiceServicio) => {
                       const asignado = st.specialties.includes(srv.name);
                       return (
                         <button
-                          key={srv.name}
+                          key={`${srv.name}-${indiceServicio}`}
                           onClick={() => alternarEspecialidad(st.id, srv.name)}
                           className={`px-3 py-1.5 rounded-xl text-[9px] font-black uppercase border transition-colors ${asignado ? 'bg-slate-900 text-white border-slate-900 shadow-md' : 'bg-white text-slate-400 border-slate-200 hover:border-slate-400'}`}
                           aria-label={asignado ? `Desactivar ${srv.name}` : `Activar ${srv.name}`}

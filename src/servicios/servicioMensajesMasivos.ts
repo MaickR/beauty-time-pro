@@ -24,6 +24,24 @@ export interface CrearMensajeMasivoPayload {
   imagenUrl?: string;
 }
 
+export async function subirImagenMensajeMasivo(
+  estudioId: string,
+  archivo: File,
+): Promise<string> {
+  const datos = new FormData();
+  datos.append('archivo', archivo);
+
+  const respuesta = await peticion<{ datos: { imagenUrl: string } }>(
+    `/estudio/${estudioId}/mensajes-masivos/imagen`,
+    {
+      method: 'POST',
+      body: datos,
+    },
+  );
+
+  return respuesta.datos.imagenUrl;
+}
+
 export async function obtenerMensajesMasivos(estudioId: string): Promise<DatosMensajesMasivos> {
   const respuesta = await peticion<{ datos: DatosMensajesMasivos }>(
     `/estudio/${estudioId}/mensajes-masivos`,

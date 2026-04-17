@@ -36,7 +36,7 @@ export function limpiarNombreSalonEntrada(valor: string): string {
 }
 
 export function limpiarNombrePersonaEntrada(valor: string): string {
-  return normalizarEspacios(valor.replace(/[^\p{L}\s]/gu, ''));
+  return normalizarEspacios(valor.normalize('NFC').replace(/[^\p{L}\p{M}\s'’-]/gu, ''));
 }
 
 export function limpiarTelefonoEntrada(valor: string): string {

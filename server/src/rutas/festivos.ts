@@ -16,7 +16,7 @@ export async function rutasFestivos(servidor: FastifyInstance): Promise<void> {
     async (solicitud, respuesta) => {
       const payload = solicitud.user as { rol: string; estudioId: string | null };
       const { id } = solicitud.params;
-      if (payload.rol !== 'maestro' && payload.estudioId !== id) {
+      if (!(payload.rol === 'maestro' || (payload.rol === 'dueno' && payload.estudioId === id))) {
         return respuesta.code(403).send({ error: 'Sin permisos para esta acción' });
       }
       const festivos = await prisma.diaFestivo.findMany({
@@ -35,7 +35,7 @@ export async function rutasFestivos(servidor: FastifyInstance): Promise<void> {
     async (solicitud, respuesta) => {
       const payload = solicitud.user as { rol: string; estudioId: string | null };
       const { id } = solicitud.params;
-      if (payload.rol !== 'maestro' && payload.estudioId !== id) {
+      if (!(payload.rol === 'maestro' || (payload.rol === 'dueno' && payload.estudioId === id))) {
         return respuesta.code(403).send({ error: 'Sin permisos para esta acción' });
       }
       const resultado = esquemaFestivos.safeParse(solicitud.body);

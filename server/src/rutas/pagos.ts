@@ -4,6 +4,7 @@ import { z } from 'zod';
 import { prisma } from '../prismaCliente.js';
 import { verificarJWT } from '../middleware/autenticacion.js';
 import { requierePermiso } from '../middleware/verificarPermiso.js';
+import { revocarSesionesPorSujeto } from '../lib/sesionesAuth.js';
 import { registrarAuditoria } from '../utils/auditoria.js';
 import { normalizarZonaHorariaEstudio, obtenerFechaISOEnZona } from '../utils/zonasHorarias.js';
 import { enviarEmailPagoConfirmado } from '../servicios/servicioEmail.js';
@@ -199,7 +200,7 @@ export async function rutasPagos(servidor: FastifyInstance): Promise<void> {
     async (solicitud, respuesta) => {
       const payload = solicitud.user as { rol: string; estudioId: string | null };
       const { id } = solicitud.params;
-      if (payload.rol !== 'maestro' && payload.estudioId !== id) {
+      if (!(payload.rol === 'maestro' || (payload.rol === 'dueno' && payload.estudioId === id))) {
         return respuesta.code(403).send({ error: 'Sin permisos para esta acción' });
       }
       const pagos = await prisma.pago.findMany({
@@ -362,10 +363,23 @@ export async function rutasPagos(servidor: FastifyInstance): Promise<void> {
       actualizacionEstudio.fechaSuspension = null;
     }
 
-    if (Object.keys(actualizacionEstudio).length > 0) {
-      await prisma.estudio.update({
-        where: { id: estudioId },
-        data: actualizacionEstudio,
+    const reactivarDuenoPorPago = renovacion && estudio.estado === 'suspendido';
+
+    if (Object.keys(actualizacionEstudio).length > 0 || reactivarDuenoPorPago) {
+      await prisma.$transaction(async (tx) => {
+        if (Object.keys(actualizacionEstudio).length > 0) {
+          await tx.estudio.update({
+            where: { id: estudioId },
+            data: actualizacionEstudio,
+          });
+        }
+
+        if (reactivarDuenoPorPago) {
+          await tx.usuario.updateMany({
+            where: { estudioId, rol: 'dueno' },
+            data: { activo: true },
+          });
+        }
       });
     }
 
@@ -396,6 +410,17 @@ export async function rutasPagos(servidor: FastifyInstance): Promise<void> {
 
     // Si el salón estaba suspendido y se extendió la suscripción, reactivar automáticamente
     if (renovacion && estudio.estado === 'suspendido') {
+      const duenos = await prisma.usuario.findMany({
+        where: { estudioId, rol: 'dueno' },
+        select: { id: true },
+      });
+
+      await Promise.all(
+        duenos.map((dueno) =>
+          revocarSesionesPorSujeto('usuario', dueno.id, 'salon_reactivado_por_pago')
+        ),
+      );
+
       await registrarAuditoria({
         usuarioId: payload.sub,
         accion: 'reactivar_salon_por_pago',

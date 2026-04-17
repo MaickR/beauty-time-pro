@@ -1,5 +1,4 @@
 import type { FastifyInstance } from 'fastify';
-import bcrypt from 'bcrypt';
 import crypto from 'crypto';
 import { z } from 'zod';
 import { Prisma } from '../generated/prisma/client.js';
@@ -16,13 +15,19 @@ import {
   obtenerServiciosNormalizados,
   serializarReservaApi,
 } from '../lib/serializacionReservas.js';
-import { obtenerNombresSucursales } from '../lib/sedes.js';
+import {
+  normalizarProductosAdicionalesReserva,
+  obtenerIdsProductosReserva,
+  resolverSucursalReserva,
+} from '../lib/reservasPublicas.js';
+import { obtenerExcepcionDisponibilidadAplicada } from '../lib/disponibilidadExcepciones.js';
 import { prisma } from '../prismaCliente.js';
 import { enviarEmailConfirmacion } from '../servicios/servicioEmail.js';
 import { verificarJWT, verificarJWTOpcional } from '../middleware/autenticacion.js';
 import { registrarAuditoria } from '../utils/auditoria.js';
 import { sanitizarTexto } from '../utils/sanitizar.js';
 import { esEmailValido } from '../utils/validarEmail.js';
+import { obtenerNombresSucursales } from '../lib/sedes.js';
 import { construirFechaHoraEnZona, obtenerFechaISOEnZona, normalizarZonaHorariaEstudio } from '../utils/zonasHorarias.js';
 import {
   notificarCitaCancelada,
@@ -30,10 +35,7 @@ import {
   notificarNuevaCita,
   obtenerReservaConRelacionesPorId,
 } from '../utils/notificarReserva.js';
-
-async function asegurarColumnaPinCancelacion(): Promise<boolean> {
-  return asegurarColumnaTabla('estudios', 'pinCancelacionHash', 'VARCHAR(191) NULL');
-}
+import { calcularEdadDesdeFechaNacimiento } from '../lib/validacion.js';
 
 async function asegurarInfraestructuraServiciosDetalle(): Promise<boolean> {
   const tablasDisponibles = await obtenerTablasDisponibles();
@@ -70,6 +72,37 @@ async function asegurarInfraestructuraServiciosDetalle(): Promise<boolean> {
   }
 
   return asegurarColumnaTabla('reserva_servicios', 'motivo', 'VARCHAR(191) NULL');
+}
+
+async function asegurarColumnasAdicionalesReserva(): Promise<boolean> {
+  const resultados = await Promise.all([
+    asegurarColumnaTabla('reservas', 'metodoPago', 'VARCHAR(120) NULL'),
+    asegurarColumnaTabla('reservas', 'motivoCancelacion', 'VARCHAR(200) NULL'),
+    asegurarColumnaTabla('reservas', 'productosAdicionales', 'JSON NULL'),
+  ]);
+
+  return resultados.every(Boolean);
+}
+
+function normalizarMotivoAccion(motivo: unknown): string | null {
+  if (typeof motivo !== 'string') return null;
+
+  const motivoLimpio = sanitizarTexto(motivo).trim().slice(0, 200);
+  return motivoLimpio.length > 0 ? motivoLimpio : null;
+}
+
+function obtenerTotalProductosReserva(productos: unknown): number {
+  if (!Array.isArray(productos)) return 0;
+
+  return productos.reduce((total, producto) => {
+    if (typeof producto !== 'object' || producto === null) return total;
+
+    const registro = producto as Record<string, unknown>;
+    const cantidad = Math.max(1, Number(registro['cantidad'] ?? 1));
+    const precioUnitario = Math.max(0, Number(registro['precioUnitario'] ?? 0));
+    const subtotal = Math.max(precioUnitario * cantidad, Number(registro['total'] ?? 0));
+    return total + (Number.isFinite(subtotal) ? subtotal : 0);
+  }, 0);
 }
 
 async function resolverUsuarioAuditoriaReserva(payload: {
@@ -164,7 +197,7 @@ function esErrorCompatibilidadServiciosDetalle(error: unknown): boolean {
     codigo === 'P2021' ||
     codigo === 'P2022' ||
     /reserva_servicios/i.test(mensaje) ||
-    /(clienteAppId|tokenCancelacion|recordatorioEnviado|notasMenorEdad)/i.test(mensaje) ||
+    /(clienteAppId|tokenCancelacion|recordatorioEnviado|notasMenorEdad|metodoPago|motivoCancelacion|productosAdicionales)/i.test(mensaje) ||
     /Unknown column/i.test(mensaje) ||
     /doesn'?t exist/i.test(mensaje)
   );
@@ -341,7 +374,7 @@ const esquemaCrearReservaBase = z.object({
   duracion: z.number().int().min(1).max(480).optional(),
   servicios: z.array(z.unknown()).min(1, 'Debes seleccionar al menos un servicio'),
   precioTotal: z.number().int().min(0).optional(),
-  estado: z.enum(['pending', 'confirmed', 'completed', 'cancelled']).optional(),
+  estado: z.enum(['pending', 'confirmed', 'working', 'completed', 'cancelled']).optional(),
   sucursal: z.string().trim().optional(),
   marcaTinte: z.string().trim().optional().nullable(),
   tonalidad: z.string().trim().optional().nullable(),
@@ -349,9 +382,25 @@ const esquemaCrearReservaBase = z.object({
     .string()
     .trim()
     .max(240)
-    .regex(/^[\p{L}\p{N}\s.,:;()¿?¡!\-]*$/u, 'Las notas solo aceptan texto, números y signos básicos')
+    .regex(
+      /^[\p{L}\p{M}\p{N}\s.,:;()¿?¡!'"%/#&+\-–—]*$/u,
+      'Las notas solo aceptan letras, números y signos comunes del español',
+    )
     .optional()
     .nullable(),
+  metodoPago: z
+    .enum(['cash', 'card', 'bank_transfer', 'digital_transfer'])
+    .optional()
+    .nullable(),
+  productosSeleccionados: z
+    .array(
+      z.object({
+        productoId: z.string().trim().min(1, 'Debes seleccionar un producto válido'),
+        cantidad: z.number().int().min(1, 'La cantidad mínima es 1').max(20, 'La cantidad máxima es 20'),
+      }),
+    )
+    .max(20, 'Solo puedes agregar hasta 20 productos por reserva')
+    .optional(),
   usarRecompensa: z.boolean().optional(),
 });
 
@@ -360,7 +409,10 @@ const esquemaDatosClienteReserva = z.object({
     .string()
     .trim()
     .min(2, 'El nombre del cliente es obligatorio')
-    .regex(/^[\p{L}\s]+$/u, 'El nombre del cliente solo puede contener letras y espacios'),
+    .regex(
+      /^[\p{L}\p{M}\s'’-]+$/u,
+      'El nombre del cliente solo puede contener letras, espacios, apóstrofes y guiones',
+    ),
   telefonoCliente: z
     .string()
     .trim()
@@ -383,15 +435,36 @@ async function sincronizarResumenReserva(reservaId: string) {
   const servicios = obtenerServiciosNormalizados(reserva);
   const resumen = calcularResumenServicios(servicios);
   const serviciosActivos = resumen.serviciosActivos;
+  const totalProductos = obtenerTotalProductosReserva(
+    (reserva as { productosAdicionales?: unknown }).productosAdicionales,
+  );
+  const huboNoShow = servicios.some((servicio) => servicio.status === 'no_show');
 
   let estadoReserva = reserva.estado;
   if (serviciosActivos.length === 0 && servicios.length > 0) {
-    estadoReserva = 'cancelled';
-  } else if (serviciosActivos.length > 0 && serviciosActivos.every((servicio) => servicio.status === 'completed')) {
+    estadoReserva = huboNoShow ? 'no_show' : 'cancelled';
+  } else if (
+    serviciosActivos.length > 0 &&
+    serviciosActivos.every((servicio) => servicio.status === 'completed')
+  ) {
     estadoReserva = 'completed';
-  } else if (serviciosActivos.length > 0 && serviciosActivos.every((servicio) => ['confirmed', 'completed'].includes(servicio.status ?? 'pending'))) {
+  } else if (serviciosActivos.some((servicio) => servicio.status === 'working')) {
+    estadoReserva = 'working';
+  } else if (
+    serviciosActivos.length > 0 &&
+    serviciosActivos.every((servicio) =>
+      ['pending', 'confirmed', 'completed'].includes(servicio.status ?? 'pending'),
+    )
+  ) {
     estadoReserva = 'confirmed';
-  } else if (serviciosActivos.some((servicio) => servicio.status === 'confirmed' || servicio.status === 'completed')) {
+  } else if (
+    serviciosActivos.some(
+      (servicio) =>
+        servicio.status === 'pending' ||
+        servicio.status === 'confirmed' ||
+        servicio.status === 'completed',
+    )
+  ) {
     estadoReserva = 'confirmed';
   } else {
     estadoReserva = 'pending';
@@ -402,7 +475,7 @@ async function sincronizarResumenReserva(reservaId: string) {
     data: {
       estado: estadoReserva,
       duracion: resumen.duracionTotal,
-      precioTotal: resumen.precioTotal,
+      precioTotal: resumen.precioTotal + totalProductos,
       servicios: serializarServiciosResumen(serviciosActivos),
     },
   });
@@ -430,6 +503,9 @@ async function insertarReservaCompat(
     tonalidad?: string | null;
     notaMenorEdad?: string | null;
     observaciones?: string | null;
+    metodoPago?: string | null;
+    motivoCancelacion?: string | null;
+    productosAdicionales?: Prisma.InputJsonValue;
     clienteAppId?: string | null;
     tokenCancelacion: string;
     inicioMin: number;
@@ -468,6 +544,9 @@ async function insertarReservaCompat(
         tokenCancelacion,
         recordatorioEnviado,
         observaciones,
+        metodoPago,
+        motivoCancelacion,
+        productosAdicionales,
         creadoEn
       )
       SELECT
@@ -491,6 +570,9 @@ async function insertarReservaCompat(
         ${datos.tokenCancelacion},
         false,
         ${datos.observaciones ?? null},
+        ${datos.metodoPago ?? null},
+        ${datos.motivoCancelacion ?? null},
+        CAST(${JSON.stringify(datos.productosAdicionales ?? [])} AS JSON),
         NOW()
       FROM DUAL
       WHERE NOT EXISTS (
@@ -498,7 +580,7 @@ async function insertarReservaCompat(
         FROM reservas
         WHERE personalId = ${datos.personalId}
           AND fecha = ${datos.fecha}
-          AND estado IN ('pending', 'confirmed')
+          AND estado IN ('pending', 'confirmed', 'working')
           AND ${datos.inicioMin} < (TIME_TO_SEC(horaInicio) / 60 + duracion)
           AND ${datos.finMin} > (TIME_TO_SEC(horaInicio) / 60)
       )
@@ -556,7 +638,7 @@ async function insertarReservaCompat(
         FROM reservas
         WHERE personalId = ${datos.personalId}
           AND fecha = ${datos.fecha}
-          AND estado IN ('pending', 'confirmed')
+          AND estado IN ('pending', 'confirmed', 'working')
           AND ${datos.inicioMin} < (TIME_TO_SEC(horaInicio) / 60 + duracion)
           AND ${datos.finMin} > (TIME_TO_SEC(horaInicio) / 60)
       )
@@ -592,6 +674,8 @@ export async function rutasReservas(servidor: FastifyInstance): Promise<void> {
       const limite = Math.min(100, Math.max(1, parseInt(solicitud.query.limite ?? '20', 10)));
       const saltar = (pagina - 1) * limite;
 
+      await asegurarColumnasAdicionalesReserva();
+
       const [total, reservas] = await Promise.all([
         prisma.reserva.count(),
         buscarReservasCompat({
@@ -617,7 +701,7 @@ export async function rutasReservas(servidor: FastifyInstance): Promise<void> {
     async (solicitud, respuesta) => {
       const payload = solicitud.user as { rol: string; estudioId: string | null };
       const { id } = solicitud.params;
-      if (payload.rol !== 'maestro' && payload.estudioId !== id) {
+      if (!(payload.rol === 'maestro' || (payload.rol === 'dueno' && payload.estudioId === id))) {
         return respuesta.code(403).send({ error: 'Sin permisos para esta acción' });
       }
       const where: Record<string, unknown> = { estudioId: id };
@@ -626,6 +710,7 @@ export async function rutasReservas(servidor: FastifyInstance): Promise<void> {
       // Si se piden todas (sin pagina), devolver lista plana para compatibilidad
       if (!solicitud.query.pagina) {
         await asegurarInfraestructuraServiciosDetalle();
+        await asegurarColumnasAdicionalesReserva();
 
         let reservas = await buscarReservasCompat({
           where,
@@ -651,6 +736,7 @@ export async function rutasReservas(servidor: FastifyInstance): Promise<void> {
       const saltar = (pagina - 1) * limite;
 
       await asegurarInfraestructuraServiciosDetalle();
+      await asegurarColumnasAdicionalesReserva();
 
       const [total, reservasIniciales] = await Promise.all([
         prisma.reserva.count({ where }),
@@ -702,6 +788,7 @@ export async function rutasReservas(servidor: FastifyInstance): Promise<void> {
       marcaTinte?: string;
       tonalidad?: string;
       observaciones?: string;
+      metodoPago?: 'cash' | 'card' | 'bank_transfer' | 'digital_transfer';
       usarRecompensa?: boolean;
     };
   }>('/reservas', {
@@ -737,8 +824,19 @@ export async function rutasReservas(servidor: FastifyInstance): Promise<void> {
       null;
     const datosReserva = resultadoValidacionBase.data;
     const {
-      estudioId, personalId,
-      fecha, horaInicio, duracion, servicios, estado, sucursal, marcaTinte, tonalidad, observaciones, usarRecompensa,
+      estudioId,
+      personalId,
+      fecha,
+      horaInicio,
+      duracion,
+      servicios,
+      estado,
+      sucursal,
+      marcaTinte,
+      tonalidad,
+      observaciones,
+      metodoPago,
+      usarRecompensa,
     } = datosReserva;
 
     let nombreCliente = datosReserva.nombreCliente ?? '';
@@ -791,9 +889,13 @@ export async function rutasReservas(servidor: FastifyInstance): Promise<void> {
         select: {
           id: true,
           nombre: true,
+          plan: true,
           fechaVencimiento: true,
           estado: true,
           activo: true,
+          horario: true,
+          festivos: true,
+          excepcionesDisponibilidad: true,
           servicios: true,
           sucursales: true,
           estudioPrincipalId: true,
@@ -835,39 +937,31 @@ export async function rutasReservas(servidor: FastifyInstance): Promise<void> {
       return respuesta.code(400).send({ error: 'La sede seleccionada no está disponible para reservas públicas' });
     }
 
-    const sucursalesDisponibles = obtenerNombresSucursales(
-      estudio as unknown as Record<string, unknown>,
-      Array.isArray(estudio.sucursales) ? (estudio.sucursales as string[]) : [],
-    );
-    const sedesReservables = Array.from(
-      new Set([estudio.nombre.trim(), ...sucursalesDisponibles]),
-    ).filter((nombre) => nombre.length > 0);
-    const sucursalNormalizada = sucursal?.trim() ?? '';
+    const sucursalesDisponibles = [
+      estudio.nombre,
+      ...obtenerNombresSucursales(
+        estudio as unknown as Record<string, unknown>,
+        Array.isArray(estudio.sucursales) ? (estudio.sucursales as string[]) : [],
+      ),
+    ];
+    const sucursalEfectiva = resolverSucursalReserva(estudio.nombre, sucursal);
 
-    let sucursalEfectiva = sucursalNormalizada || sedesReservables[0] || '';
-
-    if (estudio.estudioPrincipalId) {
-      const nombreSede = estudio.nombre.trim();
-      if (
-        sucursalNormalizada &&
-        sucursalNormalizada.localeCompare(nombreSede, 'es', { sensitivity: 'base' }) !== 0
-      ) {
-        return respuesta.code(400).send({ error: 'La sede seleccionada no coincide con el salón elegido' });
-      }
-      sucursalEfectiva = nombreSede;
-    }
-
-    if (!estudio.estudioPrincipalId && sedesReservables.length > 1 && !sucursalNormalizada) {
-      return respuesta.code(400).send({ error: 'Debes seleccionar una sede para esta reserva' });
-    }
-
-    if (
-      !estudio.estudioPrincipalId &&
-      sucursalNormalizada &&
-      sedesReservables.length > 0 &&
-      !sedesReservables.includes(sucursalNormalizada)
-    ) {
+    if (!sucursalesDisponibles.includes(sucursalEfectiva)) {
       return respuesta.code(400).send({ error: 'La sede seleccionada no pertenece a este salón' });
+    }
+
+    if ((estudio.festivos as string[]).includes(fecha)) {
+      return respuesta.code(400).send({ error: 'La fecha seleccionada está cerrada para reservas' });
+    }
+
+    const excepcionDia = obtenerExcepcionDisponibilidadAplicada({
+      excepciones: estudio.excepcionesDisponibilidad,
+      fecha,
+      sucursal: sucursalEfectiva,
+    });
+
+    if (excepcionDia?.tipo === 'cerrado') {
+      return respuesta.code(400).send({ error: 'La sede seleccionada está cerrada en esa fecha' });
     }
 
     // ─── Si es un ClienteApp autenticado, rellenar datos desde su perfil ──
@@ -901,6 +995,17 @@ export async function rutasReservas(servidor: FastifyInstance): Promise<void> {
     }
 
     const emailNormalizado = email?.trim().toLowerCase() || undefined;
+
+    if (!clienteAppId && emailNormalizado) {
+      const clienteAppPorEmail = await prisma.clienteApp.findUnique({
+        where: { email: emailNormalizado },
+        select: { id: true, activo: true },
+      });
+
+      if (clienteAppPorEmail?.activo) {
+        clienteAppId = clienteAppPorEmail.id;
+      }
+    }
 
     const resultadoDatosCliente = esquemaDatosClienteReserva.safeParse({
       nombreCliente,
@@ -940,22 +1045,57 @@ export async function rutasReservas(servidor: FastifyInstance): Promise<void> {
       });
     }
 
-    const estadoReserva = estado ?? 'pending';
-    const estadosValidos = ['pending', 'confirmed', 'completed', 'cancelled'];
+    const productosSeleccionados = datosReserva.productosSeleccionados ?? [];
+    let productosAdicionalesNormalizados: Prisma.InputJsonValue = [];
+
+    if (productosSeleccionados.length > 0) {
+      if (estudio.plan !== 'PRO') {
+        return respuesta.code(403).send({
+          error: 'Los productos opcionales solo están disponibles en salones con plan PRO',
+        });
+      }
+
+      const idsProductos = obtenerIdsProductosReserva(productosSeleccionados);
+      const productosCatalogo = await prisma.producto.findMany({
+        where: {
+          estudioId,
+          activo: true,
+          id: { in: idsProductos },
+        },
+        select: {
+          id: true,
+          nombre: true,
+          categoria: true,
+          precio: true,
+        },
+      });
+
+      if (productosCatalogo.length !== idsProductos.length) {
+        return respuesta.code(400).send({
+          error: 'Uno o más productos ya no están disponibles en el catálogo del salón',
+        });
+      }
+
+      productosAdicionalesNormalizados = normalizarProductosAdicionalesReserva({
+        planEstudio: estudio.plan,
+        productosSeleccionados,
+        productosCatalogo,
+      }) as unknown as Prisma.InputJsonValue;
+    }
+
+    const estadoReserva = estado ?? 'confirmed';
+    const estadosValidos = ['pending', 'confirmed', 'working', 'completed', 'cancelled'];
     if (!estadosValidos.includes(estadoReserva)) {
       return respuesta.code(400).send({
         error: 'Estado inválido',
-        campos: { estado: 'pending | confirmed | completed | cancelled' },
+        campos: { estado: 'pending | confirmed | working | completed | cancelled' },
       });
     }
 
     // Calcular edad para detectar menor de edad
     const nacimiento = new Date(`${fechaNacimiento}T00:00:00`);
-    const hoy = new Date();
-    let edad = hoy.getFullYear() - nacimiento.getFullYear();
-    const cumpleEsteAnio = new Date(hoy.getFullYear(), nacimiento.getMonth(), nacimiento.getDate());
-    if (hoy < cumpleEsteAnio) edad--;
-    const esMenorDeEdad = edad < 18;
+    const edad = fechaNacimiento ? calcularEdadDesdeFechaNacimiento(fechaNacimiento) : null;
+    const esMenorDeEdad = edad !== null && edad < 18;
 
     // Rechazar reservas en fechas pasadas
     if (fecha < hoyStr) {
@@ -969,7 +1109,7 @@ export async function rutasReservas(servidor: FastifyInstance): Promise<void> {
     const finMin = inicioMin + duracionEfectiva;
 
     const datosCliente = {
-      nombre: nombreCliente,
+      nombre: sanitizarTexto(nombreCliente),
       fechaNacimiento: nacimiento,
       ...(emailNormalizado !== undefined && { email: emailNormalizado }),
     };
@@ -1009,6 +1149,8 @@ export async function rutasReservas(servidor: FastifyInstance): Promise<void> {
       }
     }
 
+    const columnasReservaDisponibles = await asegurarColumnasAdicionalesReserva();
+
     let reservaId = '';
     let resultadoFidelidad = { recompensaGanada: false, descripcion: null as string | null };
 
@@ -1042,6 +1184,9 @@ export async function rutasReservas(servidor: FastifyInstance): Promise<void> {
           clienteAppId: clienteAppId ?? null,
           tokenCancelacion,
           observaciones: observaciones ?? null,
+          metodoPago: columnasReservaDisponibles ? metodoPago ?? null : null,
+          motivoCancelacion: null,
+          productosAdicionales: productosAdicionalesNormalizados,
           inicioMin,
           finMin,
         });
@@ -1059,7 +1204,7 @@ export async function rutasReservas(servidor: FastifyInstance): Promise<void> {
                 categoria: servicio.category ?? null,
                 orden: servicio.order ?? indice,
                 estado: servicio.status ?? estadoReserva,
-                motivo: null,
+                motivo: servicio.motivo ?? null,
               })),
             });
           } catch (error) {
@@ -1089,7 +1234,8 @@ export async function rutasReservas(servidor: FastifyInstance): Promise<void> {
         });
       }
       if (error instanceof Error) {
-        return respuesta.code(400).send({ error: error.message });
+        solicitud.log.warn({ err: error }, 'Fallo controlado al crear la reserva');
+        return respuesta.code(400).send({ error: 'No fue posible crear la reserva con los datos enviados' });
       }
       throw error;
     }
@@ -1189,8 +1335,8 @@ export async function rutasReservas(servidor: FastifyInstance): Promise<void> {
       if (reserva.estado === 'cancelled') {
         return respuesta.code(400).send({ error: 'Esta cita ya fue cancelada anteriormente.' });
       }
-      if (['completed'].includes(reserva.estado)) {
-        return respuesta.code(400).send({ error: 'Una cita ya completada no puede cancelarse.' });
+      if (['completed', 'working'].includes(reserva.estado)) {
+        return respuesta.code(400).send({ error: 'Una cita en proceso o ya completada no puede cancelarse desde este enlace.' });
       }
 
       const hoy = new Date();
@@ -1241,22 +1387,24 @@ export async function rutasReservas(servidor: FastifyInstance): Promise<void> {
   );
 
   // PUT /reservas/:id/estado
-  servidor.put<{ Params: { id: string }; Body: { estado: string; pinCancelacion?: string } }>(
+  servidor.put<{ Params: { id: string }; Body: { estado: string; motivo?: string } }>(
     '/reservas/:id/estado',
     { preHandler: verificarJWT },
     async (solicitud, respuesta) => {
       const payload = solicitud.user as { sub: string; rol: string; estudioId: string | null };
-      const { estado, pinCancelacion } = solicitud.body;
-      const estadosValidos = ['pending', 'confirmed', 'completed', 'cancelled'];
+      const { estado, motivo } = solicitud.body;
+      const estadosValidos = ['pending', 'confirmed', 'working', 'completed', 'cancelled'];
       if (!estadosValidos.includes(estado)) {
-        return respuesta.code(400).send({ error: 'Estado inválido', campos: { estado: 'pending | confirmed | completed | cancelled' } });
-      }
-      const columnaDisponible = await asegurarColumnaPinCancelacion();
-      if (!columnaDisponible) {
-        return respuesta.code(503).send({ error: 'No se pudo validar el PIN de cancelación en este momento' });
+        return respuesta.code(400).send({ error: 'Estado inválido', campos: { estado: 'pending | confirmed | working | completed | cancelled' } });
       }
 
       await asegurarInfraestructuraServiciosDetalle();
+      await asegurarColumnasAdicionalesReserva();
+
+      const motivoNormalizado = normalizarMotivoAccion(motivo);
+      if (estado === 'cancelled' && (!motivoNormalizado || motivoNormalizado.length < 4)) {
+        return respuesta.code(400).send({ error: 'Debes indicar un motivo de cancelación más claro (mínimo 4 caracteres y máximo 200).' });
+      }
 
       const reservaExistente = await prisma.reserva.findUnique({
         where: { id: solicitud.params.id },
@@ -1264,15 +1412,10 @@ export async function rutasReservas(servidor: FastifyInstance): Promise<void> {
           estudioId: true,
           estado: true,
           clienteId: true,
-          estudio: {
-            select: {
-              pinCancelacionHash: true,
-            },
-          },
         },
       });
       if (!reservaExistente) return respuesta.code(404).send({ error: 'Reserva no encontrada' });
-      if (payload.rol !== 'maestro' && payload.estudioId !== reservaExistente.estudioId) {
+      if (!(payload.rol === 'maestro' || (payload.rol === 'dueno' && payload.estudioId === reservaExistente.estudioId))) {
         return respuesta.code(403).send({ error: 'Sin permisos para esta acción' });
       }
       if (payload.rol === 'dueno') {
@@ -1293,21 +1436,13 @@ export async function rutasReservas(servidor: FastifyInstance): Promise<void> {
         if (!reservaDelDueno) {
           return respuesta.code(403).send({ error: 'Sin acceso a este recurso' });
         }
-        if (estado === 'cancelled') {
-          if (!reservaExistente.estudio.pinCancelacionHash) {
-            return respuesta.code(403).send({ error: 'Configura el PIN de cancelación en la sección Seguridad antes de cancelar citas' });
-          }
-          const pinValido = !!pinCancelacion && await bcrypt.compare(pinCancelacion, reservaExistente.estudio.pinCancelacionHash);
-          if (!pinValido) {
-            return respuesta.code(403).send({ error: 'PIN de cancelación inválido' });
-          }
-        }
       }
 
       // Máquina de estados — solo se permiten transiciones válidas
       const TRANSICIONES_VALIDAS: Record<string, string[]> = {
-        pending: ['confirmed', 'cancelled'],
-        confirmed: ['completed', 'cancelled'],
+        pending: ['confirmed', 'working', 'cancelled'],
+        confirmed: ['working', 'completed', 'cancelled'],
+        working: ['confirmed', 'completed', 'cancelled'],
         completed: [],
         cancelled: [],
       };
@@ -1320,13 +1455,31 @@ export async function rutasReservas(servidor: FastifyInstance): Promise<void> {
 
       const actualizada = await prisma.reserva.update({
         where: { id: solicitud.params.id },
-        data: { estado },
+        data: {
+          estado,
+          ...(estado === 'cancelled'
+            ? { motivoCancelacion: motivoNormalizado }
+            : { motivoCancelacion: null }),
+        },
       });
 
       if (estado === 'confirmed') {
         await actualizarServiciosReservaCompat({
-          where: { reservaId: solicitud.params.id, estado: 'pending' },
+          where: {
+            reservaId: solicitud.params.id,
+            estado: { in: ['pending', 'working'] },
+          },
           data: { estado: 'confirmed' },
+        });
+      }
+
+      if (estado === 'working') {
+        await actualizarServiciosReservaCompat({
+          where: {
+            reservaId: solicitud.params.id,
+            estado: { in: ['pending', 'confirmed'] },
+          },
+          data: { estado: 'working' },
         });
       }
 
@@ -1334,7 +1487,7 @@ export async function rutasReservas(servidor: FastifyInstance): Promise<void> {
         await actualizarServiciosReservaCompat({
           where: {
             reservaId: solicitud.params.id,
-            estado: { in: ['pending', 'confirmed'] },
+            estado: { in: ['pending', 'confirmed', 'working'] },
           },
           data: { estado: 'completed' },
         });
@@ -1344,9 +1497,9 @@ export async function rutasReservas(servidor: FastifyInstance): Promise<void> {
         await actualizarServiciosReservaCompat({
           where: {
             reservaId: solicitud.params.id,
-            estado: { in: ['pending', 'confirmed'] },
+            estado: { in: ['pending', 'confirmed', 'working'] },
           },
-          data: { estado: 'cancelled' },
+          data: { estado: 'cancelled', motivo: motivoNormalizado },
         });
       }
 
@@ -1361,6 +1514,7 @@ export async function rutasReservas(servidor: FastifyInstance): Promise<void> {
           detalles: {
             estadoAnterior: reservaExistente.estado,
             estadoNuevo: estado,
+            motivo: motivoNormalizado,
           },
           ip: solicitud.ip,
         });
@@ -1386,25 +1540,25 @@ export async function rutasReservas(servidor: FastifyInstance): Promise<void> {
 
   servidor.put<{
     Params: { id: string; servicioId: string };
-    Body: { estado: string; pinCancelacion?: string; motivo?: string };
+    Body: { estado: string; motivo?: string };
   }>(
     '/reservas/:id/servicios/:servicioId/estado',
     { preHandler: verificarJWT },
     async (solicitud, respuesta) => {
       const payload = solicitud.user as { sub: string; rol: string; estudioId: string | null };
-      const { estado, pinCancelacion, motivo } = solicitud.body;
-      const estadosValidos = ['pending', 'confirmed', 'completed', 'cancelled', 'no_show'];
+      const { estado, motivo } = solicitud.body;
+      const estadosValidos = ['pending', 'confirmed', 'working', 'completed', 'cancelled', 'no_show'];
 
       if (!estadosValidos.includes(estado)) {
         return respuesta.code(400).send({
           error: 'Estado inválido',
-          campos: { estado: 'pending | confirmed | completed | cancelled | no_show' },
+          campos: { estado: 'pending | confirmed | working | completed | cancelled | no_show' },
         });
       }
 
-      const columnaDisponible = await asegurarColumnaPinCancelacion();
-      if (!columnaDisponible) {
-        return respuesta.code(503).send({ error: 'No se pudo validar el PIN de cancelación en este momento' });
+      const motivoNormalizado = normalizarMotivoAccion(motivo);
+      if (['cancelled', 'no_show'].includes(estado) && (!motivoNormalizado || motivoNormalizado.length < 4)) {
+        return respuesta.code(400).send({ error: 'Debes escribir un motivo claro para registrar esta acción (mínimo 4 caracteres y máximo 200).' });
       }
 
       const reservaExistente = await prisma.reserva.findUnique({
@@ -1413,11 +1567,6 @@ export async function rutasReservas(servidor: FastifyInstance): Promise<void> {
           id: true,
           estudioId: true,
           estado: true,
-          estudio: {
-            select: {
-              pinCancelacionHash: true,
-            },
-          },
         },
       });
 
@@ -1425,7 +1574,7 @@ export async function rutasReservas(servidor: FastifyInstance): Promise<void> {
         return respuesta.code(404).send({ error: 'Reserva no encontrada' });
       }
 
-      if (payload.rol !== 'maestro' && payload.estudioId !== reservaExistente.estudioId) {
+      if (!(payload.rol === 'maestro' || (payload.rol === 'dueno' && payload.estudioId === reservaExistente.estudioId))) {
         return respuesta.code(403).send({ error: 'Sin permisos para esta acción' });
       }
 
@@ -1449,15 +1598,6 @@ export async function rutasReservas(servidor: FastifyInstance): Promise<void> {
           return respuesta.code(403).send({ error: 'Sin acceso a este recurso' });
         }
 
-        if (['cancelled', 'no_show'].includes(estado)) {
-          if (!reservaExistente.estudio.pinCancelacionHash) {
-            return respuesta.code(403).send({ error: 'Configura el PIN de cancelación en la sección Seguridad antes de usar esta acción' });
-          }
-          const pinValido = !!pinCancelacion && await bcrypt.compare(pinCancelacion, reservaExistente.estudio.pinCancelacionHash);
-          if (!pinValido) {
-            return respuesta.code(403).send({ error: 'PIN de cancelación inválido' });
-          }
-        }
       }
 
       const servicioExistente = await prisma.reservaServicio.findFirst({
@@ -1478,7 +1618,7 @@ export async function rutasReservas(servidor: FastifyInstance): Promise<void> {
 
       await prisma.reservaServicio.update({
         where: { id: solicitud.params.servicioId },
-        data: { estado, ...(motivo !== undefined && { motivo }) },
+        data: { estado, ...(motivoNormalizado !== null && { motivo: motivoNormalizado }) },
       });
 
       const reservaActualizada = await sincronizarResumenReserva(solicitud.params.id);
@@ -1494,6 +1634,7 @@ export async function rutasReservas(servidor: FastifyInstance): Promise<void> {
             servicioNombre: servicioExistente.nombre,
             estadoAnterior: servicioExistente.estado,
             estadoNuevo: estado,
+            motivo: motivoNormalizado,
           },
           ip: solicitud.ip,
         });
@@ -1548,7 +1689,11 @@ export async function rutasReservas(servidor: FastifyInstance): Promise<void> {
         return respuesta.code(400).send({ error: 'No se pueden agregar servicios a una reserva finalizada o cancelada' });
       }
 
-      if (payload.rol !== 'maestro' && payload.estudioId !== reservaExistente.estudioId) {
+      if (!(
+        payload.rol === 'maestro' ||
+        (payload.rol === 'dueno' && payload.estudioId === reservaExistente.estudioId) ||
+        (payload.rol === 'empleado' && payload.estudioId === reservaExistente.estudioId)
+      )) {
         return respuesta.code(403).send({ error: 'Sin permisos para esta acción' });
       }
 
@@ -1588,7 +1733,12 @@ export async function rutasReservas(servidor: FastifyInstance): Promise<void> {
           precio,
           categoria: categoria ?? null,
           orden: ordenActual,
-          estado: reservaExistente.estado === 'confirmed' ? 'confirmed' : 'pending',
+          estado:
+            reservaExistente.estado === 'working'
+              ? 'working'
+              : reservaExistente.estado === 'confirmed'
+                ? 'confirmed'
+                : 'pending',
         },
       });
 
@@ -1619,6 +1769,156 @@ export async function rutasReservas(servidor: FastifyInstance): Promise<void> {
           { reservaId: solicitud.params.id, actorRol: payload.rol, accesoId: payload.sub },
           'No se pudo resolver un usuario para auditar el servicio adicional de la reserva',
         );
+      }
+
+      return respuesta.send({ datos: reservaActualizada });
+    },
+  );
+
+  // POST /reservas/:id/productos — agregar producto adicional a una reserva existente
+  servidor.post<{
+    Params: { id: string };
+    Body: { productoId: string; cantidad: number };
+  }>(
+    '/reservas/:id/productos',
+    { preHandler: verificarJWT },
+    async (solicitud, respuesta) => {
+      const payload = solicitud.user as {
+        sub: string;
+        rol: string;
+        estudioId: string | null;
+        personalId?: string;
+      };
+
+      const esquemaProductoAdicional = z.object({
+        productoId: z.string().trim().min(1, 'Debes seleccionar un producto'),
+        cantidad: z.number().int().min(1, 'La cantidad mínima es 1').max(20, 'La cantidad máxima es 20'),
+      });
+
+      const resultado = esquemaProductoAdicional.safeParse(solicitud.body);
+      if (!resultado.success) {
+        const campos = Object.fromEntries(
+          resultado.error.issues.map((issue) => [issue.path.join('.') || 'body', issue.message]),
+        );
+        return respuesta.code(400).send({ error: 'Datos inválidos', campos });
+      }
+
+      await asegurarColumnasAdicionalesReserva();
+
+      const reservaExistente = await prisma.reserva.findUnique({
+        where: { id: solicitud.params.id },
+        select: {
+          id: true,
+          estudioId: true,
+          estado: true,
+          personalId: true,
+          productosAdicionales: true,
+          estudio: {
+            select: {
+              plan: true,
+            },
+          },
+        },
+      });
+
+      if (!reservaExistente) {
+        return respuesta.code(404).send({ error: 'Reserva no encontrada' });
+      }
+
+      if (['completed', 'cancelled'].includes(reservaExistente.estado)) {
+        return respuesta.code(400).send({ error: 'No se pueden agregar productos a una reserva finalizada o cancelada' });
+      }
+
+      if (!(
+        payload.rol === 'maestro' ||
+        (payload.rol === 'dueno' && payload.estudioId === reservaExistente.estudioId) ||
+        (payload.rol === 'empleado' && payload.estudioId === reservaExistente.estudioId)
+      )) {
+        return respuesta.code(403).send({ error: 'Sin permisos para esta acción' });
+      }
+
+      if (payload.rol === 'empleado' && (!payload.personalId || payload.personalId !== reservaExistente.personalId)) {
+        return respuesta.code(403).send({ error: 'Solo puedes agregar productos a tus propias citas' });
+      }
+
+      if (reservaExistente.estudio.plan !== 'PRO') {
+        return respuesta.code(403).send({ error: 'La venta de productos adicionales en agenda está disponible solo para planes PRO' });
+      }
+
+      const producto = await prisma.producto.findFirst({
+        where: {
+          id: resultado.data.productoId,
+          estudioId: reservaExistente.estudioId,
+          activo: true,
+        },
+        select: {
+          id: true,
+          nombre: true,
+          categoria: true,
+          precio: true,
+        },
+      });
+
+      if (!producto) {
+        return respuesta.code(404).send({ error: 'Producto no disponible en este salón' });
+      }
+
+      const productosActuales = Array.isArray(reservaExistente.productosAdicionales)
+        ? [...(reservaExistente.productosAdicionales as Array<Record<string, unknown>>)]
+        : [];
+      const indiceExistente = productosActuales.findIndex((item) => item['id'] === producto.id);
+
+      if (indiceExistente >= 0) {
+        const itemActual = productosActuales[indiceExistente] ?? {};
+        const cantidadNueva = Number(itemActual['cantidad'] ?? 1) + resultado.data.cantidad;
+        productosActuales[indiceExistente] = {
+          id: producto.id,
+          nombre: producto.nombre,
+          categoria: producto.categoria,
+          cantidad: cantidadNueva,
+          precioUnitario: producto.precio,
+          total: producto.precio * cantidadNueva,
+        };
+      } else {
+        productosActuales.push({
+          id: producto.id,
+          nombre: producto.nombre,
+          categoria: producto.categoria,
+          cantidad: resultado.data.cantidad,
+          precioUnitario: producto.precio,
+          total: producto.precio * resultado.data.cantidad,
+        });
+      }
+
+      await prisma.reserva.update({
+        where: { id: solicitud.params.id },
+        data: {
+          productosAdicionales: productosActuales as Prisma.InputJsonValue,
+        },
+      });
+
+      const reservaActualizada = await sincronizarResumenReserva(solicitud.params.id);
+      const usuarioAuditoriaId = await resolverUsuarioAuditoriaReserva(payload);
+
+      if (usuarioAuditoriaId) {
+        await registrarAuditoria({
+          usuarioId: usuarioAuditoriaId,
+          accion: 'reserva_producto_agregado',
+          entidadTipo: 'reserva',
+          entidadId: solicitud.params.id,
+          detalles: {
+            productoId: producto.id,
+            productoNombre: producto.nombre,
+            cantidad: resultado.data.cantidad,
+            precioUnitario: producto.precio,
+            actor: {
+              rol: payload.rol,
+              accesoId: payload.sub,
+              personalId: payload.personalId ?? null,
+            },
+          },
+          ip: solicitud.ip,
+        });
       }
 
       return respuesta.send({ datos: reservaActualizada });

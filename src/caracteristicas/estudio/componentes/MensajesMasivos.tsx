@@ -1,10 +1,11 @@
 import { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Mail, MessageCircle, Send } from 'lucide-react';
+import { ImagePlus, Mail, MessageCircle, Send, X } from 'lucide-react';
 import { usarToast } from '../../../componentes/ui/ProveedorToast';
 import {
   enviarMensajeMasivo,
   obtenerMensajesMasivos,
+  subirImagenMensajeMasivo,
   type DatosMensajesMasivos,
 } from '../../../servicios/servicioMensajesMasivos';
 import type { PlanEstudio } from '../../../tipos';
@@ -34,15 +35,29 @@ export function MensajesMasivos({ estudioId, plan }: PropsMensajesMasivos) {
   const [mostrarFormulario, setMostrarFormulario] = useState(false);
   const [titulo, setTitulo] = useState('');
   const [texto, setTexto] = useState('');
+  const [imagenArchivo, setImagenArchivo] = useState<File | null>(null);
+  const [imagenVistaPrevia, setImagenVistaPrevia] = useState<string | null>(null);
 
   const mutacion = useMutation({
-    mutationFn: (datos: { titulo: string; texto: string }) => enviarMensajeMasivo(estudioId, datos),
+    mutationFn: async (datos: { titulo: string; texto: string; imagenArchivo: File | null }) => {
+      const imagenUrl = datos.imagenArchivo
+        ? await subirImagenMensajeMasivo(estudioId, datos.imagenArchivo)
+        : undefined;
+
+      return enviarMensajeMasivo(estudioId, {
+        titulo: datos.titulo,
+        texto: datos.texto,
+        imagenUrl,
+      });
+    },
     onSuccess: (resultado) => {
       void clienteConsulta.invalidateQueries({ queryKey: ['mensajes-masivos', estudioId] });
       mostrarToast(`Mensaje enviado a ${resultado.destinatarios} clientes`);
       setMostrarFormulario(false);
       setTitulo('');
       setTexto('');
+      setImagenArchivo(null);
+      setImagenVistaPrevia(null);
     },
     onError: (error: { codigo?: string; message?: string }) => {
       if (error.codigo === 'LIMITE_MENSAJES_ALCANZADO') {
@@ -76,7 +91,33 @@ export function MensajesMasivos({ estudioId, plan }: PropsMensajesMasivos) {
       mostrarToast('El mensaje no puede superar los 200 caracteres');
       return;
     }
-    mutacion.mutate({ titulo: titulo.trim(), texto: texto.trim() });
+    mutacion.mutate({ titulo: titulo.trim(), texto: texto.trim(), imagenArchivo });
+  };
+
+  const manejarSeleccionImagen = (archivo: File | null) => {
+    if (!archivo) {
+      setImagenArchivo(null);
+      setImagenVistaPrevia(null);
+      return;
+    }
+
+    if (!['image/jpeg', 'image/png'].includes(archivo.type)) {
+      mostrarToast('Solo se aceptan imágenes JPG o PNG');
+      return;
+    }
+
+    if (archivo.size > 2 * 1024 * 1024) {
+      mostrarToast('La imagen no puede superar los 2 MB');
+      return;
+    }
+
+    if (imagenVistaPrevia) {
+      URL.revokeObjectURL(imagenVistaPrevia);
+    }
+
+    const vistaPrevia = URL.createObjectURL(archivo);
+    setImagenArchivo(archivo);
+    setImagenVistaPrevia(vistaPrevia);
   };
 
   return (
@@ -160,6 +201,53 @@ export function MensajesMasivos({ estudioId, plan }: PropsMensajesMasivos) {
                 />
               </div>
 
+              <div className="space-y-3 rounded-2xl border border-dashed border-slate-200 bg-slate-50 p-4">
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                  <div>
+                    <p className="text-sm font-bold text-slate-700">Imagen del mensaje</p>
+                    <p className="text-xs text-slate-500">
+                      Adjunta una imagen JPG o PNG de hasta 2 MB para el correo.
+                    </p>
+                  </div>
+
+                  <label className="inline-flex cursor-pointer items-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-2.5 text-xs font-black uppercase tracking-wide text-slate-700 transition hover:bg-slate-100">
+                    <ImagePlus className="h-4 w-4" />
+                    Subir imagen
+                    <input
+                      type="file"
+                      accept="image/png,image/jpeg"
+                      className="sr-only"
+                      onChange={(evento) =>
+                        manejarSeleccionImagen(evento.target.files?.[0] ?? null)
+                      }
+                    />
+                  </label>
+                </div>
+
+                {imagenVistaPrevia && (
+                  <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white">
+                    <div className="flex items-center justify-between border-b border-slate-100 px-4 py-3">
+                      <p className="text-xs font-black uppercase tracking-wide text-slate-500">
+                        Vista previa
+                      </p>
+                      <button
+                        type="button"
+                        onClick={() => manejarSeleccionImagen(null)}
+                        className="rounded-lg p-1 text-slate-400 transition hover:bg-slate-100 hover:text-slate-700"
+                        aria-label="Quitar imagen adjunta"
+                      >
+                        <X className="h-4 w-4" />
+                      </button>
+                    </div>
+                    <img
+                      src={imagenVistaPrevia}
+                      alt="Vista previa de la imagen adjunta"
+                      className="h-48 w-full object-cover"
+                    />
+                  </div>
+                )}
+              </div>
+
               <div className="flex gap-3">
                 <button
                   type="button"
@@ -176,6 +264,7 @@ export function MensajesMasivos({ estudioId, plan }: PropsMensajesMasivos) {
                     setMostrarFormulario(false);
                     setTitulo('');
                     setTexto('');
+                    manejarSeleccionImagen(null);
                   }}
                   className="px-6 py-3 rounded-2xl border border-slate-200 text-slate-600 text-sm font-bold hover:bg-slate-50 transition-colors"
                 >
@@ -202,6 +291,11 @@ export function MensajesMasivos({ estudioId, plan }: PropsMensajesMasivos) {
                 <div className="min-w-0">
                   <p className="text-sm font-bold text-slate-800 truncate">{msg.titulo}</p>
                   <p className="text-xs text-slate-500 truncate">{msg.texto}</p>
+                  {msg.imagenUrl && (
+                    <p className="mt-1 text-[11px] font-semibold text-slate-400">
+                      Incluye imagen adjunta
+                    </p>
+                  )}
                 </div>
                 <span className="shrink-0 text-xs text-slate-400 font-medium">
                   {new Date(msg.fechaEnvio).toLocaleDateString()}

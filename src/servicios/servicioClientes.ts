@@ -9,7 +9,7 @@ export interface ClienteResumen {
   telefono: string;
   email: string | null;
   fechaNacimiento: string; // "YYYY-MM-DD"
-  edad: number;
+  edad: number | null;
   notas: string | null;
   activo: boolean;
   totalReservas: number;

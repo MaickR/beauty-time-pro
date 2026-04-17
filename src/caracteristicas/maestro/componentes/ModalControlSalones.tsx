@@ -16,6 +16,9 @@ import {
   obtenerSalonesActivos,
   obtenerSalonesSuspendidos,
   obtenerSalonesBloqueados,
+  obtenerTodosLosSalonesActivos,
+  obtenerTodosLosSalonesSuspendidos,
+  obtenerTodosLosSalonesBloqueados,
   suspenderSalon,
   bloquearSalon,
   activarSalon,
@@ -58,6 +61,7 @@ export function ModalControlSalones({ onCerrar }: PropsModalControlSalones) {
     contrasena: '',
   });
   const [clavesVisibles, setClavesVisibles] = useState<Set<string>>(new Set());
+  const [exportacionActiva, setExportacionActiva] = useState<TabControl | null>(null);
 
   const { mostrarToast } = usarToast();
   const clienteConsulta = useQueryClient();
@@ -182,6 +186,60 @@ export function ModalControlSalones({ onCerrar }: PropsModalControlSalones) {
     const libro = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(libro, hoja, titulo);
     XLSX.writeFile(libro, `${titulo}.xlsx`);
+  };
+
+  const exportarSalones = async (tabObjetivo: TabControl) => {
+    setExportacionActiva(tabObjetivo);
+
+    try {
+      if (tabObjetivo === 'activos') {
+        const salones = await obtenerTodosLosSalonesActivos();
+        exportarCSV(
+          'salones-activos',
+          salones.map((salon) => ({
+            Salón: salon.nombre,
+            Dueño: salon.dueno,
+            Correo: salon.correo ?? '',
+            Inicio: formatearFechaHumana(salon.periodo.inicio),
+            Fin: formatearFechaHumana(salon.periodo.fin),
+            Plan: salon.plan,
+          })),
+        );
+      }
+
+      if (tabObjetivo === 'suspendidos') {
+        const salones = await obtenerTodosLosSalonesSuspendidos();
+        exportarCSV(
+          'salones-suspendidos',
+          salones.map((salon) => ({
+            Salón: salon.nombre,
+            Correo: salon.correo ?? '',
+            'Fecha suspensión': salon.fechaSuspension ?? '',
+            Plan: salon.plan,
+          })),
+        );
+      }
+
+      if (tabObjetivo === 'bloqueados') {
+        const salones = await obtenerTodosLosSalonesBloqueados();
+        exportarCSV(
+          'salones-bloqueados',
+          salones.map((salon) => ({
+            Salón: salon.nombre,
+            Correo: salon.correo ?? '',
+            'Fecha bloqueo': salon.fechaBloqueo ?? '',
+            Motivo: salon.motivoBloqueo ?? '',
+          })),
+        );
+      }
+    } catch (error) {
+      mostrarToast({
+        mensaje: error instanceof Error ? error.message : 'No se pudo exportar la lista completa',
+        variante: 'error',
+      });
+    } finally {
+      setExportacionActiva(null);
+    }
   };
 
   const alternarClaveVisible = (id: string) => {
@@ -375,23 +433,12 @@ export function ModalControlSalones({ onCerrar }: PropsModalControlSalones) {
                   </table>
                   <div className="mt-2 flex justify-end">
                     <button
-                      onClick={() => {
-                        if (!activos.data?.datos) return;
-                        exportarCSV(
-                          'salones-activos',
-                          activos.data.datos.map((s) => ({
-                            Salón: s.nombre,
-                            Dueño: s.dueno,
-                            Correo: s.correo ?? '',
-                            Inicio: formatearFechaHumana(s.periodo.inicio),
-                            Fin: formatearFechaHumana(s.periodo.fin),
-                            Plan: s.plan,
-                          })),
-                        );
-                      }}
-                      className="px-3 py-1.5 bg-emerald-600 text-white rounded-lg text-xs font-bold flex items-center gap-1 hover:bg-emerald-700"
+                      onClick={() => void exportarSalones('activos')}
+                      disabled={exportacionActiva === 'activos'}
+                      className="px-3 py-1.5 bg-emerald-600 text-white rounded-lg text-xs font-bold flex items-center gap-1 hover:bg-emerald-700 disabled:opacity-60"
                     >
-                      <Download className="w-3.5 h-3.5" /> Exportar Excel
+                      <Download className="w-3.5 h-3.5" />
+                      {exportacionActiva === 'activos' ? 'Exportando...' : 'Exportar Excel'}
                     </button>
                   </div>
                 </div>
@@ -496,21 +543,12 @@ export function ModalControlSalones({ onCerrar }: PropsModalControlSalones) {
                   </table>
                   <div className="mt-2 flex justify-end">
                     <button
-                      onClick={() => {
-                        if (!suspendidos.data?.datos) return;
-                        exportarCSV(
-                          'salones-suspendidos',
-                          suspendidos.data.datos.map((s) => ({
-                            Salón: s.nombre,
-                            Correo: s.correo ?? '',
-                            'Fecha suspensión': s.fechaSuspension ?? '',
-                            Plan: s.plan,
-                          })),
-                        );
-                      }}
-                      className="px-3 py-1.5 bg-emerald-600 text-white rounded-lg text-xs font-bold flex items-center gap-1 hover:bg-emerald-700"
+                      onClick={() => void exportarSalones('suspendidos')}
+                      disabled={exportacionActiva === 'suspendidos'}
+                      className="px-3 py-1.5 bg-emerald-600 text-white rounded-lg text-xs font-bold flex items-center gap-1 hover:bg-emerald-700 disabled:opacity-60"
                     >
-                      <Download className="w-3.5 h-3.5" /> Exportar Excel
+                      <Download className="w-3.5 h-3.5" />
+                      {exportacionActiva === 'suspendidos' ? 'Exportando...' : 'Exportar Excel'}
                     </button>
                   </div>
                 </div>
@@ -611,21 +649,12 @@ export function ModalControlSalones({ onCerrar }: PropsModalControlSalones) {
                   </table>
                   <div className="mt-2 flex justify-end">
                     <button
-                      onClick={() => {
-                        if (!bloqueados.data?.datos) return;
-                        exportarCSV(
-                          'salones-bloqueados',
-                          bloqueados.data.datos.map((s) => ({
-                            Salón: s.nombre,
-                            Correo: s.correo ?? '',
-                            'Fecha bloqueo': s.fechaBloqueo ?? '',
-                            Motivo: s.motivoBloqueo ?? '',
-                          })),
-                        );
-                      }}
-                      className="px-3 py-1.5 bg-emerald-600 text-white rounded-lg text-xs font-bold flex items-center gap-1 hover:bg-emerald-700"
+                      onClick={() => void exportarSalones('bloqueados')}
+                      disabled={exportacionActiva === 'bloqueados'}
+                      className="px-3 py-1.5 bg-emerald-600 text-white rounded-lg text-xs font-bold flex items-center gap-1 hover:bg-emerald-700 disabled:opacity-60"
                     >
-                      <Download className="w-3.5 h-3.5" /> Exportar Excel
+                      <Download className="w-3.5 h-3.5" />
+                      {exportacionActiva === 'bloqueados' ? 'Exportando...' : 'Exportar Excel'}
                     </button>
                   </div>
                 </div>

@@ -1,5 +1,4 @@
 import type { FastifyInstance } from 'fastify';
-import bcrypt from 'bcrypt';
 import crypto from 'node:crypto';
 import { prisma } from '../prismaCliente.js';
 import { esEmailAdminProtegido, verificarJWT } from '../middleware/autenticacion.js';
@@ -7,6 +6,7 @@ import { requierePermiso } from '../middleware/verificarPermiso.js';
 import { revocarSesionesPorSujeto } from '../lib/sesionesAuth.js';
 import { registrarAuditoria } from '../utils/auditoria.js';
 import { esEmailColaboradorValido } from '../utils/validarEmail.js';
+import { generarHashContrasena } from '../utils/contrasenas.js';
 
 const ROLES_COLABORADOR = ['maestro', 'supervisor', 'vendedor'] as const;
 type RolColaborador = (typeof ROLES_COLABORADOR)[number];
@@ -20,11 +20,11 @@ function esAdminProtegido(admin: { email: string }): boolean {
 }
 
 function limpiarNombreColaborador(valor: string): string {
-  return valor.replace(/[^\p{L}\s]/gu, '').replace(/\s+/g, ' ').trim();
+  return valor.normalize('NFC').replace(/[^\p{L}\p{M}\s'’-]/gu, '').replace(/\s+/g, ' ').trim();
 }
 
 function esNombreColaboradorValido(valor: string): boolean {
-  return /^[\p{L}\s]{2,}$/u.test(limpiarNombreColaborador(valor));
+  return /^[\p{L}\p{M}\s'’-]{2,}$/u.test(limpiarNombreColaborador(valor));
 }
 
 async function obtenerColaboradorObjetivo(id: string) {
@@ -238,7 +238,7 @@ export async function rutasAdmins(servidor: FastifyInstance): Promise<void> {
         return respuesta.code(409).send({ error: 'El correo ya está registrado' });
       }
 
-      const hashContrasena = await bcrypt.hash(contrasena, 12);
+      const hashContrasena = await generarHashContrasena(contrasena);
 
       const nuevoColaborador = await prisma.usuario.create({
         data: {
@@ -391,7 +391,7 @@ export async function rutasAdmins(servidor: FastifyInstance): Promise<void> {
         actualizacionUsuario['rol'] = cargoNormalizado;
       }
       if (contrasena) {
-        actualizacionUsuario['hashContrasena'] = await bcrypt.hash(contrasena, 12);
+        actualizacionUsuario['hashContrasena'] = await generarHashContrasena(contrasena);
       }
 
       await prisma.$transaction(async (tx) => {
@@ -658,16 +658,28 @@ export async function rutasAdmins(servidor: FastifyInstance): Promise<void> {
 
       await registrarAuditoria({
         usuarioId: payload.sub,
-        accion: 'eliminar_colaborador',
+        accion: 'desactivar_colaborador',
         entidadTipo: 'usuario',
         entidadId: id,
-        detalles: { email: colaborador.email, nombre: colaborador.nombre, cargo: colaborador.rol },
+        detalles: {
+          email: colaborador.email,
+          nombre: colaborador.nombre,
+          cargo: colaborador.rol,
+          antes: { activo: colaborador.activo },
+          despues: { activo: false },
+          requestId: solicitud.id,
+        },
         ip: solicitud.ip,
       });
 
-      await prisma.usuario.delete({ where: { id } });
+      await prisma.usuario.update({
+        where: { id },
+        data: { activo: false },
+      });
 
-      return respuesta.send({ datos: { mensaje: 'Colaborador eliminado definitivamente' } });
+      await revocarSesionesPorSujeto('usuario', id, 'colaborador_desactivado_desde_panel');
+
+      return respuesta.send({ datos: { mensaje: 'Colaborador desactivado correctamente' } });
     },
   );
 

@@ -7,6 +7,7 @@ interface PersonalServidor {
   avatarUrl?: string | null;
   especialidades?: string[];
   activo?: boolean;
+  desactivadoHasta?: string | null;
   horaInicio?: string | null;
   horaFin?: string | null;
   descansoInicio?: string | null;
@@ -29,6 +30,7 @@ function mapearPersonal(personal: PersonalServidor): Personal {
     avatarUrl: personal.avatarUrl ?? null,
     specialties: personal.especialidades ?? [],
     active: personal.activo ?? true,
+    inactiveUntil: personal.desactivadoHasta ?? null,
     shiftStart: personal.horaInicio ?? null,
     shiftEnd: personal.horaFin ?? null,
     breakStart: personal.descansoInicio ?? null,
@@ -75,6 +77,12 @@ export async function actualizarPersonal(
     body: JSON.stringify(serializarPersonal(cambios)),
   });
   return mapearPersonal(respuesta.datos);
+}
+
+export async function eliminarPersonal(personalId: string): Promise<void> {
+  await peticion(`/personal/${personalId}`, {
+    method: 'DELETE',
+  });
 }
 
 export async function subirAvatarPersonal(

@@ -1,5 +1,10 @@
 import { describe, it, expect } from 'vitest';
-import { esDominioPermitido, esEmailValido } from './validarEmail.js';
+import {
+	esDominioClientePermitido,
+	esDominioPermitido,
+	esEmailClienteValido,
+	esEmailValido,
+} from './validarEmail.js';
 
 describe('validarEmail', () => {
 	describe('esDominioPermitido', () => {
@@ -42,6 +47,20 @@ describe('validarEmail', () => {
 			expect(esEmailValido('usuario@ gmail.com')).toBe(false);
 			expect(esEmailValido('usuario@')).toBe(false);
 			expect(esEmailValido('')).toBe(false);
+		});
+	});
+
+	describe('esEmailClienteValido', () => {
+		it('acepta solo los dominios permitidos para alta de cliente', () => {
+			expect(esDominioClientePermitido('usuario@gmail.com')).toBe(true);
+			expect(esDominioClientePermitido('usuario@icloud.com')).toBe(true);
+			expect(esEmailClienteValido('cliente@outlook.com')).toBe(true);
+		});
+
+		it('rechaza variantes fuera del alcance de alta de cliente', () => {
+			expect(esDominioClientePermitido('usuario@hotmail.es')).toBe(false);
+			expect(esEmailClienteValido('cliente@yahoo.com.co')).toBe(false);
+			expect(esEmailClienteValido('cliente@empresa.com')).toBe(false);
 		});
 	});
 });

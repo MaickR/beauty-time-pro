@@ -1,7 +1,9 @@
-import { useState, useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Pencil, Plus, Search, Trash2, X } from 'lucide-react';
+import { CircleCheck, CircleOff, Pencil, Plus, Search, Sparkles, Trash2, X } from 'lucide-react';
+import { DialogoConfirmacion } from '../../../componentes/ui/DialogoConfirmacion';
 import { usarToast } from '../../../componentes/ui/ProveedorToast';
+import { BotonIconoAccion } from '../../../componentes/ui/BotonIconoAccion.tsx';
 import {
   crearProducto,
   editarProducto,
@@ -19,6 +21,7 @@ import type { Moneda } from '../../../tipos';
 interface PropsPanelProductos {
   estudioId: string;
   moneda: Moneda;
+  plan: 'STANDARD' | 'PRO';
 }
 
 const CATEGORIAS_PRODUCTO = [
@@ -31,7 +34,7 @@ const CATEGORIAS_PRODUCTO = [
   'Otra',
 ] as const;
 
-export function PanelProductos({ estudioId, moneda }: PropsPanelProductos) {
+export function PanelProductos({ estudioId, moneda, plan }: PropsPanelProductos) {
   const { mostrarToast } = usarToast();
   const clienteConsulta = useQueryClient();
   const claveConsulta = ['productos', estudioId];
@@ -39,33 +42,36 @@ export function PanelProductos({ estudioId, moneda }: PropsPanelProductos) {
   const { data: productos = [], isLoading } = useQuery({
     queryKey: claveConsulta,
     queryFn: () => obtenerProductos(estudioId),
+    enabled: plan === 'PRO',
     staleTime: 2 * 60 * 1000,
   });
 
   const [busqueda, setBusqueda] = useState('');
-  const [filtroCategoria, setFiltroCategoria] = useState<string>('');
+  const [filtroCategoria, setFiltroCategoria] = useState('');
   const [editando, setEditando] = useState<Producto | null>(null);
   const [mostrarFormulario, setMostrarFormulario] = useState(false);
-
-  // Formulario
+  const [productoPendienteEliminar, setProductoPendienteEliminar] = useState<Producto | null>(null);
   const [nombre, setNombre] = useState('');
   const [categoria, setCategoria] = useState('General');
   const [precioTexto, setPrecioTexto] = useState('');
 
   const categoriasExistentes = useMemo(() => {
-    const cats = new Set(productos.map((p) => p.categoria));
-    return Array.from(cats).sort();
+    const categorias = new Set(productos.map((producto) => producto.categoria));
+    return Array.from(categorias).sort();
   }, [productos]);
 
   const productosFiltrados = useMemo(() => {
     let resultado = productos;
+
     if (busqueda.trim()) {
       const termino = busqueda.toLowerCase();
-      resultado = resultado.filter((p) => p.nombre.toLowerCase().includes(termino));
+      resultado = resultado.filter((producto) => producto.nombre.toLowerCase().includes(termino));
     }
+
     if (filtroCategoria) {
-      resultado = resultado.filter((p) => p.categoria === filtroCategoria);
+      resultado = resultado.filter((producto) => producto.categoria === filtroCategoria);
     }
+
     return resultado;
   }, [productos, busqueda, filtroCategoria]);
 
@@ -105,10 +111,12 @@ export function PanelProductos({ estudioId, moneda }: PropsPanelProductos) {
   });
 
   const mutacionToggle = useMutation({
-    mutationFn: (p: Producto) => editarProducto(estudioId, p.id, { activo: !p.activo }),
+    mutationFn: (producto: Producto) => editarProducto(estudioId, producto.id, { activo: !producto.activo }),
     onSuccess: () => {
       void clienteConsulta.invalidateQueries({ queryKey: claveConsulta });
+      mostrarToast('Estado del producto actualizado');
     },
+    onError: () => mostrarToast('No se pudo actualizar el estado del producto'),
   });
 
   function limpiarFormulario() {
@@ -133,13 +141,13 @@ export function PanelProductos({ estudioId, moneda }: PropsPanelProductos) {
       return;
     }
 
-    const precioNum = Number(precioTexto);
-    if (!precioNum || precioNum <= 0) {
+    const precioNumero = Number(precioTexto);
+    if (!precioNumero || precioNumero <= 0) {
       mostrarToast('El precio debe ser mayor a 0');
       return;
     }
 
-    const precioCentavos = convertirMonedaACentavos(precioNum);
+    const precioCentavos = convertirMonedaACentavos(precioNumero);
 
     if (editando) {
       mutacionEditar.mutate({
@@ -148,43 +156,86 @@ export function PanelProductos({ estudioId, moneda }: PropsPanelProductos) {
         categoria,
         precio: precioCentavos,
       });
-    } else {
-      mutacionCrear.mutate({
-        nombre: nombre.trim(),
-        categoria,
-        precio: precioCentavos,
-      });
+      return;
     }
+
+    mutacionCrear.mutate({
+      nombre: nombre.trim(),
+      categoria,
+      precio: precioCentavos,
+    });
   }
 
   if (isLoading) {
     return (
       <div className="flex justify-center p-12">
-        <div className="w-8 h-8 border-2 border-pink-600 border-t-transparent rounded-full animate-spin" />
+        <div className="h-8 w-8 animate-spin rounded-full border-2 border-pink-600 border-t-transparent" />
+      </div>
+    );
+  }
+
+  if (plan !== 'PRO') {
+    return (
+      <div className="max-w-4xl rounded-4xl border border-slate-200 bg-white p-6 shadow-sm sm:p-8">
+        <div className="flex flex-col gap-5 rounded-3xl border border-amber-200 bg-linear-to-br from-amber-50 via-white to-pink-50 p-5 sm:p-6">
+          <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-amber-100 text-amber-700">
+            <Sparkles className="h-6 w-6" aria-hidden="true" />
+          </div>
+          <div className="space-y-2">
+            <p className="text-[11px] font-black uppercase tracking-[0.25em] text-amber-700">
+              Función Pro
+            </p>
+            <h3 className="text-2xl font-black tracking-tight text-slate-900">
+              El catálogo de productos está disponible solo en membresías PRO
+            </h3>
+            <p className="max-w-2xl text-sm text-slate-600">
+              Al subir de plan podrás gestionar productos extra, mostrarlos en tus flujos de venta y mantenerlos visibles u ocultos con control total desde este panel.
+            </p>
+          </div>
+        </div>
       </div>
     );
   }
 
   return (
-    <div className="space-y-6 max-w-4xl">
-      {/* Barra de acciones */}
-      <div className="flex flex-col sm:flex-row gap-3 items-start sm:items-center justify-between">
-        <div className="relative flex-1 max-w-sm">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-          <input
-            type="text"
-            placeholder="Buscar productos..."
-            value={busqueda}
-            onChange={(e) => setBusqueda(e.target.value)}
-            className="w-full pl-10 pr-4 py-2.5 border border-slate-200 rounded-2xl text-sm"
-          />
+    <div className="max-w-4xl space-y-6">
+      <div className="flex flex-col gap-3 rounded-4xl border border-slate-200 bg-white p-4 shadow-sm sm:p-5">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div className="relative w-full sm:max-w-sm">
+            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+            <input
+              type="text"
+              placeholder="Buscar productos..."
+              value={busqueda}
+              onChange={(evento) => setBusqueda(evento.target.value)}
+              className="w-full rounded-2xl border border-slate-200 py-3 pl-10 pr-4 text-sm outline-none transition focus:border-pink-400 focus:ring-2 focus:ring-pink-100"
+            />
+          </div>
+
+          {!mostrarFormulario && (
+            <button
+              type="button"
+              onClick={() => setMostrarFormulario(true)}
+              className="inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-(--color-primario) px-5 py-3 text-sm font-black uppercase tracking-widest text-white shadow-sm transition-colors hover:bg-(--color-primario-oscuro) sm:w-auto"
+            >
+              <Plus className="h-4 w-4" /> Agregar producto
+            </button>
+          )}
         </div>
-        <div className="flex gap-2 items-center">
-          {categoriasExistentes.length > 1 && (
+
+        {categoriasExistentes.length > 1 && (
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+            <label
+              htmlFor="filtro-categoria"
+              className="text-xs font-black uppercase tracking-widest text-slate-500"
+            >
+              Filtrar por categoría
+            </label>
             <select
+              id="filtro-categoria"
               value={filtroCategoria}
-              onChange={(e) => setFiltroCategoria(e.target.value)}
-              className="border border-slate-200 rounded-2xl px-3 py-2.5 text-sm"
+              onChange={(evento) => setFiltroCategoria(evento.target.value)}
+              className="w-full rounded-2xl border border-slate-200 px-3 py-3 text-sm outline-none transition focus:border-pink-400 focus:ring-2 focus:ring-pink-100 sm:w-auto"
               aria-label="Filtrar por categoría"
             >
               <option value="">Todas las categorías</option>
@@ -194,65 +245,49 @@ export function PanelProductos({ estudioId, moneda }: PropsPanelProductos) {
                 </option>
               ))}
             </select>
-          )}
-          {!mostrarFormulario && (
-            <button
-              type="button"
-              onClick={() => setMostrarFormulario(true)}
-              className="inline-flex items-center gap-2 px-5 py-2.5 rounded-2xl bg-(--color-primario) hover:bg-(--color-primario-oscuro) text-white text-sm font-black uppercase tracking-widest transition-colors shadow-sm"
-            >
-              <Plus className="w-4 h-4" /> Agregar producto
-            </button>
-          )}
-        </div>
+          </div>
+        )}
       </div>
 
-      {/* Formulario crear/editar */}
       {mostrarFormulario && (
-        <div className="bg-white rounded-[2.5rem] p-6 border border-slate-200 shadow-sm space-y-4">
-          <div className="flex justify-between items-center">
-            <h3 className="text-lg font-black uppercase tracking-tight">
+        <div className="space-y-4 rounded-4xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
+          <div className="flex items-center justify-between gap-3">
+            <h3 className="text-lg font-black uppercase tracking-tight text-slate-900">
               {editando ? 'Editar producto' : 'Nuevo producto'}
             </h3>
             <button
               type="button"
               onClick={limpiarFormulario}
-              className="text-slate-400 hover:text-slate-600"
+              className="rounded-full p-2 text-slate-400 transition hover:bg-slate-100 hover:text-slate-600"
               aria-label="Cerrar formulario"
             >
-              <X className="w-5 h-5" />
+              <X className="h-5 w-5" />
             </button>
           </div>
 
-          <div className="grid sm:grid-cols-3 gap-4">
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
             <div>
-              <label
-                htmlFor="nombreProducto"
-                className="block text-sm font-bold text-slate-700 mb-1"
-              >
+              <label htmlFor="nombreProducto" className="mb-1 block text-sm font-bold text-slate-700">
                 Nombre
               </label>
               <input
                 id="nombreProducto"
                 type="text"
                 value={nombre}
-                onChange={(e) => setNombre(e.target.value)}
+                onChange={(evento) => setNombre(evento.target.value)}
                 placeholder="Ej: Shampoo de queratina"
-                className="w-full border border-slate-200 rounded-2xl px-4 py-2.5 text-sm"
+                className="w-full rounded-2xl border border-slate-200 px-4 py-3 text-sm outline-none transition focus:border-pink-400 focus:ring-2 focus:ring-pink-100"
               />
             </div>
             <div>
-              <label
-                htmlFor="categoriaProducto"
-                className="block text-sm font-bold text-slate-700 mb-1"
-              >
+              <label htmlFor="categoriaProducto" className="mb-1 block text-sm font-bold text-slate-700">
                 Categoría
               </label>
               <select
                 id="categoriaProducto"
                 value={categoria}
-                onChange={(e) => setCategoria(e.target.value)}
-                className="w-full border border-slate-200 rounded-2xl px-4 py-2.5 text-sm"
+                onChange={(evento) => setCategoria(evento.target.value)}
+                className="w-full rounded-2xl border border-slate-200 px-4 py-3 text-sm outline-none transition focus:border-pink-400 focus:ring-2 focus:ring-pink-100"
               >
                 {CATEGORIAS_PRODUCTO.map((cat) => (
                   <option key={cat} value={cat}>
@@ -262,10 +297,7 @@ export function PanelProductos({ estudioId, moneda }: PropsPanelProductos) {
               </select>
             </div>
             <div>
-              <label
-                htmlFor="precioProducto"
-                className="block text-sm font-bold text-slate-700 mb-1"
-              >
+              <label htmlFor="precioProducto" className="mb-1 block text-sm font-bold text-slate-700">
                 Precio
               </label>
               <input
@@ -274,9 +306,9 @@ export function PanelProductos({ estudioId, moneda }: PropsPanelProductos) {
                 min="1"
                 step="1"
                 value={precioTexto}
-                onChange={(e) => setPrecioTexto(e.target.value)}
+                onChange={(evento) => setPrecioTexto(evento.target.value)}
                 placeholder="350"
-                className="w-full border border-slate-200 rounded-2xl px-4 py-2.5 text-sm"
+                className="w-full rounded-2xl border border-slate-200 px-4 py-3 text-sm outline-none transition focus:border-pink-400 focus:ring-2 focus:ring-pink-100"
               />
             </div>
           </div>
@@ -285,7 +317,7 @@ export function PanelProductos({ estudioId, moneda }: PropsPanelProductos) {
             type="button"
             onClick={enviar}
             disabled={mutacionCrear.isPending || mutacionEditar.isPending}
-            className="px-6 py-2.5 rounded-2xl bg-(--color-primario) hover:bg-(--color-primario-oscuro) text-white text-sm font-black uppercase tracking-widest transition-colors shadow-sm disabled:opacity-60"
+            className="w-full rounded-2xl bg-(--color-primario) px-6 py-3 text-sm font-black uppercase tracking-widest text-white shadow-sm transition-colors hover:bg-(--color-primario-oscuro) disabled:opacity-60 sm:w-auto"
           >
             {mutacionCrear.isPending || mutacionEditar.isPending
               ? 'Guardando...'
@@ -296,66 +328,96 @@ export function PanelProductos({ estudioId, moneda }: PropsPanelProductos) {
         </div>
       )}
 
-      {/* Lista de productos */}
       {productosFiltrados.length === 0 ? (
-        <div className="bg-white rounded-[2.5rem] p-12 border border-slate-200 shadow-sm text-center">
-          <p className="text-slate-400 font-bold">
+        <div className="rounded-4xl border border-slate-200 bg-white p-10 text-center shadow-sm">
+          <p className="font-bold text-slate-400">
             {productos.length === 0
               ? 'Aún no tienes productos. Agrega el primero.'
               : 'No hay productos que coincidan con tu búsqueda.'}
           </p>
         </div>
       ) : (
-        <div className="space-y-2">
+        <div className="space-y-3">
           {productosFiltrados.map((producto) => (
-            <div
+            <article
               key={producto.id}
-              className={`flex items-center justify-between gap-4 bg-white rounded-2xl border border-slate-200 px-5 py-3.5 transition-opacity ${!producto.activo ? 'opacity-50' : ''}`}
+              className={`rounded-4xl border border-slate-200 bg-white p-4 shadow-sm transition-opacity sm:p-5 ${!producto.activo ? 'opacity-55' : ''}`}
             >
-              <div className="min-w-0 flex-1">
-                <div className="flex items-center gap-2">
-                  <p className="text-sm font-bold text-slate-800 truncate">{producto.nombre}</p>
-                  <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">
-                    {producto.categoria}
-                  </span>
+              <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+                <div className="min-w-0 space-y-3">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <h3 className="wrap-break-word text-base font-black tracking-tight text-slate-900">
+                      {producto.nombre}
+                    </h3>
+                    <span className="rounded-full bg-slate-100 px-3 py-1 text-[10px] font-black uppercase tracking-widest text-slate-500">
+                      {producto.categoria}
+                    </span>
+                    <span
+                      className={`rounded-full px-3 py-1 text-[10px] font-black uppercase tracking-widest ${producto.activo ? 'bg-emerald-50 text-emerald-700' : 'bg-slate-100 text-slate-500'}`}
+                    >
+                      {producto.activo ? 'Visible' : 'Oculto'}
+                    </span>
+                  </div>
+
+                  <p className="text-2xl font-black tracking-tight text-slate-900">
+                    {formatearDinero(producto.precio, moneda)}
+                  </p>
+                </div>
+
+                <div className="flex items-center justify-center gap-2 rounded-2xl bg-slate-50 p-2 sm:shrink-0">
+                  <BotonIconoAccion
+                    descripcion="Editar"
+                    tono="primario"
+                    onClick={() => iniciarEdicion(producto)}
+                    icono={<Pencil className="h-4 w-4" aria-hidden="true" />}
+                  />
+                  <BotonIconoAccion
+                    descripcion={producto.activo ? 'Ocultar' : 'Activar'}
+                    tono={producto.activo ? 'advertencia' : 'exito'}
+                    onClick={() => mutacionToggle.mutate(producto)}
+                    icono={
+                      producto.activo ? (
+                        <CircleOff className="h-4 w-4" aria-hidden="true" />
+                      ) : (
+                        <CircleCheck className="h-4 w-4" aria-hidden="true" />
+                      )
+                    }
+                  />
+                  <BotonIconoAccion
+                    descripcion="Eliminar"
+                    tono="peligro"
+                    onClick={() => setProductoPendienteEliminar(producto)}
+                    icono={<Trash2 className="h-4 w-4" aria-hidden="true" />}
+                  />
                 </div>
               </div>
-              <div className="flex items-center gap-3 shrink-0">
-                <span className="text-sm font-black text-slate-800">
-                  {formatearDinero(producto.precio, moneda)}
-                </span>
-                <button
-                  type="button"
-                  onClick={() => iniciarEdicion(producto)}
-                  className="p-1.5 rounded-lg hover:bg-slate-100 text-slate-400 hover:text-slate-600"
-                  aria-label={`Editar ${producto.nombre}`}
-                >
-                  <Pencil className="w-4 h-4" />
-                </button>
-                <button
-                  type="button"
-                  onClick={() => mutacionToggle.mutate(producto)}
-                  className={`text-xs font-bold px-3 py-1 rounded-full border transition-colors ${producto.activo ? 'border-emerald-200 bg-emerald-50 text-emerald-700' : 'border-slate-200 bg-slate-50 text-slate-500'}`}
-                >
-                  {producto.activo ? 'Activo' : 'Inactivo'}
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    if (confirm('¿Deseas eliminar este producto?')) {
-                      mutacionEliminar.mutate(producto.id);
-                    }
-                  }}
-                  className="p-1.5 rounded-lg hover:bg-red-50 text-slate-400 hover:text-red-500"
-                  aria-label={`Eliminar ${producto.nombre}`}
-                >
-                  <Trash2 className="w-4 h-4" />
-                </button>
-              </div>
-            </div>
+            </article>
           ))}
         </div>
       )}
+
+      <DialogoConfirmacion
+        abierto={productoPendienteEliminar !== null}
+        mensaje="Eliminar producto"
+        descripcion={
+          productoPendienteEliminar
+            ? `Este producto se eliminará del catálogo del salón: ${productoPendienteEliminar.nombre}.`
+            : undefined
+        }
+        textoConfirmar="Eliminar"
+        variante="peligro"
+        cargando={mutacionEliminar.isPending}
+        onCancelar={() => setProductoPendienteEliminar(null)}
+        onConfirmar={() => {
+          if (!productoPendienteEliminar) {
+            return;
+          }
+
+          mutacionEliminar.mutate(productoPendienteEliminar.id, {
+            onSettled: () => setProductoPendienteEliminar(null),
+          });
+        }}
+      />
     </div>
   );
 }

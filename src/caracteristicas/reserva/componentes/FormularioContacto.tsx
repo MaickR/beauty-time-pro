@@ -1,8 +1,8 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
-import { Palette, AlertTriangle, Gift } from 'lucide-react';
+import { AlertTriangle, Gift } from 'lucide-react';
 import {
   buscarClienteFidelidadPorTelefono,
   type EstadoFidelidadCliente,
@@ -12,23 +12,34 @@ import {
   limpiarNombrePersonaEntrada,
   limpiarTelefonoEntrada,
 } from '../../../utils/formularioSalon';
+import { esCumpleanosActualValido } from '../../../lib/registroCliente';
 import type { Estudio } from '../../../tipos';
 import type { usarFlujoReserva } from '../hooks/usarFlujoReserva';
+import {
+  obtenerClaveServicioReserva,
+  obtenerSeccionDetalleServicio,
+} from '../utils/detallesServicios';
 
 const esquema = z.object({
   nombreCliente: z
     .string()
     .min(3, 'Mínimo 3 caracteres')
-    .regex(/^[\p{L}\s]+$/u, 'Ingresa solo letras y espacios'),
+    .regex(/^[\p{L}\p{M}\s'’-]+$/u, 'Ingresa letras, espacios, apóstrofes y guiones válidos'),
   telefonoCliente: z.string().regex(/^[0-9]{10}$/, '10 dígitos sin espacios ni guiones'),
   fechaNacimiento: z
     .string()
-    .min(1, 'La fecha de nacimiento es requerida')
+    .min(1, 'La fecha de cumpleaños es requerida')
     .refine((v) => {
+      if (esCumpleanosActualValido(v)) {
+        return true;
+      }
       const d = new Date(v);
       return !isNaN(d.getTime()) && d <= new Date();
     }, 'No puede ser una fecha futura')
     .refine((v) => {
+      if (esCumpleanosActualValido(v)) {
+        return true;
+      }
       const d = new Date(v);
       const hace100 = new Date();
       hace100.setFullYear(hace100.getFullYear() - 100);
@@ -45,10 +56,14 @@ const esquema = z.object({
     )
     .or(z.literal(''))
     .optional(),
+  metodoPago: z.enum(['cash', 'card', 'bank_transfer', 'digital_transfer']),
   observaciones: z
     .string()
     .max(240, 'Máximo 240 caracteres')
-    .regex(/^[\p{L}\p{N}\s.,:;()¿?¡!-]*$/u, 'Usa solo texto, números y signos básicos')
+    .regex(
+      /^[\p{L}\p{M}\p{N}\s.,:;()¿?¡!'"%/#&+\-–—]*$/u,
+      'Usa letras, números y signos comunes del español',
+    )
     .optional(),
 });
 
@@ -56,14 +71,23 @@ type CamposContacto = z.infer<typeof esquema>;
 
 type DatosEnvioContacto = CamposContacto & { usarRecompensa?: boolean; observaciones?: string };
 
+const METODOS_PAGO = [
+  { valor: 'cash', etiqueta: 'Efectivo' },
+  { valor: 'card', etiqueta: 'Tarjeta' },
+  { valor: 'bank_transfer', etiqueta: 'Transferencia bancaria' },
+  { valor: 'digital_transfer', etiqueta: 'Transferencia digital' },
+] as const;
+
 interface PropsFormularioContacto {
   estudio: Estudio;
   flujo: ReturnType<typeof usarFlujoReserva>;
-  requiereColor: boolean;
   onEnviar: (datos: DatosEnvioContacto) => void;
 }
 
-function calcularEdad(fechaNacimiento: string): number {
+function calcularEdad(fechaNacimiento: string): number | null {
+  if (esCumpleanosActualValido(fechaNacimiento)) {
+    return null;
+  }
   const nacimiento = new Date(fechaNacimiento);
   const hoy = new Date();
   let edad = hoy.getFullYear() - nacimiento.getFullYear();
@@ -75,7 +99,6 @@ function calcularEdad(fechaNacimiento: string): number {
 export function FormularioContacto({
   estudio,
   flujo,
-  requiereColor,
   onEnviar,
 }: PropsFormularioContacto) {
   const [fidelidadCliente, setFidelidadCliente] = useState<EstadoFidelidadCliente | null>(null);
@@ -94,15 +117,29 @@ export function FormularioContacto({
       telefonoCliente: flujo.telefonoCliente,
       fechaNacimiento: flujo.fechaNacimiento,
       email: flujo.email,
+      metodoPago: flujo.metodoPago,
     },
   });
 
   const fechaNacimientoValor = watch('fechaNacimiento');
   const registroFechaNacimiento = register('fechaNacimiento');
+  const edadCliente =
+    fechaNacimientoValor && !errors.fechaNacimiento ? calcularEdad(fechaNacimientoValor) : null;
   const esMenor =
-    fechaNacimientoValor && !errors.fechaNacimiento
-      ? calcularEdad(fechaNacimientoValor) < 18
-      : false;
+    edadCliente !== null ? edadCliente < 18 : false;
+  const seccionesDetalleServicio = useMemo(
+    () =>
+      flujo.serviciosSeleccionados.map((servicio) => {
+        const claveServicio = obtenerClaveServicioReserva(servicio);
+        return {
+          servicio,
+          claveServicio,
+          seccion: obtenerSeccionDetalleServicio(servicio),
+          valores: flujo.detallesServicios[claveServicio] ?? {},
+        };
+      }),
+    [flujo.detallesServicios, flujo.serviciosSeleccionados],
+  );
 
   // Sincronizar cambios con el flujo para que enviarReserva tenga los valores
   const valores = watch();
@@ -111,7 +148,21 @@ export function FormularioContacto({
     flujo.actualizarContacto('telefonoCliente', valores.telefonoCliente ?? '');
     flujo.actualizarContacto('fechaNacimiento', valores.fechaNacimiento ?? '');
     flujo.actualizarContacto('email', valores.email ?? '');
-  }, [valores.nombreCliente, valores.telefonoCliente, valores.fechaNacimiento, valores.email]);
+    flujo.actualizarContacto('metodoPago', valores.metodoPago ?? 'cash');
+  }, [
+    valores.nombreCliente,
+    valores.telefonoCliente,
+    valores.fechaNacimiento,
+    valores.email,
+    valores.metodoPago,
+  ]);
+
+  useEffect(() => {
+    setValue('nombreCliente', flujo.nombreCliente, { shouldDirty: false });
+    setValue('telefonoCliente', flujo.telefonoCliente, { shouldDirty: false });
+    setValue('fechaNacimiento', flujo.fechaNacimiento, { shouldDirty: false });
+    setValue('email', flujo.email, { shouldDirty: false });
+  }, [flujo.nombreCliente, flujo.telefonoCliente, flujo.fechaNacimiento, flujo.email, setValue]);
 
   const formularioValido =
     flujo.personalSeleccionado && flujo.horaSeleccionada && flujo.serviciosSeleccionados.length > 0;
@@ -162,45 +213,76 @@ export function FormularioContacto({
         Tus Datos de Contacto
       </h3>
 
-      {requiereColor && (
-        <div className="bg-pink-950/40 p-4 md:p-6 rounded-3xl border border-pink-900/50 mb-6">
-          <p className="text-[10px] font-black text-pink-400 uppercase tracking-widest mb-4 flex items-center gap-2">
-            <Palette className="w-4 h-4" aria-hidden="true" /> Detalles de tu Coloración (Opcional)
-          </p>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <div>
-              <label
-                htmlFor="marcaTinte"
-                className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 ml-2"
-              >
-                Marca de Tinte Preferida
-              </label>
-              <input
-                id="marcaTinte"
-                type="text"
-                className="w-full px-5 py-3 bg-slate-800 border border-slate-700 rounded-xl font-bold text-white outline-none focus:border-pink-500 transition-all"
-                placeholder="Ej: L'Oréal, Wella..."
-                value={flujo.marcaTinte}
-                onChange={(e) => flujo.actualizarContacto('marcaTinte', e.target.value)}
-              />
+      {seccionesDetalleServicio.length > 0 && (
+        <div className="mb-6 space-y-4">
+          {seccionesDetalleServicio.map(({ servicio, claveServicio, seccion, valores }) => (
+            <div
+              key={claveServicio}
+              className="rounded-3xl border border-pink-900/50 bg-pink-950/40 p-4 md:p-6"
+            >
+              <div className="mb-4">
+                <p className="text-[10px] font-black uppercase tracking-widest text-pink-400">
+                  {servicio.name}
+                </p>
+                <h4 className="mt-2 text-sm font-black text-white md:text-base">{seccion.titulo}</h4>
+                <p className="mt-1 text-xs text-slate-300">{seccion.descripcion}</p>
+              </div>
+
+              <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                {seccion.campos.map((campo) => {
+                  const valorActual = valores[campo.clave] ?? '';
+                  const idCampo = `${claveServicio}-${campo.clave}`;
+
+                  return (
+                    <div key={campo.clave} className={campo.tipo === 'area' ? 'md:col-span-2' : ''}>
+                      <label
+                        htmlFor={idCampo}
+                        className="mb-2 ml-2 block text-[10px] font-black uppercase tracking-widest text-slate-300"
+                      >
+                        {campo.etiqueta}
+                      </label>
+                      {campo.tipo === 'area' ? (
+                        <textarea
+                          id={idCampo}
+                          rows={3}
+                          maxLength={campo.maximo}
+                          className="w-full rounded-2xl border border-slate-700 bg-slate-800 px-4 py-3 text-sm font-medium text-white outline-none transition-all focus:border-pink-500"
+                          placeholder={campo.placeholder}
+                          value={valorActual}
+                          onChange={(evento) =>
+                            flujo.actualizarDetalleServicio(
+                              claveServicio,
+                              campo.clave,
+                              evento.target.value.slice(0, campo.maximo),
+                            )
+                          }
+                        />
+                      ) : (
+                        <input
+                          id={idCampo}
+                          type="text"
+                          maxLength={campo.maximo}
+                          className="w-full rounded-2xl border border-slate-700 bg-slate-800 px-4 py-3 text-sm font-bold text-white outline-none transition-all focus:border-pink-500"
+                          placeholder={campo.placeholder}
+                          value={valorActual}
+                          onChange={(evento) =>
+                            flujo.actualizarDetalleServicio(
+                              claveServicio,
+                              campo.clave,
+                              evento.target.value.slice(0, campo.maximo),
+                            )
+                          }
+                        />
+                      )}
+                      <p className="mt-2 text-right text-[11px] font-semibold text-slate-400">
+                        {valorActual.length}/{campo.maximo}
+                      </p>
+                    </div>
+                  );
+                })}
+              </div>
             </div>
-            <div>
-              <label
-                htmlFor="numeroTinte"
-                className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 ml-2"
-              >
-                Número / Tono del Tinte
-              </label>
-              <input
-                id="numeroTinte"
-                type="text"
-                className="w-full px-5 py-3 bg-slate-800 border border-slate-700 rounded-xl font-bold text-white outline-none focus:border-pink-500 transition-all"
-                placeholder="Ej: 7.1, 8.0..."
-                value={flujo.numeroTinte}
-                onChange={(e) => flujo.actualizarContacto('numeroTinte', e.target.value)}
-              />
-            </div>
-          </div>
+          ))}
         </div>
       )}
 
@@ -287,7 +369,7 @@ export function FormularioContacto({
                 htmlFor="fechaNacimiento"
                 className="block text-[10px] font-black text-pink-400 uppercase tracking-widest mb-3 ml-2"
               >
-                Fecha de Nacimiento{' '}
+                Fecha de Cumpleaños{' '}
                 <span className="text-red-500 text-sm" aria-hidden="true">
                   *
                 </span>
@@ -367,6 +449,29 @@ export function FormularioContacto({
             </div>
           </div>
 
+          <div>
+            <label
+              htmlFor="metodoPago"
+              className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3 ml-2"
+            >
+              Método de pago
+            </label>
+            <select
+              id="metodoPago"
+              {...register('metodoPago')}
+              className="w-full rounded-2xl border border-slate-700 bg-slate-800 px-6 py-4 font-bold text-white outline-none transition-all focus:border-pink-500"
+            >
+              {METODOS_PAGO.map((metodo) => (
+                <option key={metodo.valor} value={metodo.valor}>
+                  {metodo.etiqueta}
+                </option>
+              ))}
+            </select>
+            <p className="mt-2 ml-2 text-[11px] text-slate-400">
+              El pago se realiza al llegar o al finalizar el servicio en el salón.
+            </p>
+          </div>
+
           {consultandoFidelidad && (
             <div className="px-5 py-4 rounded-2xl bg-slate-800 border border-slate-700 text-sm text-slate-300 font-bold">
               Consultando tus beneficios de fidelidad...
@@ -400,7 +505,7 @@ export function FormularioContacto({
             </p>
             <p className="mt-2 font-bold text-white">{estudio.name}</p>
             <p className="mt-1 text-slate-300">
-              Sede: {flujo.sucursalSeleccionada || estudio.branches[0] || 'Principal'}
+              Salón: {flujo.sucursalSeleccionada || estudio.name || 'Principal'}
             </p>
           </div>
 

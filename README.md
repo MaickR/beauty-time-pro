@@ -194,6 +194,7 @@ EMAIL_REMITENTE="Beauty Time Pro <no-reply@tudominio.com>"
 
 # CORS
 FRONTEND_URL="http://localhost:5173"
+FRONTEND_ORIGENES_PERMITIDOS=""
 
 # Web Push (VAPID)
 VAPID_PUBLIC_KEY="..."
@@ -258,14 +259,16 @@ VITE_URL_API=http://localhost:3000
 
 1. Conectar repositorio y apuntar a la carpeta `server/`
 2. Configurar las variables de entorno del backend
-3. Railway detecta automáticamente `npm run build` y `npm run start`
+3. Railway ejecuta `npm run start:railway`, que aplica `prisma migrate deploy` antes de levantar Fastify para evitar 500 por esquema desfasado
 4. Verificar salud: `GET /health` → `{ "status": "ok" }`
+5. Si el frontend vive en Vercel con previews, configurar `FRONTEND_ORIGENES_PERMITIDOS` con orígenes exactos o patrones acotados, por ejemplo `https://beauty-time-pro-git-*.vercel.app`
 
 ### Frontend — Vercel
 
 1. Importar repositorio desde la raíz
 2. Configurar `VITE_URL_API` apuntando al backend publicado
 3. Vercel detecta Vite automáticamente
+4. En despliegue Vercel + Railway el backend ya queda preparado para cookies `SameSite=None; Secure`, necesarias cuando frontend y API viven en dominios distintos
 
 <br>
 

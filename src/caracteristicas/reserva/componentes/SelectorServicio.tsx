@@ -10,6 +10,7 @@ interface PropsSelectorServicio {
   serviciosSeleccionados: Servicio[];
   moneda: Moneda;
   onAlternar: (servicio: Servicio) => void;
+  indicadorPaso?: string;
 }
 
 export function SelectorServicio({
@@ -20,6 +21,7 @@ export function SelectorServicio({
   serviciosSeleccionados,
   moneda,
   onAlternar,
+  indicadorPaso = '2',
 }: PropsSelectorServicio) {
   const miembro = personalSeleccionado
     ? estudio.staff?.find((s) => s.id === personalSeleccionado)
@@ -37,12 +39,12 @@ export function SelectorServicio({
       <section className="rounded-[2.5rem] border border-slate-200 bg-slate-50 p-6 md:p-8 shadow-sm">
         <h3 className="mb-4 flex items-center gap-3 text-lg font-black uppercase tracking-tight text-slate-800 md:text-xl">
           <span className="flex h-8 w-8 items-center justify-center rounded-full bg-pink-100 text-sm text-pink-600">
-            1
+            {indicadorPaso}
           </span>
           Servicios
         </h3>
         <p className="text-sm font-bold text-slate-500">
-          Selecciona primero una sede para continuar con el catálogo de servicios.
+          Selecciona primero el salón para continuar con el catálogo de servicios.
         </p>
       </section>
     );
@@ -52,13 +54,13 @@ export function SelectorServicio({
     <section className="rounded-[2.5rem] border border-slate-200 bg-slate-50 p-6 md:p-8 shadow-sm">
       <h3 className="mb-6 flex items-center gap-3 text-lg font-black uppercase tracking-tight text-slate-800 md:text-xl">
         <span className="bg-pink-100 text-pink-600 w-8 h-8 rounded-full flex items-center justify-center text-sm">
-          1
+          {indicadorPaso}
         </span>
         Servicios
       </h3>
       {sucursalSeleccionada ? (
         <p className="mb-4 text-xs font-black uppercase tracking-[0.18em] text-slate-500">
-          Sede activa: {sucursalSeleccionada}
+          Salón actual: {sucursalSeleccionada}
         </p>
       ) : null}
       {miembro && (

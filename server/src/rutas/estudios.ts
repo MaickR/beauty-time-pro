@@ -1,8 +1,10 @@
+import crypto from 'crypto';
 import type { FastifyInstance } from 'fastify';
 import type { Prisma } from '../generated/prisma/client.js';
 import bcrypt from 'bcrypt';
 import { z } from 'zod';
 import { resolverCategoriasSalon } from '../lib/categoriasSalon.js';
+import { parsearExcepcionesDisponibilidad } from '../lib/disponibilidadExcepciones.js';
 import { asegurarColumnaTabla, construirSelectDesdeColumnas, obtenerColumnasTabla, obtenerTablasDisponibles } from '../lib/compatibilidadEsquema.js';
 import { env } from '../lib/env.js';
 import { obtenerSlotsDisponiblesBackend } from '../lib/programacion.js';
@@ -11,12 +13,20 @@ import { verificarJWT } from '../middleware/autenticacion.js';
 import { registrarAuditoria } from '../utils/auditoria.js';
 import { sanitizarTexto } from '../utils/sanitizar.js';
 import { enviarEmailSolicitudCancelacion } from '../servicios/servicioEmail.js';
+import { revocarSesionesPorSujeto } from '../lib/sesionesAuth.js';
+import { normalizarServiciosEntrada } from '../lib/serializacionReservas.js';
 import { colorHexSchema, emailOpcionalONuloSchema, fechaIsoSchema, horaOpcionalONulaSchema, horaSchema, obtenerMensajeValidacion, telefonoSchema, textoOpcionalONuloSchema, textoSchema, urlOpcionalSchema } from '../lib/validacion.js';
 import { esClaveSalonSegura, sanitizarClaveSalon } from '../lib/clavesSalon.js';
 import { normalizarPlanEstudio, obtenerDefinicionPlan, validarCantidadServiciosPlan } from '../lib/planes.js';
 import { asegurarPrecioActualSalon, obtenerPrecioPlanActual, resolverPrecioRenovacion } from '../lib/preciosPlanes.js';
 import { obtenerNombresSucursales, obtenerSedesRelacionadas } from '../lib/sedes.js';
-import { obtenerFechaISOEnZona, obtenerZonaHorariaPorPais, normalizarZonaHorariaEstudio } from '../utils/zonasHorarias.js';
+import {
+  construirFechaHoraEnZona,
+  obtenerFechaISOEnZona,
+  obtenerMinutosActualesEnZona,
+  obtenerZonaHorariaPorPais,
+  normalizarZonaHorariaEstudio,
+} from '../utils/zonasHorarias.js';
 import { generarSlugUnico } from '../utils/generarSlug.js';
 
 const esquemaHorario = z.record(
@@ -38,6 +48,36 @@ const esquemaServicio = z.object({
 const esquemaServicioPersonalizado = z.object({
   name: textoSchema('servicioPersonalizado', 80),
   category: textoSchema('categoria', 80),
+});
+
+const esquemaExcepcionDisponibilidad = z.object({
+  id: z.string().trim().min(1, 'El identificador es obligatorio').optional(),
+  fecha: fechaIsoSchema,
+  tipo: z.enum(['cerrado', 'horario_modificado']),
+  horaInicio: horaOpcionalONulaSchema.optional(),
+  horaFin: horaOpcionalONulaSchema.optional(),
+  aplicaTodasLasSedes: z.boolean().optional(),
+  sedes: z.array(textoSchema('sede', 120)).max(50, 'No puedes asociar más de 50 sedes').optional(),
+  motivo: textoOpcionalONuloSchema('motivo', 160),
+  activa: z.boolean().optional(),
+  creadoEn: z.string().trim().optional(),
+  actualizadoEn: z.string().trim().optional(),
+}).superRefine((datos, contexto) => {
+  if (datos.tipo === 'horario_modificado') {
+    if (!datos.horaInicio) {
+      contexto.addIssue({ code: z.ZodIssueCode.custom, message: 'La hora de apertura es obligatoria', path: ['horaInicio'] });
+    }
+    if (!datos.horaFin) {
+      contexto.addIssue({ code: z.ZodIssueCode.custom, message: 'La hora de cierre es obligatoria', path: ['horaFin'] });
+    }
+    if (datos.horaInicio && datos.horaFin && datos.horaInicio >= datos.horaFin) {
+      contexto.addIssue({ code: z.ZodIssueCode.custom, message: 'La hora de cierre debe ser posterior a la de apertura', path: ['horaFin'] });
+    }
+  }
+
+  if (!datos.aplicaTodasLasSedes && (!Array.isArray(datos.sedes) || datos.sedes.length === 0)) {
+    contexto.addIssue({ code: z.ZodIssueCode.custom, message: 'Selecciona al menos una sede o aplica a todas', path: ['sedes'] });
+  }
 });
 
 const claveSalonSchema = (campo: 'claveDueno' | 'claveCliente') =>
@@ -65,6 +105,7 @@ const esquemaCamposEstudio = {
   servicios: z.array(esquemaServicio).max(100, 'No puedes registrar más de 100 servicios').optional(),
   serviciosCustom: z.array(esquemaServicioPersonalizado).max(100, 'No puedes registrar más de 100 servicios personalizados').optional(),
   festivos: z.array(fechaIsoSchema).max(366, 'No puedes registrar más de 366 festivos').optional(),
+  excepcionesDisponibilidad: z.array(esquemaExcepcionDisponibilidad).max(500, 'No puedes registrar más de 500 excepciones').optional(),
   colorPrimario: colorHexSchema.optional(),
   descripcion: textoOpcionalONuloSchema('descripcion', 500),
   direccion: textoOpcionalONuloSchema('direccion', 180),
@@ -95,6 +136,7 @@ const esquemaCrearEstudio = z.object({
   servicios: z.array(esquemaServicio).max(100).optional(),
   serviciosCustom: z.array(esquemaServicioPersonalizado).max(100).optional(),
   festivos: z.array(fechaIsoSchema).max(366).optional(),
+  excepcionesDisponibilidad: z.array(esquemaExcepcionDisponibilidad).max(500).optional(),
   colorPrimario: colorHexSchema.optional(),
   descripcion: textoOpcionalONuloSchema('descripcion', 500),
   direccion: textoOpcionalONuloSchema('direccion', 180),
@@ -170,6 +212,94 @@ async function asegurarColumnaPinCancelacion(): Promise<boolean> {
   return asegurarColumnaTabla('estudios', 'pinCancelacionHash', 'VARCHAR(191) NULL');
 }
 
+async function asegurarColumnaExcepcionesDisponibilidad(): Promise<boolean> {
+  return asegurarColumnaTabla('estudios', 'excepcionesDisponibilidad', 'JSON NULL');
+}
+
+function normalizarTextoComparacion(valor: string): string {
+  return valor
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .trim()
+    .toLowerCase();
+}
+
+function normalizarExcepcionesDisponibilidadEntrada(params: {
+  excepciones: z.infer<typeof esquemaExcepcionDisponibilidad>[];
+  fechaMinima: string;
+  horaActual: string;
+  sedesDisponibles: string[];
+}): Prisma.InputJsonValue {
+  const { excepciones, fechaMinima, horaActual, sedesDisponibles } = params;
+  const sedesValidas = new Map(sedesDisponibles.map((sede) => [normalizarTextoComparacion(sede), sede]));
+  const llavesActivas = new Set<string>();
+
+  return excepciones.map((excepcion) => {
+    if (excepcion.fecha < fechaMinima) {
+      throw new Error('No puedes registrar excepciones en fechas pasadas');
+    }
+
+    if (
+      excepcion.tipo === 'horario_modificado' &&
+      excepcion.fecha === fechaMinima &&
+      excepcion.horaFin !== undefined &&
+      excepcion.horaFin !== null &&
+      excepcion.horaFin <= horaActual
+    ) {
+      throw new Error('El horario modificado debe terminar después de la hora actual');
+    }
+
+    const sedesNormalizadas = excepcion.aplicaTodasLasSedes
+      ? []
+      : Array.from(
+          new Set(
+            (excepcion.sedes ?? []).map((sede) => {
+              const sedeNormalizada = normalizarTextoComparacion(sede);
+              const sedeReal = sedesValidas.get(sedeNormalizada);
+              if (!sedeReal) {
+                throw new Error(`La sede ${sede} no pertenece a este salón`);
+              }
+              return sedeReal;
+            }),
+          ),
+        );
+
+    const llave = excepcion.aplicaTodasLasSedes
+      ? `${excepcion.fecha}|todas`
+      : `${excepcion.fecha}|${sedesNormalizadas.map(normalizarTextoComparacion).sort().join(',')}`;
+    const activa = excepcion.activa ?? true;
+
+    if (activa) {
+      if (llavesActivas.has(llave)) {
+        throw new Error('No puedes registrar dos excepciones activas para la misma fecha y sedes');
+      }
+      llavesActivas.add(llave);
+    }
+
+    const marcaTiempo = new Date().toISOString();
+
+    return {
+      id: excepcion.id?.trim() || crypto.randomUUID(),
+      fecha: excepcion.fecha,
+      tipo: excepcion.tipo,
+      horaInicio: excepcion.tipo === 'horario_modificado' ? excepcion.horaInicio ?? null : null,
+      horaFin: excepcion.tipo === 'horario_modificado' ? excepcion.horaFin ?? null : null,
+      aplicaTodasLasSedes: excepcion.aplicaTodasLasSedes ?? false,
+      sedes: sedesNormalizadas,
+      motivo: excepcion.motivo ?? null,
+      activa,
+      creadoEn: excepcion.creadoEn?.trim() || marcaTiempo,
+      actualizadoEn: marcaTiempo,
+    };
+  }) as Prisma.InputJsonValue;
+}
+
+function formatearHoraDesdeMinutos(totalMinutos: number): string {
+  const horas = Math.floor(totalMinutos / 60);
+  const minutos = totalMinutos % 60;
+  return `${String(horas).padStart(2, '0')}:${String(minutos).padStart(2, '0')}`;
+}
+
 function esErrorCompatibilidadEstudio(error: unknown): boolean {
   const codigo =
     typeof error === 'object' && error !== null && 'code' in error
@@ -180,7 +310,7 @@ function esErrorCompatibilidadEstudio(error: unknown): boolean {
   return (
     codigo === 'P2022' ||
     /Unknown column/i.test(mensaje) ||
-    /(pinCancelacionHash|plan|primeraVez|cancelacionSolicitada|fechaSolicitudCancelacion|motivoCancelacion|precioPlanActualId|precioPlanProximoId|fechaAplicacionPrecioProximo|estudioPrincipalId|permiteReservasPublicas)/i.test(
+    /(pinCancelacionHash|plan|primeraVez|cancelacionSolicitada|fechaSolicitudCancelacion|motivoCancelacion|precioPlanActualId|precioPlanProximoId|fechaAplicacionPrecioProximo|estudioPrincipalId|permiteReservasPublicas|excepcionesDisponibilidad)/i.test(
       mensaje,
     )
   );
@@ -227,6 +357,7 @@ const seleccionarEstudioPanelModerno = {
   servicios: true,
   serviciosCustom: true,
   festivos: true,
+  excepcionesDisponibilidad: true,
   colorPrimario: true,
   logoUrl: true,
   descripcion: true,
@@ -324,6 +455,7 @@ const seleccionarEstudioPanelCompat = {
   servicios: true,
   serviciosCustom: true,
   festivos: true,
+  excepcionesDisponibilidad: true,
   colorPrimario: true,
   logoUrl: true,
   descripcion: true,
@@ -392,6 +524,7 @@ function serializarEstudioPanel(estudio: Record<string, unknown>) {
     esSede: Boolean((estudio['estudioPrincipalId'] as string | null | undefined) ?? null),
     permiteReservasPublicas:
       (estudio['permiteReservasPublicas'] as boolean | undefined) ?? true,
+    excepcionesDisponibilidad: parsearExcepcionesDisponibilidad(estudio['excepcionesDisponibilidad']),
     sedes,
     sucursales: obtenerNombresSucursales(estudio, sucursalesLegacy),
     primeraVez: (estudio['primeraVez'] as boolean | undefined) ?? true,
@@ -410,7 +543,212 @@ function serializarEstudioPanel(estudio: Record<string, unknown>) {
   };
 }
 
+function obtenerInicioSemanaISO(fechaISO: string): string {
+  const [anio, mes, dia] = fechaISO.split('-').map(Number);
+  const fecha = new Date(anio ?? 0, (mes ?? 1) - 1, dia ?? 1);
+  const diaSemana = fecha.getDay();
+  const ajuste = diaSemana === 0 ? -6 : 1 - diaSemana;
+  fecha.setDate(fecha.getDate() + ajuste);
+  return `${fecha.getFullYear()}-${String(fecha.getMonth() + 1).padStart(2, '0')}-${String(fecha.getDate()).padStart(2, '0')}`;
+}
+
+function obtenerInicioMesISO(fechaISO: string): string {
+  const [anio, mes] = fechaISO.split('-').map(Number);
+  return `${String(anio ?? 0).padStart(4, '0')}-${String(mes ?? 1).padStart(2, '0')}-01`;
+}
+
+function obtenerMenorFechaISO(...fechas: string[]): string {
+  return [...fechas].sort((a, b) => a.localeCompare(b))[0] ?? fechas[0] ?? '';
+}
+
+function construirHoraFin(horaInicio: string, duracion: number): string {
+  const [horas, minutos] = horaInicio.split(':').map(Number);
+  const totalMinutos = (horas ?? 0) * 60 + (minutos ?? 0) + duracion;
+  const horaFinal = Math.floor(totalMinutos / 60) % 24;
+  const minutoFinal = totalMinutos % 60;
+  return `${String(horaFinal).padStart(2, '0')}:${String(minutoFinal).padStart(2, '0')}`;
+}
+
+function construirJornadaTexto(personal: {
+  horaInicio: string | null;
+  horaFin: string | null;
+}): string {
+  if (!personal.horaInicio || !personal.horaFin) {
+    return 'Horario general del salón';
+  }
+
+  return `${personal.horaInicio} - ${personal.horaFin}`;
+}
+
+function construirDescansoTexto(personal: {
+  descansoInicio: string | null;
+  descansoFin: string | null;
+}): string {
+  if (!personal.descansoInicio || !personal.descansoFin) {
+    return 'Sin descanso configurado';
+  }
+
+  return `${personal.descansoInicio} - ${personal.descansoFin}`;
+}
+
+function construirCuentaRegresivaCorte(params: {
+  fechaCorte: string;
+  zonaHoraria?: string | null;
+  pais?: string | null;
+  ahora?: Date;
+}) {
+  const fechaObjetivo = construirFechaHoraEnZona(
+    params.fechaCorte,
+    '23:59',
+    params.zonaHoraria,
+    params.pais,
+  );
+  const referencia = params.ahora ?? new Date();
+  const diferenciaMs = fechaObjetivo.getTime() - referencia.getTime();
+  const totalMinutos = Math.max(0, Math.floor(diferenciaMs / 60000));
+
+  return {
+    fecha: params.fechaCorte,
+    fechaHoraObjetivo: fechaObjetivo.toISOString(),
+    dias: Math.floor(totalMinutos / (60 * 24)),
+    horas: Math.floor((totalMinutos % (60 * 24)) / 60),
+    minutos: totalMinutos % 60,
+    totalMinutos,
+    vencido: diferenciaMs <= 0,
+  };
+}
+
+function construirEnlaceWhatsAppSoporte(params: {
+  pais?: string | null;
+  nombreSalon: string;
+  plan: string;
+  fechaCorte: string;
+  moneda: string;
+}) {
+  const numero = params.pais === 'Colombia' ? '573006934216' : '5255641341516';
+  const mensaje = [
+    'Hola, equipo Beauty Time Pro.',
+    `Necesito apoyo con el plan ${params.plan} de mi salón ${params.nombreSalon}.`,
+    `Mi próxima fecha de corte es ${params.fechaCorte} y mi moneda es ${params.moneda}.`,
+    '¿Me ayudan por favor?',
+  ].join(' ');
+
+  return `https://wa.me/${numero}?text=${encodeURIComponent(mensaje)}`;
+}
+
+interface PagoVentaProductoMetrica {
+  id: string;
+  fecha: string;
+  monto: number;
+  concepto: string;
+  tipo: string | null;
+  referencia: string | null;
+  creadoEn: Date;
+}
+
+function esErrorCompatibilidadPagoMetrica(error: unknown): boolean {
+  const codigo =
+    typeof error === 'object' && error !== null && 'code' in error
+      ? String((error as { code?: unknown }).code ?? '')
+      : '';
+  const mensaje = error instanceof Error ? error.message : '';
+
+  return codigo === 'P2022' || /Unknown column/i.test(mensaje) || /(tipo|referencia)/i.test(mensaje);
+}
+
+function esPagoVentaProducto(tipo: string | null | undefined, concepto: string): boolean {
+  return tipo === 'venta_producto' || concepto.startsWith('Venta producto:');
+}
+
+function extraerHoraEnZona(fecha: Date, zonaHoraria: string): string {
+  return new Intl.DateTimeFormat('es-MX', {
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+    timeZone: zonaHoraria,
+  }).format(fecha);
+}
+
+function parsearReferenciaVentaProducto(referencia: string | null): {
+  productoNombre: string | null;
+  empleadoId: string | null;
+  empleadoNombre: string | null;
+  clienteNombre: string | null;
+  sucursal: string | null;
+  hora: string | null;
+} | null {
+  if (!referencia) return null;
+
+  try {
+    const datos = JSON.parse(referencia) as Record<string, unknown>;
+    return {
+      productoNombre: typeof datos['pn'] === 'string' ? datos['pn'] : null,
+      empleadoId: typeof datos['e'] === 'string' ? datos['e'] : null,
+      empleadoNombre: typeof datos['en'] === 'string' ? datos['en'] : null,
+      clienteNombre: typeof datos['c'] === 'string' ? datos['c'] : null,
+      sucursal: typeof datos['s'] === 'string' ? datos['s'] : null,
+      hora: typeof datos['h'] === 'string' ? datos['h'] : null,
+    };
+  } catch {
+    return null;
+  }
+}
+
+async function obtenerPagosVentaProductoMetricas(params: {
+  estudioId: string;
+  fechaInicio: string;
+  fechaFin: string;
+}): Promise<PagoVentaProductoMetrica[]> {
+  try {
+    return await prisma.pago.findMany({
+      where: {
+        estudioId: params.estudioId,
+        fecha: { gte: params.fechaInicio, lte: params.fechaFin },
+        OR: [{ tipo: 'venta_producto' }, { concepto: { startsWith: 'Venta producto:' } }],
+      },
+      orderBy: [{ fecha: 'desc' }, { creadoEn: 'desc' }],
+      select: {
+        id: true,
+        fecha: true,
+        monto: true,
+        concepto: true,
+        tipo: true,
+        referencia: true,
+        creadoEn: true,
+      },
+    });
+  } catch (error) {
+    if (!esErrorCompatibilidadPagoMetrica(error)) {
+      throw error;
+    }
+
+    const pagosCompat = await prisma.pago.findMany({
+      where: {
+        estudioId: params.estudioId,
+        fecha: { gte: params.fechaInicio, lte: params.fechaFin },
+        concepto: { startsWith: 'Venta producto:' },
+      },
+      orderBy: [{ fecha: 'desc' }, { creadoEn: 'desc' }],
+      select: {
+        id: true,
+        fecha: true,
+        monto: true,
+        concepto: true,
+        creadoEn: true,
+      },
+    });
+
+    return pagosCompat.map((pago) => ({
+      ...pago,
+      tipo: null,
+      referencia: null,
+    }));
+  }
+}
+
 async function listarEstudiosPanel(where: Prisma.EstudioWhereInput = {}) {
+  await asegurarColumnaExcepcionesDisponibilidad();
+
   try {
     return await prisma.estudio.findMany({
       where,
@@ -431,6 +769,8 @@ async function listarEstudiosPanel(where: Prisma.EstudioWhereInput = {}) {
 }
 
 async function obtenerEstudioPanel(where: Prisma.EstudioWhereInput) {
+  await asegurarColumnaExcepcionesDisponibilidad();
+
   try {
     return await prisma.estudio.findFirst({
       where,
@@ -471,14 +811,354 @@ export async function rutasEstudios(servidor: FastifyInstance): Promise<void> {
     async (solicitud, respuesta) => {
       const payload = solicitud.user as { rol: string; estudioId: string | null };
       const { id } = solicitud.params;
-      if (payload.rol !== 'maestro' && payload.estudioId !== id) {
+      if (!(payload.rol === 'maestro' || (payload.rol === 'dueno' && payload.estudioId === id))) {
         return respuesta.code(403).send({ error: 'Sin permisos para esta acción' });
       }
       const filtroDemo = obtenerFiltroDemo();
+      const estudioBase = await prisma.estudio.findFirst({
+        where: { id, ...filtroDemo },
+        select: {
+          id: true,
+          plan: true,
+          pais: true,
+          precioPlanActualId: true,
+        },
+      });
+      if (!estudioBase) return respuesta.code(404).send({ error: 'Estudio no encontrado' });
+      if (!estudioBase.precioPlanActualId) {
+        await asegurarPrecioActualSalon({
+          estudioId: estudioBase.id,
+          plan: normalizarPlanEstudio(estudioBase.plan),
+          pais: estudioBase.pais,
+        });
+      }
       const estudio = await obtenerEstudioPanel({ id, ...filtroDemo });
       if (!estudio) return respuesta.code(404).send({ error: 'Estudio no encontrado' });
       return respuesta.send({
         datos: serializarEstudioPanel(estudio as unknown as Record<string, unknown>),
+      });
+    },
+  );
+
+  servidor.get<{ Params: { id: string } }>(
+    '/estudios/:id/metricas-dashboard',
+    { preHandler: verificarJWT },
+    async (solicitud, respuesta) => {
+      const payload = solicitud.user as { sub: string; rol: string; estudioId: string | null };
+      const { id } = solicitud.params;
+
+      if (!(payload.rol === 'maestro' || (payload.rol === 'dueno' && payload.estudioId === id))) {
+        return respuesta.code(403).send({ error: 'Sin permisos para esta acción' });
+      }
+
+      if (payload.rol === 'dueno') {
+        const tieneAcceso = await verificarAccesoDuenoAEstudio(payload.sub, id);
+        if (!tieneAcceso) {
+          return respuesta.code(403).send({ error: 'Sin acceso a este recurso' });
+        }
+      }
+
+      const estudio = await prisma.estudio.findUnique({
+        where: { id },
+        select: {
+          id: true,
+          nombre: true,
+          plan: true,
+          pais: true,
+          zonaHoraria: true,
+          inicioSuscripcion: true,
+          fechaVencimiento: true,
+          precioPlanActual: {
+            select: {
+              monto: true,
+              moneda: true,
+            },
+          },
+          personal: {
+            where: { activo: true },
+            orderBy: { nombre: 'asc' },
+            select: {
+              id: true,
+              nombre: true,
+              especialidades: true,
+              horaInicio: true,
+              horaFin: true,
+              descansoInicio: true,
+              descansoFin: true,
+            },
+          },
+          productos: {
+            select: {
+              id: true,
+            },
+            where: { activo: true },
+            take: 1,
+          },
+        },
+      });
+
+      if (!estudio) {
+        return respuesta.code(404).send({ error: 'Estudio no encontrado' });
+      }
+
+      const zonaHoraria = normalizarZonaHorariaEstudio(estudio.zonaHoraria, estudio.pais);
+      const fechaActual = obtenerFechaISOEnZona(new Date(), zonaHoraria, estudio.pais);
+      const inicioSemana = obtenerInicioSemanaISO(fechaActual);
+      const inicioMes = obtenerInicioMesISO(fechaActual);
+      const inicioConsulta = obtenerMenorFechaISO(inicioSemana, inicioMes);
+
+      const [reservasHoy, reservasIngresos, pagosVentaProducto] = await Promise.all([
+        prisma.reserva.findMany({
+          where: {
+            estudioId: id,
+            fecha: fechaActual,
+            estado: { not: 'cancelled' },
+          },
+          orderBy: [{ horaInicio: 'asc' }, { creadoEn: 'asc' }],
+          include: {
+            empleado: {
+              select: {
+                id: true,
+                nombre: true,
+              },
+            },
+            serviciosDetalle: {
+              select: {
+                id: true,
+                nombre: true,
+                precio: true,
+                duracion: true,
+                estado: true,
+                orden: true,
+              },
+              orderBy: { orden: 'asc' },
+            },
+          },
+        }),
+        prisma.reserva.findMany({
+          where: {
+            estudioId: id,
+            fecha: { gte: inicioConsulta, lte: fechaActual },
+            estado: 'completed',
+          },
+          orderBy: [{ fecha: 'desc' }, { horaInicio: 'desc' }, { creadoEn: 'desc' }],
+          include: {
+            empleado: {
+              select: {
+                id: true,
+                nombre: true,
+              },
+            },
+            serviciosDetalle: {
+              select: {
+                id: true,
+                nombre: true,
+                precio: true,
+                duracion: true,
+                estado: true,
+                orden: true,
+              },
+              orderBy: { orden: 'asc' },
+            },
+          },
+        }),
+        obtenerPagosVentaProductoMetricas({
+          estudioId: id,
+          fechaInicio: inicioConsulta,
+          fechaFin: fechaActual,
+        }),
+      ]);
+
+      const citasHoy = reservasHoy.map((reserva) => {
+        const servicios =
+          reserva.serviciosDetalle.length > 0
+            ? reserva.serviciosDetalle.map((servicio) => servicio.nombre)
+            : normalizarServiciosEntrada(reserva.servicios).map((servicio) => servicio.name);
+
+        return {
+          id: reserva.id,
+          fecha: reserva.fecha,
+          hora: reserva.horaInicio,
+          horaFin: construirHoraFin(reserva.horaInicio, reserva.duracion),
+          cliente: reserva.nombreCliente,
+          telefonoCliente: reserva.telefonoCliente,
+          especialista: reserva.empleado?.nombre ?? '',
+          especialistaId: reserva.empleado?.id ?? '',
+          servicioPrincipal: servicios[0] ?? 'Servicio',
+          servicios,
+          sucursal: reserva.sucursal,
+          precioEstimado: reserva.precioTotal,
+          estado: reserva.estado,
+          observaciones: reserva.observaciones ?? null,
+          creadoEn: reserva.creadoEn,
+        };
+      });
+
+      const filasIngresosServicios = reservasIngresos
+        .flatMap((reserva) => {
+          const servicios =
+            reserva.serviciosDetalle.length > 0
+              ? reserva.serviciosDetalle
+              : normalizarServiciosEntrada(reserva.servicios).map((servicio, indice) => ({
+                  id: servicio.id ?? `${reserva.id}-${indice}`,
+                  nombre: servicio.name,
+                  precio: servicio.price,
+                  duracion: servicio.duration,
+                  estado: servicio.status ?? reserva.estado,
+                  orden: servicio.order ?? indice,
+                }));
+
+          return servicios
+            .filter((servicio) => servicio.estado === 'completed')
+            .map((servicio, indice) => ({
+              id: `${reserva.id}-${servicio.id ?? indice}`,
+              fecha: reserva.fecha,
+              hora: reserva.horaInicio,
+              concepto: servicio.nombre,
+              tipo: 'servicio' as const,
+              cliente: reserva.nombreCliente,
+              especialista: reserva.empleado?.nombre ?? '',
+              especialistaId: reserva.empleado?.id ?? '',
+              sucursal: reserva.sucursal,
+              total: servicio.precio,
+            }));
+        })
+        .sort((a, b) => {
+          const comparacionFecha = b.fecha.localeCompare(a.fecha);
+          if (comparacionFecha !== 0) return comparacionFecha;
+          return b.hora.localeCompare(a.hora);
+        });
+
+      const filasIngresosProductos = pagosVentaProducto
+        .filter((pago) => esPagoVentaProducto(pago.tipo, pago.concepto))
+        .map((pago) => {
+          const referencia = parsearReferenciaVentaProducto(pago.referencia);
+          const conceptoLimpio = pago.concepto.replace(/^Venta producto:\s*/i, '').trim();
+
+          return {
+            id: `producto-${pago.id}`,
+            fecha: pago.fecha,
+            hora: referencia?.hora ?? extraerHoraEnZona(pago.creadoEn, zonaHoraria),
+            concepto: referencia?.productoNombre ?? conceptoLimpio ?? 'Producto',
+            tipo: 'producto' as const,
+            cliente: referencia?.clienteNombre ?? 'Venta mostrador',
+            especialista: referencia?.empleadoNombre ?? '',
+            especialistaId: referencia?.empleadoId ?? '',
+            sucursal: referencia?.sucursal ?? 'Principal',
+            total: pago.monto,
+          };
+        });
+
+      const filasIngresos = [...filasIngresosServicios, ...filasIngresosProductos]
+        .sort((a, b) => {
+          const comparacionFecha = b.fecha.localeCompare(a.fecha);
+          if (comparacionFecha !== 0) return comparacionFecha;
+          return b.hora.localeCompare(a.hora);
+        });
+
+      const ingresosDia = filasIngresos.filter((fila) => fila.fecha === fechaActual);
+      const ingresosSemana = filasIngresos.filter((fila) => fila.fecha >= inicioSemana);
+      const ingresosMes = filasIngresos.filter((fila) => fila.fecha >= inicioMes);
+      const resumenCitasPorEspecialista = new Map<string, number>();
+
+      citasHoy.forEach((cita) => {
+        resumenCitasPorEspecialista.set(
+          cita.especialistaId,
+          (resumenCitasPorEspecialista.get(cita.especialistaId) ?? 0) + 1,
+        );
+      });
+
+      const especialistasActivos = estudio.personal.map((persona) => {
+        const proximaCita =
+          citasHoy.find((cita) => cita.especialistaId === persona.id)?.hora ?? null;
+
+        return {
+          id: persona.id,
+          nombre: persona.nombre,
+          servicios: persona.especialidades,
+          jornada: construirJornadaTexto(persona),
+          descanso: construirDescansoTexto(persona),
+          citasHoy: resumenCitasPorEspecialista.get(persona.id) ?? 0,
+          proximaCita,
+        };
+      });
+
+      const moneda = (estudio.precioPlanActual?.moneda as string | undefined) ?? (estudio.pais === 'Colombia' ? 'COP' : 'MXN');
+      const nombrePlan = obtenerDefinicionPlan(estudio.plan).nombre;
+      const cuentaRegresiva = construirCuentaRegresivaCorte({
+        fechaCorte: estudio.fechaVencimiento,
+        zonaHoraria,
+        pais: estudio.pais,
+      });
+      const hayCatalogoProductos = estudio.productos.length > 0;
+      const ventasProductosRegistradas = filasIngresosProductos.length > 0;
+
+      return respuesta.send({
+        datos: {
+          actualizadoEn: new Date().toISOString(),
+          fechaActual,
+          zonaHoraria,
+          resumen: {
+            citasAgendadasHoy: citasHoy.length,
+            totalGanadoMes: ingresosMes.reduce((acumulado, fila) => acumulado + fila.total, 0),
+            especialistasActivos: especialistasActivos.length,
+            planActual: estudio.plan,
+            diasParaCorte: cuentaRegresiva.dias,
+          },
+          citasHoy,
+          ingresos: {
+            dia: {
+              total: ingresosDia.reduce((acumulado, fila) => acumulado + fila.total, 0),
+              filas: ingresosDia,
+            },
+            semana: {
+              total: ingresosSemana.reduce((acumulado, fila) => acumulado + fila.total, 0),
+              filas: ingresosSemana,
+            },
+            mes: {
+              total: ingresosMes.reduce((acumulado, fila) => acumulado + fila.total, 0),
+              filas: ingresosMes,
+            },
+          },
+          especialistasActivos,
+          plan: {
+            actual: estudio.plan,
+            nombre: nombrePlan,
+            fechaAdquisicion: estudio.inicioSuscripcion,
+            proximoCorte: estudio.fechaVencimiento,
+            precioActual: estudio.precioPlanActual?.monto ?? null,
+            moneda,
+            pais: estudio.pais,
+            whatsapp: construirEnlaceWhatsAppSoporte({
+              pais: estudio.pais,
+              nombreSalon: estudio.nombre,
+              plan: nombrePlan,
+              fechaCorte: estudio.fechaVencimiento,
+              moneda,
+            }),
+          },
+          corte: cuentaRegresiva,
+          soporte: {
+            whatsapp: construirEnlaceWhatsAppSoporte({
+              pais: estudio.pais,
+              nombreSalon: estudio.nombre,
+              plan: nombrePlan,
+              fechaCorte: estudio.fechaVencimiento,
+              moneda,
+            }),
+          },
+          contextoProductos: {
+            planPermiteProductos: estudio.plan === 'PRO',
+            ventasRegistradas: ventasProductosRegistradas,
+            catalogoConfigurado: hayCatalogoProductos,
+            mensaje:
+              estudio.plan === 'PRO'
+                ? ventasProductosRegistradas
+                  ? 'Las ventas de productos registradas ya se integran en el balance financiero de este salón.'
+                  : 'Tu plan PRO ya permite ventas de productos. Registra la primera venta para verla reflejada en este balance.'
+                : 'Las ventas de productos se habilitan en el plan Pro.',
+          },
+        },
       });
     },
   );
@@ -498,6 +1178,7 @@ export async function rutasEstudios(servidor: FastifyInstance): Promise<void> {
       }
 
       const datos = resultado.data;
+      await asegurarColumnaExcepcionesDisponibilidad();
       if (datos.estudioPrincipalId) {
         const errorEstudioPrincipal = await validarEstudioPrincipal(datos.estudioPrincipalId);
         if (errorEstudioPrincipal) {
@@ -555,6 +1236,7 @@ export async function rutasEstudios(servidor: FastifyInstance): Promise<void> {
           servicios: (datos.servicios ?? []) as Prisma.InputJsonValue,
           serviciosCustom: (datos.serviciosCustom ?? []) as Prisma.InputJsonValue,
           festivos: datos.festivos ?? [],
+          excepcionesDisponibilidad: (datos.excepcionesDisponibilidad ?? []) as Prisma.InputJsonValue,
           ...(datos.colorPrimario !== undefined && { colorPrimario: datos.colorPrimario }),
           ...(datos.descripcion !== undefined && { descripcion: sanitizarTexto(datos.descripcion ?? '') }),
           ...(datos.direccion !== undefined && { direccion: sanitizarTexto(datos.direccion ?? '') }),
@@ -578,7 +1260,7 @@ export async function rutasEstudios(servidor: FastifyInstance): Promise<void> {
       try {
         const payload = solicitud.user as { sub: string; rol: string; estudioId: string | null };
         const { id } = solicitud.params;
-        if (payload.rol !== 'maestro' && payload.estudioId !== id) {
+        if (!(payload.rol === 'maestro' || (payload.rol === 'dueno' && payload.estudioId === id))) {
           return respuesta.code(403).send({ error: 'Sin permisos para esta acción' });
         }
         if (payload.rol === 'dueno') {
@@ -593,6 +1275,7 @@ export async function rutasEstudios(servidor: FastifyInstance): Promise<void> {
         }
 
         const datos = resultado.data;
+        await asegurarColumnaExcepcionesDisponibilidad();
         if (datos.estudioPrincipalId) {
           const errorEstudioPrincipal = await validarEstudioPrincipal(datos.estudioPrincipalId, id);
           if (errorEstudioPrincipal) {
@@ -622,6 +1305,31 @@ export async function rutasEstudios(servidor: FastifyInstance): Promise<void> {
         if (!estudioExistente) {
           return respuesta.code(404).send({ error: 'Estudio no encontrado' });
         }
+
+        const estudioAccesible = await prisma.estudio.findUnique({
+          where: { id },
+          select: { nombre: true, sucursales: true, sedes: { select: { nombre: true }, where: { activo: true } }, zonaHoraria: true, pais: true },
+        });
+
+        if (!estudioAccesible) {
+          return respuesta.code(404).send({ error: 'Estudio no encontrado' });
+        }
+
+        const zonaHorariaSalon = normalizarZonaHorariaEstudio(estudioAccesible.zonaHoraria, estudioAccesible.pais);
+        const horaActualSalon = formatearHoraDesdeMinutos(
+          obtenerMinutosActualesEnZona(new Date(), zonaHorariaSalon, estudioAccesible.pais),
+        );
+        const sedesDisponibles = [
+          estudioAccesible.nombre,
+          ...obtenerNombresSucursales(
+            {
+              id,
+              nombre: estudioAccesible.nombre,
+              sedes: estudioAccesible.sedes,
+            } as Record<string, unknown>,
+            Array.isArray(estudioAccesible.sucursales) ? (estudioAccesible.sucursales as string[]) : [],
+          ),
+        ];
 
         if (payload.rol !== 'maestro' && datos.plan !== undefined) {
           return respuesta.code(403).send({ error: 'Solo el panel maestro puede cambiar el plan del salón' });
@@ -679,6 +1387,14 @@ export async function rutasEstudios(servidor: FastifyInstance): Promise<void> {
           ...(datos.servicios !== undefined && columnasEstudios.has('servicios') && { servicios: datos.servicios as Prisma.InputJsonValue }),
           ...(datos.serviciosCustom !== undefined && columnasEstudios.has('serviciosCustom') && { serviciosCustom: datos.serviciosCustom as Prisma.InputJsonValue }),
           ...(datos.festivos !== undefined && columnasEstudios.has('festivos') && { festivos: datos.festivos }),
+          ...(datos.excepcionesDisponibilidad !== undefined && columnasEstudios.has('excepcionesDisponibilidad') && {
+            excepcionesDisponibilidad: normalizarExcepcionesDisponibilidadEntrada({
+              excepciones: datos.excepcionesDisponibilidad,
+              fechaMinima: obtenerFechaISOEnZona(new Date(), zonaHorariaSalon, estudioAccesible.pais),
+                horaActual: horaActualSalon,
+              sedesDisponibles,
+            }),
+          }),
           ...(datos.colorPrimario !== undefined && columnasEstudios.has('colorPrimario') && { colorPrimario: datos.colorPrimario }),
           ...(datos.descripcion !== undefined && columnasEstudios.has('descripcion') && { descripcion: sanitizarTexto(datos.descripcion ?? '') }),
           ...(datos.direccion !== undefined && columnasEstudios.has('direccion') && { direccion: sanitizarTexto(datos.direccion ?? '') }),
@@ -686,6 +1402,7 @@ export async function rutasEstudios(servidor: FastifyInstance): Promise<void> {
           ...(datos.horarioApertura !== undefined && columnasEstudios.has('horarioApertura') && { horarioApertura: datos.horarioApertura }),
           ...(datos.horarioCierre !== undefined && columnasEstudios.has('horarioCierre') && { horarioCierre: datos.horarioCierre }),
           ...(datos.diasAtencion !== undefined && columnasEstudios.has('diasAtencion') && { diasAtencion: datos.diasAtencion }),
+            ...(datos.primeraVez !== undefined && columnasEstudios.has('primeraVez') && { primeraVez: datos.primeraVez }),
           ...(columnasEstudios.has('categorias') && { categorias }),
         };
 
@@ -696,6 +1413,35 @@ export async function rutasEstudios(servidor: FastifyInstance): Promise<void> {
           data: dataActualizacion as Prisma.EstudioUncheckedUpdateInput,
           select: selectActualizacion as Prisma.EstudioSelect,
         });
+
+        const cambiosOperativos: string[] = [];
+        if (datos.horario !== undefined || datos.horarioApertura !== undefined || datos.horarioCierre !== undefined) {
+          cambiosOperativos.push('horarios de operación');
+        }
+        if (datos.festivos !== undefined || datos.excepcionesDisponibilidad !== undefined) {
+          cambiosOperativos.push('cierres y disponibilidad especial');
+        }
+        if (
+          datos.nombre !== undefined ||
+          datos.telefono !== undefined ||
+          datos.direccion !== undefined ||
+          datos.emailContacto !== undefined ||
+          datos.colorPrimario !== undefined ||
+          datos.descripcion !== undefined
+        ) {
+          cambiosOperativos.push('datos visibles del salón');
+        }
+
+        if (cambiosOperativos.length > 0) {
+          await prisma.notificacionEstudio.create({
+            data: {
+              estudioId: id,
+              tipo: 'actualizacion_salon',
+              titulo: 'Actualización del salón',
+              mensaje: `El salón actualizó ${cambiosOperativos.join(', ')}. Revisa tu agenda y datos operativos para trabajar con la información vigente.`,
+            },
+          });
+        }
 
         if (datos.plan !== undefined || datos.pais !== undefined) {
           await asegurarPrecioActualSalon({
@@ -721,8 +1467,111 @@ export async function rutasEstudios(servidor: FastifyInstance): Promise<void> {
         solicitud.log.error({ err: error }, 'Fallo al actualizar estudio');
         return respuesta.code(500).send({
           error: 'No se pudo actualizar el estudio',
-          detalle: error instanceof Error ? error.message : 'Error desconocido',
         });
+      }
+    },
+  );
+
+  servidor.put<{ Params: { id: string }; Body: { excepcionesDisponibilidad: z.infer<typeof esquemaExcepcionDisponibilidad>[] } }>(
+    '/estudios/:id/disponibilidad-excepciones',
+    { preHandler: verificarJWT },
+    async (solicitud, respuesta) => {
+      try {
+        const payload = solicitud.user as { sub: string; rol: string; estudioId: string | null };
+        const { id } = solicitud.params;
+
+        if (!(payload.rol === 'maestro' || (payload.rol === 'dueno' && payload.estudioId === id))) {
+          return respuesta.code(403).send({ error: 'Sin permisos para esta acción' });
+        }
+
+        if (payload.rol === 'dueno') {
+          const tieneAcceso = await verificarAccesoDuenoAEstudio(payload.sub, id);
+          if (!tieneAcceso) {
+            return respuesta.code(403).send({ error: 'Sin acceso a este recurso' });
+          }
+        }
+
+        const resultado = z.object({
+          excepcionesDisponibilidad: z.array(esquemaExcepcionDisponibilidad).max(500, 'No puedes registrar más de 500 excepciones'),
+        }).safeParse(solicitud.body);
+
+        if (!resultado.success) {
+          return respuesta.code(400).send({ error: obtenerMensajeValidacion(resultado.error) });
+        }
+
+        const columnaDisponible = await asegurarColumnaExcepcionesDisponibilidad();
+        if (!columnaDisponible) {
+          return respuesta.code(503).send({ error: 'No se pudo habilitar la disponibilidad avanzada en este momento' });
+        }
+
+        const estudio = await prisma.estudio.findUnique({
+          where: { id },
+          select: {
+            id: true,
+            nombre: true,
+            sucursales: true,
+            zonaHoraria: true,
+            pais: true,
+            sedes: { where: { activo: true }, select: { nombre: true } },
+            excepcionesDisponibilidad: true,
+          },
+        });
+
+        if (!estudio) {
+          return respuesta.code(404).send({ error: 'Estudio no encontrado' });
+        }
+
+        const zonaHorariaSalon = normalizarZonaHorariaEstudio(estudio.zonaHoraria, estudio.pais);
+        const sedesDisponibles = [
+          estudio.nombre,
+          ...obtenerNombresSucursales(
+            estudio as unknown as Record<string, unknown>,
+            Array.isArray(estudio.sucursales) ? (estudio.sucursales as string[]) : [],
+          ),
+        ];
+        const excepcionesNormalizadas = normalizarExcepcionesDisponibilidadEntrada({
+          excepciones: resultado.data.excepcionesDisponibilidad,
+          fechaMinima: obtenerFechaISOEnZona(new Date(), zonaHorariaSalon, estudio.pais),
+          horaActual: formatearHoraDesdeMinutos(
+            obtenerMinutosActualesEnZona(new Date(), zonaHorariaSalon, estudio.pais),
+          ),
+          sedesDisponibles,
+        });
+
+        await prisma.estudio.update({
+          where: { id },
+          data: { excepcionesDisponibilidad: excepcionesNormalizadas },
+        });
+
+        await prisma.notificacionEstudio.create({
+          data: {
+            estudioId: id,
+            tipo: 'actualizacion_horario',
+            titulo: 'Cambio de horario o cierre',
+            mensaje: 'El salón ajustó cierres u horarios especiales. Revisa el calendario antes de confirmar tu siguiente jornada.',
+          },
+        });
+
+        await registrarAuditoria({
+          usuarioId: payload.sub,
+          accion: 'actualizar_disponibilidad_excepciones',
+          entidadTipo: 'estudio',
+          entidadId: id,
+          detalles: {
+            antes: parsearExcepcionesDisponibilidad(estudio.excepcionesDisponibilidad),
+            despues: parsearExcepcionesDisponibilidad(excepcionesNormalizadas),
+          },
+          ip: solicitud.ip,
+        });
+
+        return respuesta.send({ datos: { actualizado: true } });
+      } catch (error) {
+        if (error instanceof Error) {
+          return respuesta.code(400).send({ error: error.message });
+        }
+
+        solicitud.log.error({ err: error }, 'Fallo al actualizar excepciones de disponibilidad');
+        return respuesta.code(500).send({ error: 'No se pudo actualizar la disponibilidad especial' });
       }
     },
   );
@@ -738,7 +1587,7 @@ export async function rutasEstudios(servidor: FastifyInstance): Promise<void> {
       const { id } = solicitud.params;
       const { personalId, fecha, duracion } = solicitud.query;
 
-      if (payload.rol !== 'maestro' && payload.estudioId !== id) {
+      if (!(payload.rol === 'maestro' || (payload.rol === 'dueno' && payload.estudioId === id))) {
         return respuesta.code(403).send({ error: 'Sin permisos para esta acción' });
       }
 
@@ -754,7 +1603,7 @@ export async function rutasEstudios(servidor: FastifyInstance): Promise<void> {
       const [salon, miembro, reservasExistentes] = await Promise.all([
         prisma.estudio.findUnique({
           where: { id },
-          select: { horario: true, festivos: true, zonaHoraria: true, pais: true },
+          select: { nombre: true, horario: true, festivos: true, excepcionesDisponibilidad: true, zonaHoraria: true, pais: true },
         }),
         prisma.personal.findFirst({
           where: { id: personalId, estudioId: id, activo: true },
@@ -774,7 +1623,7 @@ export async function rutasEstudios(servidor: FastifyInstance): Promise<void> {
             fecha,
             estado: { not: 'cancelled' },
           },
-          select: { horaInicio: true, duracion: true },
+          select: { horaInicio: true, duracion: true, estado: true },
         }),
       ]);
 
@@ -793,6 +1642,8 @@ export async function rutasEstudios(servidor: FastifyInstance): Promise<void> {
         fecha,
         duracionMin,
         reservas: reservasExistentes,
+        sucursal: salon.nombre,
+        excepcionesDisponibilidad: salon.excepcionesDisponibilidad,
         zonaHoraria: normalizarZonaHorariaEstudio(salon.zonaHoraria, salon.pais),
       });
 
@@ -800,95 +1651,140 @@ export async function rutasEstudios(servidor: FastifyInstance): Promise<void> {
     },
   );
 
-  // DELETE /estudios/:id — solo maestro
+  // DELETE /estudios/:id — cierre seguro solo maestro
   servidor.delete<{ Params: { id: string } }>(
     '/estudios/:id',
     { preHandler: verificarJWT },
     async (solicitud, respuesta) => {
       try {
-        const payload = solicitud.user as { rol: string };
+        const payload = solicitud.user as { rol: string; sub: string };
         if (payload.rol !== 'maestro') {
           return respuesta.code(403).send({ error: 'Sin permisos para esta acción' });
         }
 
         const { id } = solicitud.params;
-        const tablasDisponibles = await obtenerTablasDisponibles();
-
         const estudio = await prisma.estudio.findUnique({
           where: { id },
-          select: { id: true },
+          select: {
+            id: true,
+            nombre: true,
+            activo: true,
+            estado: true,
+            usuarios: {
+              select: { id: true },
+            },
+            personal: {
+              select: {
+                id: true,
+                acceso: {
+                  select: { id: true },
+                },
+              },
+            },
+          },
         });
 
         if (!estudio) {
           return respuesta.code(404).send({ error: 'Estudio no encontrado' });
         }
 
-        const [usuarios, personal, reservas, pagos] = await Promise.all([
-          prisma.usuario.findMany({ where: { estudioId: id }, select: { id: true } }),
-          prisma.personal.findMany({ where: { estudioId: id }, select: { id: true } }),
-          prisma.reserva.findMany({ where: { estudioId: id }, select: { id: true } }),
-          prisma.pago.findMany({ where: { estudioId: id }, select: { id: true } }),
+        if (!estudio.activo && estudio.estado === 'suspendido') {
+          return respuesta.send({
+            datos: {
+              eliminado: false,
+              cierreSeguro: true,
+              mensaje: 'El estudio ya se encuentra suspendido y fuera de operación',
+            },
+          });
+        }
+
+        const usuarioIds = estudio.usuarios.map((usuario) => usuario.id);
+        const personalIds = estudio.personal.map((persona) => persona.id);
+        const accesoEmpleadoIds = estudio.personal
+          .map((persona) => persona.acceso?.id ?? null)
+          .filter((valor): valor is string => Boolean(valor));
+        const fechaCierre = new Date();
+
+        await prisma.$transaction(async (tx) => {
+          await tx.estudio.update({
+            where: { id },
+            data: {
+              activo: false,
+              estado: 'suspendido',
+              permiteReservasPublicas: false,
+              cancelacionSolicitada: false,
+              fechaSolicitudCancelacion: null,
+              fechaSuspension: fechaCierre,
+              motivoCancelacion: 'Cierre administrativo ejecutado por maestro',
+            },
+          });
+
+          if (usuarioIds.length > 0) {
+            await tx.usuario.updateMany({
+              where: { id: { in: usuarioIds } },
+              data: { activo: false },
+            });
+          }
+
+          if (personalIds.length > 0) {
+            await tx.personal.updateMany({
+              where: { id: { in: personalIds } },
+              data: { activo: false, eliminadoEn: fechaCierre },
+            });
+          }
+
+          if (accesoEmpleadoIds.length > 0) {
+            await tx.empleadoAcceso.updateMany({
+              where: { id: { in: accesoEmpleadoIds } },
+              data: { activo: false },
+            });
+          }
+        });
+
+        await Promise.all([
+          ...usuarioIds.map((usuarioId) =>
+            revocarSesionesPorSujeto('usuario', usuarioId, 'estudio_suspendido_por_maestro')
+          ),
+          ...accesoEmpleadoIds.map((accesoId) =>
+            revocarSesionesPorSujeto('empleado_acceso', accesoId, 'estudio_suspendido_por_maestro')
+          ),
         ]);
 
-        const usuarioIds = usuarios.map((usuario) => usuario.id);
-        const personalIds = personal.map((persona) => persona.id);
-        const reservaIds = reservas.map((reserva) => reserva.id);
-        const pagoIds = pagos.map((pago) => pago.id);
+        await registrarAuditoria({
+          usuarioId: payload.sub,
+          accion: 'cerrar_estudio_seguro',
+          entidadTipo: 'estudio',
+          entidadId: id,
+          detalles: {
+            nombre: estudio.nombre,
+            requestId: solicitud.id,
+            antes: {
+              activo: estudio.activo,
+              estado: estudio.estado,
+            },
+            despues: {
+              activo: false,
+              estado: 'suspendido',
+              permiteReservasPublicas: false,
+            },
+            usuariosDesactivados: usuarioIds.length,
+            personalDesactivado: personalIds.length,
+            accesosEmpleadoRevocados: accesoEmpleadoIds.length,
+          },
+          ip: solicitud.ip,
+        });
 
-        if (usuarioIds.length > 0 && tablasDisponibles.has('suscripciones_push')) {
-          await prisma.suscripcionPush.deleteMany({ where: { usuarioId: { in: usuarioIds } } });
-        }
-        if (usuarioIds.length > 0 && tablasDisponibles.has('tokens_reset')) {
-          await prisma.tokenReset.deleteMany({ where: { usuarioId: { in: usuarioIds } } });
-        }
-        if (usuarioIds.length > 0 && tablasDisponibles.has('permisos_maestro')) {
-          await prisma.permisosMaestro.deleteMany({ where: { usuarioId: { in: usuarioIds } } });
-        }
-        if (usuarioIds.length > 0 && tablasDisponibles.has('audit_log')) {
-          await prisma.auditLog.deleteMany({ where: { usuarioId: { in: usuarioIds } } });
-        }
-
-        if (tablasDisponibles.has('audit_log')) {
-          await prisma.auditLog.deleteMany({
-          where: {
-            OR: [
-              { entidadTipo: 'estudio', entidadId: id },
-              ...(pagoIds.length > 0 ? [{ entidadTipo: 'pago', entidadId: { in: pagoIds } }] : []),
-            ],
+        return respuesta.code(200).send({
+          datos: {
+            eliminado: false,
+            cierreSeguro: true,
+            mensaje: 'El estudio fue suspendido y desactivado sin borrar historial',
           },
         });
-        }
-
-        if (reservaIds.length > 0 && tablasDisponibles.has('reserva_servicios')) {
-          await prisma.reservaServicio.deleteMany({ where: { reservaId: { in: reservaIds } } });
-        }
-
-        if (personalIds.length > 0 && tablasDisponibles.has('empleados_acceso')) {
-          await prisma.empleadoAcceso.deleteMany({ where: { personalId: { in: personalIds } } });
-        }
-
-        await prisma.personal.deleteMany({ where: { estudioId: id } });
-        await prisma.reserva.deleteMany({ where: { estudioId: id } });
-        await prisma.pago.deleteMany({ where: { estudioId: id } });
-        if (tablasDisponibles.has('clientes')) {
-          await prisma.cliente.deleteMany({ where: { estudioId: id } });
-        }
-        if (tablasDisponibles.has('puntos_fidelidad')) {
-          await prisma.puntosFidelidad.deleteMany({ where: { estudioId: id } });
-        }
-        if (tablasDisponibles.has('config_fidelidad')) {
-          await prisma.configFidelidad.deleteMany({ where: { estudioId: id } });
-        }
-        await prisma.diaFestivo.deleteMany({ where: { estudioId: id } });
-        await prisma.usuario.deleteMany({ where: { estudioId: id } });
-        await prisma.estudio.deleteMany({ where: { id } });
-
-        return respuesta.code(200).send({ datos: { eliminado: true } });
       } catch (error) {
-        solicitud.log.error({ err: error }, 'Fallo al eliminar estudio');
+        solicitud.log.error({ err: error }, 'Fallo al cerrar estudio de forma segura');
         return respuesta.code(500).send({
-          error: 'No se pudo eliminar el estudio',
-          detalle: error instanceof Error ? error.message : 'Error desconocido',
+          error: 'No se pudo desactivar el estudio',
         });
       }
     },
@@ -902,7 +1798,7 @@ export async function rutasEstudios(servidor: FastifyInstance): Promise<void> {
       const payload = solicitud.user as { sub: string; rol: string; estudioId: string | null };
       const { id } = solicitud.params;
 
-      if (payload.rol !== 'maestro' && payload.estudioId !== id) {
+      if (!(payload.rol === 'maestro' || (payload.rol === 'dueno' && payload.estudioId === id))) {
         return respuesta.code(403).send({ error: 'Sin permisos para esta acción' });
       }
       if (payload.rol === 'dueno') {
@@ -1045,7 +1941,7 @@ export async function rutasEstudios(servidor: FastifyInstance): Promise<void> {
       const { id } = solicitud.params;
 
       // Solo el dueño de ese estudio o un maestro pueden ver las notificaciones
-      if (payload.rol === 'dueno' && payload.estudioId !== id) {
+      if (payload.rol !== 'maestro' && payload.estudioId !== id) {
         return respuesta.code(403).send({ error: 'Sin permisos para esta acción' });
       }
       if (payload.rol !== 'maestro' && payload.rol !== 'dueno' && payload.rol !== 'empleado') {
@@ -1072,7 +1968,7 @@ export async function rutasEstudios(servidor: FastifyInstance): Promise<void> {
       const payload = solicitud.user as { rol: string; estudioId?: string };
       const { id, notifId } = solicitud.params;
 
-      if (payload.rol === 'dueno' && payload.estudioId !== id) {
+      if (payload.rol !== 'maestro' && payload.estudioId !== id) {
         return respuesta.code(403).send({ error: 'Sin permisos para esta acción' });
       }
       if (payload.rol !== 'maestro' && payload.rol !== 'dueno' && payload.rol !== 'empleado') {

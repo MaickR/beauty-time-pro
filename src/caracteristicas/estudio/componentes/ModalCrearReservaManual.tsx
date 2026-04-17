@@ -16,7 +16,7 @@ const esquemaFormulario = z.object({
   telefonoCliente: z.string().regex(/^[0-9]{10}$/, '10 dígitos sin espacios'),
   fechaNacimiento: z.string().min(1, 'Selecciona una fecha'),
   email: z.string().email('Correo inválido').or(z.literal('')),
-  sucursal: z.string().optional(),
+  metodoPago: z.enum(['cash', 'card', 'bank_transfer', 'digital_transfer']),
   marcaTinte: z.string().optional(),
   observaciones: z.string().max(500, 'Máximo 500 caracteres').optional(),
 });
@@ -42,6 +42,13 @@ const PALABRAS_COLOR = [
   'rayitos',
   'mechas',
 ];
+
+const METODOS_PAGO = [
+  { valor: 'cash', etiqueta: 'Efectivo' },
+  { valor: 'card', etiqueta: 'Tarjeta' },
+  { valor: 'bank_transfer', etiqueta: 'Transferencia bancaria' },
+  { valor: 'digital_transfer', etiqueta: 'Transferencia digital' },
+] as const;
 
 export function ModalCrearReservaManual({
   abierto,
@@ -93,7 +100,7 @@ export function ModalCrearReservaManual({
       telefonoCliente: '',
       fechaNacimiento: '',
       email: '',
-      sucursal: estudio.branches[0] ?? '',
+      metodoPago: 'cash',
       marcaTinte: '',
       observaciones: '',
     },
@@ -116,12 +123,13 @@ export function ModalCrearReservaManual({
         totalDuration: totalDuracion,
         totalPrice: totalPrecio,
         status: 'confirmed',
-        branch: datos.sucursal ?? '',
+        branch: estudio.name,
         staffId: personalSeleccionado,
         staffName: miembro?.name ?? '',
         colorBrand: requiereColor ? datos.marcaTinte || null : null,
         colorNumber: null,
         observaciones: datos.observaciones || null,
+        paymentMethod: datos.metodoPago,
         date: fechaStr,
         time: horaSeleccionada,
         createdAt: new Date().toISOString(),
@@ -134,7 +142,7 @@ export function ModalCrearReservaManual({
         telefonoCliente: '',
         fechaNacimiento: '',
         email: '',
-        sucursal: estudio.branches[0] ?? '',
+        metodoPago: 'cash',
         marcaTinte: '',
         observaciones: '',
       });
@@ -245,13 +253,13 @@ export function ModalCrearReservaManual({
                 </p>
               ) : (
                 <div className="grid gap-2">
-                  {serviciosDisponibles.map((servicio) => {
+                  {serviciosDisponibles.map((servicio, indiceServicio) => {
                     const activo = serviciosSeleccionados.some(
                       (item) => item.name === servicio.name,
                     );
                     return (
                       <button
-                        key={servicio.name}
+                        key={`${servicio.name}-${indiceServicio}`}
                         type="button"
                         onClick={() => alternarServicio(servicio)}
                         className={`flex items-center justify-between rounded-2xl border px-4 py-3 text-left transition-colors ${activo ? 'border-pink-500 bg-pink-50 text-pink-700' : 'border-slate-200 bg-white text-slate-700 hover:border-pink-200'}`}
@@ -352,6 +360,28 @@ export function ModalCrearReservaManual({
               )}
             </div>
             <div>
+              <label
+                htmlFor="metodoPago"
+                className="mb-1 block text-xs font-bold uppercase text-slate-500"
+              >
+                Método de pago
+              </label>
+              <select
+                id="metodoPago"
+                {...formulario.register('metodoPago')}
+                className="w-full rounded-2xl border border-slate-200 px-4 py-3 text-sm font-medium text-slate-800 focus:outline-none focus:ring-2 focus:ring-pink-400"
+              >
+                {METODOS_PAGO.map((metodo) => (
+                  <option key={metodo.valor} value={metodo.valor}>
+                    {metodo.etiqueta}
+                  </option>
+                ))}
+              </select>
+              <p className="mt-1 text-[11px] text-slate-400">
+                El cobro se realiza al finalizar el servicio, directamente en el salón.
+              </p>
+            </div>
+            <div>
               <input type="hidden" {...formulario.register('fechaNacimiento')} />
               <SelectorFecha
                 etiqueta="Fecha de nacimiento"
@@ -386,27 +416,9 @@ export function ModalCrearReservaManual({
                 </p>
               )}
             </div>
-            {estudio.branches.length > 1 && (
-              <div>
-                <label
-                  htmlFor="sucursal"
-                  className="mb-1 block text-xs font-bold uppercase text-slate-500"
-                >
-                  Sucursal
-                </label>
-                <select
-                  id="sucursal"
-                  {...formulario.register('sucursal')}
-                  className="w-full rounded-2xl border border-slate-200 px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-pink-400"
-                >
-                  {estudio.branches.map((sucursal) => (
-                    <option key={sucursal} value={sucursal}>
-                      {sucursal}
-                    </option>
-                  ))}
-                </select>
-              </div>
-            )}
+            <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-bold text-slate-700">
+              Salón: {estudio.name}
+            </div>
             {requiereColor && (
               <div>
                 <label

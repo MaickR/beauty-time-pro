@@ -6,6 +6,7 @@
  */
 import 'dotenv/config';
 import { z } from 'zod';
+import { esPatronOrigenFrontendValido } from './origenesFrontend.js';
 
 function esPlaceholder(valor: string | undefined): boolean {
   if (!valor) {
@@ -32,8 +33,25 @@ const esquemaEntorno = z
     RESEND_API_KEY: z.string().optional(),
     EMAIL_REMITENTE: z.string().optional(),
     FRONTEND_URL: z.string().url('FRONTEND_URL debe ser una URL válida'),
+    FRONTEND_ORIGENES_PERMITIDOS: z.string().default(''),
   })
   .superRefine((datos, contexto) => {
+    const origenesPermitidos = datos.FRONTEND_ORIGENES_PERMITIDOS.split(',')
+      .map((valor) => valor.trim())
+      .filter(Boolean);
+
+    for (const origen of origenesPermitidos) {
+      if (!esPatronOrigenFrontendValido(origen)) {
+        contexto.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ['FRONTEND_ORIGENES_PERMITIDOS'],
+          message:
+            'FRONTEND_ORIGENES_PERMITIDOS debe usar URLs absolutas o patrones tipo https://mi-app-git-*.vercel.app',
+        });
+        break;
+      }
+    }
+
     if (datos.ENTORNO === 'production') {
       if (!datos.RESEND_API_KEY) {
         contexto.addIssue({
@@ -81,6 +99,18 @@ const esquemaEntorno = z
           path: ['FRONTEND_URL'],
           message: 'FRONTEND_URL debe usar HTTPS y no puede apuntar a localhost en producción',
         });
+      }
+
+      for (const origen of origenesPermitidos) {
+        if (!origen.startsWith('https://') || /localhost|127\.0\.0\.1/.test(origen)) {
+          contexto.addIssue({
+            code: z.ZodIssueCode.custom,
+            path: ['FRONTEND_ORIGENES_PERMITIDOS'],
+            message:
+              'FRONTEND_ORIGENES_PERMITIDOS solo puede contener orígenes HTTPS públicos en producción',
+          });
+          break;
+        }
       }
     }
 

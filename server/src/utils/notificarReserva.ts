@@ -10,14 +10,30 @@ import {
 } from '../servicios/notificacionesPush.js';
 
 export interface ReservaConRelaciones {
+  id?: string;
   estudioId: string;
   nombreCliente: string;
   horaInicio: string;
   fecha: string;
+  duracion?: number;
+  precioTotal?: number;
+  tokenCancelacion?: string;
+  notasMenorEdad?: string | null;
   clienteAppId?: string | null;
   servicios: unknown;
   serviciosDetalle?: unknown[];
   estudio?: {
+    nombre: string;
+    colorPrimario?: string | null;
+    logoUrl?: string | null;
+    direccion?: string | null;
+    telefono?: string;
+    claveCliente?: string;
+  };
+  cliente?: {
+    email?: string | null;
+  };
+  empleado?: {
     nombre: string;
   };
 }
@@ -137,6 +153,15 @@ export async function obtenerReservaConRelacionesPorId(reservaId: string) {
 }
 
 export async function notificarNuevaCita(reserva: ReservaConRelaciones) {
+  await prisma.notificacionEstudio.create({
+    data: {
+      estudioId: reserva.estudioId,
+      tipo: 'nueva_reserva',
+      titulo: 'Nueva cita asignada',
+      mensaje: `${reserva.nombreCliente} reservó ${obtenerServiciosTexto(reserva)} para ${reserva.fecha} a las ${reserva.horaInicio}.`,
+    },
+  });
+
   const suscripciones = await obtenerSuscripcionesDueno(reserva.estudioId);
   if (suscripciones.length === 0) return;
 

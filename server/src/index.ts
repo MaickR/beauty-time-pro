@@ -11,6 +11,8 @@ import rateLimit from '@fastify/rate-limit';
 import compress from '@fastify/compress';
 import path from 'path';
 import { env } from './lib/env.js';
+import { obtenerPatronesOrigenFrontend, tieneOrigenFrontendPermitido } from './lib/origenesFrontend.js';
+import { sincronizarReactivacionesProgramadasPersonal } from './lib/reactivacionPersonalProgramada.js';
 import { iniciarJobColaEmails } from './jobs/colaEmails.js';
 import { iniciarJobRecordatorios } from './jobs/recordatorios.js';
 import { iniciarJobCumpleanos } from './jobs/cumpleanos.js';
@@ -72,7 +74,12 @@ function esOrigenPermitido(origen: string | undefined, esProduccion: boolean): b
     return true;
   }
 
-  return origen === env.FRONTEND_URL || (!esProduccion && esOrigenLocal(origen));
+  return (
+    tieneOrigenFrontendPermitido(
+      origen,
+      obtenerPatronesOrigenFrontend(env.FRONTEND_URL, env.FRONTEND_ORIGENES_PERMITIDOS),
+    ) || (!esProduccion && esOrigenLocal(origen))
+  );
 }
 
 void (async () => {
@@ -104,9 +111,21 @@ void (async () => {
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
     credentials: true,
     allowedHeaders: ['Content-Type', 'Authorization', 'x-csrf-token'],
+    exposedHeaders: ['X-Request-ID'],
+  });
+
+  servidor.addHook('onRequest', async (solicitud, respuesta) => {
+    try {
+      await sincronizarReactivacionesProgramadasPersonal();
+    } catch (error) {
+      servidor.log.warn({ err: error }, 'No se pudo sincronizar la reactivación programada de personal');
+    }
+
+    respuesta.header('X-Request-ID', solicitud.id);
   });
 
   servidor.addHook('onSend', async (solicitud, respuesta, payload) => {
+    respuesta.header('X-Request-ID', solicitud.id);
     const origen = solicitud.headers.origin;
     if (esOrigenPermitido(origen, esProduccion) && origen) {
       respuesta.header('Access-Control-Allow-Origin', origen);

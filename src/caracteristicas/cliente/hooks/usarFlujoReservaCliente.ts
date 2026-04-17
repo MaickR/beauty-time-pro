@@ -125,6 +125,7 @@ export function usarFlujoReservaCliente(salon: SalonDetalle) {
         estado.personalId,
         obtenerFechaLocalISO(fecha),
         duracionTotal,
+        estado.sucursalSeleccionada || salon.nombre,
       );
       setEstado((e) => ({ ...e, slots, cargandoSlots: false }));
     } catch {
@@ -147,6 +148,21 @@ export function usarFlujoReservaCliente(salon: SalonDetalle) {
         exitosa: 'exitosa',
       };
       return { ...e, paso: anterior[e.paso] };
+    });
+  };
+
+  const reiniciar = () => {
+    setEstado({
+      paso: 'especialista',
+      sucursalSeleccionada: salon.sucursales?.length === 1 ? salon.sucursales[0]! : '',
+      personalId: '',
+      serviciosSeleccionados: [],
+      fechaSeleccionada: new Date(),
+      horaSeleccionada: '',
+      slots: [],
+      cargandoSlots: false,
+      enviando: false,
+      reservaResultado: null,
     });
   };
 
@@ -190,6 +206,7 @@ export function usarFlujoReservaCliente(salon: SalonDetalle) {
     seleccionarFecha,
     seleccionarHora,
     retroceder,
+    reiniciar,
     enviarReserva,
   };
 }

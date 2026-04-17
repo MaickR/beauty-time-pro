@@ -183,9 +183,9 @@ export function SeccionPersonalFormulario({
             ¿Qué servicios realiza?
           </p>
           <div className="flex flex-wrap gap-2">
-            {serviciosDisponibles.map((s) => (
+            {serviciosDisponibles.map((s, indiceServicio) => (
               <button
-                key={s.name}
+                key={`${s.name}-${indiceServicio}`}
                 type="button"
                 onClick={() => dispatch({ tipo: 'TOGGLE_ESPECIALIDAD', nombre: s.name })}
                 className={`px-3 py-1.5 rounded-lg text-[9px] font-black uppercase border transition-colors ${

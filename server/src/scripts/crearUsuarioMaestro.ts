@@ -1,6 +1,6 @@
 import 'dotenv/config';
-import bcrypt from 'bcrypt';
 import { prisma } from '../prismaCliente.js';
+import { generarHashContrasena } from '../utils/contrasenas.js';
 
 const REGEX_CONTRASENA = /^(?=.*[A-Z])(?=.*[0-9]).{8,}$/;
 
@@ -27,7 +27,7 @@ async function crearUsuarioMaestro(): Promise<void> {
 		return;
 	}
 
-	const hashContrasena = await bcrypt.hash(contrasena, 12);
+	const hashContrasena = await generarHashContrasena(contrasena);
 
 	await prisma.usuario.create({
 		data: {

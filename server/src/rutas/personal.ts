@@ -7,6 +7,7 @@ import { Prisma } from '../generated/prisma/client.js';
 import { verificarJWT } from '../middleware/autenticacion.js';
 import { horaOpcionalONulaSchema, obtenerMensajeValidacion, textoSchema } from '../lib/validacion.js';
 import { detectarTipoImagen } from '../utils/validarImagen.js';
+import { obtenerDesactivacionesProgramadasPersonal } from '../lib/reactivacionPersonalProgramada.js';
 
 const esquemaPersonalBase = {
   nombre: textoSchema('nombre', 80),
@@ -74,14 +75,26 @@ export async function rutasPersonal(servidor: FastifyInstance): Promise<void> {
     async (solicitud, respuesta) => {
       const payload = solicitud.user as { rol: string; estudioId: string | null };
       const { id } = solicitud.params;
-      if (payload.rol !== 'maestro' && payload.estudioId !== id) {
+      if (!(payload.rol === 'maestro' || (payload.rol === 'dueno' && payload.estudioId === id))) {
         return respuesta.code(403).send({ error: 'Sin permisos para esta acción' });
       }
       const personal = await prisma.personal.findMany({
-        where: { estudioId: id, activo: true },
-        orderBy: { creadoEn: 'asc' },
+        where: { estudioId: id },
+        orderBy: [{ activo: 'desc' }, { creadoEn: 'asc' }],
       });
-      return respuesta.send({ datos: personal });
+
+      const desactivadoHastaPorId = await obtenerDesactivacionesProgramadasPersonal(
+        personal.map((miembro) => miembro.id),
+      );
+
+      const personalVisible = personal
+        .filter((miembro) => miembro.activo || Boolean(desactivadoHastaPorId.get(miembro.id)))
+        .map((miembro) => ({
+          ...miembro,
+          desactivadoHasta: desactivadoHastaPorId.get(miembro.id) ?? null,
+        }));
+
+      return respuesta.send({ datos: personalVisible });
     },
   );
 
@@ -95,7 +108,7 @@ export async function rutasPersonal(servidor: FastifyInstance): Promise<void> {
     async (solicitud, respuesta) => {
       const payload = solicitud.user as { sub: string; rol: string; estudioId: string | null };
       const { id } = solicitud.params;
-      if (payload.rol !== 'maestro' && payload.estudioId !== id) {
+      if (!(payload.rol === 'maestro' || (payload.rol === 'dueno' && payload.estudioId === id))) {
         return respuesta.code(403).send({ error: 'Sin permisos para esta acción' });
       }
       if (payload.rol === 'dueno') {
@@ -157,7 +170,7 @@ export async function rutasPersonal(servidor: FastifyInstance): Promise<void> {
         select: { estudioId: true },
       });
       if (!empleadoExistente) return respuesta.code(404).send({ error: 'Personal no encontrado' });
-      if (payload.rol !== 'maestro' && payload.estudioId !== empleadoExistente.estudioId) {
+      if (!(payload.rol === 'maestro' || (payload.rol === 'dueno' && payload.estudioId === empleadoExistente.estudioId))) {
         return respuesta.code(403).send({ error: 'Sin permisos para esta acción' });
       }
       if (payload.rol === 'dueno') {
@@ -220,7 +233,7 @@ export async function rutasPersonal(servidor: FastifyInstance): Promise<void> {
         return respuesta.code(404).send({ error: 'Personal no encontrado' });
       }
 
-      if (payload.rol !== 'maestro' && payload.estudioId !== empleadoExistente.estudioId) {
+      if (!(payload.rol === 'maestro' || (payload.rol === 'dueno' && payload.estudioId === empleadoExistente.estudioId))) {
         return respuesta.code(403).send({ error: 'Sin permisos para esta acción' });
       }
 
@@ -268,7 +281,7 @@ export async function rutasPersonal(servidor: FastifyInstance): Promise<void> {
       const payload = solicitud.user as { sub: string; rol: string; estudioId: string | null };
       const { id, personalId } = solicitud.params;
 
-      if (payload.rol !== 'maestro' && payload.estudioId !== id) {
+      if (!(payload.rol === 'maestro' || (payload.rol === 'dueno' && payload.estudioId === id))) {
         return respuesta.code(403).send({ error: 'Sin permisos para esta acción' });
       }
 

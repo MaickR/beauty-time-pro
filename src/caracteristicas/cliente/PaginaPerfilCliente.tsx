@@ -33,7 +33,8 @@ function formatearPais(pais: Pais): string {
 
 function normalizarTextoPersona(valor: string): string {
   return valor
-    .replace(/[^A-Za-zÁÉÍÓÚáéíóúÑñÜü\s]/g, '')
+    .normalize('NFC')
+    .replace(/[^\p{L}\p{M}\s'’-]/gu, '')
     .replace(/\s{2,}/g, ' ')
     .trimStart();
 }

@@ -1,6 +1,6 @@
-import { peticion } from '../lib/clienteHTTP';
+import { obtenerCabecerasAutenticadas, peticion } from '../lib/clienteHTTP';
 import { URL_BASE } from '../lib/clienteHTTP';
-import type { PlanEstudio } from '../tipos';
+import type { Pais, PlanEstudio } from '../tipos';
 
 export interface PerfilEstudio {
   id: string;
@@ -11,9 +11,11 @@ export interface PerfilEstudio {
   telefono: string;
   emailContacto: string | null;
   emailCuenta: string | null;
+  country: Pais;
   plan: PlanEstudio;
   colorPrimario: string;
   logoUrl: string | null;
+  claveCliente: string | null;
   estudioPrincipalId?: string | null;
   estudioPrincipal?: { id: string; nombre: string } | null;
   sedes?: Array<{
@@ -33,7 +35,7 @@ export async function obtenerPerfilEstudio(estudioId: string): Promise<PerfilEst
 
 export async function actualizarPerfilEstudio(
   estudioId: string,
-  datos: Partial<Omit<PerfilEstudio, 'id' | 'logoUrl' | 'plan'>>,
+  datos: Partial<Omit<PerfilEstudio, 'id' | 'logoUrl' | 'plan' | 'country'>>,
 ): Promise<PerfilEstudio> {
   const cuerpo: Record<string, unknown> = {};
 
@@ -67,10 +69,9 @@ export async function subirLogo(estudioId: string, archivo: File): Promise<{ log
   const formData = new FormData();
   formData.append('logo', archivo);
 
-  const token = sessionStorage.getItem('btp_access_token');
   const res = await fetch(`${URL_BASE}/estudio/${estudioId}/logo`, {
     method: 'POST',
-    headers: token ? { Authorization: `Bearer ${token}` } : {},
+    headers: obtenerCabecerasAutenticadas('POST'),
     body: formData,
     credentials: 'include',
   });

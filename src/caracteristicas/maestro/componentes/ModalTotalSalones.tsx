@@ -1,6 +1,6 @@
 import { useState, useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { X, Download, Search, ArrowUpDown, ArrowUp, ArrowDown } from 'lucide-react';
+import { X, Download, Search } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { obtenerTotalSalones } from '../../../servicios/servicioAdmin';
 import type { SalonTotalMetrica } from '../../../servicios/servicioAdmin';
@@ -29,6 +29,7 @@ export function ModalTotalSalones({ onCerrar }: PropsModalTotalSalones) {
   > | null>(null);
   const [campoOrden, setCampoOrden] = useState<CampoOrden>('fechaCreacion');
   const [direccionOrden, setDireccionOrden] = useState<DireccionOrden>('desc');
+  const [exportando, setExportando] = useState(false);
 
   // Debounce manual
   const [temporizador, setTemporizador] = useState<ReturnType<typeof setTimeout> | null>(null);
@@ -56,6 +57,41 @@ export function ModalTotalSalones({ onCerrar }: PropsModalTotalSalones) {
 
   const planStr = filtrosplan.length > 0 ? filtrosplan.join(',') : undefined;
   const paisStr = filtrosPais.length > 0 ? filtrosPais.join(',') : undefined;
+
+  const ordenarSalones = (salones: SalonTotalMetrica[]) => {
+    const copia = [...salones];
+    copia.sort((a, b) => {
+      let valorA: string;
+      let valorB: string;
+      switch (campoOrden) {
+        case 'nombre':
+          valorA = a.nombre.toLowerCase();
+          valorB = b.nombre.toLowerCase();
+          break;
+        case 'fechaCreacion':
+          valorA = a.fechaCreacion;
+          valorB = b.fechaCreacion;
+          break;
+        case 'plan':
+          valorA = a.plan;
+          valorB = b.plan;
+          break;
+        case 'pais':
+          valorA = a.pais;
+          valorB = b.pais;
+          break;
+        case 'vendedor':
+          valorA = (a.vendedor ?? '').toLowerCase();
+          valorB = (b.vendedor ?? '').toLowerCase();
+          break;
+        default:
+          return 0;
+      }
+      const resultado = valorA < valorB ? -1 : valorA > valorB ? 1 : 0;
+      return direccionOrden === 'asc' ? resultado : -resultado;
+    });
+    return copia;
+  };
 
   const { data, isLoading } = useQuery({
     queryKey: [
@@ -96,62 +132,72 @@ export function ModalTotalSalones({ onCerrar }: PropsModalTotalSalones) {
 
   const datosOrdenados = useMemo(() => {
     if (!data?.datos) return [];
-    const copia = [...data.datos];
-    copia.sort((a, b) => {
-      let valorA: string;
-      let valorB: string;
-      switch (campoOrden) {
-        case 'nombre':
-          valorA = a.nombre.toLowerCase();
-          valorB = b.nombre.toLowerCase();
-          break;
-        case 'fechaCreacion':
-          valorA = a.fechaCreacion;
-          valorB = b.fechaCreacion;
-          break;
-        case 'plan':
-          valorA = a.plan;
-          valorB = b.plan;
-          break;
-        case 'pais':
-          valorA = a.pais;
-          valorB = b.pais;
-          break;
-        case 'vendedor':
-          valorA = (a.vendedor ?? '').toLowerCase();
-          valorB = (b.vendedor ?? '').toLowerCase();
-          break;
-        default:
-          return 0;
-      }
-      const resultado = valorA < valorB ? -1 : valorA > valorB ? 1 : 0;
-      return direccionOrden === 'asc' ? resultado : -resultado;
-    });
-    return copia;
+    return ordenarSalones(data.datos);
   }, [data?.datos, campoOrden, direccionOrden]);
 
-  const iconoOrden = (campo: CampoOrden) => {
-    if (campoOrden !== campo) return <ArrowUpDown className="w-3 h-3 opacity-30" />;
-    return direccionOrden === 'asc' ? (
-      <ArrowUp className="w-3 h-3" />
-    ) : (
-      <ArrowDown className="w-3 h-3" />
-    );
+  const indicadorOrden = (campo: CampoOrden) => {
+    if (campoOrden !== campo) return '↕';
+    return direccionOrden === 'asc' ? '↑' : '↓';
   };
 
-  const exportarExcel = () => {
-    if (!datosOrdenados.length) return;
-    const filas = datosOrdenados.map((s: SalonTotalMetrica) => ({
-      'Nombre del salón': s.nombre,
-      'Fecha de creación': formatearFechaHumana(s.fechaCreacion),
-      Plan: s.plan,
-      País: s.pais,
-      Vendedor: s.vendedor ?? 'N/A',
-    }));
-    const hoja = XLSX.utils.json_to_sheet(filas);
-    const libro = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(libro, hoja, 'Total Salones');
-    XLSX.writeFile(libro, 'total-salones.xlsx');
+  const construirNombreArchivo = () => {
+    const segmentos = ['total-salones'];
+    if (filtrosplan.length > 0) segmentos.push(`plan-${filtrosplan.join('-').toLowerCase()}`);
+    if (filtrosPais.length > 0) segmentos.push(`pais-${filtrosPais.join('-').toLowerCase()}`);
+    if (vendedorDebounced.trim()) {
+      segmentos.push(`vendedor-${vendedorDebounced.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-')}`);
+    }
+    if (buscarDebounced.trim()) {
+      segmentos.push(`busqueda-${buscarDebounced.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-')}`);
+    }
+    segmentos.push(new Date().toISOString().slice(0, 10));
+    return `${segmentos.join('_')}.xlsx`;
+  };
+
+  const exportarExcel = async () => {
+    if (exportando) return;
+    setExportando(true);
+
+    try {
+      const primerLote = await obtenerTotalSalones({
+        buscar: buscarDebounced || undefined,
+        plan: planStr,
+        pais: paisStr,
+        vendedor: vendedorDebounced || undefined,
+        pagina: 1,
+        limite: 100,
+      });
+
+      let todosLosSalones = [...primerLote.datos];
+
+      for (let paginaActual = 2; paginaActual <= primerLote.totalPaginas; paginaActual += 1) {
+        const respuesta = await obtenerTotalSalones({
+          buscar: buscarDebounced || undefined,
+          plan: planStr,
+          pais: paisStr,
+          vendedor: vendedorDebounced || undefined,
+          pagina: paginaActual,
+          limite: 100,
+        });
+        todosLosSalones = [...todosLosSalones, ...respuesta.datos];
+      }
+
+      const filas = ordenarSalones(todosLosSalones).map((s: SalonTotalMetrica) => ({
+        'Nombre del salón': s.nombre,
+        'Fecha de creación': formatearFechaHumana(s.fechaCreacion),
+        Plan: s.plan,
+        País: s.pais,
+        Dueño: s.dueno,
+        Vendedor: s.vendedor ?? 'N/A',
+      }));
+
+      const hoja = XLSX.utils.json_to_sheet(filas);
+      const libro = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(libro, hoja, 'Total Salones');
+      XLSX.writeFile(libro, construirNombreArchivo());
+    } finally {
+      setExportando(false);
+    }
   };
 
   return (
@@ -159,7 +205,7 @@ export function ModalTotalSalones({ onCerrar }: PropsModalTotalSalones) {
       role="dialog"
       aria-modal="true"
       aria-labelledby="modal-total-salones-titulo"
-      className="fixed inset-0 z-[200] flex items-center justify-center bg-black/70 backdrop-blur-sm p-4"
+      className="fixed inset-0 z-200 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4"
       onKeyDown={(e) => e.key === 'Escape' && onCerrar()}
     >
       <div className="bg-white rounded-3xl w-full max-w-4xl max-h-[90vh] overflow-hidden flex flex-col shadow-2xl">
@@ -255,7 +301,7 @@ export function ModalTotalSalones({ onCerrar }: PropsModalTotalSalones) {
                     onClick={() => alternarOrden('nombre')}
                   >
                     <span className="inline-flex items-center gap-1">
-                      Nombre del salón {iconoOrden('nombre')}
+                      Nombre del salón {indicadorOrden('nombre')}
                     </span>
                   </th>
                   <th
@@ -263,7 +309,7 @@ export function ModalTotalSalones({ onCerrar }: PropsModalTotalSalones) {
                     onClick={() => alternarOrden('fechaCreacion')}
                   >
                     <span className="inline-flex items-center gap-1">
-                      Fecha de creación {iconoOrden('fechaCreacion')}
+                      Fecha de creación {indicadorOrden('fechaCreacion')}
                     </span>
                   </th>
                   <th
@@ -271,7 +317,7 @@ export function ModalTotalSalones({ onCerrar }: PropsModalTotalSalones) {
                     onClick={() => alternarOrden('plan')}
                   >
                     <span className="inline-flex items-center gap-1">
-                      Plan {iconoOrden('plan')}
+                      Plan {indicadorOrden('plan')}
                     </span>
                   </th>
                   <th
@@ -279,7 +325,7 @@ export function ModalTotalSalones({ onCerrar }: PropsModalTotalSalones) {
                     onClick={() => alternarOrden('pais')}
                   >
                     <span className="inline-flex items-center gap-1">
-                      País {iconoOrden('pais')}
+                      País {indicadorOrden('pais')}
                     </span>
                   </th>
                   <th
@@ -287,7 +333,7 @@ export function ModalTotalSalones({ onCerrar }: PropsModalTotalSalones) {
                     onClick={() => alternarOrden('vendedor')}
                   >
                     <span className="inline-flex items-center gap-1">
-                      Vendedor {iconoOrden('vendedor')}
+                      Vendedor {indicadorOrden('vendedor')}
                     </span>
                   </th>
                 </tr>
@@ -323,11 +369,11 @@ export function ModalTotalSalones({ onCerrar }: PropsModalTotalSalones) {
         </div>
 
         {/* Paginación y exportar */}
-        <div className="flex items-center justify-between px-6 py-3 border-t border-slate-200">
+        <div className="flex flex-col gap-3 border-t border-slate-200 px-6 py-3 sm:flex-row sm:items-center sm:justify-between">
           <p className="text-xs font-bold text-slate-500">
             {data?.total ?? 0} salones en total — Página {pagina} de {data?.totalPaginas ?? 1}
           </p>
-          <div className="flex gap-2">
+          <div className="flex flex-wrap gap-2">
             <button
               onClick={() => setPagina((p) => Math.max(1, p - 1))}
               disabled={pagina <= 1}
@@ -344,9 +390,11 @@ export function ModalTotalSalones({ onCerrar }: PropsModalTotalSalones) {
             </button>
             <button
               onClick={exportarExcel}
-              className="px-3 py-1.5 bg-emerald-600 text-white rounded-lg text-xs font-bold flex items-center gap-1 hover:bg-emerald-700"
+              disabled={exportando}
+              className="flex items-center gap-1 rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-bold text-white hover:bg-emerald-700 disabled:opacity-60"
             >
-              <Download className="w-3.5 h-3.5" /> Exportar Excel
+              <Download className="w-3.5 h-3.5" />
+              {exportando ? 'Exportando...' : 'Exportar Excel'}
             </button>
           </div>
         </div>

@@ -9,6 +9,7 @@ import { revocarSesionesPorSujeto } from '../lib/sesionesAuth.js';
 import { detectarTipoImagen } from '../utils/validarImagen.js';
 import { resolverCategoriasSalon } from '../lib/categoriasSalon.js';
 import { cacheSalonesPublicos } from '../lib/cache.js';
+import { obtenerExcepcionDisponibilidadAplicada, parsearExcepcionesDisponibilidad } from '../lib/disponibilidadExcepciones.js';
 import { construirSedesReservables, obtenerNombresSucursales } from '../lib/sedes.js';
 import { obtenerServiciosNormalizados } from '../lib/serializacionReservas.js';
 import { prisma } from '../prismaCliente.js';
@@ -37,12 +38,12 @@ const esquemaBusquedaSalones = z.object({
   pais: z.enum(['Mexico', 'Colombia']).optional(),
 });
 
-const regexTextoPersona = /^[A-Za-zÁÉÍÓÚáéíóúÑñÜü\s]+$/;
+const regexTextoPersona = /^[\p{L}\p{M}\s'’-]+$/u;
 const regexContrasenaSegura = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[^A-Za-z\d]).{10,}$/;
 
 const esquemaPerfilClienteApp = z.object({
-  nombre: textoSchema('nombre', 80).regex(regexTextoPersona, 'El nombre solo puede contener letras y espacios').optional(),
-  apellido: textoSchema('apellido', 80).regex(regexTextoPersona, 'El apellido solo puede contener letras y espacios').optional(),
+  nombre: textoSchema('nombre', 80).regex(regexTextoPersona, 'El nombre solo puede contener letras, espacios, apóstrofes y guiones').optional(),
+  apellido: textoSchema('apellido', 80).regex(regexTextoPersona, 'El apellido solo puede contener letras, espacios, apóstrofes y guiones').optional(),
   telefono: z.union([
     z.literal(''),
     z.string().trim().regex(/^\d{1,10}$/, 'El teléfono solo puede contener números y máximo 10 dígitos'),
@@ -194,6 +195,7 @@ export async function rutasClientesApp(servidor: FastifyInstance): Promise<void>
         select: {
           id: true,
           nombre: true,
+          plan: true,
           slug: true,
           descripcion: true,
           direccion: true,
@@ -212,8 +214,19 @@ export async function rutasClientesApp(servidor: FastifyInstance): Promise<void>
           fechaVencimiento: true,
           zonaHoraria: true,
           servicios: true,
+          productos: {
+            where: { activo: true },
+            orderBy: { nombre: 'asc' },
+            select: {
+              id: true,
+              nombre: true,
+              categoria: true,
+              precio: true,
+            },
+          },
           horario: true,
           festivos: true,
+          excepcionesDisponibilidad: true,
           sedes: {
             where: { activo: true, estado: 'aprobado' },
             orderBy: { creadoEn: 'asc' },
@@ -294,6 +307,7 @@ export async function rutasClientesApp(servidor: FastifyInstance): Promise<void>
         select: {
           id: true,
           nombre: true,
+          plan: true,
           slug: true,
           descripcion: true,
           direccion: true,
@@ -312,8 +326,19 @@ export async function rutasClientesApp(servidor: FastifyInstance): Promise<void>
           fechaVencimiento: true,
           zonaHoraria: true,
           servicios: true,
+          productos: {
+            where: { activo: true },
+            orderBy: { nombre: 'asc' },
+            select: {
+              id: true,
+              nombre: true,
+              categoria: true,
+              precio: true,
+            },
+          },
           horario: true,
           festivos: true,
+          excepcionesDisponibilidad: true,
           sedes: {
             where: { activo: true, estado: 'aprobado' },
             orderBy: { creadoEn: 'asc' },
@@ -377,15 +402,89 @@ export async function rutasClientesApp(servidor: FastifyInstance): Promise<void>
     },
   );
 
+  servidor.get<{ Params: { id: string }; Querystring: { email?: string } }>(
+    '/salones/publicos/:id/cliente-por-email',
+    async (solicitud, respuesta) => {
+      const email = solicitud.query.email?.trim().toLowerCase() ?? '';
+      const { id } = solicitud.params;
+
+      if (!email || !esEmailValido(email)) {
+        return respuesta.send({
+          datos: {
+            encontrado: false,
+            email,
+            nombre: '',
+            apellido: '',
+            telefono: null,
+            fechaNacimiento: null,
+            ciudad: null,
+            pais: 'Mexico',
+          },
+        });
+      }
+
+      const salon = await prisma.estudio.findFirst({
+        where: { id, estado: 'aprobado', activo: true, ...obtenerFiltroDemo() },
+        select: { id: true },
+      });
+
+      if (!salon) {
+        return respuesta.code(404).send({ error: 'Salón no encontrado' });
+      }
+
+      const clienteApp = await prisma.clienteApp.findUnique({
+        where: { email },
+        select: {
+          email: true,
+          nombre: true,
+          apellido: true,
+          telefono: true,
+          fechaNacimiento: true,
+          ciudad: true,
+          pais: true,
+          activo: true,
+        },
+      });
+
+      if (!clienteApp || !clienteApp.activo) {
+        return respuesta.send({
+          datos: {
+            encontrado: false,
+            email,
+            nombre: '',
+            apellido: '',
+            telefono: null,
+            fechaNacimiento: null,
+            ciudad: null,
+            pais: 'Mexico',
+          },
+        });
+      }
+
+      return respuesta.send({
+        datos: {
+          encontrado: true,
+          email: clienteApp.email,
+          nombre: clienteApp.nombre,
+          apellido: clienteApp.apellido,
+          telefono: clienteApp.telefono,
+          fechaNacimiento: clienteApp.fechaNacimiento?.toISOString().split('T')[0] ?? null,
+          ciudad: clienteApp.ciudad ?? null,
+          pais: clienteApp.pais === 'Colombia' ? 'Colombia' : 'Mexico',
+        },
+      });
+    },
+  );
+
   // ─── GET /salones/publicos/:id/disponibilidad ─────────────────────────────
   servidor.get<{
     Params: { id: string };
-    Querystring: { personalId: string; fecha: string; duracion: string };
+    Querystring: { personalId: string; fecha: string; duracion: string; sucursal?: string };
   }>(
     '/salones/publicos/:id/disponibilidad',
     async (solicitud, respuesta) => {
       const { id } = solicitud.params;
-      const { personalId, fecha, duracion } = solicitud.query;
+      const { personalId, fecha, duracion, sucursal } = solicitud.query;
       if (!personalId || !fecha || !duracion) {
         return respuesta.code(400).send({ error: 'personalId, fecha y duracion son requeridos' });
       }
@@ -398,7 +497,7 @@ export async function rutasClientesApp(servidor: FastifyInstance): Promise<void>
       const [salon, miembro, reservasExistentes] = await Promise.all([
         prisma.estudio.findFirst({
           where: { id, estado: 'aprobado', activo: true },
-          select: { horario: true, festivos: true, fechaVencimiento: true, zonaHoraria: true, pais: true },
+          select: { nombre: true, horario: true, festivos: true, excepcionesDisponibilidad: true, fechaVencimiento: true, zonaHoraria: true, pais: true },
         }),
         prisma.personal.findFirst({
           where: { id: personalId, estudioId: id, activo: true },
@@ -418,7 +517,7 @@ export async function rutasClientesApp(servidor: FastifyInstance): Promise<void>
             fecha,
             estado: { not: 'cancelled' },
           },
-          select: { horaInicio: true, duracion: true },
+          select: { horaInicio: true, duracion: true, estado: true },
         }),
       ]);
 
@@ -431,12 +530,25 @@ export async function rutasClientesApp(servidor: FastifyInstance): Promise<void>
         return respuesta.send({ datos: [] });
       }
 
+      const sucursalEfectiva = sucursal?.trim() || salon.nombre;
+      const excepcionDia = obtenerExcepcionDisponibilidadAplicada({
+        excepciones: salon.excepcionesDisponibilidad,
+        fecha,
+        sucursal: sucursalEfectiva,
+      });
+
+      if (excepcionDia?.tipo === 'cerrado') {
+        return respuesta.send({ datos: [] });
+      }
+
       const slots = obtenerSlotsDisponiblesBackend({
         horario: salon.horario as Record<string, { isOpen: boolean; openTime: string; closeTime: string }>,
         miembro,
         fecha,
         duracionMin,
         reservas: reservasExistentes,
+        sucursal: sucursalEfectiva,
+        excepcionesDisponibilidad: salon.excepcionesDisponibilidad,
         zonaHoraria: normalizarZonaHorariaEstudio(salon.zonaHoraria, salon.pais),
       });
 
@@ -468,8 +580,10 @@ export async function rutasClientesApp(servidor: FastifyInstance): Promise<void>
         prisma.estudio.findFirst({
           where: { id, estado: 'aprobado', activo: true },
           select: {
+            nombre: true,
             horario: true,
             festivos: true,
+            excepcionesDisponibilidad: true,
             fechaVencimiento: true,
             zonaHoraria: true,
             pais: true,
@@ -513,14 +627,6 @@ export async function rutasClientesApp(servidor: FastifyInstance): Promise<void>
         return respuesta.code(404).send({ error: 'La sede seleccionada no está disponible para reservas públicas' });
       }
 
-      const sucursalesSalon = obtenerNombresSucursales(
-        salon as unknown as Record<string, unknown>,
-        Array.isArray(salon.sucursales) ? (salon.sucursales as string[]) : [],
-      );
-      if (sucursal && sucursalesSalon.length > 1 && !sucursalesSalon.includes(sucursal)) {
-        return respuesta.code(400).send({ error: 'La sede seleccionada no existe en este salón' });
-      }
-
       const serviciosSeleccionados = (servicios ?? '')
         .split(',')
         .map((servicio) => servicio.trim())
@@ -531,6 +637,17 @@ export async function rutasClientesApp(servidor: FastifyInstance): Promise<void>
         return respuesta.send({ especialistas: [] });
       }
 
+      const sucursalEfectiva = sucursal?.trim() || salon.nombre;
+      const excepcionDia = obtenerExcepcionDisponibilidadAplicada({
+        excepciones: salon.excepcionesDisponibilidad,
+        fecha,
+        sucursal: sucursalEfectiva,
+      });
+
+      if (excepcionDia?.tipo === 'cerrado') {
+        return respuesta.send({ especialistas: [] });
+      }
+
       // Para cada especialista, obtener sus reservas del día y calcular slots
       const reservasPorEspecialista = await prisma.reserva.findMany({
         where: {
@@ -538,14 +655,18 @@ export async function rutasClientesApp(servidor: FastifyInstance): Promise<void>
           fecha,
           estado: { not: 'cancelled' },
         },
-        select: { personalId: true, horaInicio: true, duracion: true },
+        select: { personalId: true, horaInicio: true, duracion: true, estado: true },
       });
 
       // Agrupar reservas por especialista
-      const mapaReservas = new Map<string, { horaInicio: string; duracion: number }[]>();
+      const mapaReservas = new Map<string, { horaInicio: string; duracion: number; estado?: string }[]>();
       for (const r of reservasPorEspecialista) {
         if (!mapaReservas.has(r.personalId)) mapaReservas.set(r.personalId, []);
-        mapaReservas.get(r.personalId)!.push({ horaInicio: r.horaInicio, duracion: r.duracion });
+        mapaReservas.get(r.personalId)!.push({
+          horaInicio: r.horaInicio,
+          duracion: r.duracion,
+          estado: r.estado,
+        });
       }
 
       const horario = salon.horario as Record<string, { isOpen: boolean; openTime: string; closeTime: string }>;
@@ -573,6 +694,8 @@ export async function rutasClientesApp(servidor: FastifyInstance): Promise<void>
           fecha,
           duracionMin,
           reservas: reservasEsp,
+          sucursal: sucursalEfectiva,
+          excepcionesDisponibilidad: salon.excepcionesDisponibilidad,
           zonaHoraria: zonaHorariaSalon,
         });
 
@@ -1068,7 +1191,7 @@ export async function rutasClientesApp(servidor: FastifyInstance): Promise<void>
       const hoyStr = obtenerFechaISOEnZona(hoy, zona, reserva.estudio.pais);
 
       if (reserva.fecha < hoyStr) {
-        return respuesta.code(400).send({ error: 'Cannot cancel a past booking.' });
+        return respuesta.code(400).send({ error: 'No se puede cancelar una reserva pasada.' });
       }
 
       const [h, m] = reserva.horaInicio.split(':').map(Number);
@@ -1077,7 +1200,7 @@ export async function rutasClientesApp(servidor: FastifyInstance): Promise<void>
       const horasRestantes = (fechaCita.getTime() - hoy.getTime()) / (1000 * 60 * 60);
       if (horasRestantes < 2) {
         return respuesta.code(400).send({
-          error: 'Cannot cancel less than 2 hours before the appointment. Contact the salon directly.',
+          error: 'No se puede cancelar con menos de 2 horas de anticipación. Contacta directamente al salón.',
         });
       }
 

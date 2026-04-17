@@ -30,7 +30,7 @@ export async function obtenerAccesoPersonal(
 export async function crearAccesoEmpleado(
   estudioId: string,
   personalId: string,
-  datos: { email: string; contrasena: string; forzarCambioContrasena?: boolean },
+  datos: { email: string; contrasena?: string; forzarCambioContrasena?: boolean },
 ): Promise<EmpleadoAccesoInfo> {
   const respuesta = await peticion<RespuestaCrearAcceso>(
     `/estudio/${estudioId}/personal/${personalId}/crear-acceso`,
@@ -42,11 +42,11 @@ export async function crearAccesoEmpleado(
 export async function actualizarAccesoEmpleado(
   estudioId: string,
   personalId: string,
-  activo: boolean,
+  datos: { activo: boolean; desactivarHasta?: string | null },
 ): Promise<EmpleadoAccesoInfo> {
   const respuesta = await peticion<RespuestaCrearAcceso>(
     `/estudio/${estudioId}/personal/${personalId}/acceso`,
-    { method: 'PUT', body: JSON.stringify({ activo }) },
+    { method: 'PUT', body: JSON.stringify(datos) },
   );
   return respuesta.datos;
 }
@@ -70,7 +70,7 @@ export async function obtenerMiAgendaMes(mes: string): Promise<ReservaEmpleado[]
 
 export async function actualizarEstadoReservaEmpleado(
   reservaId: string,
-  estado: 'confirmed' | 'completed' | 'no_show',
+  estado: 'confirmed' | 'working' | 'completed' | 'no_show',
 ): Promise<ReservaEmpleado> {
   const respuesta = await peticion<{ datos: ReservaEmpleado }>(
     `/empleados/reservas/${reservaId}/estado`,

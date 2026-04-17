@@ -33,6 +33,7 @@ import { usarNotificacionesPush } from '../../hooks/usarNotificacionesPush';
 import { ModalSuspension } from './componentes/ModalSuspension';
 import { PanelNotificaciones } from './componentes/PanelNotificaciones';
 import { usarNotificacionesEstudio } from './hooks/usarNotificacionesEstudio';
+import { GestorFestivos } from './componentes/GestorFestivos';
 import type { Moneda } from '../../tipos';
 
 export function PaginaAdminEstudio() {
@@ -44,16 +45,18 @@ export function PaginaAdminEstudio() {
   const [seccion, setSeccion] = useState<
     'ingresos' | 'clientes' | 'fidelidad' | 'salon' | 'equipo' | 'productos' | 'contacto'
   >('ingresos');
+  const [subseccionSalon, setSubseccionSalon] = useState<'perfil' | 'horario'>('perfil');
   const [activandoPush, setActivandoPush] = useState(false);
   const push = usarNotificacionesPush();
-  const estudio = estudios.find((s) => s.slug === slug || s.id === slug);
+  const estudio = estudios.find((s) => s.slug === slug || s.clientKey === slug || s.id === slug);
   const estudioId = estudio?.id;
   const { notificaciones, marcarLeida } = usarNotificacionesEstudio(estudioId);
+  const identificadorRutaPrivada = estudio?.slug?.trim() || estudio?.clientKey?.trim() || estudio?.id;
 
   useEffect(() => {
-    if (!estudio?.slug || !slug || slug === estudio.slug) return;
-    navegar(`/estudio/${estudio.slug}/admin`, { replace: true });
-  }, [estudio?.slug, slug, navegar]);
+    if (!identificadorRutaPrivada || !slug || slug === identificadorRutaPrivada) return;
+    navegar(`/estudio/${identificadorRutaPrivada}/admin`, { replace: true });
+  }, [identificadorRutaPrivada, slug, navegar]);
 
   if (cargando)
     return (
@@ -156,64 +159,68 @@ export function PaginaAdminEstudio() {
       </header>
 
       <main className="max-w-7xl mx-auto p-4 md:p-8 space-y-8">
-        <div className="no-imprimir flex bg-slate-200/50 p-1 rounded-2xl w-fit border border-slate-200 mx-auto md:mx-0">
-          <button
-            onClick={() => navegar(`/estudio/${estudio.slug || estudio.id}/agenda`)}
-            className="px-4 md:px-6 py-3 rounded-xl text-[10px] md:text-xs font-black transition-all flex items-center gap-2 text-slate-500 hover:text-slate-800"
-          >
-            <Calendar className="w-4 h-4" /> Agenda
-          </button>
-          <button
-            onClick={() => navegar(`/estudio/${estudio.slug || estudio.id}/admin`)}
-            className="px-4 md:px-6 py-3 rounded-xl text-[10px] md:text-xs font-black transition-all flex items-center gap-2 bg-white shadow-sm text-slate-900"
-          >
-            <Wallet className="w-4 h-4" /> Administración
-          </button>
+        <div className="no-imprimir -mx-4 overflow-x-auto px-4 pb-2 md:mx-0 md:px-0">
+          <div className="mx-auto inline-flex min-w-max gap-1 rounded-2xl border border-slate-200 bg-slate-200/50 p-1 md:mx-0">
+            <button
+              onClick={() => navegar(`/estudio/${identificadorRutaPrivada}/agenda`)}
+              className="inline-flex items-center gap-2 rounded-xl px-4 py-3 text-[10px] font-black text-slate-500 transition-all hover:text-slate-800 md:px-6 md:text-xs"
+            >
+              <Calendar className="h-4 w-4" /> Agenda
+            </button>
+            <button
+              onClick={() => navegar(`/estudio/${identificadorRutaPrivada}/admin`)}
+              className="inline-flex items-center gap-2 rounded-xl bg-white px-4 py-3 text-[10px] font-black text-slate-900 shadow-sm transition-all md:px-6 md:text-xs"
+            >
+              <Wallet className="h-4 w-4" /> Administración
+            </button>
+          </div>
         </div>
 
-        <div className="no-imprimir flex flex-wrap justify-center gap-1 bg-slate-100 p-1 rounded-2xl w-full border border-slate-200">
-          <button
-            onClick={() => setSeccion('ingresos')}
-            className={`flex-1 sm:flex-none px-3 sm:px-4 md:px-6 py-2.5 rounded-xl text-[10px] md:text-xs font-black transition-all flex items-center justify-center gap-1.5 ${seccion === 'ingresos' ? 'bg-white shadow-sm text-slate-900' : 'text-slate-500 hover:text-slate-800'}`}
-          >
-            <TrendingUp className="w-4 h-4 shrink-0" /> Ingresos
-          </button>
-          <button
-            onClick={() => setSeccion('clientes')}
-            className={`flex-1 sm:flex-none px-3 sm:px-4 md:px-6 py-2.5 rounded-xl text-[10px] md:text-xs font-black transition-all flex items-center justify-center gap-1.5 ${seccion === 'clientes' ? 'bg-white shadow-sm text-slate-900' : 'text-slate-500 hover:text-slate-800'}`}
-          >
-            <Users className="w-4 h-4 shrink-0" /> Clientes
-          </button>
-          <button
-            onClick={() => setSeccion('salon')}
-            className={`flex-1 sm:flex-none px-3 sm:px-4 md:px-6 py-2.5 rounded-xl text-[10px] md:text-xs font-black transition-all flex items-center justify-center gap-1.5 ${seccion === 'salon' ? 'bg-white shadow-sm text-slate-900' : 'text-slate-500 hover:text-slate-800'}`}
-          >
-            <Palette className="w-4 h-4 shrink-0" /> Mi salón
-          </button>
-          <button
-            onClick={() => setSeccion('equipo')}
-            className={`flex-1 sm:flex-none px-3 sm:px-4 md:px-6 py-2.5 rounded-xl text-[10px] md:text-xs font-black transition-all flex items-center justify-center gap-1.5 ${seccion === 'equipo' ? 'bg-white shadow-sm text-slate-900' : 'text-slate-500 hover:text-slate-800'}`}
-          >
-            <Users className="w-4 h-4 shrink-0" /> Mi equipo
-          </button>
-          <button
-            onClick={() => setSeccion('productos')}
-            className={`flex-1 sm:flex-none px-3 sm:px-4 md:px-6 py-2.5 rounded-xl text-[10px] md:text-xs font-black transition-all flex items-center justify-center gap-1.5 ${seccion === 'productos' ? 'bg-white shadow-sm text-slate-900' : 'text-slate-500 hover:text-slate-800'}`}
-          >
-            <ShoppingBag className="w-4 h-4 shrink-0" /> Productos
-          </button>
-          <button
-            onClick={() => setSeccion('fidelidad')}
-            className={`flex-1 sm:flex-none px-3 sm:px-4 md:px-6 py-2.5 rounded-xl text-[10px] md:text-xs font-black transition-all flex items-center justify-center gap-1.5 ${seccion === 'fidelidad' ? 'bg-white shadow-sm text-slate-900' : 'text-slate-500 hover:text-slate-800'}`}
-          >
-            <Gift className="w-4 h-4 shrink-0" /> Beneficios
-          </button>
-          <button
-            onClick={() => setSeccion('contacto')}
-            className={`flex-1 sm:flex-none px-3 sm:px-4 md:px-6 py-2.5 rounded-xl text-[10px] md:text-xs font-black transition-all flex items-center justify-center gap-1.5 ${seccion === 'contacto' ? 'bg-white shadow-sm text-slate-900' : 'text-slate-500 hover:text-slate-800'}`}
-          >
-            <HelpCircle className="w-4 h-4 shrink-0" /> Soporte
-          </button>
+        <div className="no-imprimir -mx-4 overflow-x-auto px-4 pb-2 md:mx-0 md:px-0">
+          <div className="inline-flex min-w-max gap-1 rounded-2xl border border-slate-200 bg-slate-100 p-1">
+            <button
+              onClick={() => setSeccion('ingresos')}
+              className={`inline-flex items-center justify-center gap-1.5 rounded-xl px-4 py-2.5 text-[10px] font-black transition-all md:px-6 md:text-xs ${seccion === 'ingresos' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-800'}`}
+            >
+              <TrendingUp className="h-4 w-4 shrink-0" /> Ingresos
+            </button>
+            <button
+              onClick={() => setSeccion('clientes')}
+              className={`inline-flex items-center justify-center gap-1.5 rounded-xl px-4 py-2.5 text-[10px] font-black transition-all md:px-6 md:text-xs ${seccion === 'clientes' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-800'}`}
+            >
+              <Users className="h-4 w-4 shrink-0" /> Clientes
+            </button>
+            <button
+              onClick={() => setSeccion('salon')}
+              className={`inline-flex items-center justify-center gap-1.5 rounded-xl px-4 py-2.5 text-[10px] font-black transition-all md:px-6 md:text-xs ${seccion === 'salon' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-800'}`}
+            >
+              <Palette className="h-4 w-4 shrink-0" /> Mi salón
+            </button>
+            <button
+              onClick={() => setSeccion('equipo')}
+              className={`inline-flex items-center justify-center gap-1.5 rounded-xl px-4 py-2.5 text-[10px] font-black transition-all md:px-6 md:text-xs ${seccion === 'equipo' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-800'}`}
+            >
+              <Users className="h-4 w-4 shrink-0" /> Mi equipo
+            </button>
+            <button
+              onClick={() => setSeccion('productos')}
+              className={`inline-flex items-center justify-center gap-1.5 rounded-xl px-4 py-2.5 text-[10px] font-black transition-all md:px-6 md:text-xs ${seccion === 'productos' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-800'}`}
+            >
+              <ShoppingBag className="h-4 w-4 shrink-0" /> Productos
+            </button>
+            <button
+              onClick={() => setSeccion('fidelidad')}
+              className={`inline-flex items-center justify-center gap-1.5 rounded-xl px-4 py-2.5 text-[10px] font-black transition-all md:px-6 md:text-xs ${seccion === 'fidelidad' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-800'}`}
+            >
+              <Gift className="h-4 w-4 shrink-0" /> Beneficios
+            </button>
+            <button
+              onClick={() => setSeccion('contacto')}
+              className={`inline-flex items-center justify-center gap-1.5 rounded-xl px-4 py-2.5 text-[10px] font-black transition-all md:px-6 md:text-xs ${seccion === 'contacto' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-800'}`}
+            >
+              <HelpCircle className="h-4 w-4 shrink-0" /> Soporte
+            </button>
+          </div>
         </div>
 
         {seccion === 'ingresos' && (
@@ -266,8 +273,54 @@ export function PaginaAdminEstudio() {
 
         {seccion === 'salon' && (
           <>
-            <h2 className="text-3xl font-black italic uppercase tracking-tighter">Mi Salón</h2>
-            <PerfilSalon estudioId={estudio.id} />
+            <div className="space-y-4">
+              <div>
+                <h2 className="text-3xl font-black italic uppercase tracking-tighter">Mi Salón</h2>
+                <p className="mt-1 text-sm text-slate-500">
+                  Ordena la información general del salón y la gestión de horario en espacios separados.
+                </p>
+              </div>
+
+              <div className="no-imprimir -mx-4 overflow-x-auto px-4 pb-1 md:mx-0 md:px-0">
+                <div className="inline-flex min-w-max gap-1 rounded-2xl border border-slate-200 bg-slate-100 p-1">
+                  <button
+                    type="button"
+                    onClick={() => setSubseccionSalon('perfil')}
+                    className={`inline-flex items-center gap-2 rounded-xl px-4 py-2.5 text-[10px] font-black uppercase tracking-widest transition-all md:text-xs ${subseccionSalon === 'perfil' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-800'}`}
+                  >
+                    <Palette className="h-4 w-4" /> Perfil
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setSubseccionSalon('horario')}
+                    className={`inline-flex items-center gap-2 rounded-xl px-4 py-2.5 text-[10px] font-black uppercase tracking-widest transition-all md:text-xs ${subseccionSalon === 'horario' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-800'}`}
+                  >
+                    <CalendarRange className="h-4 w-4" /> Horario
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            {subseccionSalon === 'perfil' ? (
+              <PerfilSalon estudioId={estudio.id} />
+            ) : (
+              <div className="space-y-4">
+                <div className="rounded-4xl border border-slate-200 bg-white p-6 shadow-sm sm:p-8">
+                  <div className="max-w-2xl space-y-2">
+                    <p className="text-[11px] font-black uppercase tracking-[0.25em] text-slate-400">
+                      Gestión de horario
+                    </p>
+                    <h3 className="text-2xl font-black tracking-tight text-slate-900">
+                      Horarios, descansos y festivos del salón
+                    </h3>
+                    <p className="text-sm text-slate-500">
+                      Mantén aquí la programación operativa para que la agenda y la reserva pública respeten estos límites.
+                    </p>
+                  </div>
+                </div>
+                <GestorFestivos estudio={estudio} />
+              </div>
+            )}
           </>
         )}
 
@@ -281,7 +334,7 @@ export function PaginaAdminEstudio() {
         {seccion === 'productos' && (
           <>
             <h2 className="text-3xl font-black italic uppercase tracking-tighter">Productos</h2>
-            <PanelProductos estudioId={estudio.id} moneda={moneda} />
+            <PanelProductos estudioId={estudio.id} moneda={moneda} plan={estudio.plan} />
           </>
         )}
 

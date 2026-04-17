@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import {
-  iniciarSesionConEmailAPI,
+  iniciarSesionInteligenteAPI,
   iniciarSesionConClaveAPI,
   buscarAccesoSalonPorClaveAPI,
   refrescarSesion,
@@ -39,7 +39,10 @@ interface EstadoAuth {
   claveClienteActual: string | null;
   iniciando: boolean;
   inicializarAutenticacion: () => () => void;
-  iniciarSesion: (email: string, contrasena: string) => Promise<ResultadoInicioSesion>;
+  iniciarSesion: (
+    identificador: string | null,
+    contrasena: string,
+  ) => Promise<ResultadoInicioSesion>;
   iniciarSesionConClave: (clave: string) => Promise<ResultadoInicioSesion>;
   cerrarSesion: () => Promise<void>;
   establecerEstudio: (estudioId: string | null, slugEstudio?: string | null) => void;
@@ -48,9 +51,36 @@ interface EstadoAuth {
 
 let inicializacionPendiente = false;
 const CLAVE_SESION = 'btp_tiene_sesion';
+const CLAVE_AVISO_INICIO_SESION = 'btp_aviso_inicio_sesion';
 const CLAVE_RESERVA_ESTUDIO_ID = 'btp_reserva_estudio_id';
 const CLAVE_RESERVA_ESTUDIO_NOMBRE = 'btp_reserva_estudio_nombre';
 const CLAVE_RESERVA_ESTUDIO_CLAVE = 'btp_reserva_estudio_clave';
+
+export interface AvisoInicioSesionTransitorio {
+  titulo?: string;
+  mensaje: string;
+  codigo?: string;
+  motivo?: string | null;
+  tono?: 'amber' | 'red' | 'blue' | 'emerald';
+}
+
+export function guardarAvisoInicioSesion(aviso: AvisoInicioSesionTransitorio): void {
+  if (typeof window === 'undefined') return;
+  sessionStorage.setItem(CLAVE_AVISO_INICIO_SESION, JSON.stringify(aviso));
+}
+
+export function consumirAvisoInicioSesion(): AvisoInicioSesionTransitorio | null {
+  if (typeof window === 'undefined') return null;
+  const contenido = sessionStorage.getItem(CLAVE_AVISO_INICIO_SESION);
+  if (!contenido) return null;
+  sessionStorage.removeItem(CLAVE_AVISO_INICIO_SESION);
+
+  try {
+    return JSON.parse(contenido) as AvisoInicioSesionTransitorio;
+  } catch {
+    return null;
+  }
+}
 
 function guardarSesionReserva(datos: {
   estudioId: string;
@@ -180,7 +210,16 @@ export const usarTiendaAuth = create<EstadoAuth>((set) => ({
             iniciando: false,
           });
         } else {
-          set({ usuario: null, rol: null, iniciando: false });
+          localStorage.removeItem(CLAVE_SESION);
+          limpiarToken();
+          set({
+            usuario: null,
+            rol: null,
+            estudioActual: sesionReserva?.estudioId ?? null,
+            slugEstudioActual: null,
+            claveClienteActual: sesionReserva?.claveSalon ?? null,
+            iniciando: false,
+          });
         }
       });
     }
@@ -189,9 +228,9 @@ export const usarTiendaAuth = create<EstadoAuth>((set) => ({
     };
   },
 
-  iniciarSesion: async (email, contrasena) => {
+  iniciarSesion: async (identificador, contrasena) => {
     try {
-      const datos = await iniciarSesionConEmailAPI(email, contrasena);
+      const datos = await iniciarSesionInteligenteAPI(identificador, contrasena);
       const rol = datos.rol as RolUsuario;
       localStorage.setItem(CLAVE_SESION, '1');
       limpiarSesionReserva();
@@ -374,13 +413,12 @@ registrarCallbackSesionExpirada(({ mensaje, codigo }) => {
     claveClienteActual: null,
   });
   if (typeof window !== 'undefined') {
-    const destino = new URL('/iniciar-sesion', window.location.origin);
-    if (codigo) {
-      destino.searchParams.set('codigo', codigo);
-    }
-    if (mensaje) {
-      destino.searchParams.set('mensaje', mensaje);
-    }
-    window.location.replace(`${destino.pathname}${destino.search}`);
+    guardarAvisoInicioSesion({
+      titulo: 'Session ended',
+      mensaje: mensaje || 'Your session is no longer active. Sign in again to continue.',
+      codigo,
+      tono: codigo ? 'amber' : 'blue',
+    });
+    window.location.replace('/iniciar-sesion');
   }
 });

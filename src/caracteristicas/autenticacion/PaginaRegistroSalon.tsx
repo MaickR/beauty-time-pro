@@ -20,7 +20,11 @@ import {
 } from 'lucide-react';
 import { Spinner } from '../../componentes/ui/Spinner';
 import { SelectorHora } from '../../componentes/ui/SelectorHora';
-import { CATALOGO_SERVICIOS, DIAS_SEMANA } from '../../lib/constantes';
+import {
+  CATALOGO_SERVICIOS,
+  DIAS_SEMANA,
+  obtenerEtiquetaServicioCatalogo,
+} from '../../lib/constantes';
 import {
   ErrorServicioRegistro,
   registrarSalon,
@@ -1405,7 +1409,7 @@ export function PaginaRegistroSalon() {
                                         className={`w-full text-left text-sm font-bold ${servicio ? 'text-pink-700' : 'text-slate-700'}`}
                                       >
                                         {servicio ? '✓ ' : ''}
-                                        {nombreServicio}
+                                        {obtenerEtiquetaServicioCatalogo(nombreServicio)}
                                       </button>
                                       {servicio && (
                                         <div className="mt-3 grid grid-cols-2 items-end gap-2">

@@ -2,6 +2,15 @@ import { useEffect, useMemo, useState } from 'react';
 import { peticion } from '../lib/clienteHTTP';
 import { usarTiendaAuth } from '../tienda/tiendaAuth';
 
+async function limpiarServiceWorkersLocales() {
+  if (typeof window === 'undefined' || !('serviceWorker' in navigator)) {
+    return;
+  }
+
+  const registros = await navigator.serviceWorker.getRegistrations();
+  await Promise.all(registros.map((registro) => registro.unregister()));
+}
+
 function urlBase64AUint8Array(base64: string): Uint8Array {
   const padding = '='.repeat((4 - (base64.length % 4)) % 4);
   const base64Url = (base64 + padding).replace(/-/g, '+').replace(/_/g, '/');
@@ -11,6 +20,11 @@ function urlBase64AUint8Array(base64: string): Uint8Array {
 
 async function obtenerRegistroServiceWorker() {
   if (!('serviceWorker' in navigator)) return null;
+
+  if (import.meta.env.DEV) {
+    await limpiarServiceWorkersLocales();
+    return null;
+  }
 
   const registroExistente = await navigator.serviceWorker.getRegistration('/sw.js');
   if (registroExistente) return registroExistente;
@@ -30,7 +44,8 @@ export function usarNotificacionesPush() {
     typeof window !== 'undefined' &&
     (window.location.protocol === 'https:' ||
       ['localhost', '127.0.0.1'].includes(window.location.hostname));
-  const soportado = soportadoNavegador && contextoSeguroPush;
+  const esDesarrollo = import.meta.env.DEV;
+  const soportado = soportadoNavegador && contextoSeguroPush && !esDesarrollo;
   const claveUsuario = useMemo(() => {
     if (!usuario) return 'anonimo';
     return `${usuario.rol}:${usuario.email || usuario.estudioId || usuario.nombre}`;
@@ -43,6 +58,9 @@ export function usarNotificacionesPush() {
 
   useEffect(() => {
     if (!soportado) {
+      if (esDesarrollo) {
+        void limpiarServiceWorkersLocales();
+      }
       setNotificacionesActivas(false);
       setCargando(false);
       return;
@@ -81,7 +99,7 @@ export function usarNotificacionesPush() {
     return () => {
       cancelado = true;
     };
-  }, [soportado]);
+  }, [esDesarrollo, soportado]);
 
   const activar = async () => {
     if (!soportadoNavegador) return false;

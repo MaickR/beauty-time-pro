@@ -7,14 +7,24 @@ import { generarCodigoAlfanumerico, hashValorSesion } from '../lib/sesionesAuth.
 import { prisma } from '../prismaCliente.js';
 import { enviarEmailVerificacionCliente } from '../servicios/servicioEmail.js';
 import { generarHashContrasena } from '../utils/contrasenas.js';
-import { esEmailValido } from '../utils/validarEmail.js';
+import { esEmailClienteValido, esEmailValido } from '../utils/validarEmail.js';
 import { sanitizarTexto } from '../utils/sanitizar.js';
-import { colorHexSchema, fechaIsoSchema, horaSchema, obtenerMensajeValidacion, telefonoSchema, textoSchema, urlOpcionalSchema } from '../lib/validacion.js';
+import {
+	colorHexSchema,
+	fechaCumpleanosActualSchema,
+	horaSchema,
+	obtenerMensajeValidacion,
+	telefonoClienteSchema,
+	telefonoSchema,
+	textoSchema,
+	textoSoloLetrasSchema,
+	urlOpcionalSchema,
+} from '../lib/validacion.js';
 import { validarCantidadServiciosPlan } from '../lib/planes.js';
 import { obtenerFechaISOEnZona, obtenerZonaHorariaPorPais } from '../utils/zonasHorarias.js';
 
 const REGEX_CONTRASENA = /^(?=.*[A-Z])(?=.*[a-z])(?=.*[0-9])(?=.*[^A-Za-z0-9]).{8,}$/;
-const ERROR_DOMINIO = 'Solo se aceptan correos personales válidos de Gmail, Hotmail, Outlook o Yahoo';
+const ERROR_DOMINIO = 'Solo se aceptan correos personales válidos de Gmail, Outlook, Hotmail, iCloud o Yahoo';
 const ERROR_CONTRASENA = 'La contraseña debe tener al menos 8 caracteres, una mayúscula, una minúscula, un número y un carácter especial';
 const SEGUNDOS_REENVIO_CODIGO = 60;
 const MINUTOS_EXPIRACION_CODIGO = 15;
@@ -88,13 +98,13 @@ const esquemaDisponibilidadEmail = z.object({
 const esquemaRegistroCliente = z.object({
 	email: z.string().trim().max(120, 'El email no puede superar 120 caracteres').email('Email inválido'),
 	contrasena: z.string().min(8, ERROR_CONTRASENA).max(100, 'La contraseña no puede superar 100 caracteres'),
-	nombreCompleto: textoSchema('nombreCompleto', 120).optional(),
-	nombre: textoSchema('nombre', 80).optional(),
-	apellido: textoSchema('apellido', 80).optional(),
-	fechaNacimiento: fechaIsoSchema,
+	nombreCompleto: textoSoloLetrasSchema('nombreCompleto', 120, 3).optional(),
+	nombre: textoSoloLetrasSchema('nombre', 80, 1).optional(),
+	apellido: textoSoloLetrasSchema('apellido', 80, 1).optional(),
+	fechaNacimiento: fechaCumpleanosActualSchema,
 	pais: z.enum(['Mexico', 'Colombia']),
-	telefono: z.union([z.literal(''), telefonoSchema]).optional().transform((valor) => (valor === '' ? null : valor)),
-	ciudad: z.string().trim().max(80, 'La ciudad no puede superar 80 caracteres').optional().transform((valor) => valor || null),
+	telefono: z.union([z.literal(''), telefonoClienteSchema]).optional().transform((valor) => (valor === '' ? null : valor)),
+	ciudad: z.union([z.literal(''), textoSoloLetrasSchema('ciudad', 80, 1)]).optional().transform((valor) => valor || null),
 }).superRefine((datos, contexto) => {
 	if (!datos.nombreCompleto && !datos.nombre) {
 		contexto.addIssue({
@@ -207,7 +217,12 @@ async function obtenerUsuarioBloqueante(email: string) {
 		!usuario.activo &&
 		(!usuario.estudioId || !usuario.estudio)
 	) {
-		await prisma.usuario.delete({ where: { id: usuario.id } });
+		await prisma.usuario.update({
+			where: { id: usuario.id },
+			data: {
+				email: `archivado+${usuario.id}@beautytime.local`,
+			},
+		});
 		return null;
 	}
 
@@ -361,7 +376,7 @@ export async function rutasRegistro(servidor: FastifyInstance): Promise<void> {
 		const emailNorm = email.trim().toLowerCase();
 		const telefonoNormalizado = telefono?.trim() ?? null;
 
-		if (!esEmailValido(emailNorm)) {
+		if (!esEmailClienteValido(emailNorm)) {
 			return respuesta.code(400).send({ error: ERROR_DOMINIO });
 		}
 

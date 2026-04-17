@@ -1,10 +1,12 @@
 import { peticion } from '../lib/clienteHTTP';
+import { combinarExcepcionesDisponibilidad, normalizarExcepcionesDisponibilidad } from '../lib/disponibilidadExcepciones';
 import { construirUrlArchivo } from '../utils/archivos';
 import type {
   ReservaCliente,
   SalonPublico,
   SalonDetalle,
   PerfilClienteApp,
+  PerfilClienteReservaPublica,
   SlotTiempo,
   DisponibilidadEspecialista,
 } from '../tipos';
@@ -23,6 +25,10 @@ interface RespuestaAccesoSalon {
 
 interface RespuestaPerfil {
   datos: PerfilClienteApp;
+}
+
+interface RespuestaPerfilReservaPublica {
+  datos: PerfilClienteReservaPublica;
 }
 
 interface RespuestaSlots {
@@ -75,10 +81,16 @@ function normalizarSalonDetalle(salon: SalonDetalle): SalonDetalle {
     permiteReservasPublicas: salon.permiteReservasPublicas ?? true,
     sucursales: Array.isArray(salon.sucursales) ? salon.sucursales : [],
     sedesReservables: Array.isArray(salon.sedesReservables) ? salon.sedesReservables : [],
+    plan: salon.plan,
     personal: salon.personal,
     servicios: salon.servicios,
+    productos: Array.isArray(salon.productos) ? salon.productos : [],
     horario: salon.horario,
     festivos: salon.festivos,
+    availabilityExceptions: combinarExcepcionesDisponibilidad(
+      Array.isArray(salon.festivos) ? salon.festivos : [],
+      normalizarExcepcionesDisponibilidad((salon as unknown as Record<string, unknown>)['excepcionesDisponibilidad']),
+    ),
   };
 }
 
@@ -136,9 +148,20 @@ export async function obtenerDisponibilidad(
   personalId: string,
   fecha: string,
   duracion: number,
+  sucursal?: string,
 ): Promise<SlotTiempo[]> {
+  const parametros = new URLSearchParams({
+    personalId,
+    fecha,
+    duracion: String(duracion),
+  });
+
+  if (sucursal?.trim()) {
+    parametros.set('sucursal', sucursal.trim());
+  }
+
   const res = await peticion<RespuestaSlots>(
-    `/salones/publicos/${salonId}/disponibilidad?personalId=${personalId}&fecha=${fecha}&duracion=${duracion}`,
+    `/salones/publicos/${salonId}/disponibilidad?${parametros.toString()}`,
   );
   return normalizarSlots(res.datos);
 }
@@ -166,6 +189,16 @@ export async function obtenerDisponibilidadCompleta(
     `/salones/publicos/${salonId}/disponibilidad-completa?${parametros.toString()}`,
   );
   return res.especialistas;
+}
+
+export async function obtenerPerfilClienteReservaPublica(
+  salonId: string,
+  email: string,
+): Promise<PerfilClienteReservaPublica> {
+  const res = await peticion<RespuestaPerfilReservaPublica>(
+    `/salones/publicos/${salonId}/cliente-por-email?email=${encodeURIComponent(email.trim())}`,
+  );
+  return res.datos;
 }
 
 export async function obtenerMiPerfil(): Promise<PerfilClienteApp> {

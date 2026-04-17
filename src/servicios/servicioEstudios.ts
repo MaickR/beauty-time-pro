@@ -2,12 +2,14 @@
  * Servicio de estudios - llama al backend Fastify en lugar de Firebase.
  */
 import type {
+  ExcepcionDisponibilidad,
   Estudio,
   PlanEstudio,
   SedeEstudio,
   Servicio,
   ServicioPersonalizado,
 } from '../tipos/index';
+import { combinarExcepcionesDisponibilidad, normalizarExcepcionesDisponibilidad } from '../lib/disponibilidadExcepciones';
 import { peticion } from '../lib/clienteHTTP';
 
 type RespuestaEstudio = { datos: Estudio };
@@ -82,6 +84,10 @@ function mapearEstudioBackend(estudio: EstudioBackend): Estudio {
     subscriptionStart: (estudio['inicioSuscripcion'] as string) ?? '',
     paidUntil: (estudio['fechaVencimiento'] as string) ?? '',
     holidays: (estudio['festivos'] as string[]) ?? [],
+    availabilityExceptions: combinarExcepcionesDisponibilidad(
+      (estudio['festivos'] as string[]) ?? [],
+      normalizarExcepcionesDisponibilidad(estudio['excepcionesDisponibilidad']),
+    ),
     schedule: (estudio['horario'] as Estudio['schedule']) ?? {},
     selectedServices: (estudio['servicios'] as Estudio['selectedServices']) ?? [],
     customServices: (estudio['serviciosCustom'] as Estudio['customServices']) ?? [],
@@ -225,6 +231,10 @@ export async function actualizarEstudio(id: string, campos: Partial<Estudio>): P
   if (campos.selectedServices !== undefined) cuerpo['servicios'] = campos.selectedServices;
   if (campos.customServices !== undefined) cuerpo['serviciosCustom'] = campos.customServices;
   if (campos.holidays !== undefined) cuerpo['festivos'] = campos.holidays;
+  if (campos.availabilityExceptions !== undefined) {
+    cuerpo['excepcionesDisponibilidad'] = campos.availabilityExceptions;
+  }
+  if (campos.primeraVez !== undefined) cuerpo['primeraVez'] = campos.primeraVez;
   await peticion<RespuestaEstudio>(`/estudios/${id}`, {
     method: 'PUT',
     body: JSON.stringify(cuerpo),
@@ -238,9 +248,19 @@ export async function eliminarEstudio(id: string): Promise<void> {
 
 /** Actualiza los días festivos/bloqueados de un estudio. */
 export async function actualizarFestivos(id: string, festivos: string[]): Promise<void> {
-  await peticion(`/estudios/${id}/festivos`, {
+  await peticion(`/estudios/${id}`, {
     method: 'PUT',
     body: JSON.stringify({ festivos }),
+  });
+}
+
+export async function actualizarExcepcionesDisponibilidad(
+  id: string,
+  excepcionesDisponibilidad: ExcepcionDisponibilidad[],
+): Promise<void> {
+  await peticion(`/estudios/${id}/disponibilidad-excepciones`, {
+    method: 'PUT',
+    body: JSON.stringify({ excepcionesDisponibilidad }),
   });
 }
 
@@ -261,4 +281,113 @@ export async function actualizarPinCancelacion(
     method: 'PUT',
     body: JSON.stringify({ pin, confirmacion }),
   });
+}
+
+export interface CitaDashboardSalon {
+  id: string;
+  fecha: string;
+  hora: string;
+  horaFin: string;
+  cliente: string;
+  telefonoCliente: string;
+  especialista: string;
+  especialistaId: string;
+  servicioPrincipal: string;
+  servicios: string[];
+  sucursal: string;
+  precioEstimado: number;
+  estado: string;
+  observaciones: string | null;
+  creadoEn: string;
+}
+
+export interface FilaIngresoDashboardSalon {
+  id: string;
+  fecha: string;
+  hora: string;
+  concepto: string;
+  tipo: 'servicio' | 'producto';
+  cliente: string;
+  especialista: string;
+  especialistaId: string;
+  sucursal: string;
+  total: number;
+}
+
+export interface ResumenIngresosDashboardSalon {
+  total: number;
+  filas: FilaIngresoDashboardSalon[];
+}
+
+export interface EspecialistaActivoDashboardSalon {
+  id: string;
+  nombre: string;
+  servicios: string[];
+  jornada: string;
+  descanso: string;
+  citasHoy: number;
+  proximaCita: string | null;
+}
+
+export interface PlanDashboardSalon {
+  actual: 'STANDARD' | 'PRO';
+  nombre: string;
+  fechaAdquisicion: string;
+  proximoCorte: string;
+  precioActual: number | null;
+  moneda: 'MXN' | 'COP';
+  pais: string;
+  whatsapp: string;
+}
+
+export interface CorteDashboardSalon {
+  fecha: string;
+  fechaHoraObjetivo: string;
+  dias: number;
+  horas: number;
+  minutos: number;
+  totalMinutos: number;
+  vencido: boolean;
+}
+
+export interface ContextoProductosDashboardSalon {
+  planPermiteProductos: boolean;
+  ventasRegistradas: boolean;
+  catalogoConfigurado: boolean;
+  mensaje: string;
+}
+
+export interface MetricasDashboardSalon {
+  actualizadoEn: string;
+  fechaActual: string;
+  zonaHoraria: string;
+  resumen: {
+    citasAgendadasHoy: number;
+    totalGanadoMes: number;
+    especialistasActivos: number;
+    planActual: 'STANDARD' | 'PRO';
+    diasParaCorte: number;
+  };
+  citasHoy: CitaDashboardSalon[];
+  ingresos: {
+    dia: ResumenIngresosDashboardSalon;
+    semana: ResumenIngresosDashboardSalon;
+    mes: ResumenIngresosDashboardSalon;
+  };
+  especialistasActivos: EspecialistaActivoDashboardSalon[];
+  plan: PlanDashboardSalon;
+  corte: CorteDashboardSalon;
+  soporte: {
+    whatsapp: string;
+  };
+  contextoProductos: ContextoProductosDashboardSalon;
+}
+
+export async function obtenerMetricasDashboard(
+  estudioId: string,
+): Promise<MetricasDashboardSalon> {
+  const respuesta = await peticion<{ datos: MetricasDashboardSalon }>(
+    `/estudios/${estudioId}/metricas-dashboard`,
+  );
+  return respuesta.datos;
 }

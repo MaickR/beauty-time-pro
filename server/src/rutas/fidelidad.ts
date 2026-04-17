@@ -9,7 +9,7 @@ import {
 import { MENSAJE_FUNCION_PRO, normalizarPlanEstudio } from '../lib/planes.js';
 
 function tieneAccesoEstudio(payload: { rol: string; estudioId: string | null }, estudioId: string): boolean {
-  return payload.rol === 'maestro' || payload.estudioId === estudioId;
+  return payload.rol === 'maestro' || (payload.rol === 'dueno' && payload.estudioId === estudioId);
 }
 
 function tieneAccesoAdminEstudio(payload: { rol: string; estudioId: string | null }, estudioId: string): boolean {
@@ -74,8 +74,8 @@ export async function rutasFidelidad(servidor: FastifyInstance): Promise<void> {
         const pct = datos.porcentajeDescuento;
         if (pct < 5 || pct > 50 || pct % 5 !== 0) {
           return respuesta.code(400).send({
-            error: 'The discount percentage must be between 5% and 50% in 5% increments.',
-            campos: { porcentajeDescuento: 'Invalid value' },
+            error: 'El porcentaje de descuento debe estar entre 5% y 50% en incrementos de 5%.',
+            campos: { porcentajeDescuento: 'Valor inválido' },
           });
         }
       }
@@ -279,7 +279,8 @@ export async function rutasFidelidad(servidor: FastifyInstance): Promise<void> {
         const resultado = await canjearRecompensaFidelidad(clienteId, estudioId);
         return respuesta.send({ datos: { canjeado: true, descripcion: resultado.descripcion } });
       } catch (error) {
-        return respuesta.code(400).send({ error: error instanceof Error ? error.message : 'No fue posible canjear la recompensa' });
+        solicitud.log.warn({ err: error }, 'Fallo controlado al canjear recompensa');
+        return respuesta.code(400).send({ error: 'No fue posible canjear la recompensa' });
       }
     },
   );

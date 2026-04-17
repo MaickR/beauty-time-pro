@@ -82,7 +82,7 @@ export function SeccionContacto({ estudio }: PropsSeccionContacto) {
             </div>
             <div>
               <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">
-                Support Hours
+                Horario de soporte
               </p>
               <p className="text-sm font-bold text-slate-900">{DATOS_CONTACTO.horario}</p>
             </div>

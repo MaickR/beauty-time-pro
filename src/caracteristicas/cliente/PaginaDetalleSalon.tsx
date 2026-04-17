@@ -250,9 +250,9 @@ export function PaginaDetalleSalon() {
                     </h3>
                   </div>
                   <ul>
-                    {servicios.map((s) => (
+                    {servicios.map((s, indiceServicio) => (
                       <li
-                        key={s.name}
+                        key={`${s.name}-${indiceServicio}`}
                         className="flex items-center justify-between px-5 py-3 border-b border-slate-50 last:border-0"
                       >
                         <span className="font-medium text-slate-800 text-sm">{s.name}</span>

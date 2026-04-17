@@ -4,6 +4,8 @@ import { Link, useNavigate } from 'react-router-dom';
 import { CalendarDays, User, LogOut, ChevronDown } from 'lucide-react';
 import { usarTiendaAuth } from '../../tienda/tiendaAuth';
 import { obtenerMiPerfilEmpleado } from '../../servicios/servicioEmpleados';
+import { PanelNotificaciones } from '../../caracteristicas/estudio/componentes/PanelNotificaciones';
+import { usarNotificacionesEstudio } from '../../caracteristicas/estudio/hooks/usarNotificacionesEstudio';
 
 function inicialesDesdeNombre(nombre: string): string {
   return nombre
@@ -30,7 +32,10 @@ export function NavegacionEmpleado() {
 
   const nombre = consultaPerfil.data?.nombre ?? usuario?.nombre ?? '';
   const nombreSalon = consultaPerfil.data?.estudio.nombre ?? '';
+  const estudioId = consultaPerfil.data?.estudio.id;
+  const paisSalon = consultaPerfil.data?.estudio.pais ?? 'Mexico';
   const inics = nombre ? inicialesDesdeNombre(nombre) : 'E';
+  const { notificaciones, marcarLeida } = usarNotificacionesEstudio(estudioId);
 
   useEffect(() => {
     function manejarClicExterior(e: MouseEvent) {
@@ -66,50 +71,58 @@ export function NavegacionEmpleado() {
             </div>
           </div>
 
-          <div className="relative" ref={menuRef}>
-            <button
-              onClick={() => setMenuAbierto((a) => !a)}
-              aria-label="Abrir menú de empleado"
-              aria-expanded={menuAbierto}
-              aria-haspopup="true"
-              className="flex items-center gap-2 px-3 py-2 rounded-xl hover:bg-slate-50 transition-colors"
-            >
-              <span className="w-8 h-8 rounded-full bg-pink-100 text-pink-700 font-black text-sm flex items-center justify-center select-none">
-                {inics}
-              </span>
-              <span className="font-bold text-slate-800 text-sm max-w-30 truncate">
-                {nombre || 'Empleado'}
-              </span>
-              <ChevronDown
-                className={`w-4 h-4 text-slate-400 transition-transform ${menuAbierto ? 'rotate-180' : ''}`}
-                aria-hidden="true"
-              />
-            </button>
+          <div className="flex items-center gap-3">
+            <PanelNotificaciones
+              notificaciones={notificaciones}
+              pais={paisSalon}
+              onMarcarLeida={marcarLeida}
+            />
 
-            {menuAbierto && (
-              <div
-                role="menu"
-                aria-label="Opciones de empleado"
-                className="absolute right-0 top-full mt-2 w-48 bg-white border border-slate-100 rounded-2xl shadow-xl overflow-hidden z-50"
+            <div className="relative" ref={menuRef}>
+              <button
+                onClick={() => setMenuAbierto((a) => !a)}
+                aria-label="Abrir menú de empleado"
+                aria-expanded={menuAbierto}
+                aria-haspopup="true"
+                className="flex items-center gap-2 px-3 py-2 rounded-xl hover:bg-slate-50 transition-colors"
               >
-                <Link
-                  to="/empleado/perfil"
-                  role="menuitem"
-                  onClick={() => setMenuAbierto(false)}
-                  className="flex items-center gap-3 px-4 py-3 text-sm text-slate-700 hover:bg-slate-50 font-medium transition-colors"
+                <span className="w-8 h-8 rounded-full bg-pink-100 text-pink-700 font-black text-sm flex items-center justify-center select-none">
+                  {inics}
+                </span>
+                <span className="font-bold text-slate-800 text-sm max-w-30 truncate">
+                  {nombre || 'Empleado'}
+                </span>
+                <ChevronDown
+                  className={`w-4 h-4 text-slate-400 transition-transform ${menuAbierto ? 'rotate-180' : ''}`}
+                  aria-hidden="true"
+                />
+              </button>
+
+              {menuAbierto && (
+                <div
+                  role="menu"
+                  aria-label="Opciones de empleado"
+                  className="absolute right-0 top-full mt-2 w-48 bg-white border border-slate-100 rounded-2xl shadow-xl overflow-hidden z-50"
                 >
-                  <User className="w-4 h-4 text-slate-400" aria-hidden="true" /> Mi perfil
-                </Link>
-                <hr className="border-slate-100 mx-3" />
-                <button
-                  role="menuitem"
-                  onClick={handleCerrarSesion}
-                  className="flex items-center gap-3 px-4 py-3 text-sm text-red-600 hover:bg-red-50 font-medium w-full text-left transition-colors"
-                >
-                  <LogOut className="w-4 h-4" aria-hidden="true" /> Cerrar sesión
-                </button>
-              </div>
-            )}
+                  <Link
+                    to="/empleado/perfil"
+                    role="menuitem"
+                    onClick={() => setMenuAbierto(false)}
+                    className="flex items-center gap-3 px-4 py-3 text-sm text-slate-700 hover:bg-slate-50 font-medium transition-colors"
+                  >
+                    <User className="w-4 h-4 text-slate-400" aria-hidden="true" /> Mi perfil
+                  </Link>
+                  <hr className="border-slate-100 mx-3" />
+                  <button
+                    role="menuitem"
+                    onClick={handleCerrarSesion}
+                    className="flex items-center gap-3 px-4 py-3 text-sm text-red-600 hover:bg-red-50 font-medium w-full text-left transition-colors"
+                  >
+                    <LogOut className="w-4 h-4" aria-hidden="true" /> Cerrar sesión
+                  </button>
+                </div>
+              )}
+            </div>
           </div>
         </div>
       </header>
@@ -131,11 +144,18 @@ export function NavegacionEmpleado() {
               )}
             </div>
           </div>
-          <Link to="/empleado/perfil" aria-label="Mi perfil">
-            <span className="w-8 h-8 rounded-full bg-pink-100 text-pink-700 font-black text-sm flex items-center justify-center">
-              {inics}
-            </span>
-          </Link>
+          <div className="flex items-center gap-2">
+            <PanelNotificaciones
+              notificaciones={notificaciones}
+              pais={paisSalon}
+              onMarcarLeida={marcarLeida}
+            />
+            <Link to="/empleado/perfil" aria-label="Mi perfil">
+              <span className="w-8 h-8 rounded-full bg-pink-100 text-pink-700 font-black text-sm flex items-center justify-center">
+                {inics}
+              </span>
+            </Link>
+          </div>
         </div>
       </header>
 

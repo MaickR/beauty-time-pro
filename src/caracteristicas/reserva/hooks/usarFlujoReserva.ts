@@ -1,7 +1,11 @@
 import { useState } from 'react';
 import { crearReserva } from '../../../servicios/servicioReservas';
 import { obtenerFechaLocalISO } from '../../../utils/formato';
-import type { Estudio, Servicio, SlotTiempo } from '../../../tipos';
+import type { Estudio, ProductoAdicionalReserva, ProductoPublicoReserva, Servicio, SlotTiempo } from '../../../tipos';
+import {
+  construirNotaServicio,
+  obtenerClaveServicioReserva,
+} from '../utils/detallesServicios';
 
 interface DatosContactoFormulario {
   nombreCliente: string;
@@ -9,6 +13,7 @@ interface DatosContactoFormulario {
   fechaNacimiento: string;
   email?: string;
   observaciones?: string;
+  metodoPago?: 'cash' | 'card' | 'bank_transfer' | 'digital_transfer';
   usarRecompensa?: boolean;
 }
 
@@ -17,6 +22,7 @@ interface ResumenReservaConfirmada {
   hora: string;
   especialista: string;
   servicios: string[];
+  productos: Array<{ nombre: string; cantidad: number }>;
   duracion: number;
   total: number;
 }
@@ -27,12 +33,13 @@ interface EstadoFlujo {
   fechaSeleccionada: Date;
   horaSeleccionada: string;
   sucursalSeleccionada: string;
+  productosSeleccionados: ProductoAdicionalReserva[];
   nombreCliente: string;
   telefonoCliente: string;
   fechaNacimiento: string;
   email: string;
-  marcaTinte: string;
-  numeroTinte: string;
+  metodoPago: 'cash' | 'card' | 'bank_transfer' | 'digital_transfer';
+  detallesServicios: Record<string, Record<string, string>>;
   reservaExitosa: boolean;
   nombreClienteReservado: string;
   descripcionRecompensaGanada: string;
@@ -47,18 +54,22 @@ export interface HookFlujoReserva extends EstadoFlujo {
   seleccionarFecha: (d: Date) => void;
   seleccionarHora: (h: string) => void;
   seleccionarSucursal: (b: string) => void;
+  precargarContacto: (datos: {
+    nombreCliente: string;
+    telefonoCliente: string;
+    fechaNacimiento: string;
+    email: string;
+  }) => void;
+  alternarProducto: (producto: ProductoPublicoReserva) => void;
+  actualizarCantidadProducto: (productoId: string, cantidad: number) => void;
   actualizarContacto: (
     campo: keyof Pick<
       EstadoFlujo,
-      | 'nombreCliente'
-      | 'telefonoCliente'
-      | 'fechaNacimiento'
-      | 'email'
-      | 'marcaTinte'
-      | 'numeroTinte'
+      'nombreCliente' | 'telefonoCliente' | 'fechaNacimiento' | 'email' | 'metodoPago'
     >,
     valor: string,
   ) => void;
+  actualizarDetalleServicio: (servicioClave: string, campoClave: string, valor: string) => void;
   enviarReserva: (
     estudio: Estudio,
     mostrarError: (msg: string) => void,
@@ -67,30 +78,20 @@ export interface HookFlujoReserva extends EstadoFlujo {
   reiniciar: (sucursalInicial?: string) => void;
 }
 
-const PALABRAS_COLOR = [
-  'tinte',
-  'color',
-  'balayage',
-  'babylights',
-  'canas',
-  'ombré',
-  'decoloración',
-  'rayitos',
-  'mechas',
-];
-
 export function usarFlujoReserva(): Omit<HookFlujoReserva, 'slots'> {
   const [personalSeleccionado, setPersonalSeleccionado] = useState('');
   const [serviciosSeleccionados, setServiciosSeleccionados] = useState<Servicio[]>([]);
   const [fechaSeleccionada, setFechaSeleccionada] = useState(new Date());
   const [horaSeleccionada, setHoraSeleccionada] = useState('');
   const [sucursalSeleccionada, setSucursalSeleccionada] = useState('');
+  const [productosSeleccionados, setProductosSeleccionados] = useState<ProductoAdicionalReserva[]>([]);
   const [nombreCliente, setNombreCliente] = useState('');
   const [telefonoCliente, setTelefonoCliente] = useState('');
   const [fechaNacimiento, setFechaNacimiento] = useState('');
   const [email, setEmail] = useState('');
-  const [marcaTinte, setMarcaTinte] = useState('');
-  const [numeroTinte, setNumeroTinte] = useState('');
+  const [metodoPago, setMetodoPago] =
+    useState<'cash' | 'card' | 'bank_transfer' | 'digital_transfer'>('cash');
+  const [detallesServicios, setDetallesServicios] = useState<Record<string, Record<string, string>>>({});
   const [reservaExitosa, setReservaExitosa] = useState(false);
   const [nombreClienteReservado, setNombreClienteReservado] = useState('');
   const [descripcionRecompensaGanada, setDescripcionRecompensaGanada] = useState('');
@@ -100,6 +101,7 @@ export function usarFlujoReserva(): Omit<HookFlujoReserva, 'slots'> {
   const seleccionarPersonal = (id: string) => {
     setPersonalSeleccionado(id);
     setServiciosSeleccionados([]);
+    setDetallesServicios({});
     setHoraSeleccionada('');
   };
 
@@ -113,6 +115,16 @@ export function usarFlujoReserva(): Omit<HookFlujoReserva, 'slots'> {
   const alternarServicio = (servicio: Servicio) => {
     setServiciosSeleccionados((prev) => {
       const idx = prev.findIndex((s) => s.name === servicio.name);
+      if (idx > -1) {
+        const servicioEliminado = prev[idx];
+        const claveServicio = obtenerClaveServicioReserva(servicioEliminado);
+        setDetallesServicios((previo) => {
+          if (!(claveServicio in previo)) return previo;
+          const siguiente = { ...previo };
+          delete siguiente[claveServicio];
+          return siguiente;
+        });
+      }
       const siguiente = idx > -1 ? prev.filter((_, i) => i !== idx) : [...prev, servicio];
       return siguiente;
     });
@@ -128,31 +140,91 @@ export function usarFlujoReserva(): Omit<HookFlujoReserva, 'slots'> {
     setSucursalSeleccionada(b);
     setPersonalSeleccionado('');
     setServiciosSeleccionados([]);
+    setDetallesServicios({});
+    setProductosSeleccionados([]);
     setHoraSeleccionada('');
     setResumenReservaConfirmada(null);
+  };
+
+  const precargarContacto = (datos: {
+    nombreCliente: string;
+    telefonoCliente: string;
+    fechaNacimiento: string;
+    email: string;
+  }) => {
+    setNombreCliente(datos.nombreCliente);
+    setTelefonoCliente(datos.telefonoCliente);
+    setFechaNacimiento(datos.fechaNacimiento);
+    setEmail(datos.email);
+  };
+
+  const alternarProducto = (producto: ProductoPublicoReserva) => {
+    setProductosSeleccionados((previo) => {
+      const existente = previo.find((item) => item.id === producto.id);
+      if (existente) {
+        return previo.filter((item) => item.id !== producto.id);
+      }
+
+      return [
+        ...previo,
+        {
+          id: producto.id,
+          nombre: producto.nombre,
+          categoria: producto.categoria,
+          cantidad: 1,
+          precioUnitario: producto.precio,
+          total: producto.precio,
+        },
+      ];
+    });
+  };
+
+  const actualizarCantidadProducto = (productoId: string, cantidad: number) => {
+    setProductosSeleccionados((previo) =>
+      previo.map((producto) =>
+        producto.id === productoId
+          ? {
+              ...producto,
+              cantidad,
+              total: producto.precioUnitario * cantidad,
+            }
+          : producto,
+      ),
+    );
   };
 
   const actualizarContacto = (
     campo: keyof Pick<
       EstadoFlujo,
-      | 'nombreCliente'
-      | 'telefonoCliente'
-      | 'fechaNacimiento'
-      | 'email'
-      | 'marcaTinte'
-      | 'numeroTinte'
+      'nombreCliente' | 'telefonoCliente' | 'fechaNacimiento' | 'email' | 'metodoPago'
     >,
     valor: string,
   ) => {
-    const setters: Record<string, (v: string) => void> = {
+    if (campo === 'metodoPago') {
+      setMetodoPago(valor as EstadoFlujo['metodoPago']);
+      return;
+    }
+
+    const setters: Record<
+      'nombreCliente' | 'telefonoCliente' | 'fechaNacimiento' | 'email',
+      (v: string) => void
+    > = {
       nombreCliente: setNombreCliente,
       telefonoCliente: setTelefonoCliente,
       fechaNacimiento: setFechaNacimiento,
       email: setEmail,
-      marcaTinte: setMarcaTinte,
-      numeroTinte: setNumeroTinte,
     };
     setters[campo](valor);
+  };
+
+  const actualizarDetalleServicio = (servicioClave: string, campoClave: string, valor: string) => {
+    setDetallesServicios((previo) => ({
+      ...previo,
+      [servicioClave]: {
+        ...(previo[servicioClave] ?? {}),
+        [campoClave]: valor,
+      },
+    }));
   };
 
   const enviarReserva = async (
@@ -160,47 +232,47 @@ export function usarFlujoReserva(): Omit<HookFlujoReserva, 'slots'> {
     mostrarError: (msg: string) => void,
     datos: DatosContactoFormulario,
   ) => {
-    const sedesDisponibles = estudio.sedes ?? [];
-    const sedeSeleccionada =
-      sedesDisponibles.find((sede) => sede.id === sucursalSeleccionada) ??
-      (sedesDisponibles.length === 1 ? sedesDisponibles[0] : null);
-
     if (serviciosSeleccionados.length === 0 || !horaSeleccionada || !personalSeleccionado) {
       mostrarError('Por favor completa todos los campos requeridos antes de confirmar.');
       return;
     }
 
-    if (sedesDisponibles.length > 1 && !sedeSeleccionada) {
-      mostrarError('Selecciona una sede antes de confirmar la reserva.');
-      return;
-    }
-
     const totalDuracion = serviciosSeleccionados.reduce((acc, s) => acc + s.duration, 0);
     const totalPrecio = serviciosSeleccionados.reduce((acc, s) => acc + (s.price ?? 0), 0);
+    const totalProductos = productosSeleccionados.reduce((acc, producto) => acc + producto.total, 0);
     const fechaStr = obtenerFechaLocalISO(fechaSeleccionada);
-    const requiereColor = serviciosSeleccionados.some((s) =>
-      PALABRAS_COLOR.some((kw) => s.name.toLowerCase().includes(kw)),
-    );
+    const serviciosConDetalles = serviciosSeleccionados.map((servicio) => ({
+      ...servicio,
+      motivo: construirNotaServicio(
+        servicio,
+        detallesServicios[obtenerClaveServicioReserva(servicio)],
+      ),
+    }));
 
     try {
       const resultado = await crearReserva({
-        studioId: sedeSeleccionada?.id ?? estudio.id,
+        studioId: estudio.id,
         studioName: estudio.name,
         clientName: datos.nombreCliente,
         clientPhone: datos.telefonoCliente,
         fechaNacimiento: datos.fechaNacimiento,
         email: datos.email ?? '',
         usarRecompensa: datos.usarRecompensa ?? false,
-        services: serviciosSeleccionados,
+        services: serviciosConDetalles,
         totalDuration: totalDuracion,
         totalPrice: totalPrecio,
         status: 'confirmed',
-        branch: sedeSeleccionada?.nombre ?? estudio.name,
+        branch: estudio.name,
         staffId: personalSeleccionado,
         staffName: estudio.staff.find((s) => s.id === personalSeleccionado)?.name ?? '',
-        colorBrand: requiereColor ? marcaTinte : null,
-        colorNumber: requiereColor ? numeroTinte : null,
+        colorBrand: null,
+        colorNumber: null,
         observaciones: datos.observaciones || null,
+        paymentMethod: datos.metodoPago ?? metodoPago,
+        productosSeleccionados: productosSeleccionados.map((producto) => ({
+          productoId: producto.id,
+          cantidad: producto.cantidad,
+        })),
         date: fechaStr,
         time: horaSeleccionada,
         createdAt: new Date().toISOString(),
@@ -213,18 +285,23 @@ export function usarFlujoReserva(): Omit<HookFlujoReserva, 'slots'> {
         hora: horaSeleccionada,
         especialista: estudio.staff.find((s) => s.id === personalSeleccionado)?.name ?? '',
         servicios: serviciosSeleccionados.map((servicio) => servicio.name),
+        productos: productosSeleccionados.map((producto) => ({
+          nombre: producto.nombre,
+          cantidad: producto.cantidad,
+        })),
         duracion: totalDuracion,
-        total: totalPrecio,
+        total: totalPrecio + totalProductos,
       });
       setReservaExitosa(true);
       setNombreCliente('');
       setTelefonoCliente('');
       setFechaNacimiento('');
       setEmail('');
-      setMarcaTinte('');
-      setNumeroTinte('');
+      setMetodoPago('cash');
+      setDetallesServicios({});
       setHoraSeleccionada('');
       setServiciosSeleccionados([]);
+      setProductosSeleccionados([]);
       setPersonalSeleccionado('');
     } catch (err) {
       console.error(err);
@@ -241,12 +318,13 @@ export function usarFlujoReserva(): Omit<HookFlujoReserva, 'slots'> {
     setFechaSeleccionada(new Date());
     setHoraSeleccionada('');
     setSucursalSeleccionada(sucursalInicial);
+    setProductosSeleccionados([]);
     setNombreCliente('');
     setTelefonoCliente('');
     setFechaNacimiento('');
     setEmail('');
-    setMarcaTinte('');
-    setNumeroTinte('');
+    setMetodoPago('cash');
+    setDetallesServicios({});
   };
 
   return {
@@ -255,12 +333,13 @@ export function usarFlujoReserva(): Omit<HookFlujoReserva, 'slots'> {
     fechaSeleccionada,
     horaSeleccionada,
     sucursalSeleccionada,
+    productosSeleccionados,
     nombreCliente,
     telefonoCliente,
     fechaNacimiento,
     email,
-    marcaTinte,
-    numeroTinte,
+    metodoPago,
+    detallesServicios,
     reservaExitosa,
     nombreClienteReservado,
     descripcionRecompensaGanada,
@@ -271,7 +350,11 @@ export function usarFlujoReserva(): Omit<HookFlujoReserva, 'slots'> {
     seleccionarFecha,
     seleccionarHora,
     seleccionarSucursal,
+    precargarContacto,
+    alternarProducto,
+    actualizarCantidadProducto,
     actualizarContacto,
+    actualizarDetalleServicio,
     enviarReserva,
     reiniciar,
   };

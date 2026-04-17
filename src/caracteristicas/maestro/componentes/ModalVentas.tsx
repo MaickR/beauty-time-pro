@@ -101,14 +101,14 @@ export function ModalVentas({ onCerrar }: PropsModalVentas) {
 
               {/* Detalle por país */}
               <div className="space-y-3 mt-6">
-                {paises.map(({ nombre, datos: paisData }) => {
+                {paises.map(({ nombre, datos: paisData }, indicePais) => {
                   const expandido = expandidos[nombre] ?? false;
                   const { moneda, desglose } = paisData;
                   const totalSalones = desglose.pro.salones + desglose.standard.salones;
                   const esMexico = nombre === 'México';
                   return (
                     <div
-                      key={nombre}
+                      key={`${nombre}-${indicePais}`}
                       className={`border rounded-2xl overflow-hidden ${esMexico ? 'border-green-200' : 'border-yellow-200'}`}
                     >
                       <button

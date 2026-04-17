@@ -1,10 +1,12 @@
-import { useRef, useState } from 'react';
+import { useState } from 'react';
 import { useMutation } from '@tanstack/react-query';
-import { Camera, PlusCircle, X } from 'lucide-react';
+import { Eye, EyeOff, PlusCircle, RefreshCw, X } from 'lucide-react';
 import { usarToast } from '../../../componentes/ui/ProveedorToast';
-import { crearPersonal, subirAvatarPersonal } from '../../../servicios/servicioPersonal';
+import { crearPersonal } from '../../../servicios/servicioPersonal';
+import { crearAccesoEmpleado } from '../../../servicios/servicioEmpleados';
 import { usarContextoApp } from '../../../contextos/ContextoApp';
 import { SelectorHora } from '../../../componentes/ui/SelectorHora';
+import { esEmailColaboradorValido, generarContrasenaColaborador } from '../../../utils/formularioSalon';
 import type { Servicio } from '../../../tipos';
 
 interface PropsFormularioNuevoPersonal {
@@ -16,14 +18,25 @@ interface PropsFormularioNuevoPersonal {
 const DIAS_LABORALES_PREDETERMINADOS = [1, 2, 3, 4, 5];
 
 const NOMBRES_DIAS: Record<number, string> = {
-  0: 'Sun',
-  1: 'Mon',
-  2: 'Tue',
-  3: 'Wed',
-  4: 'Thu',
-  5: 'Fri',
-  6: 'Sat',
+  0: 'Dom',
+  1: 'Lun',
+  2: 'Mar',
+  3: 'Mié',
+  4: 'Jue',
+  5: 'Vie',
+  6: 'Sáb',
 };
+
+const REGEX_CONTRASENA_SEGURA = /^(?=.*[A-Z])(?=.*[0-9])(?=.*[^A-Za-z0-9]).{8,}$/;
+
+function obtenerIniciales(nombreCompleto: string) {
+  return nombreCompleto
+    .trim()
+    .split(/\s+/)
+    .slice(0, 2)
+    .map((fragmento) => fragmento.slice(0, 1).toUpperCase())
+    .join('') || 'NS';
+}
 
 export function FormularioNuevoPersonal({
   estudioId,
@@ -33,8 +46,6 @@ export function FormularioNuevoPersonal({
   const { mostrarToast } = usarToast();
   const { recargar } = usarContextoApp();
   const [nombre, setNombre] = useState('');
-  const [avatarPreview, setAvatarPreview] = useState<string | null>(null);
-  const [archivoAvatar, setArchivoAvatar] = useState<File | null>(null);
   const [horaInicio, setHoraInicio] = useState('09:00');
   const [horaFin, setHoraFin] = useState('18:00');
   const [descansoInicio, setDescansoInicio] = useState('14:00');
@@ -43,22 +54,9 @@ export function FormularioNuevoPersonal({
   const [especialidades, setEspecialidades] = useState<string[]>(
     serviciosDisponibles.map((s) => s.name),
   );
-  const refArchivo = useRef<HTMLInputElement>(null);
-
-  const manejarArchivoAvatar = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const archivo = e.target.files?.[0];
-    if (!archivo) return;
-    if (!['image/jpeg', 'image/png'].includes(archivo.type)) {
-      mostrarToast({ mensaje: 'Solo se permiten imágenes JPG o PNG', variante: 'error' });
-      return;
-    }
-    if (archivo.size > 2 * 1024 * 1024) {
-      mostrarToast({ mensaje: 'La imagen no debe superar 2 MB', variante: 'error' });
-      return;
-    }
-    setArchivoAvatar(archivo);
-    setAvatarPreview(URL.createObjectURL(archivo));
-  };
+  const [emailAcceso, setEmailAcceso] = useState('');
+  const [contrasenaAcceso, setContrasenaAcceso] = useState('');
+  const [mostrarContrasenaAcceso, setMostrarContrasenaAcceso] = useState(false);
 
   const alternarEspecialidad = (servicio: string) => {
     setEspecialidades((actual) =>
@@ -87,29 +85,35 @@ export function FormularioNuevoPersonal({
         workingDays: diasLaborales,
       });
 
-      if (archivoAvatar) {
-        const avatarUrl = await subirAvatarPersonal(estudioId, personal.id, archivoAvatar);
-        personal.avatarUrl = avatarUrl;
-      }
+      await crearAccesoEmpleado(estudioId, personal.id, {
+        email: emailAcceso.trim(),
+        contrasena: contrasenaAcceso.trim(),
+        forzarCambioContrasena: false,
+      });
 
-      return personal;
+      return { personal, accesoCreado: true };
     },
-    onSuccess: async () => {
+    onSuccess: async (resultado) => {
       setNombre('');
-      setAvatarPreview(null);
-      setArchivoAvatar(null);
       setEspecialidades(serviciosDisponibles.map((s) => s.name));
       setHoraInicio('09:00');
       setHoraFin('18:00');
       setDescansoInicio('14:00');
       setDescansoFin('15:00');
       setDiasLaborales(DIAS_LABORALES_PREDETERMINADOS);
+      setEmailAcceso('');
+      setContrasenaAcceso('');
+      setMostrarContrasenaAcceso(false);
       if (alCrearExitoso) {
         await alCrearExitoso();
       } else {
         recargar();
       }
-      mostrarToast('Especialista agregado correctamente');
+      mostrarToast(
+        resultado.accesoCreado
+          ? 'Especialista y acceso creados correctamente'
+          : 'Especialista agregado correctamente',
+      );
     },
     onError: (error) => {
       mostrarToast(error instanceof Error ? error.message : 'No se pudo agregar el especialista');
@@ -121,7 +125,33 @@ export function FormularioNuevoPersonal({
       mostrarToast('Escribe el nombre del especialista');
       return;
     }
+
+    if (!emailAcceso.trim()) {
+      mostrarToast('Escribe el correo que usará el especialista para iniciar sesión');
+      return;
+    }
+
+    if (!esEmailColaboradorValido(emailAcceso)) {
+      mostrarToast('El correo del especialista no es válido o usa un dominio temporal');
+      return;
+    }
+
+    if (!contrasenaAcceso.trim()) {
+      mostrarToast('Define una contraseña de acceso para el especialista');
+      return;
+    }
+
+    if (!REGEX_CONTRASENA_SEGURA.test(contrasenaAcceso.trim())) {
+      mostrarToast('La contraseña debe tener mínimo 8 caracteres, una mayúscula, un número y un símbolo');
+      return;
+    }
+
     mutacionCrearPersonal.mutate();
+  };
+
+  const manejarGenerarContrasena = () => {
+    setContrasenaAcceso(generarContrasenaColaborador(nombre.trim(), emailAcceso.trim() || 'empleado@beautytime.pro'));
+    setMostrarContrasenaAcceso(true);
   };
 
   return (
@@ -131,42 +161,34 @@ export function FormularioNuevoPersonal({
       aria-labelledby="titulo-nuevo-especialista"
       className="w-full max-w-2xl rounded-4xl bg-white p-6 shadow-2xl"
     >
-      <div className="mb-5 flex items-center justify-between">
-        <h3 id="titulo-nuevo-especialista" className="text-xl font-black text-slate-900">
-          New Specialist
-        </h3>
-        {alCrearExitoso && (
-          <button type="button" onClick={() => void alCrearExitoso()} aria-label="Cerrar modal">
-            <X className="h-5 w-5 text-slate-400" />
-          </button>
-        )}
-      </div>
+      <form
+        onSubmit={(evento) => {
+          evento.preventDefault();
+          manejarCrear();
+        }}
+      >
+        <div className="mb-5 flex items-center justify-between">
+          <h3 id="titulo-nuevo-especialista" className="text-xl font-black text-slate-900">
+            Nuevo especialista
+          </h3>
+          {alCrearExitoso && (
+            <button type="button" onClick={() => void alCrearExitoso()} aria-label="Cerrar modal">
+              <X className="h-5 w-5 text-slate-400" />
+            </button>
+          )}
+        </div>
 
-      <div className="grid gap-4 md:grid-cols-2">
+        <div className="grid gap-4 md:grid-cols-2">
         <div className="md:col-span-2 flex items-center gap-4">
-          <button
-            type="button"
-            onClick={() => refArchivo.current?.click()}
-            aria-label="Subir foto del especialista"
-            className="flex h-20 w-20 items-center justify-center overflow-hidden rounded-full border-2 border-dashed border-slate-300 bg-slate-100 shrink-0 transition-colors hover:bg-slate-200"
-          >
-            {avatarPreview ? (
-              <img src={avatarPreview} alt="Vista previa" className="h-full w-full object-cover" />
-            ) : (
-              <Camera className="h-6 w-6 text-slate-400" aria-hidden="true" />
-            )}
-          </button>
-          <div>
-            <p className="text-sm font-bold text-slate-700">Photo</p>
-            <p className="text-xs text-slate-400">JPG or PNG, max 2 MB.</p>
+          <div className="flex h-20 w-20 items-center justify-center rounded-full bg-pink-100 text-xl font-black text-pink-700 shrink-0">
+            {obtenerIniciales(nombre)}
           </div>
-          <input
-            ref={refArchivo}
-            type="file"
-            accept="image/jpeg,image/png"
-            className="hidden"
-            onChange={manejarArchivoAvatar}
-          />
+          <div>
+            <p className="text-sm font-bold text-slate-700">Avatar automático</p>
+            <p className="text-xs text-slate-400">
+              Se generará con las iniciales del especialista. Ya no es necesario subir foto.
+            </p>
+          </div>
         </div>
 
         <div className="md:col-span-2">
@@ -174,24 +196,25 @@ export function FormularioNuevoPersonal({
             htmlFor="nuevo-especialista"
             className="mb-1 block text-sm font-semibold text-slate-700"
           >
-            Full name
+            Nombre completo
           </label>
           <input
             id="nuevo-especialista"
+            name="nombreEspecialista"
             value={nombre}
             onChange={(evento) => setNombre(evento.target.value)}
-            placeholder="Specialist's name"
+            placeholder="Nombre del especialista"
             className="w-full rounded-xl border border-slate-200 px-3.5 py-3 text-sm outline-none focus:ring-2 focus:ring-pink-500"
           />
         </div>
 
-        <SelectorHora etiqueta="Shift start" valor={horaInicio} alCambiar={setHoraInicio} />
-        <SelectorHora etiqueta="Shift end" valor={horaFin} alCambiar={setHoraFin} />
-        <SelectorHora etiqueta="Break start" valor={descansoInicio} alCambiar={setDescansoInicio} />
-        <SelectorHora etiqueta="Break end" valor={descansoFin} alCambiar={setDescansoFin} />
+        <SelectorHora etiqueta="Entrada" valor={horaInicio} alCambiar={setHoraInicio} />
+        <SelectorHora etiqueta="Salida" valor={horaFin} alCambiar={setHoraFin} />
+        <SelectorHora etiqueta="Inicio de descanso" valor={descansoInicio} alCambiar={setDescansoInicio} />
+        <SelectorHora etiqueta="Fin de descanso" valor={descansoFin} alCambiar={setDescansoFin} />
 
         <div className="md:col-span-2">
-          <p className="mb-2 text-sm font-semibold text-slate-700">Working days</p>
+          <p className="mb-2 text-sm font-semibold text-slate-700">Días laborales</p>
           <div className="flex flex-wrap gap-2">
             {[1, 2, 3, 4, 5, 6, 0].map((dia) => {
               const activo = diasLaborales.includes(dia);
@@ -212,11 +235,11 @@ export function FormularioNuevoPersonal({
         <div className="md:col-span-2">
           <p className="mb-2 text-sm font-semibold text-slate-700">Servicios que realiza</p>
           <div className="flex flex-wrap gap-2">
-            {serviciosDisponibles.map((servicio) => {
+            {serviciosDisponibles.map((servicio, indiceServicio) => {
               const activo = especialidades.includes(servicio.name);
               return (
                 <button
-                  key={servicio.name}
+                  key={`${servicio.name}-${indiceServicio}`}
                   type="button"
                   onClick={() => alternarEspecialidad(servicio.name)}
                   className={`rounded-xl px-3 py-1.5 text-xs font-bold transition-colors ${activo ? 'bg-slate-900 text-white' : 'border border-slate-200 bg-white text-slate-600 hover:border-pink-300 hover:text-pink-600'}`}
@@ -228,28 +251,103 @@ export function FormularioNuevoPersonal({
             })}
           </div>
         </div>
-      </div>
 
-      <div className="mt-6 flex justify-end gap-3">
-        {alCrearExitoso && (
+        <div className="md:col-span-2 rounded-2xl border border-slate-200 bg-slate-50 p-4">
+          <div className="space-y-2">
+            <p className="text-sm font-semibold text-slate-700">Acceso al sistema</p>
+            <p className="text-xs text-slate-500">
+              Cada especialista se crea con acceso inmediato. Define o genera la contraseña que se enviará por email junto con el enlace de ingreso.
+            </p>
+          </div>
+
+          <div className="mt-4 grid gap-4 md:grid-cols-2">
+            <div className="space-y-2">
+            <label
+              htmlFor="email-acceso-especialista"
+              className="block text-sm font-semibold text-slate-700"
+            >
+              Correo de acceso
+            </label>
+            <input
+              id="email-acceso-especialista"
+              name="emailAccesoEspecialista"
+              type="email"
+              value={emailAcceso}
+              onChange={(evento) => setEmailAcceso(evento.target.value)}
+              placeholder="especialista@correo.com"
+              className="w-full rounded-xl border border-slate-200 px-3.5 py-3 text-sm outline-none focus:ring-2 focus:ring-pink-500"
+            />
+            </div>
+
+            <div className="space-y-2">
+              <label
+                htmlFor="contrasena-acceso-especialista"
+                className="block text-sm font-semibold text-slate-700"
+              >
+                Contraseña de acceso
+              </label>
+              <div className="flex gap-2">
+                <div className="relative flex-1">
+                  <input
+                    id="contrasena-acceso-especialista"
+                    name="contrasenaAccesoEspecialista"
+                    type={mostrarContrasenaAcceso ? 'text' : 'password'}
+                    value={contrasenaAcceso}
+                    onChange={(evento) => setContrasenaAcceso(evento.target.value)}
+                    placeholder="Define una contraseña segura"
+                    autoComplete="new-password"
+                    className="w-full rounded-xl border border-slate-200 px-3.5 py-3 pr-10 text-sm outline-none focus:ring-2 focus:ring-pink-500"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setMostrarContrasenaAcceso((valorActual) => !valorActual)}
+                    aria-label={mostrarContrasenaAcceso ? 'Ocultar contraseña' : 'Mostrar contraseña'}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 transition hover:text-slate-600"
+                  >
+                    {mostrarContrasenaAcceso ? (
+                      <EyeOff className="h-4 w-4" aria-hidden="true" />
+                    ) : (
+                      <Eye className="h-4 w-4" aria-hidden="true" />
+                    )}
+                  </button>
+                </div>
+                <button
+                  type="button"
+                  onClick={manejarGenerarContrasena}
+                  className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-3 text-xs font-black uppercase tracking-widest text-slate-700 transition hover:bg-slate-100"
+                >
+                  <RefreshCw className="h-3.5 w-3.5" aria-hidden="true" />
+                  Generar
+                </button>
+              </div>
+              <p className="text-xs text-slate-500">
+                Usa al menos 8 caracteres, una mayúscula, un número y un símbolo.
+              </p>
+            </div>
+          </div>
+        </div>
+        </div>
+
+        <div className="mt-6 flex justify-end gap-3">
+          {alCrearExitoso && (
+            <button
+              type="button"
+              onClick={() => void alCrearExitoso()}
+              className="rounded-2xl bg-slate-100 px-5 py-3 text-sm font-semibold text-slate-700 hover:bg-slate-200"
+            >
+              Cancelar
+            </button>
+          )}
           <button
-            type="button"
-            onClick={() => void alCrearExitoso()}
-            className="rounded-2xl bg-slate-100 px-5 py-3 text-sm font-semibold text-slate-700 hover:bg-slate-200"
+            type="submit"
+            disabled={mutacionCrearPersonal.isPending}
+            className="inline-flex items-center justify-center gap-2 rounded-2xl bg-slate-900 px-5 py-3 text-sm font-black text-white transition hover:bg-black disabled:opacity-60"
           >
-            Cancelar
+            <PlusCircle className="h-4 w-4" />
+            {mutacionCrearPersonal.isPending ? 'Guardando...' : 'Agregar especialista'}
           </button>
-        )}
-        <button
-          type="button"
-          onClick={manejarCrear}
-          disabled={mutacionCrearPersonal.isPending}
-          className="inline-flex items-center justify-center gap-2 rounded-2xl bg-slate-900 px-5 py-3 text-sm font-black text-white transition hover:bg-black disabled:opacity-60"
-        >
-          <PlusCircle className="h-4 w-4" />
-          {mutacionCrearPersonal.isPending ? 'Guardando...' : 'Agregar especialista'}
-        </button>
-      </div>
+        </div>
+      </form>
     </div>
   );
 }

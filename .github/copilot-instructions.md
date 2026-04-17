@@ -15,6 +15,32 @@ La prioridad no es construir más rápido, sino construir bien para evitar repro
 - Formularios: React Hook Form + Zod
 - Testing: Vitest + Testing Library
 
+### Skills instaladas para asistencia IA
+- El proyecto mantiene skills locales en `./.agents/skills/`.
+- Antes de proponer arquitectura, escribir código o refactorizar, se deben revisar las skills relevantes al cambio solicitado y usarlas como guía complementaria, sin contradecir estas instrucciones del repositorio.
+- Priorizar especialmente estas skills cuando apliquen:
+  - `vercel-react-best-practices`
+  - `vercel-composition-patterns`
+  - `tailwind-css-patterns`
+  - `typescript-advanced-types`
+  - `vitest`
+  - `vite`
+  - `playwright-best-practices`
+  - `nodejs-backend-patterns`
+  - `nodejs-best-practices`
+  - `react-hook-form`
+  - `zod`
+  - `tanstack-query`
+  - `prisma-cli`
+  - `prisma-client-api`
+  - `prisma-database-setup`
+- Si varias skills aplican al mismo cambio, se debe priorizar este orden:
+  1. seguridad y reglas de negocio del repositorio
+  2. arquitectura del proyecto
+  3. stack específico afectado
+  4. testing y DX
+- Estas skills son apoyo técnico. Nunca sustituyen validaciones de backend, permisos, auditoría ni reglas críticas de negocio definidas en este archivo.
+
 ---
 
 ## 2. Filosofía general

@@ -42,9 +42,11 @@ function serializarPerfilCompat(
   direccion: string | null;
   telefono: string;
   emailContacto: string | null;
+  country: 'Mexico' | 'Colombia';
   plan: 'STANDARD' | 'PRO';
   colorPrimario: string;
   logoUrl: string | null;
+  claveCliente: string | null;
   estudioPrincipalId: string | null;
 } {
   return {
@@ -55,9 +57,11 @@ function serializarPerfilCompat(
     direccion: typeof estudio.direccion === 'string' ? estudio.direccion : null,
     telefono: typeof estudio.telefono === 'string' ? estudio.telefono : '',
     emailContacto: typeof estudio.emailContacto === 'string' ? estudio.emailContacto : null,
+    country: estudio.pais === 'Colombia' ? 'Colombia' : 'Mexico',
     plan: normalizarPlanEstudio(typeof estudio.plan === 'string' ? estudio.plan : null),
     colorPrimario: typeof estudio.colorPrimario === 'string' ? estudio.colorPrimario : '#EC4899',
     logoUrl: typeof estudio.logoUrl === 'string' ? estudio.logoUrl : null,
+    claveCliente: typeof estudio.claveCliente === 'string' ? estudio.claveCliente : null,
     estudioPrincipalId:
       typeof estudio.estudioPrincipalId === 'string' ? estudio.estudioPrincipalId : null,
   };
@@ -71,7 +75,7 @@ export async function rutasPerfil(servidor: FastifyInstance): Promise<void> {
     async (solicitud, respuesta) => {
       const payload = solicitud.user as { rol: string; estudioId: string | null };
       const { id } = solicitud.params;
-      if (payload.rol !== 'maestro' && payload.estudioId !== id) {
+      if (!(payload.rol === 'maestro' || (payload.rol === 'dueno' && payload.estudioId === id))) {
         return respuesta.code(403).send({ error: 'Sin permisos para esta acción' });
       }
 
@@ -84,6 +88,8 @@ export async function rutasPerfil(servidor: FastifyInstance): Promise<void> {
         'direccion',
         'telefono',
         'emailContacto',
+        'claveCliente',
+        'pais',
         'plan',
         'colorPrimario',
         'logoUrl',
@@ -155,7 +161,7 @@ export async function rutasPerfil(servidor: FastifyInstance): Promise<void> {
     async (solicitud, respuesta) => {
       const payload = solicitud.user as { rol: string; estudioId: string | null };
       const { id } = solicitud.params;
-      if (payload.rol !== 'maestro' && payload.estudioId !== id) {
+      if (!(payload.rol === 'maestro' || (payload.rol === 'dueno' && payload.estudioId === id))) {
         return respuesta.code(403).send({ error: 'Sin permisos para esta acción' });
       }
 
@@ -183,6 +189,7 @@ export async function rutasPerfil(servidor: FastifyInstance): Promise<void> {
         'direccion',
         'telefono',
         'emailContacto',
+        'pais',
         'plan',
         'colorPrimario',
         'logoUrl',
@@ -216,7 +223,7 @@ export async function rutasPerfil(servidor: FastifyInstance): Promise<void> {
     async (solicitud, respuesta) => {
       const payload = solicitud.user as { rol: string; estudioId: string | null };
       const { id } = solicitud.params;
-      if (payload.rol !== 'maestro' && payload.estudioId !== id) {
+      if (!(payload.rol === 'maestro' || (payload.rol === 'dueno' && payload.estudioId === id))) {
         return respuesta.code(403).send({ error: 'Sin permisos para esta acción' });
       }
 
@@ -281,7 +288,7 @@ export async function rutasPerfil(servidor: FastifyInstance): Promise<void> {
     async (solicitud, respuesta) => {
       const payload = solicitud.user as { rol: string; estudioId: string | null };
       const { id } = solicitud.params;
-      if (payload.rol !== 'maestro' && payload.estudioId !== id) {
+      if (!(payload.rol === 'maestro' || (payload.rol === 'dueno' && payload.estudioId === id))) {
         return respuesta.code(403).send({ error: 'Sin permisos para esta acción' });
       }
 
@@ -292,7 +299,7 @@ export async function rutasPerfil(servidor: FastifyInstance): Promise<void> {
       if (!estudio) return respuesta.code(404).send({ error: 'Estudio no encontrado' });
 
       return respuesta.send({
-        datos: { disponible: false, mensaje: 'Service contract will be available soon.' },
+        datos: { disponible: false, mensaje: 'El contrato de servicios estará disponible próximamente.' },
       });
     },
   );

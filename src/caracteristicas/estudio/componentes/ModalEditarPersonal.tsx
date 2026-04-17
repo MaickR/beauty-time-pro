@@ -1,9 +1,30 @@
-import { useEffect, useRef, useState } from 'react';
-import { Camera, X } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { X } from 'lucide-react';
 import { SelectorHora } from '../../../componentes/ui/SelectorHora';
 import { usarToast } from '../../../componentes/ui/ProveedorToast';
-import { actualizarPersonal, subirAvatarPersonal } from '../../../servicios/servicioPersonal';
+import { actualizarPersonal } from '../../../servicios/servicioPersonal';
 import type { Personal } from '../../../tipos';
+
+const NOMBRES_DIAS: Record<number, string> = {
+  0: 'Dom',
+  1: 'Lun',
+  2: 'Mar',
+  3: 'Mié',
+  4: 'Jue',
+  5: 'Vie',
+  6: 'Sáb',
+};
+
+const DIAS_LABORALES_PREDETERMINADOS = [1, 2, 3, 4, 5];
+
+function obtenerIniciales(nombreCompleto: string) {
+  return nombreCompleto
+    .trim()
+    .split(/\s+/)
+    .slice(0, 2)
+    .map((fragmento) => fragmento.slice(0, 1).toUpperCase())
+    .join('') || 'NS';
+}
 
 interface PropsModalEditarPersonal {
   abierto: boolean;
@@ -23,15 +44,13 @@ export function ModalEditarPersonal({
   onGuardado,
 }: PropsModalEditarPersonal) {
   const { mostrarToast } = usarToast();
-  const refArchivo = useRef<HTMLInputElement>(null);
   const [nombre, setNombre] = useState('');
   const [especialidades, setEspecialidades] = useState<string[]>([]);
   const [horaInicio, setHoraInicio] = useState('09:00');
   const [horaFin, setHoraFin] = useState('18:00');
   const [descansoInicio, setDescansoInicio] = useState('14:00');
   const [descansoFin, setDescansoFin] = useState('15:00');
-  const [archivoAvatar, setArchivoAvatar] = useState<File | null>(null);
-  const [vistaPrevia, setVistaPrevia] = useState<string | null>(null);
+  const [diasLaborales, setDiasLaborales] = useState<number[]>(DIAS_LABORALES_PREDETERMINADOS);
   const [guardando, setGuardando] = useState(false);
 
   useEffect(() => {
@@ -42,8 +61,7 @@ export function ModalEditarPersonal({
     setHoraFin(personal.shiftEnd ?? '18:00');
     setDescansoInicio(personal.breakStart ?? '14:00');
     setDescansoFin(personal.breakEnd ?? '15:00');
-    setArchivoAvatar(null);
-    setVistaPrevia(personal.avatarUrl ?? null);
+    setDiasLaborales(personal.workingDays ?? DIAS_LABORALES_PREDETERMINADOS);
   }, [abierto, personal]);
 
   if (!abierto || !personal) return null;
@@ -56,19 +74,10 @@ export function ModalEditarPersonal({
     );
   };
 
-  const manejarArchivo = (evento: React.ChangeEvent<HTMLInputElement>) => {
-    const archivo = evento.target.files?.[0];
-    if (!archivo) return;
-    if (!['image/jpeg', 'image/png'].includes(archivo.type)) {
-      mostrarToast({ mensaje: 'Solo se permiten imágenes JPG o PNG', variante: 'error' });
-      return;
-    }
-    if (archivo.size > 2 * 1024 * 1024) {
-      mostrarToast({ mensaje: 'La imagen no debe superar 2 MB', variante: 'error' });
-      return;
-    }
-    setArchivoAvatar(archivo);
-    setVistaPrevia(URL.createObjectURL(archivo));
+  const alternarDia = (dia: number) => {
+    setDiasLaborales((actual) =>
+      actual.includes(dia) ? actual.filter((item) => item !== dia) : [...actual, dia].sort(),
+    );
   };
 
   const guardar = async () => {
@@ -86,12 +95,8 @@ export function ModalEditarPersonal({
         shiftEnd: horaFin,
         breakStart: descansoInicio,
         breakEnd: descansoFin,
+        workingDays: diasLaborales,
       });
-
-      if (archivoAvatar) {
-        const avatarUrl = await subirAvatarPersonal(estudioId, personal.id, archivoAvatar);
-        actualizado.avatarUrl = avatarUrl;
-      }
 
       onGuardado(actualizado);
       mostrarToast('Especialista actualizado correctamente');
@@ -125,32 +130,15 @@ export function ModalEditarPersonal({
 
         <div className="grid gap-4 md:grid-cols-2">
           <div className="md:col-span-2 flex items-center gap-4">
-            <button
-              type="button"
-              onClick={() => refArchivo.current?.click()}
-              className="flex h-20 w-20 items-center justify-center overflow-hidden rounded-full border-2 border-dashed border-slate-300 bg-slate-100"
-            >
-              {vistaPrevia ? (
-                <img
-                  src={vistaPrevia}
-                  alt={`Foto de ${nombre}`}
-                  className="h-full w-full object-cover"
-                />
-              ) : (
-                <Camera className="h-6 w-6 text-slate-400" />
-              )}
-            </button>
-            <div>
-              <p className="text-sm font-bold text-slate-700">Foto del especialista</p>
-              <p className="text-xs text-slate-400">JPG o PNG, máximo 2 MB.</p>
+            <div className="flex h-20 w-20 items-center justify-center rounded-full bg-pink-100 text-xl font-black text-pink-700">
+              {obtenerIniciales(nombre)}
             </div>
-            <input
-              ref={refArchivo}
-              type="file"
-              accept="image/jpeg,image/png"
-              className="hidden"
-              onChange={manejarArchivo}
-            />
+            <div>
+              <p className="text-sm font-bold text-slate-700">Avatar automático</p>
+              <p className="text-xs text-slate-400">
+                El sistema mantiene un avatar con iniciales para este especialista.
+              </p>
+            </div>
           </div>
 
           <div className="md:col-span-2">
@@ -191,6 +179,25 @@ export function ModalEditarPersonal({
                   >
                     {activo ? '✓ ' : ''}
                     {servicio}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          <div className="md:col-span-2">
+            <p className="mb-2 text-sm font-semibold text-slate-700">Días laborales</p>
+            <div className="flex flex-wrap gap-2">
+              {[1, 2, 3, 4, 5, 6, 0].map((dia) => {
+                const activo = diasLaborales.includes(dia);
+                return (
+                  <button
+                    key={dia}
+                    type="button"
+                    onClick={() => alternarDia(dia)}
+                    className={`rounded-xl px-3 py-1.5 text-xs font-bold transition-colors ${activo ? 'bg-slate-900 text-white' : 'border border-slate-200 bg-white text-slate-600 hover:border-pink-300 hover:text-pink-600'}`}
+                  >
+                    {NOMBRES_DIAS[dia]}
                   </button>
                 );
               })}

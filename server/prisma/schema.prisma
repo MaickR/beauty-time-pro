@@ -69,6 +69,7 @@ model Estudio {
   servicios         Json         // Servicio[]
   serviciosCustom   Json         // ServicioPersonalizado[]
   festivos          Json         // string[] fechas bloqueadas
+  excepcionesDisponibilidad Json? // Excepciones por fecha/sede para cierres y horarios modificados
   colorPrimario     String?      @default("#C2185B")
   logoUrl           String?
   descripcion       String?
@@ -365,9 +366,12 @@ model Reserva {
   notasMenorEdad  String?
   clienteAppId    String?
   recordatorioEnviado Boolean @default(false)
-  tokenCancelacion String @unique @default(uuid())
-  observaciones    String? @db.Text
-  reagendada       Boolean @default(false)
+  tokenCancelacion   String @unique @default(uuid())
+  observaciones      String? @db.Text
+  metodoPago         String?
+  motivoCancelacion  String?
+  productosAdicionales Json?
+  reagendada         Boolean @default(false)
   reservaOriginalId String?
   creadoEn        DateTime @default(now())
 

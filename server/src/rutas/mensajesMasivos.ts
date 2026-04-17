@@ -1,11 +1,21 @@
+import fs from 'fs';
+import path from 'path';
+import { randomUUID } from 'crypto';
 import type { FastifyInstance } from 'fastify';
+import sharp from 'sharp';
 import { prisma } from '../prismaCliente.js';
 import { verificarJWT } from '../middleware/autenticacion.js';
 import { MENSAJE_FUNCION_PRO, normalizarPlanEstudio } from '../lib/planes.js';
 import { encolarCorreo } from '../lib/colaEmails.js';
 import { registrarAuditoria } from '../utils/auditoria.js';
+import { detectarTipoImagen } from '../utils/validarImagen.js';
 
 const LIMITE_MENSAJES_ANUALES = 3;
+const LIMITE_BYTES_IMAGEN = 2 * 1024 * 1024;
+const MIME_IMAGEN_PERMITIDOS: Record<string, string> = {
+  'image/jpeg': 'jpg',
+  'image/png': 'png',
+};
 
 function tieneAccesoAdminEstudio(payload: { rol: string; estudioId: string | null }, estudioId: string): boolean {
   return payload.rol === 'maestro' || (payload.rol === 'dueno' && payload.estudioId === estudioId);
@@ -13,6 +23,10 @@ function tieneAccesoAdminEstudio(payload: { rol: string; estudioId: string | nul
 
 function obtenerAnioActual(): number {
   return new Date().getFullYear();
+}
+
+function dirImagenesMensajesMasivos(): string {
+  return path.join(process.cwd(), 'uploads', 'mensajes-masivos');
 }
 
 export async function rutasMensajesMasivos(servidor: FastifyInstance): Promise<void> {
@@ -56,6 +70,86 @@ export async function rutasMensajesMasivos(servidor: FastifyInstance): Promise<v
           usados: estudio.mensajesMasivosUsados,
           limite: limiteTotal,
           extra: estudio.mensajesMasivosExtra,
+        },
+      });
+    },
+  );
+
+  servidor.post<{ Params: { id: string } }>(
+    '/estudio/:id/mensajes-masivos/imagen',
+    {
+      preHandler: verificarJWT,
+      config: {
+        rateLimit: {
+          max: 20,
+          timeWindow: '1 hour',
+          errorResponseBuilder: () => ({
+            error: 'Demasiados uploads. Espera 1 hora.',
+          }),
+        },
+      },
+    },
+    async (solicitud, respuesta) => {
+      const payload = solicitud.user as { rol: string; estudioId: string | null };
+      const { id } = solicitud.params;
+
+      if (!tieneAccesoAdminEstudio(payload, id)) {
+        return respuesta.code(403).send({ error: 'Sin permisos para esta acción' });
+      }
+
+      const estudio = await prisma.estudio.findUnique({
+        where: { id },
+        select: { plan: true },
+      });
+
+      if (!estudio) {
+        return respuesta.code(404).send({ error: 'Estudio no encontrado' });
+      }
+
+      if (normalizarPlanEstudio(estudio.plan) !== 'PRO') {
+        return respuesta.code(403).send({ error: MENSAJE_FUNCION_PRO });
+      }
+
+      const archivo = await solicitud.file({ limits: { fileSize: LIMITE_BYTES_IMAGEN } });
+      if (!archivo) {
+        return respuesta.code(400).send({ error: 'No se recibió ninguna imagen' });
+      }
+
+      if (!MIME_IMAGEN_PERMITIDOS[archivo.mimetype]) {
+        archivo.file.resume();
+        return respuesta.code(400).send({ error: 'Solo se aceptan imágenes JPG o PNG' });
+      }
+
+      let buffer: Buffer;
+      try {
+        buffer = await archivo.toBuffer();
+      } catch {
+        return respuesta.code(400).send({ error: 'La imagen supera el límite de 2 MB' });
+      }
+
+      if (buffer.byteLength > LIMITE_BYTES_IMAGEN) {
+        return respuesta.code(400).send({ error: 'La imagen supera el límite de 2 MB' });
+      }
+
+      const extensionSegura = detectarTipoImagen(buffer);
+      if (!extensionSegura) {
+        return respuesta.code(400).send({ error: 'El archivo no contiene una imagen válida' });
+      }
+
+      const dir = dirImagenesMensajesMasivos();
+      fs.mkdirSync(dir, { recursive: true });
+
+      const nombreArchivo = `mensaje-${id}-${randomUUID()}.jpg`;
+      const imagenOptimizada = await sharp(buffer)
+        .resize(1200, 1200, { fit: 'inside', withoutEnlargement: true })
+        .jpeg({ quality: 82, progressive: true })
+        .toBuffer();
+
+      fs.writeFileSync(path.join(dir, nombreArchivo), imagenOptimizada);
+
+      return respuesta.code(201).send({
+        datos: {
+          imagenUrl: `/uploads/mensajes-masivos/${nombreArchivo}`,
         },
       });
     },

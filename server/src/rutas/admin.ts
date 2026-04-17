@@ -118,6 +118,35 @@ function formatearFechaISO(fecha: Date): string {
   return fecha.toISOString().split('T')[0]!;
 }
 
+async function obtenerSujetosAutenticacionEstudio(estudioId: string) {
+  const [usuarios, accesosEmpleados] = await Promise.all([
+    prisma.usuario.findMany({
+      where: { estudioId },
+      select: { id: true },
+    }),
+    prisma.empleadoAcceso.findMany({
+      where: { personal: { estudioId } },
+      select: { id: true },
+    }),
+  ]);
+
+  return {
+    usuarioIds: usuarios.map((usuario) => usuario.id),
+    accesoEmpleadoIds: accesosEmpleados.map((acceso) => acceso.id),
+  };
+}
+
+async function revocarAccesosEstudio(estudioId: string, motivo: string) {
+  const { usuarioIds, accesoEmpleadoIds } = await obtenerSujetosAutenticacionEstudio(estudioId);
+
+  await Promise.all([
+    ...usuarioIds.map((usuarioId) => revocarSesionesPorSujeto('usuario', usuarioId, motivo)),
+    ...accesoEmpleadoIds.map((accesoId) =>
+      revocarSesionesPorSujeto('empleado_acceso', accesoId, motivo)
+    ),
+  ]);
+}
+
 function formatearFechaHoraSQL(fecha: Date): Date {
   return fecha;
 }
@@ -1368,7 +1397,6 @@ export async function rutasAdmin(servidor: FastifyInstance): Promise<void> {
         solicitud.log.error({ err: error }, 'Fallo al crear salon desde admin');
         return respuesta.code(500).send({
           error: 'No se pudo crear el salon',
-          detalle: error instanceof Error ? error.message : 'Error desconocido',
         });
       }
     },
@@ -1421,6 +1449,10 @@ export async function rutasAdmin(servidor: FastifyInstance): Promise<void> {
             ...(columnasUsuarios.has('estudioId') && { estudioId: id }),
             ...(columnasUsuarios.has('actualizadoEn') && { actualizadoEn: formatearFechaHoraSQL(new Date()) }),
           });
+        }
+
+        if (!nuevoActivo) {
+          await revocarAccesosEstudio(id, 'salon_suspendido_desde_admin');
         }
 
         try {
@@ -1693,6 +1725,8 @@ export async function rutasAdmin(servidor: FastifyInstance): Promise<void> {
           data: { activo: false },
         });
       }
+
+      await revocarAccesosEstudio(id, 'salon_suspendido_por_falta_pago');
 
       // Crear notificación interna de suspensión
       await prisma.notificacionEstudio.create({
@@ -1972,6 +2006,8 @@ export async function rutasAdmin(servidor: FastifyInstance): Promise<void> {
             });
           }
         });
+
+        await revocarAccesosEstudio(id, 'cancelacion_aprobada_por_admin');
       } else {
         await prisma.estudio.update({
           where: { id },
@@ -2679,6 +2715,8 @@ export async function rutasAdmin(servidor: FastifyInstance): Promise<void> {
           data: { activo: false },
         });
       });
+
+      await revocarAccesosEstudio(id, 'salon_bloqueado_desde_admin');
 
       await registrarAuditoria({
         usuarioId: payload.sub,
