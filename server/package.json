@@ -6,7 +6,7 @@
     "dev": "tsx watch src/index.ts",
     "build": "prisma generate && tsc",
     "start": "node dist/index.js",
-    "start:railway": "node dist/scripts/repararMigracionProduccion.js && prisma migrate deploy && node dist/scripts/asegurarCredencialesQaArranque.js && node dist/index.js",
+    "start:railway": "node dist/scripts/repararMigracionProduccion.js && prisma migrate deploy && node dist/scripts/crearUsuarioMaestro.js && node dist/scripts/asegurarCredencialesQaArranque.js && node dist/index.js",
     "start:prod": "node dist/index.js",
     "verificar-tipos": "tsc --noEmit",
     "db:migrate": "prisma migrate dev",

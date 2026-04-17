@@ -88,7 +88,8 @@ async function crearUsuarioMaestro(): Promise<void> {
 	const maestros = leerMaestrosDesdeEnv();
 
 	if (maestros.length === 0) {
-		throw new Error('Debes definir MAESTRO_INICIAL_EMAIL y MAESTRO_INICIAL_CONTRASENA para ejecutar este script');
+		console.log('[maestro] No hay variables MAESTRO_INICIAL_EMAIL/CONTRASENA — omitiendo');
+		return;
 	}
 
 	for (const maestro of maestros) {
