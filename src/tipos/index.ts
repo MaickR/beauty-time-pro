@@ -29,8 +29,15 @@ export type DiaFestivo = string;
 export type Moneda = 'MXN' | 'COP';
 export type Pais = 'Mexico' | 'Colombia';
 export type PlanEstudio = 'STANDARD' | 'PRO';
-export type EstadoReserva = 'pending' | 'confirmed' | 'working' | 'completed' | 'cancelled' | 'no_show';
+export type EstadoReserva =
+  | 'pending'
+  | 'confirmed'
+  | 'working'
+  | 'completed'
+  | 'cancelled'
+  | 'no_show';
 export type EstadoSlot = 'AVAILABLE' | 'OCCUPIED' | 'BREAK_TIME' | 'TOO_SHORT';
+export type MetodoPagoReserva = 'cash' | 'card' | 'bank_transfer' | 'digital_transfer';
 
 export interface SlotTiempo {
   time: string; // "HH:mm"
@@ -117,6 +124,7 @@ export interface Estudio {
   estudioPrincipal?: { id: string; nombre: string; slug: string | null } | null;
   esSede?: boolean;
   permiteReservasPublicas?: boolean;
+  metodosPagoReserva?: MetodoPagoReserva[];
   sedes?: SedeEstudio[];
   primeraVez?: boolean;
   cancelacionSolicitada?: boolean;
@@ -252,6 +260,7 @@ export interface SalonDetalle extends SalonPublico {
   plan: PlanEstudio;
   estudioPrincipalId?: string | null;
   permiteReservasPublicas?: boolean;
+  metodosPagoReserva?: MetodoPagoReserva[];
   sucursales?: string[];
   sedesReservables?: SedeEstudio[];
   servicios: Servicio[];
@@ -328,6 +337,11 @@ export interface ReservaCliente {
   servicios: Servicio[];
   serviciosDetalle?: DetalleServicioReserva[];
   precioTotal: number; // centavos
+  observaciones?: string | null;
+  metodoPago?: string | null;
+  marcaTinte?: string | null;
+  tonalidad?: string | null;
+  productosAdicionales?: ProductoAdicionalReserva[];
   tokenCancelacion: string;
   reagendada: boolean;
   reservaOriginalId: string | null;

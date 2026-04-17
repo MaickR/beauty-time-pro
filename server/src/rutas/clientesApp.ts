@@ -4,19 +4,29 @@ import path from 'path';
 import sharp from 'sharp';
 import { z } from 'zod';
 import NodeCache from 'node-cache';
+import { Prisma } from '../generated/prisma/client.js';
 import { env } from '../lib/env.js';
 import { revocarSesionesPorSujeto } from '../lib/sesionesAuth.js';
 import { detectarTipoImagen } from '../utils/validarImagen.js';
 import { resolverCategoriasSalon } from '../lib/categoriasSalon.js';
 import { cacheSalonesPublicos } from '../lib/cache.js';
+import { construirSelectDesdeColumnas, obtenerColumnasTabla } from '../lib/compatibilidadEsquema.js';
 import { obtenerExcepcionDisponibilidadAplicada, parsearExcepcionesDisponibilidad } from '../lib/disponibilidadExcepciones.js';
+import { normalizarMetodosPagoReserva } from '../lib/metodosPagoReserva.js';
 import { construirSedesReservables, obtenerNombresSucursales } from '../lib/sedes.js';
 import { obtenerServiciosNormalizados } from '../lib/serializacionReservas.js';
 import { prisma } from '../prismaCliente.js';
 import { verificarJWT } from '../middleware/autenticacion.js';
 import { obtenerSlotsDisponiblesBackend } from '../lib/programacion.js';
 import { enviarEmailVerificacionCliente } from '../servicios/servicioEmail.js';
+import { registrarAuditoria } from '../utils/auditoria.js';
+import { sanitizarTexto } from '../utils/sanitizar.js';
 import { compararHashContrasena, generarHashContrasena } from '../utils/contrasenas.js';
+import {
+  notificarCitaCancelada,
+  notificarCitaReagendada,
+  obtenerReservaConRelacionesPorId,
+} from '../utils/notificarReserva.js';
 import { esEmailValido } from '../utils/validarEmail.js';
 import { fechaIsoSchema, obtenerMensajeValidacion, telefonoSchema, textoSchema } from '../lib/validacion.js';
 import { obtenerFechaISOEnZona, normalizarZonaHorariaEstudio } from '../utils/zonasHorarias.js';
@@ -40,6 +50,8 @@ const esquemaBusquedaSalones = z.object({
 
 const regexTextoPersona = /^[\p{L}\p{M}\s'’-]+$/u;
 const regexContrasenaSegura = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[^A-Za-z\d]).{10,}$/;
+const MINUTOS_ANTICIPACION_CANCELACION_CLIENTE = 60;
+const ACCIONES_RESERVA_CLIENTE_POR_MES = ['cliente_reserva_cancelada', 'cliente_reserva_reagendada'] as const;
 
 const esquemaPerfilClienteApp = z.object({
   nombre: textoSchema('nombre', 80).regex(regexTextoPersona, 'El nombre solo puede contener letras, espacios, apóstrofes y guiones').optional(),
@@ -91,6 +103,116 @@ function salonTieneSuscripcionActiva(salon: {
   );
 
   return salon.fechaVencimiento >= hoySalon;
+}
+
+function construirFechaReserva(fecha: string, horaInicio: string): Date {
+  const [horas, minutos] = horaInicio.split(':').map(Number);
+  const [anio, mes, dia] = fecha.split('-').map(Number);
+  return new Date(anio!, mes! - 1, dia!, horas, minutos);
+}
+
+function obtenerMinutosHastaReserva(fecha: string, horaInicio: string, ahora: Date): number {
+  return (construirFechaReserva(fecha, horaInicio).getTime() - ahora.getTime()) / (1000 * 60);
+}
+
+async function contarAccionesReservaClienteEnMes(clienteAppId: string, fechaReferencia: Date): Promise<number> {
+  const inicioMes = new Date(Date.UTC(fechaReferencia.getUTCFullYear(), fechaReferencia.getUTCMonth(), 1));
+  const inicioMesSiguiente = new Date(
+    Date.UTC(fechaReferencia.getUTCFullYear(), fechaReferencia.getUTCMonth() + 1, 1),
+  );
+  const filas = await prisma.$queryRaw<Array<{ total: bigint | number }>>(Prisma.sql`
+    SELECT COUNT(*) AS total
+    FROM audit_log
+    WHERE accion IN (${Prisma.join(ACCIONES_RESERVA_CLIENTE_POR_MES)})
+      AND creadoEn >= ${inicioMes}
+      AND creadoEn < ${inicioMesSiguiente}
+      AND JSON_UNQUOTE(JSON_EXTRACT(detalles, '$.clienteAppId')) = ${clienteAppId}
+  `);
+
+  return Number(filas[0]?.total ?? 0);
+}
+
+async function construirSelectSalonPublico() {
+  const columnasEstudios = await obtenerColumnasTabla('estudios');
+
+  return {
+    ...construirSelectDesdeColumnas(columnasEstudios, [
+      'id',
+      'nombre',
+      'plan',
+      'slug',
+      'descripcion',
+      'direccion',
+      'pais',
+      'telefono',
+      'emailContacto',
+      'logoUrl',
+      'colorPrimario',
+      'estudioPrincipalId',
+      'permiteReservasPublicas',
+      'sucursales',
+      'horarioApertura',
+      'horarioCierre',
+      'diasAtencion',
+      'categorias',
+      'fechaVencimiento',
+      'zonaHoraria',
+      'servicios',
+      'metodosPagoReserva',
+      'horario',
+      'festivos',
+      'excepcionesDisponibilidad',
+    ]),
+    productos: {
+      where: { activo: true },
+      orderBy: { nombre: 'asc' },
+      select: {
+        id: true,
+        nombre: true,
+        categoria: true,
+        precio: true,
+      },
+    },
+    sedes: {
+      where: { activo: true, estado: 'aprobado' as const },
+      orderBy: { creadoEn: 'asc' as const },
+      select: {
+        id: true,
+        nombre: true,
+        slug: true,
+        plan: true,
+        estado: true,
+        activo: true,
+        fechaVencimiento: true,
+        propietario: true,
+        telefono: true,
+        direccion: true,
+        emailContacto: true,
+        estudioPrincipalId: true,
+        permiteReservasPublicas: true,
+        precioPlanActual: {
+          select: {
+            monto: true,
+            moneda: true,
+          },
+        },
+      },
+    },
+    personal: {
+      where: { activo: true },
+      select: {
+        id: true,
+        nombre: true,
+        especialidades: true,
+        horaInicio: true,
+        horaFin: true,
+        descansoInicio: true,
+        descansoFin: true,
+        diasTrabajo: true,
+      },
+      orderBy: { nombre: 'asc' },
+    },
+  } as Prisma.EstudioSelect;
 }
 
 export async function rutasClientesApp(servidor: FastifyInstance): Promise<void> {
@@ -190,83 +312,10 @@ export async function rutasClientesApp(servidor: FastifyInstance): Promise<void>
     async (solicitud, respuesta) => {
       const { id } = solicitud.params;
       const filtroDemo = obtenerFiltroDemo();
+      const selectSalonPublico = await construirSelectSalonPublico();
       const salon = await prisma.estudio.findFirst({
         where: { id, estado: 'aprobado', activo: true, ...filtroDemo },
-        select: {
-          id: true,
-          nombre: true,
-          plan: true,
-          slug: true,
-          descripcion: true,
-          direccion: true,
-          pais: true,
-          telefono: true,
-          emailContacto: true,
-          logoUrl: true,
-          colorPrimario: true,
-          estudioPrincipalId: true,
-          permiteReservasPublicas: true,
-          sucursales: true,
-          horarioApertura: true,
-          horarioCierre: true,
-          diasAtencion: true,
-          categorias: true,
-          fechaVencimiento: true,
-          zonaHoraria: true,
-          servicios: true,
-          productos: {
-            where: { activo: true },
-            orderBy: { nombre: 'asc' },
-            select: {
-              id: true,
-              nombre: true,
-              categoria: true,
-              precio: true,
-            },
-          },
-          horario: true,
-          festivos: true,
-          excepcionesDisponibilidad: true,
-          sedes: {
-            where: { activo: true, estado: 'aprobado' },
-            orderBy: { creadoEn: 'asc' },
-            select: {
-              id: true,
-              nombre: true,
-              slug: true,
-              plan: true,
-              estado: true,
-              activo: true,
-              fechaVencimiento: true,
-              propietario: true,
-              telefono: true,
-              direccion: true,
-              emailContacto: true,
-              estudioPrincipalId: true,
-              permiteReservasPublicas: true,
-              precioPlanActual: {
-                select: {
-                  monto: true,
-                  moneda: true,
-                },
-              },
-            },
-          },
-          personal: {
-            where: { activo: true },
-            select: {
-              id: true,
-              nombre: true,
-              especialidades: true,
-              horaInicio: true,
-              horaFin: true,
-              descansoInicio: true,
-              descansoFin: true,
-              diasTrabajo: true,
-            },
-            orderBy: { nombre: 'asc' },
-          },
-        },
+        select: selectSalonPublico,
       });
 
       if (!salon || !salonTieneSuscripcionActiva(salon)) return respuesta.code(404).send({ error: 'Salón no encontrado' });
@@ -284,6 +333,7 @@ export async function rutasClientesApp(servidor: FastifyInstance): Promise<void>
           ...salon,
           sucursales,
           sedesReservables,
+          metodosPagoReserva: normalizarMetodosPagoReserva(salon.metodosPagoReserva),
           categorias: resolverCategoriasSalon({ categorias: salon.categorias, servicios: salon.servicios }),
         },
       });
@@ -297,6 +347,7 @@ export async function rutasClientesApp(servidor: FastifyInstance): Promise<void>
       const clave = identificadorCrudo.toUpperCase();
       const slug = identificadorCrudo.toLowerCase();
       const filtroDemo = obtenerFiltroDemo();
+      const selectSalonPublico = await construirSelectSalonPublico();
       const salon = await prisma.estudio.findFirst({
         where: {
           OR: [{ claveCliente: clave }, { slug }],
@@ -304,81 +355,7 @@ export async function rutasClientesApp(servidor: FastifyInstance): Promise<void>
           activo: true,
           ...filtroDemo,
         },
-        select: {
-          id: true,
-          nombre: true,
-          plan: true,
-          slug: true,
-          descripcion: true,
-          direccion: true,
-          pais: true,
-          telefono: true,
-          emailContacto: true,
-          logoUrl: true,
-          colorPrimario: true,
-          estudioPrincipalId: true,
-          permiteReservasPublicas: true,
-          sucursales: true,
-          horarioApertura: true,
-          horarioCierre: true,
-          diasAtencion: true,
-          categorias: true,
-          fechaVencimiento: true,
-          zonaHoraria: true,
-          servicios: true,
-          productos: {
-            where: { activo: true },
-            orderBy: { nombre: 'asc' },
-            select: {
-              id: true,
-              nombre: true,
-              categoria: true,
-              precio: true,
-            },
-          },
-          horario: true,
-          festivos: true,
-          excepcionesDisponibilidad: true,
-          sedes: {
-            where: { activo: true, estado: 'aprobado' },
-            orderBy: { creadoEn: 'asc' },
-            select: {
-              id: true,
-              nombre: true,
-              slug: true,
-              plan: true,
-              estado: true,
-              activo: true,
-              fechaVencimiento: true,
-              propietario: true,
-              telefono: true,
-              direccion: true,
-              emailContacto: true,
-              estudioPrincipalId: true,
-              permiteReservasPublicas: true,
-              precioPlanActual: {
-                select: {
-                  monto: true,
-                  moneda: true,
-                },
-              },
-            },
-          },
-          personal: {
-            where: { activo: true },
-            select: {
-              id: true,
-              nombre: true,
-              especialidades: true,
-              horaInicio: true,
-              horaFin: true,
-              descansoInicio: true,
-              descansoFin: true,
-              diasTrabajo: true,
-            },
-            orderBy: { nombre: 'asc' },
-          },
-        },
+        select: selectSalonPublico,
       });
 
       if (!salon || !salonTieneSuscripcionActiva(salon)) return respuesta.code(404).send({ error: 'Salón no encontrado' });
@@ -396,6 +373,7 @@ export async function rutasClientesApp(servidor: FastifyInstance): Promise<void>
           ...salon,
           sucursales,
           sedesReservables,
+          metodosPagoReserva: normalizarMetodosPagoReserva(salon.metodosPagoReserva),
           categorias: resolverCategoriasSalon({ categorias: salon.categorias, servicios: salon.servicios }),
         },
       });
@@ -787,6 +765,11 @@ export async function rutasClientesApp(servidor: FastifyInstance): Promise<void>
                 orderBy: { orden: 'asc' },
               },
               precioTotal: true,
+              observaciones: true,
+              metodoPago: true,
+              marcaTinte: true,
+              tonalidad: true,
+              productosAdicionales: true,
               tokenCancelacion: true,
               clienteId: true,
               reagendada: true,
@@ -887,6 +870,25 @@ export async function rutasClientesApp(servidor: FastifyInstance): Promise<void>
               ...(servicio.category ? { category: servicio.category } : {}),
             })),
             precioTotal: r.precioTotal,
+            observaciones: r.observaciones ?? null,
+            metodoPago: r.metodoPago ?? null,
+            marcaTinte: r.marcaTinte ?? null,
+            tonalidad: r.tonalidad ?? null,
+            productosAdicionales: Array.isArray(r.productosAdicionales)
+              ? r.productosAdicionales
+                  .filter((producto): producto is Prisma.JsonObject =>
+                    Boolean(producto) && typeof producto === 'object' && !Array.isArray(producto),
+                  )
+                  .map((producto) => ({
+                    id: String(producto['id'] ?? ''),
+                    nombre: String(producto['nombre'] ?? 'Producto adicional'),
+                    categoria:
+                      typeof producto['categoria'] === 'string' ? producto['categoria'] : null,
+                    cantidad: Number(producto['cantidad'] ?? 0),
+                    precioUnitario: Number(producto['precioUnitario'] ?? 0),
+                    total: Number(producto['total'] ?? 0),
+                  }))
+              : [],
             tokenCancelacion: r.tokenCancelacion,
             reagendada: r.reagendada,
             reservaOriginalId: r.reservaOriginalId,
@@ -930,11 +932,11 @@ export async function rutasClientesApp(servidor: FastifyInstance): Promise<void>
       const actualizado = await prisma.clienteApp.update({
         where: { id: payload.sub },
         data: {
-          ...(nombre !== undefined && { nombre }),
-          ...(apellido !== undefined && { apellido }),
+          ...(nombre !== undefined && { nombre: sanitizarTexto(nombre) }),
+          ...(apellido !== undefined && { apellido: sanitizarTexto(apellido) }),
           ...(telefono !== undefined && { telefono }),
           ...(fechaNacimiento !== undefined && { fechaNacimiento: new Date(fechaNacimiento) }),
-          ...(ciudad !== undefined && { ciudad }),
+          ...(ciudad !== undefined && { ciudad: ciudad ? sanitizarTexto(ciudad) : null }),
         },
         select: {
           id: true,
@@ -1197,17 +1199,45 @@ export async function rutasClientesApp(servidor: FastifyInstance): Promise<void>
       const [h, m] = reserva.horaInicio.split(':').map(Number);
       const [anio, mes, dia] = reserva.fecha.split('-').map(Number);
       const fechaCita = new Date(anio!, mes! - 1, dia!, h, m);
-      const horasRestantes = (fechaCita.getTime() - hoy.getTime()) / (1000 * 60 * 60);
-      if (horasRestantes < 2) {
+      const minutosRestantes = (fechaCita.getTime() - hoy.getTime()) / (1000 * 60);
+      if (minutosRestantes < MINUTOS_ANTICIPACION_CANCELACION_CLIENTE) {
         return respuesta.code(400).send({
-          error: 'No se puede cancelar con menos de 2 horas de anticipación. Contacta directamente al salón.',
+          error: 'No se puede cancelar con menos de 1 hora de anticipación. Contacta directamente al salón.',
+        });
+      }
+
+      const accionesMes = await contarAccionesReservaClienteEnMes(payload.sub, hoy);
+      if (accionesMes >= 1) {
+        return respuesta.code(400).send({
+          error: 'Solo puedes cancelar o reagendar una reserva por mes.',
         });
       }
 
       await prisma.reserva.update({
         where: { id: reserva.id },
-        data: { estado: 'cancelled' },
+        data: { estado: 'cancelled', motivoCancelacion: 'Cancelada por cliente' },
       });
+
+      await registrarAuditoria({
+        accion: 'cliente_reserva_cancelada',
+        entidadTipo: 'reserva',
+        entidadId: reserva.id,
+        detalles: {
+          clienteAppId: payload.sub,
+          estudioId: reserva.estudioId,
+          estadoAnterior: reserva.estado,
+          estadoNuevo: 'cancelled',
+          fecha: reserva.fecha,
+          horaInicio: reserva.horaInicio,
+          motivo: 'Cancelada por cliente',
+        },
+        ip: solicitud.ip,
+      });
+
+      const reservaCompleta = await obtenerReservaConRelacionesPorId(reserva.id);
+      if (reservaCompleta) {
+        void notificarCitaCancelada(reservaCompleta);
+      }
 
       return respuesta.send({ datos: { cancelada: true } });
     },
@@ -1273,12 +1303,33 @@ export async function rutasClientesApp(servidor: FastifyInstance): Promise<void>
         return respuesta.code(400).send({ error: 'Cannot reschedule to a past date.' });
       }
 
+      const minutosHastaReserva = obtenerMinutosHastaReserva(
+        reservaOriginal.fecha,
+        reservaOriginal.horaInicio,
+        hoy,
+      );
+      if (minutosHastaReserva < MINUTOS_ANTICIPACION_CANCELACION_CLIENTE) {
+        return respuesta.code(400).send({
+          error: 'No se puede reagendar con menos de 1 hora de anticipación. Contacta directamente al salón.',
+        });
+      }
+
+      const accionesMes = await contarAccionesReservaClienteEnMes(payload.sub, hoy);
+      if (accionesMes >= 1) {
+        return respuesta.code(400).send({
+          error: 'Solo puedes cancelar o reagendar una reserva por mes.',
+        });
+      }
+
       // Crear nueva reserva con los mismos datos
       const nuevaReserva = await prisma.$transaction(async (tx) => {
         // Cancelar la original
         await tx.reserva.update({
           where: { id: reservaOriginal.id },
-          data: { estado: 'cancelled' },
+          data: {
+            estado: 'cancelled',
+            motivoCancelacion: 'Reagendada por cliente',
+          },
         });
 
         // Crear la nueva reserva
@@ -1319,6 +1370,27 @@ export async function rutasClientesApp(servidor: FastifyInstance): Promise<void>
 
         return nueva;
       });
+
+      await registrarAuditoria({
+        accion: 'cliente_reserva_reagendada',
+        entidadTipo: 'reserva',
+        entidadId: nuevaReserva.id,
+        detalles: {
+          clienteAppId: payload.sub,
+          estudioId: reservaOriginal.estudioId,
+          reservaOriginalId: reservaOriginal.id,
+          fechaAnterior: reservaOriginal.fecha,
+          horaAnterior: reservaOriginal.horaInicio,
+          fechaNueva: nuevaReserva.fecha,
+          horaNueva: nuevaReserva.horaInicio,
+        },
+        ip: solicitud.ip,
+      });
+
+      const reservaCompleta = await obtenerReservaConRelacionesPorId(nuevaReserva.id);
+      if (reservaCompleta) {
+        void notificarCitaReagendada(reservaCompleta);
+      }
 
       return respuesta.code(201).send({
         datos: {

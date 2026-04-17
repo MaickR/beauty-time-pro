@@ -13,7 +13,8 @@ import {
   limpiarTelefonoEntrada,
 } from '../../../utils/formularioSalon';
 import { esCumpleanosActualValido } from '../../../lib/registroCliente';
-import type { Estudio } from '../../../tipos';
+import { obtenerOpcionesMetodosPagoReserva } from '../../../lib/metodosPagoReserva';
+import type { Estudio, MetodoPagoReserva } from '../../../tipos';
 import type { usarFlujoReserva } from '../hooks/usarFlujoReserva';
 import {
   obtenerClaveServicioReserva,
@@ -71,13 +72,6 @@ type CamposContacto = z.infer<typeof esquema>;
 
 type DatosEnvioContacto = CamposContacto & { usarRecompensa?: boolean; observaciones?: string };
 
-const METODOS_PAGO = [
-  { valor: 'cash', etiqueta: 'Efectivo' },
-  { valor: 'card', etiqueta: 'Tarjeta' },
-  { valor: 'bank_transfer', etiqueta: 'Transferencia bancaria' },
-  { valor: 'digital_transfer', etiqueta: 'Transferencia digital' },
-] as const;
-
 interface PropsFormularioContacto {
   estudio: Estudio;
   flujo: ReturnType<typeof usarFlujoReserva>;
@@ -96,14 +90,11 @@ function calcularEdad(fechaNacimiento: string): number | null {
   return edad;
 }
 
-export function FormularioContacto({
-  estudio,
-  flujo,
-  onEnviar,
-}: PropsFormularioContacto) {
+export function FormularioContacto({ estudio, flujo, onEnviar }: PropsFormularioContacto) {
   const [fidelidadCliente, setFidelidadCliente] = useState<EstadoFidelidadCliente | null>(null);
   const [consultandoFidelidad, setConsultandoFidelidad] = useState(false);
   const [usarRecompensa, setUsarRecompensa] = useState(false);
+  const metodosPagoDisponibles = obtenerOpcionesMetodosPagoReserva(estudio.metodosPagoReserva);
   const {
     register,
     handleSubmit,
@@ -117,16 +108,19 @@ export function FormularioContacto({
       telefonoCliente: flujo.telefonoCliente,
       fechaNacimiento: flujo.fechaNacimiento,
       email: flujo.email,
-      metodoPago: flujo.metodoPago,
+      metodoPago:
+        metodosPagoDisponibles.find((metodo) => metodo.valor === flujo.metodoPago)?.valor ??
+        metodosPagoDisponibles[0]?.valor ??
+        'cash',
     },
   });
 
   const fechaNacimientoValor = watch('fechaNacimiento');
+  const metodoPagoSeleccionado = watch('metodoPago');
   const registroFechaNacimiento = register('fechaNacimiento');
   const edadCliente =
     fechaNacimientoValor && !errors.fechaNacimiento ? calcularEdad(fechaNacimientoValor) : null;
-  const esMenor =
-    edadCliente !== null ? edadCliente < 18 : false;
+  const esMenor = edadCliente !== null ? edadCliente < 18 : false;
   const seccionesDetalleServicio = useMemo(
     () =>
       flujo.serviciosSeleccionados.map((servicio) => {
@@ -156,6 +150,20 @@ export function FormularioContacto({
     valores.email,
     valores.metodoPago,
   ]);
+
+  useEffect(() => {
+    const metodoPredeterminado = metodosPagoDisponibles[0]?.valor ?? 'cash';
+    if (metodosPagoDisponibles.some((metodo) => metodo.valor === metodoPagoSeleccionado)) {
+      return;
+    }
+
+    flujo.actualizarContacto('metodoPago', metodoPredeterminado);
+    setValue('metodoPago', metodoPredeterminado as MetodoPagoReserva, {
+      shouldDirty: false,
+      shouldTouch: false,
+      shouldValidate: true,
+    });
+  }, [flujo, metodoPagoSeleccionado, metodosPagoDisponibles, setValue]);
 
   useEffect(() => {
     setValue('nombreCliente', flujo.nombreCliente, { shouldDirty: false });
@@ -224,7 +232,9 @@ export function FormularioContacto({
                 <p className="text-[10px] font-black uppercase tracking-widest text-pink-400">
                   {servicio.name}
                 </p>
-                <h4 className="mt-2 text-sm font-black text-white md:text-base">{seccion.titulo}</h4>
+                <h4 className="mt-2 text-sm font-black text-white md:text-base">
+                  {seccion.titulo}
+                </h4>
                 <p className="mt-1 text-xs text-slate-300">{seccion.descripcion}</p>
               </div>
 
@@ -461,7 +471,7 @@ export function FormularioContacto({
               {...register('metodoPago')}
               className="w-full rounded-2xl border border-slate-700 bg-slate-800 px-6 py-4 font-bold text-white outline-none transition-all focus:border-pink-500"
             >
-              {METODOS_PAGO.map((metodo) => (
+              {metodosPagoDisponibles.map((metodo) => (
                 <option key={metodo.valor} value={metodo.valor}>
                   {metodo.etiqueta}
                 </option>

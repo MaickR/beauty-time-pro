@@ -7,6 +7,8 @@ import { resolverCategoriasSalon } from '../lib/categoriasSalon.js';
 import { parsearExcepcionesDisponibilidad } from '../lib/disponibilidadExcepciones.js';
 import { asegurarColumnaTabla, construirSelectDesdeColumnas, obtenerColumnasTabla, obtenerTablasDisponibles } from '../lib/compatibilidadEsquema.js';
 import { env } from '../lib/env.js';
+import { tieneAccesoAdministrativoEstudio } from '../lib/accesoEstudio.js';
+import { METODOS_PAGO_RESERVA, normalizarMetodosPagoReserva } from '../lib/metodosPagoReserva.js';
 import { obtenerSlotsDisponiblesBackend } from '../lib/programacion.js';
 import { prisma } from '../prismaCliente.js';
 import { verificarJWT } from '../middleware/autenticacion.js';
@@ -100,6 +102,7 @@ const esquemaCamposEstudio = {
   plan: z.enum(['STANDARD', 'PRO']).optional(),
   estudioPrincipalId: z.string().trim().min(1, 'Debes seleccionar un salón principal').nullable().optional(),
   permiteReservasPublicas: z.boolean().optional(),
+  metodosPagoReserva: z.array(z.enum(METODOS_PAGO_RESERVA)).min(1, 'Selecciona al menos un método de pago').optional(),
   sucursales: z.array(textoSchema('sucursal', 80)).max(20, 'No puedes registrar más de 20 sucursales').optional(),
   horario: esquemaHorario.optional(),
   servicios: z.array(esquemaServicio).max(100, 'No puedes registrar más de 100 servicios').optional(),
@@ -126,6 +129,7 @@ const esquemaCrearEstudio = z.object({
   plan: z.enum(['STANDARD', 'PRO']).optional(),
   estudioPrincipalId: z.string().trim().min(1, 'Debes seleccionar un salón principal').nullable().optional(),
   permiteReservasPublicas: z.boolean().optional(),
+  metodosPagoReserva: z.array(z.enum(METODOS_PAGO_RESERVA)).min(1, 'Selecciona al menos un método de pago').optional(),
   sucursales: z.array(textoSchema('sucursal', 80)).max(20).optional(),
   claveDueno: claveSalonSchema('claveDueno'),
   claveCliente: claveSalonSchema('claveCliente'),
@@ -214,6 +218,10 @@ async function asegurarColumnaPinCancelacion(): Promise<boolean> {
 
 async function asegurarColumnaExcepcionesDisponibilidad(): Promise<boolean> {
   return asegurarColumnaTabla('estudios', 'excepcionesDisponibilidad', 'JSON NULL');
+}
+
+async function asegurarColumnaMetodosPagoReserva(): Promise<boolean> {
+  return asegurarColumnaTabla('estudios', 'metodosPagoReserva', 'JSON NULL');
 }
 
 function normalizarTextoComparacion(valor: string): string {
@@ -358,6 +366,7 @@ const seleccionarEstudioPanelModerno = {
   serviciosCustom: true,
   festivos: true,
   excepcionesDisponibilidad: true,
+  metodosPagoReserva: true,
   colorPrimario: true,
   logoUrl: true,
   descripcion: true,
@@ -524,6 +533,7 @@ function serializarEstudioPanel(estudio: Record<string, unknown>) {
     esSede: Boolean((estudio['estudioPrincipalId'] as string | null | undefined) ?? null),
     permiteReservasPublicas:
       (estudio['permiteReservasPublicas'] as boolean | undefined) ?? true,
+    metodosPagoReserva: normalizarMetodosPagoReserva(estudio['metodosPagoReserva']),
     excepcionesDisponibilidad: parsearExcepcionesDisponibilidad(estudio['excepcionesDisponibilidad']),
     sedes,
     sucursales: obtenerNombresSucursales(estudio, sucursalesLegacy),
@@ -811,7 +821,7 @@ export async function rutasEstudios(servidor: FastifyInstance): Promise<void> {
     async (solicitud, respuesta) => {
       const payload = solicitud.user as { rol: string; estudioId: string | null };
       const { id } = solicitud.params;
-      if (!(payload.rol === 'maestro' || (payload.rol === 'dueno' && payload.estudioId === id))) {
+      if (!tieneAccesoAdministrativoEstudio(payload, id)) {
         return respuesta.code(403).send({ error: 'Sin permisos para esta acción' });
       }
       const filtroDemo = obtenerFiltroDemo();
@@ -847,7 +857,7 @@ export async function rutasEstudios(servidor: FastifyInstance): Promise<void> {
       const payload = solicitud.user as { sub: string; rol: string; estudioId: string | null };
       const { id } = solicitud.params;
 
-      if (!(payload.rol === 'maestro' || (payload.rol === 'dueno' && payload.estudioId === id))) {
+      if (!tieneAccesoAdministrativoEstudio(payload, id)) {
         return respuesta.code(403).send({ error: 'Sin permisos para esta acción' });
       }
 
@@ -1179,6 +1189,7 @@ export async function rutasEstudios(servidor: FastifyInstance): Promise<void> {
 
       const datos = resultado.data;
       await asegurarColumnaExcepcionesDisponibilidad();
+      await asegurarColumnaMetodosPagoReserva();
       if (datos.estudioPrincipalId) {
         const errorEstudioPrincipal = await validarEstudioPrincipal(datos.estudioPrincipalId);
         if (errorEstudioPrincipal) {
@@ -1237,6 +1248,7 @@ export async function rutasEstudios(servidor: FastifyInstance): Promise<void> {
           serviciosCustom: (datos.serviciosCustom ?? []) as Prisma.InputJsonValue,
           festivos: datos.festivos ?? [],
           excepcionesDisponibilidad: (datos.excepcionesDisponibilidad ?? []) as Prisma.InputJsonValue,
+          metodosPagoReserva: normalizarMetodosPagoReserva(datos.metodosPagoReserva) as Prisma.InputJsonValue,
           ...(datos.colorPrimario !== undefined && { colorPrimario: datos.colorPrimario }),
           ...(datos.descripcion !== undefined && { descripcion: sanitizarTexto(datos.descripcion ?? '') }),
           ...(datos.direccion !== undefined && { direccion: sanitizarTexto(datos.direccion ?? '') }),
@@ -1260,7 +1272,7 @@ export async function rutasEstudios(servidor: FastifyInstance): Promise<void> {
       try {
         const payload = solicitud.user as { sub: string; rol: string; estudioId: string | null };
         const { id } = solicitud.params;
-        if (!(payload.rol === 'maestro' || (payload.rol === 'dueno' && payload.estudioId === id))) {
+        if (!tieneAccesoAdministrativoEstudio(payload, id)) {
           return respuesta.code(403).send({ error: 'Sin permisos para esta acción' });
         }
         if (payload.rol === 'dueno') {
@@ -1276,6 +1288,7 @@ export async function rutasEstudios(servidor: FastifyInstance): Promise<void> {
 
         const datos = resultado.data;
         await asegurarColumnaExcepcionesDisponibilidad();
+        await asegurarColumnaMetodosPagoReserva();
         if (datos.estudioPrincipalId) {
           const errorEstudioPrincipal = await validarEstudioPrincipal(datos.estudioPrincipalId, id);
           if (errorEstudioPrincipal) {
@@ -1382,6 +1395,9 @@ export async function rutasEstudios(servidor: FastifyInstance): Promise<void> {
           ...(datos.plan !== undefined && columnasEstudios.has('plan') && { plan: normalizarPlanEstudio(datos.plan) }),
           ...(datos.estudioPrincipalId !== undefined && columnasEstudios.has('estudioPrincipalId') && { estudioPrincipalId: datos.estudioPrincipalId }),
           ...(datos.permiteReservasPublicas !== undefined && columnasEstudios.has('permiteReservasPublicas') && { permiteReservasPublicas: datos.permiteReservasPublicas }),
+          ...(datos.metodosPagoReserva !== undefined && columnasEstudios.has('metodosPagoReserva') && {
+            metodosPagoReserva: normalizarMetodosPagoReserva(datos.metodosPagoReserva) as Prisma.InputJsonValue,
+          }),
           ...(datos.sucursales !== undefined && columnasEstudios.has('sucursales') && { sucursales: datos.sucursales }),
           ...(datos.horario !== undefined && columnasEstudios.has('horario') && { horario: datos.horario }),
           ...(datos.servicios !== undefined && columnasEstudios.has('servicios') && { servicios: datos.servicios as Prisma.InputJsonValue }),
@@ -1567,7 +1583,11 @@ export async function rutasEstudios(servidor: FastifyInstance): Promise<void> {
         return respuesta.send({ datos: { actualizado: true } });
       } catch (error) {
         if (error instanceof Error) {
-          return respuesta.code(400).send({ error: error.message });
+          solicitud.log.warn(
+            { err: error, estudioId: solicitud.params.id, requestId: solicitud.id },
+            'Error controlado al actualizar excepciones de disponibilidad',
+          );
+          return respuesta.code(400).send({ error: 'No se pudo validar la disponibilidad especial solicitada' });
         }
 
         solicitud.log.error({ err: error }, 'Fallo al actualizar excepciones de disponibilidad');
@@ -1944,7 +1964,7 @@ export async function rutasEstudios(servidor: FastifyInstance): Promise<void> {
       if (payload.rol !== 'maestro' && payload.estudioId !== id) {
         return respuesta.code(403).send({ error: 'Sin permisos para esta acción' });
       }
-      if (payload.rol !== 'maestro' && payload.rol !== 'dueno' && payload.rol !== 'empleado') {
+      if (payload.rol !== 'maestro' && payload.rol !== 'dueno' && payload.rol !== 'empleado' && payload.rol !== 'vendedor') {
         return respuesta.code(403).send({ error: 'Sin permisos para esta acción' });
       }
 
@@ -1971,7 +1991,7 @@ export async function rutasEstudios(servidor: FastifyInstance): Promise<void> {
       if (payload.rol !== 'maestro' && payload.estudioId !== id) {
         return respuesta.code(403).send({ error: 'Sin permisos para esta acción' });
       }
-      if (payload.rol !== 'maestro' && payload.rol !== 'dueno' && payload.rol !== 'empleado') {
+      if (payload.rol !== 'maestro' && payload.rol !== 'dueno' && payload.rol !== 'empleado' && payload.rol !== 'vendedor') {
         return respuesta.code(403).send({ error: 'Sin permisos para esta acción' });
       }
 

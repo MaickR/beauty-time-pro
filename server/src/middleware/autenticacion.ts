@@ -27,7 +27,7 @@ export interface PayloadJWT {
 
 // Cuentas fundadoras siempre protegidas (independientemente del env var)
 const ADMINS_PROTEGIDOS_POR_DEFECTO = [
-  'miguel@beautytimepro.com',
+  'miguel@salonpromaster.com',
   'msrl.dev420@gmail.com',
 ];
 

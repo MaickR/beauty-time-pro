@@ -9,7 +9,7 @@ export interface CargaNotificacionPush {
 }
 
 function extraerEmailRemitente(valor: string | undefined): string {
-  if (!valor) return 'no-reply@beautytimepro.com';
+  if (!valor) return 'no-reply@salonpromaster.com';
   const coincidencia = valor.match(/<([^>]+)>/);
   return coincidencia?.[1] ?? valor;
 }

@@ -2,9 +2,10 @@ import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
-import { Eye, EyeOff, Mail, Scissors, UserRound } from 'lucide-react';
+import { Eye, EyeOff, Mail, UserRound } from 'lucide-react';
 import { MedidorContrasena } from '../../componentes/ui/MedidorContrasena';
 import { SelectorCumpleanos } from '../../componentes/ui/SelectorCumpleanos';
+import { MarcaAplicacion } from '../../componentes/ui/MarcaAplicacion';
 import { usarTituloPagina } from '../../hooks/usarTituloPagina';
 import {
   esquemaRegistroCliente,
@@ -98,15 +99,7 @@ export function PaginaRegistroCliente() {
     <main className="min-h-screen bg-[#f5efe6] px-6 py-10 sm:px-10 lg:px-14 lg:py-14">
       <div className="mx-auto grid max-w-6xl gap-8 lg:grid-cols-[0.88fr_1.12fr]">
         <section className="rounded-4xl bg-[#1d1b1a] p-8 text-white shadow-2xl shadow-black/20 sm:p-10">
-          <div className="flex items-center gap-3">
-            <div className="flex h-12 w-12 items-center justify-center rounded-2xl border border-white/10 bg-white/10">
-              <Scissors className="h-5 w-5" aria-hidden="true" />
-            </div>
-            <div>
-              <p className="text-xs uppercase tracking-[0.28em] text-white/55">Beauty Time Pro</p>
-              <p className="text-sm text-white/70">Cuenta de cliente</p>
-            </div>
-          </div>
+          <MarcaAplicacion variante="oscura" subtitulo="Cuenta de cliente" />
 
           <div className="mt-10 max-w-md">
             <p className="text-sm uppercase tracking-[0.3em] text-[#f5cea7]">Registro rápido</p>
@@ -318,7 +311,11 @@ export function PaginaRegistroCliente() {
                     className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-700"
                     aria-label={mostrarContrasena ? 'Ocultar contraseña' : 'Mostrar contraseña'}
                   >
-                    {mostrarContrasena ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                    {mostrarContrasena ? (
+                      <EyeOff className="h-4 w-4" />
+                    ) : (
+                      <Eye className="h-4 w-4" />
+                    )}
                   </button>
                 </div>
                 {errors.contrasena ? (
@@ -346,9 +343,15 @@ export function PaginaRegistroCliente() {
                     type="button"
                     onClick={() => setMostrarConfirmacion((valor) => !valor)}
                     className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-700"
-                    aria-label={mostrarConfirmacion ? 'Ocultar confirmación' : 'Mostrar confirmación'}
+                    aria-label={
+                      mostrarConfirmacion ? 'Ocultar confirmación' : 'Mostrar confirmación'
+                    }
                   >
-                    {mostrarConfirmacion ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                    {mostrarConfirmacion ? (
+                      <EyeOff className="h-4 w-4" />
+                    ) : (
+                      <Eye className="h-4 w-4" />
+                    )}
                   </button>
                 </div>
                 {errors.confirmarContrasena ? (

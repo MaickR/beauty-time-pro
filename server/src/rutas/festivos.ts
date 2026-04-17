@@ -2,6 +2,7 @@ import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import { prisma } from '../prismaCliente.js';
 import { verificarJWT } from '../middleware/autenticacion.js';
+import { tieneAccesoAdministrativoEstudio } from '../lib/accesoEstudio.js';
 import { fechaIsoSchema, obtenerMensajeValidacion } from '../lib/validacion.js';
 
 const esquemaFestivos = z.object({
@@ -16,7 +17,7 @@ export async function rutasFestivos(servidor: FastifyInstance): Promise<void> {
     async (solicitud, respuesta) => {
       const payload = solicitud.user as { rol: string; estudioId: string | null };
       const { id } = solicitud.params;
-      if (!(payload.rol === 'maestro' || (payload.rol === 'dueno' && payload.estudioId === id))) {
+      if (!tieneAccesoAdministrativoEstudio(payload, id)) {
         return respuesta.code(403).send({ error: 'Sin permisos para esta acción' });
       }
       const festivos = await prisma.diaFestivo.findMany({
@@ -35,7 +36,7 @@ export async function rutasFestivos(servidor: FastifyInstance): Promise<void> {
     async (solicitud, respuesta) => {
       const payload = solicitud.user as { rol: string; estudioId: string | null };
       const { id } = solicitud.params;
-      if (!(payload.rol === 'maestro' || (payload.rol === 'dueno' && payload.estudioId === id))) {
+      if (!tieneAccesoAdministrativoEstudio(payload, id)) {
         return respuesta.code(403).send({ error: 'Sin permisos para esta acción' });
       }
       const resultado = esquemaFestivos.safeParse(solicitud.body);

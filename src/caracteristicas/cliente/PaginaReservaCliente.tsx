@@ -1,16 +1,48 @@
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
-import { ChevronLeft, Check, Clock, Calendar, User, Tag, Loader2 } from 'lucide-react';
-import { obtenerSalonPublico } from '../../servicios/servicioClienteApp';
+import { ChevronLeft, ChevronRight, Check, Calendar, User, Tag, Loader2 } from 'lucide-react';
+import { obtenerSalonPublicoPorIdentificador } from '../../servicios/servicioClienteApp';
 import { NavegacionCliente } from '../../componentes/diseno/NavegacionCliente';
+import {
+  formatearMetodoPagoReserva,
+  obtenerOpcionesMetodosPagoReserva,
+} from '../../lib/metodosPagoReserva';
 import { Spinner } from '../../componentes/ui/Spinner';
 import { usarToast } from '../../componentes/ui/ProveedorToast';
+import { SelectorProductosPublicos } from '../reserva/componentes/SelectorProductosPublicos';
+import { SelectorEspecialistaHorario } from '../reserva/componentes/SelectorEspecialistaHorario';
 import { obtenerExcepcionDisponibilidadAplicada } from '../../lib/disponibilidadExcepciones';
 import { formatearDinero, obtenerFechaLocalISO } from '../../utils/formato';
 import { DIAS_SEMANA } from '../../lib/constantes';
 import { usarFlujoReservaCliente } from './hooks/usarFlujoReservaCliente';
-import type { SalonDetalle, Servicio, SlotTiempo } from '../../tipos';
+import {
+  construirRutaReservaSalonCliente,
+  construirRutaSalonCliente,
+} from './utils/rutasSalonCliente';
+import { obtenerServiciosPorEspecialista } from './utils/servicios-especialista';
+import type {
+  MetodoPagoReserva,
+  ProductoAdicionalReserva,
+  ProductoPublicoReserva,
+  SalonDetalle,
+  Servicio,
+} from '../../tipos';
+
+function formatearDuracionAproximada(duracion: number): string {
+  const horas = Math.floor(duracion / 60);
+  const minutos = duracion % 60;
+
+  if (horas === 0) {
+    return `${duracion} min`;
+  }
+
+  if (minutos === 0) {
+    return `${horas} h`;
+  }
+
+  return `${horas} h ${minutos} min`;
+}
 
 function iniciales(nombre: string) {
   return nombre
@@ -24,47 +56,25 @@ function iniciales(nombre: string) {
 // ── Selector de Especialista ─────────────────────────────────────────────────
 function PasoEspecialista({
   salon,
-  sucursalSeleccionada,
-  onSeleccionarSucursal,
   onSeleccionar,
 }: {
   salon: SalonDetalle;
-  sucursalSeleccionada: string;
-  onSeleccionarSucursal: (sucursal: string) => void;
   onSeleccionar: (id: string) => void;
 }) {
-  const requiereSucursal = (salon.sucursales?.length ?? 0) > 1;
-
   return (
     <section aria-labelledby="titulo-especialista">
       <h2 id="titulo-especialista" className="font-black text-lg text-slate-900 mb-4">
         Elige tu especialista
       </h2>
-      {requiereSucursal && (
-        <div className="mb-4 rounded-2xl border border-slate-200 bg-white p-4">
-          <label className="mb-2 block text-xs font-black uppercase tracking-wide text-slate-500">
-            Sede
-          </label>
-          <select
-            value={sucursalSeleccionada}
-            onChange={(evento) => onSeleccionarSucursal(evento.target.value)}
-            className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm font-bold text-slate-700"
-          >
-            <option value="">Selecciona una sede</option>
-            {salon.sucursales?.map((sucursal) => (
-              <option key={sucursal} value={sucursal}>
-                {sucursal}
-              </option>
-            ))}
-          </select>
-        </div>
-      )}
-      <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+      <p className="mb-4 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600">
+        Elige a tu especialista de preferencia. Antes de confirmar, el sistema volverá a validar la
+        disponibilidad real para la fecha, duración y servicios seleccionados.
+      </p>
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 md:grid-cols-3">
         {salon.personal.map((p) => (
           <button
             key={p.id}
             onClick={() => onSeleccionar(p.id)}
-            disabled={requiereSucursal && !sucursalSeleccionada}
             className="bg-white border-2 border-slate-100 rounded-2xl p-4 text-left hover:border-pink-300 hover:shadow-md transition-all"
           >
             <div
@@ -88,26 +98,47 @@ function PasoEspecialista({
 // ── Selector de Servicios ────────────────────────────────────────────────────
 function PasoServicios({
   salon,
+  personalId,
   seleccionados,
+  productosSeleccionados,
+  observaciones,
   onAlternar,
+  onAlternarProducto,
+  onActualizarCantidadProducto,
+  onCambiarObservaciones,
   onSiguiente,
 }: {
   salon: SalonDetalle;
+  personalId: string;
   seleccionados: Servicio[];
+  productosSeleccionados: ProductoAdicionalReserva[];
+  observaciones: string;
   onAlternar: (s: Servicio) => void;
+  onAlternarProducto: (producto: ProductoPublicoReserva) => void;
+  onActualizarCantidadProducto: (productoId: string, cantidad: number) => void;
+  onCambiarObservaciones: (observaciones: string) => void;
   onSiguiente: () => void;
 }) {
   const totalDuracion = seleccionados.reduce((a, s) => a + s.duration, 0);
   const totalPrecio = seleccionados.reduce((a, s) => a + s.price, 0);
+  const totalProductos = productosSeleccionados.reduce((a, producto) => a + producto.total, 0);
   const color = salon.colorPrimario ?? '#C2185B';
+  const moneda = salon.pais === 'Colombia' ? 'COP' : 'MXN';
+  const serviciosDisponibles = obtenerServiciosPorEspecialista(salon, personalId);
+  const especialista = salon.personal.find((persona) => persona.id === personalId);
 
   return (
     <section aria-labelledby="titulo-servicios">
       <h2 id="titulo-servicios" className="font-black text-lg text-slate-900 mb-4">
         Elige los servicios
       </h2>
+      {especialista && (
+        <p className="mb-4 rounded-2xl border border-pink-100 bg-pink-50 px-4 py-3 text-sm font-medium text-pink-700">
+          Estás viendo solo los servicios habilitados para {especialista.nombre}.
+        </p>
+      )}
       <ul className="space-y-2 mb-6">
-        {salon.servicios.map((s, indiceServicio) => {
+        {serviciosDisponibles.map((s, indiceServicio) => {
           const activo = seleccionados.some((sel) => sel.name === s.name);
           return (
             <li key={`${s.name}-${indiceServicio}`}>
@@ -132,7 +163,7 @@ function PasoServicios({
                 <span className="text-xs text-slate-400">{s.duration} min</span>
                 {s.price > 0 && (
                   <span className="text-xs font-bold" style={{ color }}>
-                    {formatearDinero(s.price, salon.pais === 'Colombia' ? 'COP' : 'MXN')}
+                    {formatearDinero(s.price, moneda)}
                   </span>
                 )}
               </button>
@@ -140,15 +171,58 @@ function PasoServicios({
           );
         })}
       </ul>
+
+      {serviciosDisponibles.length === 0 && (
+        <div className="mb-6 rounded-3xl border border-dashed border-slate-200 bg-slate-50 px-5 py-6 text-sm font-medium text-slate-500">
+          Este especialista no tiene servicios habilitados para reserva en este momento.
+        </div>
+      )}
+
+      {salon.plan === 'PRO' && salon.productos.length > 0 && (
+        <div className="mb-6">
+          <SelectorProductosPublicos
+            productos={salon.productos}
+            productosSeleccionados={productosSeleccionados}
+            moneda={moneda}
+            onAlternarProducto={onAlternarProducto}
+            onActualizarCantidad={onActualizarCantidadProducto}
+          />
+        </div>
+      )}
+
+      <div className="mb-6 rounded-3xl border border-slate-100 bg-white p-5 shadow-sm">
+        <div>
+          <p className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-500">
+            Notas opcionales
+          </p>
+          <h3 className="mt-2 text-lg font-black text-slate-900">Detalles para tu servicio</h3>
+          <p className="mt-2 text-sm text-slate-600">
+            Si necesitas indicar una preferencia, sensibilidad o detalle especial, puedes escribirlo
+            aquí.
+          </p>
+        </div>
+        <textarea
+          value={observaciones}
+          onChange={(evento) => onCambiarObservaciones(evento.target.value.slice(0, 240))}
+          rows={4}
+          maxLength={240}
+          className="mt-4 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-800 outline-none transition focus:border-pink-300 focus:bg-white"
+          placeholder="Ej: prefiero atención silenciosa, piel sensible o cualquier detalle que el salón deba tener en cuenta."
+        />
+        <p className="mt-2 text-right text-xs font-semibold text-slate-400">
+          {observaciones.length}/240
+        </p>
+      </div>
+
       {seleccionados.length > 0 && (
         <div className="bg-slate-50 rounded-2xl p-4 flex items-center justify-between mb-4">
           <div className="text-sm text-slate-600">
             <span className="font-bold text-slate-900">{seleccionados.length}</span> servicio
             {seleccionados.length > 1 ? 's' : ''} · {totalDuracion} min
           </div>
-          {totalPrecio > 0 && (
+          {(totalPrecio > 0 || totalProductos > 0) && (
             <span className="font-black text-slate-900">
-              {formatearDinero(totalPrecio, salon.pais === 'Colombia' ? 'COP' : 'MXN')}
+              {formatearDinero(totalPrecio + totalProductos, moneda)}
             </span>
           )}
         </div>
@@ -169,26 +243,26 @@ function PasoServicios({
 function PasoFecha({
   salon,
   fechaSeleccionada,
-  sucursalSeleccionada,
   onSeleccionar,
 }: {
   salon: SalonDetalle;
   fechaSeleccionada: Date;
-  sucursalSeleccionada: string;
   onSeleccionar: (d: Date) => void;
 }) {
   const hoy = new Date();
   hoy.setHours(0, 0, 0, 0);
-  const primerDia = new Date(
-    fechaSeleccionada.getFullYear(),
-    fechaSeleccionada.getMonth(),
-    1,
-  ).getDay();
-  const diasEnMes = new Date(
-    fechaSeleccionada.getFullYear(),
-    fechaSeleccionada.getMonth() + 1,
-    0,
-  ).getDate();
+  const [mesVisible, setMesVisible] = useState(
+    new Date(fechaSeleccionada.getFullYear(), fechaSeleccionada.getMonth(), 1),
+  );
+
+  useEffect(() => {
+    setMesVisible(new Date(fechaSeleccionada.getFullYear(), fechaSeleccionada.getMonth(), 1));
+  }, [fechaSeleccionada]);
+
+  const inicioMesActual = new Date(hoy.getFullYear(), hoy.getMonth(), 1);
+  const puedeRetrocederMes = mesVisible > inicioMesActual;
+  const primerDia = new Date(mesVisible.getFullYear(), mesVisible.getMonth(), 1).getDay();
+  const diasEnMes = new Date(mesVisible.getFullYear(), mesVisible.getMonth() + 1, 0).getDate();
   const celdas = Array.from({ length: 42 }, (_, i) => {
     const d = i - primerDia + 1;
     return d > 0 && d <= diasEnMes ? d : null;
@@ -204,9 +278,34 @@ function PasoFecha({
         <Calendar className="w-5 h-5" aria-hidden="true" /> Elige la fecha
       </h2>
       <div className="bg-white border border-slate-100 rounded-3xl p-5 shadow-sm">
-        <p className="text-center font-bold text-slate-700 mb-4 capitalize">
-          {fechaSeleccionada.toLocaleString('es-ES', { month: 'long', year: 'numeric' })}
-        </p>
+        <div className="mb-4 flex items-center justify-between gap-3">
+          <button
+            type="button"
+            onClick={() =>
+              puedeRetrocederMes
+                ? setMesVisible(new Date(mesVisible.getFullYear(), mesVisible.getMonth() - 1, 1))
+                : undefined
+            }
+            disabled={!puedeRetrocederMes}
+            className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-slate-200 text-slate-500 transition hover:border-pink-200 hover:text-pink-600 disabled:cursor-not-allowed disabled:opacity-40"
+            aria-label="Ir al mes anterior"
+          >
+            <ChevronLeft className="h-4 w-4" aria-hidden="true" />
+          </button>
+          <p className="text-center font-bold text-slate-700 capitalize">
+            {mesVisible.toLocaleString('es-ES', { month: 'long', year: 'numeric' })}
+          </p>
+          <button
+            type="button"
+            onClick={() =>
+              setMesVisible(new Date(mesVisible.getFullYear(), mesVisible.getMonth() + 1, 1))
+            }
+            className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-slate-200 text-slate-500 transition hover:border-pink-200 hover:text-pink-600"
+            aria-label="Ir al mes siguiente"
+          >
+            <ChevronRight className="h-4 w-4" aria-hidden="true" />
+          </button>
+        </div>
         <div className="grid grid-cols-7 gap-1 text-center mb-2">
           {['Do', 'Lu', 'Ma', 'Mi', 'Ju', 'Vi', 'Sá'].map((d) => (
             <div key={d} className="text-xs font-bold text-slate-400 py-1">
@@ -217,11 +316,7 @@ function PasoFecha({
         <div className="grid grid-cols-7 gap-1">
           {celdas.map((dia, i) => {
             if (!dia) return <div key={i} />;
-            const dateObj = new Date(
-              fechaSeleccionada.getFullYear(),
-              fechaSeleccionada.getMonth(),
-              dia,
-            );
+            const dateObj = new Date(mesVisible.getFullYear(), mesVisible.getMonth(), dia);
             const dStr = obtenerFechaLocalISO(dateObj);
             const esPasado = dateObj < hoy;
             const nombreDia = DIAS_SEMANA[dateObj.getDay()];
@@ -231,7 +326,7 @@ function PasoFecha({
             const excepcionDisponibilidad = obtenerExcepcionDisponibilidadAplicada({
               excepciones: salon.availabilityExceptions,
               fecha: dStr,
-              sucursal: sucursalSeleccionada || salon.nombre,
+              sucursal: salon.nombre,
             });
             const esCierreEspecial = excepcionDisponibilidad?.tipo === 'cerrado';
             const tieneHorarioModificado = excepcionDisponibilidad?.tipo === 'horario_modificado';
@@ -249,7 +344,7 @@ function PasoFecha({
                       ? 'text-slate-200 cursor-not-allowed'
                       : 'hover:bg-pink-50 text-slate-700 hover:text-pink-600'
                 }`}
-                aria-label={`${dia} de ${fechaSeleccionada.toLocaleString('es-ES', { month: 'long' })}${deshabilitado ? ', no disponible' : ''}`}
+                aria-label={`${dia} de ${mesVisible.toLocaleString('es-ES', { month: 'long' })}${deshabilitado ? ', no disponible' : ''}`}
                 aria-pressed={seleccionado}
               >
                 {dia}
@@ -259,7 +354,10 @@ function PasoFecha({
                       {(esFestivo || estaCerrado || esCierreEspecial) && (
                         <span className="h-1.5 w-1.5 rounded-full bg-red-500" />
                       )}
-                      {!esFestivo && !estaCerrado && !esCierreEspecial && tieneHorarioModificado && (
+                      {!esFestivo &&
+                        !estaCerrado &&
+                        !esCierreEspecial &&
+                        tieneHorarioModificado && (
                           <span className="h-1.5 w-1.5 rounded-full bg-blue-500" />
                         )}
                     </span>
@@ -281,90 +379,43 @@ function PasoFecha({
   );
 }
 
-// ── Selector de Hora ─────────────────────────────────────────────────────────
-function PasoHora({
-  slots,
-  cargando,
-  horaSeleccionada,
-  color,
-  onSeleccionar,
-}: {
-  slots: SlotTiempo[];
-  cargando: boolean;
-  horaSeleccionada: string;
-  color: string;
-  onSeleccionar: (h: string) => void;
-}) {
-  return (
-    <section aria-labelledby="titulo-hora">
-      <h2
-        id="titulo-hora"
-        className="font-black text-lg text-slate-900 mb-4 flex items-center gap-2"
-      >
-        <Clock className="w-5 h-5" aria-hidden="true" /> Elige el horario
-      </h2>
-      {cargando ? (
-        <div className="flex justify-center py-12">
-          <Spinner tamaño="md" />
-        </div>
-      ) : slots.length === 0 ? (
-        <div className="text-center py-12 bg-slate-50 rounded-3xl">
-          <p className="font-bold text-slate-500">No hay horarios disponibles para este día</p>
-        </div>
-      ) : (
-        <div className="grid grid-cols-3 md:grid-cols-4 gap-2">
-          {slots.map((s) => (
-            <button
-              key={s.time}
-              disabled={s.status !== 'AVAILABLE'}
-              onClick={() => onSeleccionar(s.time)}
-              className={`py-3 rounded-2xl font-bold text-sm border-2 transition-all ${
-                s.status !== 'AVAILABLE'
-                  ? 'border-slate-100 bg-slate-50 text-slate-300 cursor-not-allowed line-through'
-                  : horaSeleccionada === s.time
-                    ? 'text-white shadow-md border-transparent'
-                    : 'border-slate-200 text-slate-700 hover:border-pink-300 bg-white'
-              }`}
-              style={
-                horaSeleccionada === s.time && s.status === 'AVAILABLE'
-                  ? { backgroundColor: color }
-                  : undefined
-              }
-              aria-pressed={horaSeleccionada === s.time}
-            >
-              {s.time}
-            </button>
-          ))}
-        </div>
-      )}
-    </section>
-  );
-}
-
 // ── Confirmación ─────────────────────────────────────────────────────────────
 function PasoConfirmar({
   salon,
-  sucursal,
   personalId,
   servicios,
   fecha,
   hora,
+  duracionTotal,
   precioTotal,
+  totalProductos,
+  metodosPagoDisponibles,
+  metodoPago,
+  productosSeleccionados,
+  observaciones,
+  onSeleccionarMetodoPago,
   enviando,
   onConfirmar,
 }: {
   salon: SalonDetalle;
-  sucursal: string;
   personalId: string;
   servicios: Servicio[];
   fecha: Date;
   hora: string;
+  duracionTotal: number;
   precioTotal: number;
+  totalProductos: number;
+  metodosPagoDisponibles: Array<{ valor: MetodoPagoReserva; etiqueta: string }>;
+  metodoPago: MetodoPagoReserva;
+  productosSeleccionados: ProductoAdicionalReserva[];
+  observaciones: string;
+  onSeleccionarMetodoPago: (metodoPago: MetodoPagoReserva) => void;
   enviando: boolean;
   onConfirmar: () => void;
 }) {
   const especialista = salon.personal.find((p) => p.id === personalId);
   const color = salon.colorPrimario ?? '#C2185B';
+  const moneda = salon.pais === 'Colombia' ? 'COP' : 'MXN';
   const fechaFormateada = fecha.toLocaleDateString('es-MX', {
     weekday: 'long',
     day: 'numeric',
@@ -391,7 +442,62 @@ function PasoConfirmar({
             <p className="font-bold text-slate-900 capitalize">
               {fechaFormateada} · {hora}
             </p>
-            {sucursal && <p className="text-xs font-semibold text-slate-500">Sede: {sucursal}</p>}
+            <p className="text-xs font-semibold text-slate-500">
+              Dirección: {salon.direccion ?? salon.nombre}
+            </p>
+          </div>
+        </div>
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+          <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
+            <p className="text-[10px] font-black uppercase tracking-[0.16em] text-slate-400">
+              Duración aproximada
+            </p>
+            <p className="mt-1 text-sm font-black text-slate-900">
+              {formatearDuracionAproximada(duracionTotal)}
+            </p>
+          </div>
+          <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
+            <p className="text-[10px] font-black uppercase tracking-[0.16em] text-slate-400">
+              Método de pago
+            </p>
+            <p className="mt-1 text-sm font-black text-slate-900">
+              {formatearMetodoPagoReserva(metodoPago)}
+            </p>
+          </div>
+        </div>
+        <div className="space-y-3 rounded-2xl border border-slate-100 bg-slate-50 p-4">
+          <div>
+            <p className="text-xs font-black uppercase tracking-[0.16em] text-slate-400">
+              Selecciona cómo pagarás en el salón
+            </p>
+            <p className="mt-1 text-sm text-slate-500">
+              Este método queda registrado en tu reserva para que puedas consultarlo después.
+            </p>
+          </div>
+          <div
+            className="grid grid-cols-1 gap-2 sm:grid-cols-2"
+            role="radiogroup"
+            aria-label="Método de pago"
+          >
+            {metodosPagoDisponibles.map((opcion) => {
+              const activo = opcion.valor === metodoPago;
+
+              return (
+                <button
+                  key={opcion.valor}
+                  type="button"
+                  onClick={() => onSeleccionarMetodoPago(opcion.valor)}
+                  className={`rounded-2xl border px-4 py-3 text-left text-sm font-black transition-colors ${
+                    activo
+                      ? 'border-pink-300 bg-pink-50 text-pink-700'
+                      : 'border-slate-200 bg-white text-slate-600 hover:border-pink-200'
+                  }`}
+                  aria-pressed={activo}
+                >
+                  {opcion.etiqueta}
+                </button>
+              );
+            })}
           </div>
         </div>
         <div className="flex items-start gap-3">
@@ -405,17 +511,42 @@ function PasoConfirmar({
                 <span className="text-slate-800">{s.name}</span>
                 {s.price > 0 && (
                   <span className="font-bold text-slate-600">
-                    {formatearDinero(s.price, salon.pais === 'Colombia' ? 'COP' : 'MXN')}
+                    {formatearDinero(s.price, moneda)}
                   </span>
                 )}
               </div>
             ))}
-            {precioTotal > 0 && (
-              <div className="flex justify-between text-sm font-black mt-2 pt-2 border-t border-slate-100">
-                <span>Total</span>
-                <span>
-                  {formatearDinero(precioTotal, salon.pais === 'Colombia' ? 'COP' : 'MXN')}
-                </span>
+            {productosSeleccionados.length > 0 && (
+              <div className="mt-3 border-t border-slate-100 pt-3">
+                <p className="mb-2 text-xs font-black uppercase tracking-wide text-slate-400">
+                  Productos
+                </p>
+                <div className="space-y-2">
+                  {productosSeleccionados.map((producto) => (
+                    <div key={producto.id} className="flex justify-between text-sm">
+                      <span className="text-slate-800">
+                        {producto.nombre} x{producto.cantidad}
+                      </span>
+                      <span className="font-bold text-slate-600">
+                        {formatearDinero(producto.total, moneda)}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+            {observaciones.trim() ? (
+              <div className="mt-3 border-t border-slate-100 pt-3">
+                <p className="mb-2 text-xs font-black uppercase tracking-wide text-slate-400">
+                  Notas del cliente
+                </p>
+                <p className="text-sm text-slate-700">{observaciones}</p>
+              </div>
+            ) : null}
+            {(precioTotal > 0 || totalProductos > 0) && (
+              <div className="mt-2 flex justify-between border-t border-slate-100 pt-2 text-sm font-black text-slate-900">
+                <span>Total estimado</span>
+                <span>{formatearDinero(precioTotal + totalProductos, moneda)}</span>
               </div>
             )}
           </div>
@@ -490,14 +621,23 @@ function PasoExitosa({
 
 // ── Página principal ─────────────────────────────────────────────────────────
 export function PaginaReservaCliente() {
-  const { id } = useParams<{ id: string }>();
+  const { identificador } = useParams<{ identificador: string }>();
+  const navegar = useNavigate();
   const { mostrarToast } = usarToast();
 
   const { data: salon, isLoading } = useQuery<SalonDetalle>({
-    queryKey: ['salon-publico', id],
-    queryFn: () => obtenerSalonPublico(id!),
-    enabled: !!id,
+    queryKey: ['salon-publico', identificador],
+    queryFn: () => obtenerSalonPublicoPorIdentificador(identificador!),
+    enabled: !!identificador,
   });
+
+  useEffect(() => {
+    if (!salon?.slug || !identificador || salon.slug === identificador) {
+      return;
+    }
+
+    navegar(construirRutaReservaSalonCliente(salon), { replace: true });
+  }, [identificador, navegar, salon]);
 
   if (isLoading || !salon) {
     return (
@@ -525,6 +665,7 @@ function ContenidoReserva({
   const navegar = useNavigate();
   const flujo = usarFlujoReservaCliente(salon);
   const color = salon.colorPrimario ?? '#C2185B';
+  const metodosPagoDisponibles = obtenerOpcionesMetodosPagoReserva(salon.metodosPagoReserva);
 
   useEffect(() => {
     if ((salon.sucursales?.length ?? 0) === 1 && !flujo.sucursalSeleccionada) {
@@ -554,7 +695,7 @@ function ContenidoReserva({
           <button
             onClick={() => {
               if (flujo.paso === 'especialista' || flujo.paso === 'exitosa')
-                navegar(`/cliente/salon/${salon.id}`);
+                navegar(construirRutaSalonCliente(salon));
               else flujo.retroceder();
             }}
             aria-label="Volver"
@@ -591,18 +732,19 @@ function ContenidoReserva({
 
       <main className="max-w-2xl mx-auto px-4 py-6">
         {flujo.paso === 'especialista' && (
-          <PasoEspecialista
-            salon={salon}
-            sucursalSeleccionada={flujo.sucursalSeleccionada}
-            onSeleccionarSucursal={flujo.seleccionarSucursal}
-            onSeleccionar={flujo.seleccionarPersonal}
-          />
+          <PasoEspecialista salon={salon} onSeleccionar={flujo.seleccionarPersonal} />
         )}
         {flujo.paso === 'servicios' && (
           <PasoServicios
             salon={salon}
+            personalId={flujo.personalId}
             seleccionados={flujo.serviciosSeleccionados}
+            productosSeleccionados={flujo.productosSeleccionados}
+            observaciones={flujo.observaciones}
             onAlternar={flujo.alternarServicio}
+            onAlternarProducto={flujo.alternarProducto}
+            onActualizarCantidadProducto={flujo.actualizarCantidadProducto}
+            onCambiarObservaciones={flujo.actualizarObservaciones}
             onSiguiente={flujo.irAFecha}
           />
         )}
@@ -610,28 +752,36 @@ function ContenidoReserva({
           <PasoFecha
             salon={salon}
             fechaSeleccionada={flujo.fechaSeleccionada}
-            sucursalSeleccionada={flujo.sucursalSeleccionada}
             onSeleccionar={flujo.seleccionarFecha}
           />
         )}
         {flujo.paso === 'hora' && (
-          <PasoHora
-            slots={flujo.slots}
-            cargando={flujo.cargandoSlots}
+          <SelectorEspecialistaHorario
+            salonId={salon.id}
+            sucursalSeleccionada={flujo.sucursalSeleccionada}
+            fecha={obtenerFechaLocalISO(flujo.fechaSeleccionada)}
+            totalDuracion={flujo.duracionTotal}
+            serviciosSeleccionados={flujo.serviciosSeleccionados}
+            personalSeleccionado={flujo.personalId}
             horaSeleccionada={flujo.horaSeleccionada}
-            color={color}
-            onSeleccionar={flujo.seleccionarHora}
+            onSeleccionar={flujo.seleccionarEspecialistaYHora}
           />
         )}
         {flujo.paso === 'confirmar' && (
           <PasoConfirmar
             salon={salon}
-            sucursal={flujo.sucursalSeleccionada}
             personalId={flujo.personalId}
             servicios={flujo.serviciosSeleccionados}
             fecha={flujo.fechaSeleccionada}
             hora={flujo.horaSeleccionada}
+            duracionTotal={flujo.duracionTotal}
             precioTotal={flujo.precioTotal}
+            totalProductos={flujo.totalProductos}
+            metodosPagoDisponibles={metodosPagoDisponibles}
+            metodoPago={flujo.metodoPago}
+            productosSeleccionados={flujo.productosSeleccionados}
+            observaciones={flujo.observaciones}
+            onSeleccionarMetodoPago={flujo.seleccionarMetodoPago}
             enviando={flujo.enviando}
             onConfirmar={() => flujo.enviarReserva(mostrarError)}
           />

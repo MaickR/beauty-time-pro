@@ -1,6 +1,7 @@
 import { createContext, useContext, useEffect, useState, useCallback } from 'react';
 import type { PropsWithChildren } from 'react';
 import { ErrorAPI, peticion } from '../lib/clienteHTTP';
+import { normalizarMetodosPagoReserva } from '../lib/metodosPagoReserva';
 import { usarTiendaAuth } from '../tienda/tiendaAuth';
 import type { Estudio, Reserva, Pago, Personal } from '../tipos';
 
@@ -218,6 +219,7 @@ function mapearEstudios(datos: Estudio[]): Estudio[] {
       descripcion: (d['descripcion'] as string | null) ?? null,
       direccion: (d['direccion'] as string | null) ?? null,
       emailContacto: (d['emailContacto'] as string | null) ?? null,
+      metodosPagoReserva: normalizarMetodosPagoReserva(d['metodosPagoReserva']),
       primeraVez: (d['primeraVez'] as boolean | undefined) ?? true,
       cancelacionSolicitada: (d['cancelacionSolicitada'] as boolean) ?? false,
       fechaSolicitudCancelacion: (d['fechaSolicitudCancelacion'] as string | null) ?? null,
@@ -265,8 +267,10 @@ function mapearReservas(datos: unknown[], estudiosMap: Map<string, Estudio>): Re
       observaciones: (d['observaciones'] as string | null) ?? null,
       paymentMethod: (d['metodoPago'] as string | null | undefined) ?? null,
       cancellationReason: (d['motivoCancelacion'] as string | null | undefined) ?? null,
-      productItems:
-        ((d['productosAdicionales'] as import('../tipos').ProductoAdicionalReserva[] | null | undefined) ?? []) as import('../tipos').ProductoAdicionalReserva[],
+      productItems: ((d['productosAdicionales'] as
+        | import('../tipos').ProductoAdicionalReserva[]
+        | null
+        | undefined) ?? []) as import('../tipos').ProductoAdicionalReserva[],
       createdAt: (d['creadoEn'] as string) ?? '',
     };
   });

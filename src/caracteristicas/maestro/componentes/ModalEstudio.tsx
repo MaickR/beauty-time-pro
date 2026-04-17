@@ -44,10 +44,12 @@ interface PropsCatalogo {
   setEntradaServicioPersonalizado: Dispatch<SetStateAction<Record<string, string>>>;
 }
 
+type OpcionSalonPrincipal = Pick<Estudio, 'id' | 'name' | 'estudioPrincipalId'>;
+
 interface PropsModalEstudio {
   modo: 'ADD' | 'EDIT' | 'CONFIRMACION';
   formulario: FormularioEstudio;
-  estudiosPrincipales: Estudio[];
+  estudiosPrincipales: OpcionSalonPrincipal[];
   setFormulario: Dispatch<SetStateAction<FormularioEstudio>>;
   catalogoProps: PropsCatalogo;
   onAgregarPersonal: (personal: Personal) => void;
@@ -58,7 +60,25 @@ interface PropsModalEstudio {
   onDescartarBorrador: () => void;
   logoArchivo: File | null;
   onCambiarLogo: (archivo: File | null) => void;
+  textosModoAgregar?: {
+    titulo: string;
+    descripcionBorrador: string;
+    textoBotonDescartar: string;
+    tituloInformativo: string;
+    descripcionInformativa: string;
+    textoBotonEnviar: string;
+  };
 }
+
+const TEXTOS_MODO_AGREGAR_POR_DEFECTO = {
+  titulo: 'Registro completo',
+  descripcionBorrador: 'Este formulario guarda tu avance mientras trabajas.',
+  textoBotonDescartar: 'Limpiar borrador',
+  tituloInformativo: 'Credenciales automáticas',
+  descripcionInformativa:
+    'La clave del dueño y la ClaveClientes se generan automáticamente al guardar. Al finalizar verás la ClaveClientes lista para copiar y descargar en QR.',
+  textoBotonEnviar: 'Crear salón',
+} as const;
 
 export function ModalEstudio({
   modo,
@@ -74,6 +94,7 @@ export function ModalEstudio({
   onDescartarBorrador,
   logoArchivo,
   onCambiarLogo,
+  textosModoAgregar,
 }: PropsModalEstudio) {
   const [mostrarContrasena, setMostrarContrasena] = useState(false);
   const [prefijoTelefono, setPrefijoTelefono] = useState('+52');
@@ -87,6 +108,7 @@ export function ModalEstudio({
     entradaServicioPersonalizado,
     setEntradaServicioPersonalizado,
   } = catalogoProps;
+  const textosAgregar = textosModoAgregar ?? TEXTOS_MODO_AGREGAR_POR_DEFECTO;
   const estudiosPadreDisponibles = estudiosPrincipales.filter(
     (estudio) => !estudio.estudioPrincipalId && estudio.id !== formulario.id,
   );
@@ -332,7 +354,7 @@ export function ModalEstudio({
             id="modal-estudio-titulo"
             className="text-2xl font-black italic uppercase tracking-tighter"
           >
-            {modo === 'EDIT' ? 'Editar salón' : 'Registro completo'}
+            {modo === 'EDIT' ? 'Editar salón' : textosAgregar.titulo}
           </h2>
           <button onClick={onCerrar} aria-label="Cerrar modal">
             <XCircle className="w-8 h-8 text-slate-300 hover:text-red-500" />
@@ -347,7 +369,7 @@ export function ModalEstudio({
                   Borrador automático
                 </p>
                 <p className="mt-1 text-sm font-medium text-slate-500">
-                  Este formulario guarda tu avance mientras trabajas.
+                  {textosAgregar.descripcionBorrador}
                 </p>
               </div>
               <button
@@ -355,7 +377,7 @@ export function ModalEstudio({
                 onClick={onDescartarBorrador}
                 className="rounded-full border border-slate-200 bg-white px-4 py-2 text-[10px] font-black uppercase text-slate-700"
               >
-                Limpiar borrador
+                {textosAgregar.textoBotonDescartar}
               </button>
             </div>
           )}
@@ -1156,11 +1178,10 @@ export function ModalEstudio({
           {modo === 'ADD' && (
             <section className="bg-slate-900 p-8 rounded-4xl text-white">
               <div className="font-black text-xs text-pink-400 uppercase tracking-widest mb-3">
-                Credenciales automáticas
+                {textosAgregar.tituloInformativo}
               </div>
               <p className="text-sm font-medium text-slate-300">
-                La clave del dueño y la ClaveClientes se generan automáticamente al guardar. Al
-                finalizar verás la ClaveClientes lista para copiar y descargar en QR.
+                {textosAgregar.descripcionInformativa}
               </p>
             </section>
           )}
@@ -1177,7 +1198,7 @@ export function ModalEstudio({
               type="submit"
               className="flex-1 py-5 bg-pink-600 text-white font-black rounded-4xl uppercase text-xs shadow-2xl hover:bg-pink-700 transition-colors"
             >
-              {modo === 'EDIT' ? 'Guardar cambios' : 'Crear salón'}
+              {modo === 'EDIT' ? 'Guardar cambios' : textosAgregar.textoBotonEnviar}
             </button>
           </div>
         </form>

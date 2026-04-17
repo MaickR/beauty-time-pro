@@ -3,7 +3,14 @@ import { fireEvent, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { renderConProveedores } from '../../../test/renderConProveedores';
 import { ModalCrearReservaManual } from './ModalCrearReservaManual';
-import type { Estudio, Reserva, ResultadoCrearReserva, SlotTiempo } from '../../../tipos';
+import type { Estudio, Reserva, SlotTiempo } from '../../../tipos';
+
+interface ResultadoCrearReservaPrueba {
+  datos: Reserva;
+  recompensaGanada: boolean;
+  descripcion: string | null;
+  recompensaUsada: boolean;
+}
 
 const mocksServicioReservas = vi.hoisted(() => ({
   crearReserva: vi.fn(),
@@ -111,7 +118,7 @@ describe('ModalCrearReservaManual', () => {
 
   beforeEach(() => {
     mocksServicioReservas.obtenerDisponibilidadEstudio.mockResolvedValue(disponibilidad);
-    const resultado: ResultadoCrearReserva = {
+    const resultado: ResultadoCrearReservaPrueba = {
       datos: crearReservaPrueba(),
       recompensaGanada: false,
       descripcion: null,
@@ -154,7 +161,7 @@ describe('ModalCrearReservaManual', () => {
       target: { value: '1990-04-16' },
     });
     fireEvent.change(screen.getByLabelText(/Correo electrónico/i), {
-      target: { value: 'cliente.qa@beautytimepro.com' },
+      target: { value: 'cliente.qa@salonpromaster.com' },
     });
 
     fireEvent.click(screen.getByRole('button', { name: 'Crear cita' }));
@@ -167,7 +174,7 @@ describe('ModalCrearReservaManual', () => {
           clientName: 'Cliente Flujo QA',
           clientPhone: '5510002233',
           fechaNacimiento: '1990-04-16',
-          email: 'cliente.qa@beautytimepro.com',
+          email: 'cliente.qa@salonpromaster.com',
           staffId: 'qa-personal',
           staffName: 'QA Especialista',
           date: '2026-04-17',

@@ -9,7 +9,6 @@ import {
   obtenerReservasProximas,
   actualizarMiPerfil,
   actualizarMiEmail,
-  subirAvatar,
   cambiarContrasena,
 } from '../../../servicios/servicioClienteApp';
 import { usarToast } from '../../../componentes/ui/ProveedorToast';
@@ -227,36 +226,6 @@ export function usarPerfilCliente() {
     await mutarPerfil.mutateAsync(datos);
   }
 
-  const cambiarAvatar = async (archivo: File) => {
-    const perfilActual = queryClient.getQueryData<PerfilClienteApp>(['mi-perfil']);
-    const avatarAnterior = perfilActual?.avatarUrl ?? null;
-    const vistaPrevia = URL.createObjectURL(archivo);
-
-    queryClient.setQueryData(['mi-perfil'], (prev: PerfilClienteApp | undefined) =>
-      prev ? { ...prev, avatarUrl: vistaPrevia } : prev,
-    );
-
-    try {
-      const avatarUrl = await subirAvatar(archivo);
-      queryClient.setQueryData(['mi-perfil'], (prev: PerfilClienteApp | undefined) => {
-        if (!prev) {
-          return prev;
-        }
-
-        return { ...prev, avatarUrl };
-      });
-      await queryClient.invalidateQueries({ queryKey: ['mi-perfil'] });
-      URL.revokeObjectURL(vistaPrevia);
-      mostrarNotificacion({ mensaje: 'Foto actualizada', variante: 'exito' });
-    } catch {
-      queryClient.setQueryData(['mi-perfil'], (prev: PerfilClienteApp | undefined) =>
-        prev ? { ...prev, avatarUrl: avatarAnterior } : prev,
-      );
-      URL.revokeObjectURL(vistaPrevia);
-      mostrarNotificacion({ mensaje: 'No se pudo subir la foto', variante: 'error' });
-    }
-  };
-
   return {
     consulta,
     consultaReservas,
@@ -266,7 +235,6 @@ export function usarPerfilCliente() {
     mutarPerfil,
     mutarEmail,
     mutarContrasena,
-    cambiarAvatar,
     guardarPerfil,
     notificacion,
   };

@@ -1,6 +1,6 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
-import { Camera, Lock, Star, ChevronRight, Loader2, Mail, Palette } from 'lucide-react';
+import { Lock, Star, ChevronRight, Loader2, Mail, Palette } from 'lucide-react';
 import { NavegacionCliente } from '../../componentes/diseno/NavegacionCliente';
 import { DialogoConfirmacion } from '../../componentes/ui/DialogoConfirmacion';
 import { Spinner } from '../../componentes/ui/Spinner';
@@ -43,28 +43,25 @@ function normalizarTelefono(valor: string): string {
   return valor.replace(/\D/g, '').slice(0, 10);
 }
 
-// ── Sección Avatar ───────────────────────────────────────────────────────────
-function SeccionAvatar({
+// ── Sección identidad ───────────────────────────────────────────────────────
+function SeccionIdentidadCliente({
   avatarUrl,
   nombre,
   apellido,
   email,
   pais,
-  onCambiar,
 }: {
   avatarUrl: string | null;
   nombre: string;
   apellido: string;
   email: string;
   pais: Pais;
-  onCambiar: (f: File) => void;
 }) {
-  const refInput = useRef<HTMLInputElement>(null);
   const inics = inicialesDesdeNombre(nombre, apellido).toUpperCase();
 
   return (
     <div className="bg-white rounded-3xl p-8 border border-slate-100 shadow-sm flex flex-col items-center text-center gap-4">
-      <div className="relative shrink-0">
+      <div className="shrink-0">
         {avatarUrl ? (
           <img
             src={avatarUrl}
@@ -80,25 +77,6 @@ function SeccionAvatar({
             {inics}
           </div>
         )}
-        <button
-          type="button"
-          onClick={() => refInput.current?.click()}
-          aria-label="Cambiar foto de perfil"
-          className="mt-3 inline-flex items-center gap-1 rounded-full border border-pink-200 bg-pink-50 px-3 py-1.5 text-xs font-bold text-pink-700 hover:bg-pink-100 transition-colors"
-        >
-          <Camera className="w-3.5 h-3.5" aria-hidden="true" /> Editar foto
-        </button>
-        <input
-          ref={refInput}
-          type="file"
-          accept="image/jpeg,image/jpg,image/png"
-          className="sr-only"
-          aria-hidden="true"
-          onChange={(e) => {
-            const f = e.target.files?.[0];
-            if (f) onCambiar(f);
-          }}
-        />
       </div>
       <div className="space-y-1">
         <p className="text-lg font-semibold text-slate-900">
@@ -383,7 +361,6 @@ export function PaginaPerfilCliente() {
     mutarPerfil,
     mutarEmail,
     mutarContrasena,
-    cambiarAvatar,
     guardarPerfil,
     notificacion,
   } = usarPerfilCliente();
@@ -397,7 +374,6 @@ export function PaginaPerfilCliente() {
   const vistaSolicitada = new URLSearchParams(ubicacion.search).get('vista');
   const vistaActiva =
     vistaSolicitada === 'reservas' || ubicacion.hash === '#reservas' ? 'reservas' : 'perfil';
-  const pestanaReservasInicial = vistaActiva === 'reservas' ? 'proximas' : 'historial';
 
   useEffect(() => {
     if (!perfil) {
@@ -499,35 +475,17 @@ export function PaginaPerfilCliente() {
         </section>
 
         {vistaActiva === 'perfil' && (
-          <SeccionAvatar
+          <SeccionIdentidadCliente
             avatarUrl={perfil.avatarUrl}
             nombre={perfil.nombre}
             apellido={perfil.apellido}
             email={perfil.email}
             pais={perfil.pais}
-            onCambiar={cambiarAvatar}
           />
         )}
 
         {vistaActiva === 'reservas' && (
-          <section className="bg-pink-50 border border-pink-100 rounded-3xl p-5">
-            <p className="text-xs font-black uppercase tracking-[0.2em] text-pink-600 mb-2">
-              Vista activa
-            </p>
-            <h1 className="text-2xl font-black text-slate-900">Tus reservas y cancelaciones</h1>
-            <p className="text-sm text-slate-600 mt-1">
-              Desde aquí puedes revisar tus próximas citas, abrir tu historial y cancelar una
-              reserva activa sin salir de tu panel.
-            </p>
-          </section>
-        )}
-
-        {vistaActiva === 'reservas' && (
-          <PanelReservasCliente
-            reservas={reservas}
-            paisCliente={perfil.pais}
-            pestanaInicial={pestanaReservasInicial}
-          />
+          <PanelReservasCliente reservas={reservas} paisCliente={perfil.pais} />
         )}
 
         {vistaActiva === 'perfil' && (

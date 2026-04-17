@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import QRCode from 'qrcode';
 import { useParams, useNavigate } from 'react-router-dom';
 import {
+  ArrowLeft,
   Store,
   LogOut,
   Copy,
@@ -64,7 +65,8 @@ export function PaginaAgenda() {
   );
   const estudioId = estudio?.id;
   const { notificaciones, marcarLeida } = usarNotificacionesEstudio(estudioId);
-  const identificadorRutaPrivada = estudio?.slug?.trim() || estudio?.clientKey?.trim() || estudio?.id;
+  const identificadorRutaPrivada =
+    estudio?.slug?.trim() || estudio?.clientKey?.trim() || estudio?.id;
 
   useEffect(() => {
     if (!identificadorRutaPrivada || !slug || slug === identificadorRutaPrivada) return;
@@ -153,6 +155,15 @@ export function PaginaAgenda() {
     window.open(`/reservar/${identificadorPublicoReserva}`, '_blank', 'noopener');
   };
 
+  const volverPanelVendedor = () => {
+    navegar('/vendedor');
+  };
+
+  const manejarCerrarSesion = async () => {
+    await cerrarSesion();
+    navegar('/iniciar-sesion', { replace: true });
+  };
+
   const descargarQr = () => {
     if (!qrReserva) return;
     const fecha = new Date().toLocaleDateString('es-MX', {
@@ -205,13 +216,24 @@ export function PaginaAgenda() {
           </div>
         </div>
         <div className="flex items-center gap-3">
+          {usuario?.rol === 'vendedor' && (
+            <button
+              onClick={volverPanelVendedor}
+              className="inline-flex items-center gap-2 rounded-full border border-sky-200 bg-sky-50 px-4 py-2 text-sm font-bold text-sky-800 transition hover:bg-sky-100"
+            >
+              <ArrowLeft className="h-4 w-4" />
+              Volver al panel vendedor
+            </button>
+          )}
           <PanelNotificaciones
             notificaciones={notificaciones}
             pais={estudio?.country ?? 'Mexico'}
             onMarcarLeida={marcarLeida}
           />
           <button
-            onClick={cerrarSesion}
+            onClick={() => {
+              void manejarCerrarSesion();
+            }}
             aria-label="Cerrar sesión"
             className="p-3 bg-slate-100 rounded-full hover:bg-slate-200 text-slate-400"
           >

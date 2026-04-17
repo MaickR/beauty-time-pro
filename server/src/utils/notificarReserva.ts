@@ -134,6 +134,22 @@ function obtenerServiciosTexto(reserva: { servicios: unknown; serviciosDetalle?:
   return nombres.length > 0 ? nombres.join(', ') : 'tu cita';
 }
 
+async function crearNotificacionEstudio(params: {
+  estudioId: string;
+  tipo: string;
+  titulo: string;
+  mensaje: string;
+}) {
+  await prisma.notificacionEstudio.create({
+    data: {
+      estudioId: params.estudioId,
+      tipo: params.tipo,
+      titulo: params.titulo,
+      mensaje: params.mensaje,
+    },
+  });
+}
+
 export async function obtenerReservaConRelacionesPorId(reservaId: string) {
   try {
     return await prisma.reserva.findUnique({
@@ -153,13 +169,11 @@ export async function obtenerReservaConRelacionesPorId(reservaId: string) {
 }
 
 export async function notificarNuevaCita(reserva: ReservaConRelaciones) {
-  await prisma.notificacionEstudio.create({
-    data: {
-      estudioId: reserva.estudioId,
-      tipo: 'nueva_reserva',
-      titulo: 'Nueva cita asignada',
-      mensaje: `${reserva.nombreCliente} reservó ${obtenerServiciosTexto(reserva)} para ${reserva.fecha} a las ${reserva.horaInicio}.`,
-    },
+  await crearNotificacionEstudio({
+    estudioId: reserva.estudioId,
+    tipo: 'nueva_reserva',
+    titulo: 'Nueva cita asignada',
+    mensaje: `${reserva.nombreCliente} reservó ${obtenerServiciosTexto(reserva)} para ${reserva.fecha} a las ${reserva.horaInicio}.`,
   });
 
   const suscripciones = await obtenerSuscripcionesDueno(reserva.estudioId);
@@ -184,6 +198,13 @@ export async function notificarCitaConfirmada(reserva: ReservaConRelaciones) {
 }
 
 export async function notificarCitaCancelada(reserva: ReservaConRelaciones) {
+  await crearNotificacionEstudio({
+    estudioId: reserva.estudioId,
+    tipo: 'reserva_cancelada',
+    titulo: 'Cita cancelada',
+    mensaje: `La cita de ${reserva.nombreCliente} para ${reserva.fecha} a las ${reserva.horaInicio} fue cancelada.`,
+  });
+
   const [suscripcionesCliente, suscripcionesDueno] = await Promise.all([
     obtenerSuscripcionesCliente(reserva.clienteAppId),
     obtenerSuscripcionesDueno(reserva.estudioId),
@@ -200,10 +221,28 @@ export async function notificarCitaCancelada(reserva: ReservaConRelaciones) {
   if (suscripcionesDueno.length > 0) {
     await enviarMultiplesSuscripciones(suscripcionesDueno, {
       titulo: 'Cita cancelada',
-      cuerpo: `${reserva.nombreCliente} canceló su cita de las ${reserva.horaInicio}.`,
+      cuerpo: `Se canceló la cita de ${reserva.nombreCliente} para ${reserva.fecha} a las ${reserva.horaInicio}.`,
       url: `/estudio/${reserva.estudioId}/agenda`,
     });
   }
+}
+
+export async function notificarCitaReagendada(reserva: ReservaConRelaciones) {
+  await crearNotificacionEstudio({
+    estudioId: reserva.estudioId,
+    tipo: 'reserva_reagendada',
+    titulo: 'Cita reagendada',
+    mensaje: `${reserva.nombreCliente} reagendó su cita para ${reserva.fecha} a las ${reserva.horaInicio}.`,
+  });
+
+  const suscripcionesDueno = await obtenerSuscripcionesDueno(reserva.estudioId);
+  if (suscripcionesDueno.length === 0) return;
+
+  await enviarMultiplesSuscripciones(suscripcionesDueno, {
+    titulo: 'Cita reagendada',
+    cuerpo: `${reserva.nombreCliente} reagendó una cita para ${reserva.fecha} a las ${reserva.horaInicio}.`,
+    url: `/estudio/${reserva.estudioId}/agenda`,
+  });
 }
 
 export async function notificarRecordatorio(reserva: ReservaConRelaciones) {

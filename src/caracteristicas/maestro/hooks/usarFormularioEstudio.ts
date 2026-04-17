@@ -86,11 +86,11 @@ function normalizarTextoOpcional(valor?: string | null) {
   return limpio === '' ? '' : limpio;
 }
 
-function restaurarBorradorAlta(): FormularioEstudio | null {
+function restaurarBorradorAlta(claveBorrador: string): FormularioEstudio | null {
   if (typeof window === 'undefined') return null;
 
   try {
-    const borrador = window.localStorage.getItem(CLAVE_BORRADOR_ALTA_SALON);
+    const borrador = window.localStorage.getItem(claveBorrador);
     if (!borrador) return null;
 
     const datos = JSON.parse(borrador) as Partial<FormularioEstudio>;
@@ -106,27 +106,42 @@ function restaurarBorradorAlta(): FormularioEstudio | null {
   }
 }
 
-function guardarBorradorAlta(formulario: FormularioEstudio) {
+function guardarBorradorAlta(claveBorrador: string, formulario: FormularioEstudio) {
   if (typeof window === 'undefined') return;
 
   try {
-    window.localStorage.setItem(CLAVE_BORRADOR_ALTA_SALON, JSON.stringify(formulario));
+    window.localStorage.setItem(claveBorrador, JSON.stringify(formulario));
   } catch {
     // Ignorar almacenamiento no disponible.
   }
 }
 
-function limpiarBorradorAlta() {
+function limpiarBorradorAlta(claveBorrador: string) {
   if (typeof window === 'undefined') return;
 
   try {
-    window.localStorage.removeItem(CLAVE_BORRADOR_ALTA_SALON);
+    window.localStorage.removeItem(claveBorrador);
   } catch {
     // Ignorar almacenamiento no disponible.
   }
 }
 
-export function usarFormularioEstudio() {
+interface ResultadoAltaFormularioEstudio {
+  mensajeExito: string;
+  confirmacionAlta?: ConfirmacionAltaSalon | null;
+  cerrarModal?: boolean;
+}
+
+interface OpcionesFormularioEstudio {
+  claveBorrador?: string;
+  procesarAlta?: (contexto: {
+    formulario: FormularioEstudio;
+    logoArchivo: File | null;
+  }) => Promise<ResultadoAltaFormularioEstudio>;
+}
+
+export function usarFormularioEstudio(opciones?: OpcionesFormularioEstudio) {
+  const claveBorrador = opciones?.claveBorrador ?? CLAVE_BORRADOR_ALTA_SALON;
   const [modoModal, setModoModal] = useState<'ADD' | 'EDIT' | 'CONFIRMACION' | null>(null);
   const [formulario, setFormulario] = useState<FormularioEstudio>(crearEstadoInicial());
   const [confirmacionAlta, setConfirmacionAlta] = useState<ConfirmacionAltaSalon | null>(null);
@@ -137,11 +152,11 @@ export function usarFormularioEstudio() {
 
   useEffect(() => {
     if (modoModal !== 'ADD') return;
-    guardarBorradorAlta(formulario);
-  }, [formulario, modoModal]);
+    guardarBorradorAlta(claveBorrador, formulario);
+  }, [claveBorrador, formulario, modoModal]);
 
   const abrirModalAlta = () => {
-    setFormulario(restaurarBorradorAlta() ?? crearEstadoInicial());
+    setFormulario(restaurarBorradorAlta(claveBorrador) ?? crearEstadoInicial());
     setConfirmacionAlta(null);
     setModoModal('ADD');
   };
@@ -167,7 +182,7 @@ export function usarFormularioEstudio() {
   };
 
   const descartarBorrador = () => {
-    limpiarBorradorAlta();
+    limpiarBorradorAlta(claveBorrador);
     setFormulario(crearEstadoInicial());
     setLogoArchivo(null);
   };
@@ -300,52 +315,67 @@ export function usarFormularioEstudio() {
           return;
         }
 
-        const resultado = await crearSalonAdmin({
-          nombreSalon: datosGuardar.name,
-          nombreAdmin: datosGuardar.owner,
-          emailDueno: datosGuardar.emailDueno,
-          contrasenaDueno: datosGuardar.contrasenaDueno,
-          telefono: datosGuardar.phone,
-          pais: datosGuardar.country,
-          plan: datosGuardar.plan,
-          estudioPrincipalId: datosGuardar.estudioPrincipalId,
-          permiteReservasPublicas: datosGuardar.permiteReservasPublicas,
-          inicioSuscripcion: datosGuardar.subscriptionStart,
-          direccion: datosGuardar.direccion,
-          sucursales: datosGuardar.branches,
-          servicios: datosGuardar.selectedServices,
-          productos: datosGuardar.productos.map((producto) => ({
-            nombre: producto.nombre,
-            categoria: producto.categoria,
-            precio: producto.precio,
-          })),
-          serviciosCustom: datosGuardar.customServices,
-          personal: formulario.staff.map((persona) => ({
-            nombre: persona.name,
-            especialidades: persona.specialties,
-            horaInicio: persona.shiftStart ?? undefined,
-            horaFin: persona.shiftEnd ?? undefined,
-            descansoInicio: persona.breakStart ?? undefined,
-            descansoFin: persona.breakEnd ?? undefined,
-          })),
-        });
-        if (logoArchivo) {
-          await subirLogo(resultado.estudio.id, logoArchivo);
-        }
-        setConfirmacionAlta({
-          nombreSalon: resultado.estudio.name,
-          nombreDueno: resultado.estudio.owner,
-          emailDueno: resultado.acceso.emailDueno,
-          contrasenaDueno: datosGuardar.contrasenaDueno,
-          claveDueno: resultado.acceso.claveDueno,
-          claveClientes: resultado.acceso.claveClientes,
-          urlReserva: `${window.location.origin}/reservar/${resultado.acceso.claveClientes}`,
-        });
-        limpiarBorradorAlta();
+        const resultadoAlta = opciones?.procesarAlta
+          ? await opciones.procesarAlta({ formulario: datosGuardar, logoArchivo })
+          : await (async (): Promise<ResultadoAltaFormularioEstudio> => {
+              const resultado = await crearSalonAdmin({
+                nombreSalon: datosGuardar.name,
+                nombreAdmin: datosGuardar.owner,
+                emailDueno: datosGuardar.emailDueno,
+                contrasenaDueno: datosGuardar.contrasenaDueno,
+                telefono: datosGuardar.phone,
+                pais: datosGuardar.country,
+                plan: datosGuardar.plan,
+                estudioPrincipalId: datosGuardar.estudioPrincipalId,
+                permiteReservasPublicas: datosGuardar.permiteReservasPublicas,
+                inicioSuscripcion: datosGuardar.subscriptionStart,
+                direccion: datosGuardar.direccion,
+                sucursales: datosGuardar.branches,
+                servicios: datosGuardar.selectedServices,
+                productos: datosGuardar.productos.map((producto) => ({
+                  nombre: producto.nombre,
+                  categoria: producto.categoria,
+                  precio: producto.precio,
+                })),
+                serviciosCustom: datosGuardar.customServices,
+                personal: formulario.staff.map((persona) => ({
+                  nombre: persona.name,
+                  especialidades: persona.specialties,
+                  horaInicio: persona.shiftStart ?? undefined,
+                  horaFin: persona.shiftEnd ?? undefined,
+                  descansoInicio: persona.breakStart ?? undefined,
+                  descansoFin: persona.breakEnd ?? undefined,
+                })),
+              });
+              if (logoArchivo) {
+                await subirLogo(resultado.estudio.id, logoArchivo);
+              }
+              return {
+                mensajeExito: `Salón "${resultado.estudio.name}" creado correctamente.`,
+                confirmacionAlta: {
+                  nombreSalon: resultado.estudio.name,
+                  nombreDueno: resultado.estudio.owner,
+                  emailDueno: resultado.acceso.emailDueno,
+                  contrasenaDueno: datosGuardar.contrasenaDueno,
+                  claveDueno: resultado.acceso.claveDueno,
+                  claveClientes: resultado.acceso.claveClientes,
+                  urlReserva: `${window.location.origin}/reservar/${resultado.acceso.claveClientes}`,
+                },
+              };
+            })();
+
+        limpiarBorradorAlta(claveBorrador);
         setLogoArchivo(null);
-        setModoModal('CONFIRMACION');
+
+        if (resultadoAlta.confirmacionAlta) {
+          setConfirmacionAlta(resultadoAlta.confirmacionAlta);
+          setModoModal('CONFIRMACION');
+        } else if (resultadoAlta.cerrarModal ?? true) {
+          cerrarModal();
+        }
+
         await alRefrescar();
-        mostrarExito(`Salón "${resultado.estudio.name}" creado correctamente.`);
+        mostrarExito(resultadoAlta.mensajeExito);
       } else if (formulario.id) {
         await actualizarEstudio(formulario.id, datosGuardar);
         await sincronizarPersonalEstudio(formulario.id, formulario.staff);

@@ -1,6 +1,6 @@
 import { peticion } from '../lib/clienteHTTP';
 
-function construirQuery(params: Record<string, string | number | undefined>) {
+function construirQuery(params: Record<string, string | number | boolean | undefined>) {
   const query = new URLSearchParams();
   Object.entries(params).forEach(([clave, valor]) => {
     if (valor === undefined || valor === '') return;
@@ -64,6 +64,11 @@ export interface ResumenVendedor {
   rechazados: number;
   totalSalones: number;
   salonesActivos: number;
+  salonesPendientesPago: number;
+  ventasRegistradas: number;
+  ingresosGenerados: number;
+  porcentajeComision: number;
+  comisionGenerada: number;
 }
 
 export interface SalonDemoVendedor {
@@ -82,6 +87,13 @@ export interface SalonDemoVendedor {
     personal: number;
     productos: number;
   };
+  credencialesDemo: {
+    adminEmail: string;
+    adminContrasena: string;
+    empleadoEmail: string;
+    empleadoContrasena: string;
+    contrasenaCompartida: string;
+  };
 }
 
 export interface VentaVendedor {
@@ -93,8 +105,15 @@ export interface VentaVendedor {
   referencia: string | null;
   salonId: string;
   salonNombre: string;
+  adminSalonNombre: string;
+  adminSalonEmail: string | null;
   plan: 'STANDARD' | 'PRO';
+  tipoSuscripcion: string;
+  valorSuscripcion: number;
   pais: string;
+  fechaVencimiento: string;
+  pendientePago: boolean;
+  comision: number;
 }
 
 export interface DatosPreregistro {
@@ -164,10 +183,25 @@ export async function reiniciarSalonDemoVendedor(): Promise<{
   return res.datos;
 }
 
+export async function actualizarPlanSalonDemoVendedor(plan: 'STANDARD' | 'PRO'): Promise<{
+  id: string;
+  slug: string | null;
+  plan: 'STANDARD' | 'PRO';
+}> {
+  const res = await peticion<{
+    datos: { id: string; slug: string | null; plan: 'STANDARD' | 'PRO' };
+  }>('/vendedor/demo/plan', {
+    method: 'PATCH',
+    body: JSON.stringify({ plan }),
+  });
+  return res.datos;
+}
+
 export async function obtenerVentasVendedor(
   params: {
     fechaDesde?: string;
     fechaHasta?: string;
+    soloPendientesPago?: boolean;
   } = {},
 ): Promise<VentaVendedor[]> {
   const res = await peticion<{ datos: VentaVendedor[] }>(

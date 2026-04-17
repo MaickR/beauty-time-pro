@@ -1,9 +1,18 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { obtenerDisponibilidad, obtenerMiPerfil } from '../../../servicios/servicioClienteApp';
+import { obtenerMiPerfil } from '../../../servicios/servicioClienteApp';
 import { peticion } from '../../../lib/clienteHTTP';
+import { normalizarMetodosPagoReserva } from '../../../lib/metodosPagoReserva';
 import { obtenerFechaLocalISO } from '../../../utils/formato';
-import type { PerfilClienteApp, Servicio, SalonDetalle, SlotTiempo } from '../../../tipos';
+import type {
+  MetodoPagoReserva,
+  PerfilClienteApp,
+  ProductoAdicionalReserva,
+  ProductoPublicoReserva,
+  Servicio,
+  SalonDetalle,
+  SlotTiempo,
+} from '../../../tipos';
 
 export interface ResultadoReserva {
   id: string;
@@ -19,31 +28,51 @@ interface EstadoFlujo {
   sucursalSeleccionada: string;
   personalId: string;
   serviciosSeleccionados: Servicio[];
+  observaciones: string;
   fechaSeleccionada: Date;
   horaSeleccionada: string;
   slots: SlotTiempo[];
   cargandoSlots: boolean;
   enviando: boolean;
+  metodoPago: MetodoPagoReserva;
+  productosSeleccionados: ProductoAdicionalReserva[];
   reservaResultado: ResultadoReserva | null;
 }
 
 export function usarFlujoReservaCliente(salon: SalonDetalle) {
   const queryClient = useQueryClient();
+  const metodosPagoDisponibles = normalizarMetodosPagoReserva(salon.metodosPagoReserva);
   const [estado, setEstado] = useState<EstadoFlujo>({
     paso: 'especialista',
-    sucursalSeleccionada: salon.sucursales?.length === 1 ? salon.sucursales[0]! : '',
+    sucursalSeleccionada: salon.nombre,
     personalId: '',
     serviciosSeleccionados: [],
+    observaciones: '',
     fechaSeleccionada: new Date(),
     horaSeleccionada: '',
     slots: [],
     cargandoSlots: false,
     enviando: false,
+    metodoPago: metodosPagoDisponibles[0] ?? 'cash',
+    productosSeleccionados: [],
     reservaResultado: null,
   });
 
+  useEffect(() => {
+    const metodoPredeterminado = metodosPagoDisponibles[0] ?? 'cash';
+    setEstado((actual) =>
+      metodosPagoDisponibles.includes(actual.metodoPago)
+        ? actual
+        : { ...actual, metodoPago: metodoPredeterminado },
+    );
+  }, [metodosPagoDisponibles]);
+
   const duracionTotal = estado.serviciosSeleccionados.reduce((s, sv) => s + sv.duration, 0);
   const precioTotal = estado.serviciosSeleccionados.reduce((s, sv) => s + sv.price, 0);
+  const totalProductos = estado.productosSeleccionados.reduce(
+    (s, producto) => s + producto.total,
+    0,
+  );
 
   const mutacionCrearReserva = useMutation({
     mutationFn: async () => {
@@ -71,8 +100,14 @@ export function usarFlujoReservaCliente(salon: SalonDetalle) {
           duracion: duracionTotal,
           servicios: estado.serviciosSeleccionados,
           precioTotal,
+          observaciones: estado.observaciones.trim() || undefined,
           estado: 'pending',
           sucursal: estado.sucursalSeleccionada,
+          metodoPago: estado.metodoPago,
+          productosSeleccionados: estado.productosSeleccionados.map((producto) => ({
+            productoId: producto.id,
+            cantidad: producto.cantidad,
+          })),
         }),
       });
       return resultado.datos;
@@ -89,7 +124,17 @@ export function usarFlujoReservaCliente(salon: SalonDetalle) {
   };
 
   const seleccionarSucursal = (sucursal: string) => {
-    setEstado((e) => ({ ...e, sucursalSeleccionada: sucursal }));
+    setEstado((actual) => ({
+      ...actual,
+      sucursalSeleccionada: sucursal || salon.nombre,
+      personalId: '',
+      serviciosSeleccionados: [],
+      observaciones: '',
+      horaSeleccionada: '',
+      slots: [],
+      productosSeleccionados: [],
+      paso: 'especialista',
+    }));
   };
 
   const alternarServicio = (servicio: Servicio) => {
@@ -103,6 +148,48 @@ export function usarFlujoReservaCliente(salon: SalonDetalle) {
     });
   };
 
+  const actualizarObservaciones = (observaciones: string) => {
+    setEstado((actual) => ({ ...actual, observaciones }));
+  };
+
+  const alternarProducto = (producto: ProductoPublicoReserva) => {
+    setEstado((actual) => {
+      const existente = actual.productosSeleccionados.find((item) => item.id === producto.id);
+
+      return {
+        ...actual,
+        productosSeleccionados: existente
+          ? actual.productosSeleccionados.filter((item) => item.id !== producto.id)
+          : [
+              ...actual.productosSeleccionados,
+              {
+                id: producto.id,
+                nombre: producto.nombre,
+                categoria: producto.categoria,
+                cantidad: 1,
+                precioUnitario: producto.precio,
+                total: producto.precio,
+              },
+            ],
+      };
+    });
+  };
+
+  const actualizarCantidadProducto = (productoId: string, cantidad: number) => {
+    setEstado((actual) => ({
+      ...actual,
+      productosSeleccionados: actual.productosSeleccionados.map((producto) =>
+        producto.id === productoId
+          ? {
+              ...producto,
+              cantidad,
+              total: producto.precioUnitario * cantidad,
+            }
+          : producto,
+      ),
+    }));
+  };
+
   const irAFecha = () => setEstado((e) => ({ ...e, paso: 'fecha' }));
 
   const seleccionarFecha = (d: Date) => {
@@ -111,30 +198,26 @@ export function usarFlujoReservaCliente(salon: SalonDetalle) {
       fechaSeleccionada: d,
       horaSeleccionada: '',
       slots: [],
+      cargandoSlots: false,
       paso: 'hora',
     }));
-    void cargarSlots(d);
-  };
-
-  const cargarSlots = async (fecha: Date) => {
-    if (!estado.personalId || duracionTotal === 0) return;
-    setEstado((e) => ({ ...e, cargandoSlots: true }));
-    try {
-      const slots = await obtenerDisponibilidad(
-        salon.id,
-        estado.personalId,
-        obtenerFechaLocalISO(fecha),
-        duracionTotal,
-        estado.sucursalSeleccionada || salon.nombre,
-      );
-      setEstado((e) => ({ ...e, slots, cargandoSlots: false }));
-    } catch {
-      setEstado((e) => ({ ...e, slots: [], cargandoSlots: false }));
-    }
   };
 
   const seleccionarHora = (hora: string) => {
     setEstado((e) => ({ ...e, horaSeleccionada: hora, paso: 'confirmar' }));
+  };
+
+  const seleccionarEspecialistaYHora = (personalId: string, hora: string) => {
+    setEstado((actual) => ({
+      ...actual,
+      personalId,
+      horaSeleccionada: hora,
+      paso: 'confirmar',
+    }));
+  };
+
+  const seleccionarMetodoPago = (metodoPago: MetodoPagoReserva) => {
+    setEstado((e) => ({ ...e, metodoPago }));
   };
 
   const retroceder = () => {
@@ -154,14 +237,17 @@ export function usarFlujoReservaCliente(salon: SalonDetalle) {
   const reiniciar = () => {
     setEstado({
       paso: 'especialista',
-      sucursalSeleccionada: salon.sucursales?.length === 1 ? salon.sucursales[0]! : '',
+      sucursalSeleccionada: salon.nombre,
       personalId: '',
       serviciosSeleccionados: [],
+      observaciones: '',
       fechaSeleccionada: new Date(),
       horaSeleccionada: '',
       slots: [],
       cargandoSlots: false,
       enviando: false,
+      metodoPago: metodosPagoDisponibles[0] ?? 'cash',
+      productosSeleccionados: [],
       reservaResultado: null,
     });
   };
@@ -179,11 +265,6 @@ export function usarFlujoReservaCliente(salon: SalonDetalle) {
       mostrarError('Selecciona un horario disponible antes de confirmar.');
       return;
     }
-    if ((salon.sucursales?.length ?? 0) > 1 && !estado.sucursalSeleccionada) {
-      mostrarError('Selecciona una sede antes de confirmar tu reserva.');
-      return;
-    }
-
     setEstado((e) => ({ ...e, enviando: true }));
     try {
       const resultado = await mutacionCrearReserva.mutateAsync();
@@ -199,12 +280,18 @@ export function usarFlujoReservaCliente(salon: SalonDetalle) {
     ...estado,
     duracionTotal,
     precioTotal,
-    seleccionarPersonal,
+    totalProductos,
     seleccionarSucursal,
+    seleccionarPersonal,
     alternarServicio,
+    actualizarObservaciones,
+    alternarProducto,
+    actualizarCantidadProducto,
     irAFecha,
     seleccionarFecha,
     seleccionarHora,
+    seleccionarEspecialistaYHora,
+    seleccionarMetodoPago,
     retroceder,
     reiniciar,
     enviarReserva,

@@ -4,12 +4,17 @@
 import type {
   ExcepcionDisponibilidad,
   Estudio,
+  MetodoPagoReserva,
   PlanEstudio,
   SedeEstudio,
   Servicio,
   ServicioPersonalizado,
 } from '../tipos/index';
-import { combinarExcepcionesDisponibilidad, normalizarExcepcionesDisponibilidad } from '../lib/disponibilidadExcepciones';
+import {
+  combinarExcepcionesDisponibilidad,
+  normalizarExcepcionesDisponibilidad,
+} from '../lib/disponibilidadExcepciones';
+import { normalizarMetodosPagoReserva } from '../lib/metodosPagoReserva';
 import { peticion } from '../lib/clienteHTTP';
 
 type RespuestaEstudio = { datos: Estudio };
@@ -110,6 +115,7 @@ function mapearEstudioBackend(estudio: EstudioBackend): Estudio {
     emailContacto: (estudio['emailContacto'] as string | null | undefined) ?? null,
     estado: (estudio['estado'] as string | null | undefined) ?? null,
     estudioPrincipalId: (estudio['estudioPrincipalId'] as string | null | undefined) ?? null,
+    metodosPagoReserva: normalizarMetodosPagoReserva(estudio['metodosPagoReserva']),
     estudioPrincipal:
       (estudio['estudioPrincipal'] as
         | { id: string; nombre: string; slug: string | null }
@@ -233,6 +239,9 @@ export async function actualizarEstudio(id: string, campos: Partial<Estudio>): P
   if (campos.holidays !== undefined) cuerpo['festivos'] = campos.holidays;
   if (campos.availabilityExceptions !== undefined) {
     cuerpo['excepcionesDisponibilidad'] = campos.availabilityExceptions;
+  }
+  if (campos.metodosPagoReserva !== undefined) {
+    cuerpo['metodosPagoReserva'] = campos.metodosPagoReserva as MetodoPagoReserva[];
   }
   if (campos.primeraVez !== undefined) cuerpo['primeraVez'] = campos.primeraVez;
   await peticion<RespuestaEstudio>(`/estudios/${id}`, {
@@ -383,9 +392,7 @@ export interface MetricasDashboardSalon {
   contextoProductos: ContextoProductosDashboardSalon;
 }
 
-export async function obtenerMetricasDashboard(
-  estudioId: string,
-): Promise<MetricasDashboardSalon> {
+export async function obtenerMetricasDashboard(estudioId: string): Promise<MetricasDashboardSalon> {
   const respuesta = await peticion<{ datos: MetricasDashboardSalon }>(
     `/estudios/${estudioId}/metricas-dashboard`,
   );

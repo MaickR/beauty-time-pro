@@ -2,7 +2,7 @@ import { Mail, MessageCircle, Phone, Clock } from 'lucide-react';
 import type { Estudio } from '../../../tipos';
 
 const DATOS_CONTACTO = {
-  email: 'soporte@beautytimepro.com',
+  email: 'soporte@salonpromaster.com',
   whatsappMx: '+52 55 1234 5678',
   whatsappCo: '+57 300 123 4567',
   horario: 'México y Colombia: 11:00 a. m. a 4:00 p. m. (hora local)',

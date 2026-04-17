@@ -6,6 +6,7 @@ import { usarTiendaAuth } from '../../tienda/tiendaAuth';
 import { obtenerMiPerfilEmpleado } from '../../servicios/servicioEmpleados';
 import { PanelNotificaciones } from '../../caracteristicas/estudio/componentes/PanelNotificaciones';
 import { usarNotificacionesEstudio } from '../../caracteristicas/estudio/hooks/usarNotificacionesEstudio';
+import { MarcaAplicacion } from '../ui/MarcaAplicacion';
 
 function inicialesDesdeNombre(nombre: string): string {
   return nombre
@@ -58,18 +59,7 @@ export function NavegacionEmpleado() {
       {/* Header desktop */}
       <header className="bg-white border-b border-slate-100 sticky top-0 z-50 hidden md:block">
         <div className="max-w-5xl mx-auto px-8 h-16 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <span
-              className="w-8 h-8 rounded-full bg-pink-600 flex items-center justify-center text-white font-black text-sm"
-              aria-hidden="true"
-            >
-              B
-            </span>
-            <div>
-              <p className="font-black text-slate-900 text-base leading-tight">Beauty Time Pro</p>
-              {nombreSalon && <p className="text-xs text-slate-500 leading-tight">{nombreSalon}</p>}
-            </div>
-          </div>
+          <MarcaAplicacion tamano="sm" subtitulo={nombreSalon || undefined} />
 
           <div className="flex items-center gap-3">
             <PanelNotificaciones
@@ -130,20 +120,7 @@ export function NavegacionEmpleado() {
       {/* Header móvil */}
       <header className="bg-white border-b border-slate-100 sticky top-0 z-50 md:hidden">
         <div className="px-4 h-14 flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <span
-              className="w-7 h-7 rounded-full bg-pink-600 flex items-center justify-center text-white font-black text-xs"
-              aria-hidden="true"
-            >
-              B
-            </span>
-            <div>
-              <p className="font-black text-slate-900 text-sm leading-tight">Beauty Time Pro</p>
-              {nombreSalon && (
-                <p className="text-[10px] text-slate-500 leading-tight">{nombreSalon}</p>
-              )}
-            </div>
-          </div>
+          <MarcaAplicacion tamano="sm" subtitulo={nombreSalon || undefined} />
           <div className="flex items-center gap-2">
             <PanelNotificaciones
               notificaciones={notificaciones}

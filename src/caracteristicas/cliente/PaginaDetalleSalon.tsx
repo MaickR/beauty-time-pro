@@ -1,11 +1,25 @@
 import { useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
-import { MapPin, Phone, Mail, Clock, Calendar, ChevronRight, Users, Tag } from 'lucide-react';
-import { obtenerSalonPublico } from '../../servicios/servicioClienteApp';
+import {
+  MapPin,
+  Phone,
+  Mail,
+  Clock,
+  Calendar,
+  ChevronRight,
+  Users,
+  Tag,
+  Package2,
+} from 'lucide-react';
+import { obtenerSalonPublicoPorIdentificador } from '../../servicios/servicioClienteApp';
 import { NavegacionCliente } from '../../componentes/diseno/NavegacionCliente';
 import { Spinner } from '../../componentes/ui/Spinner';
 import { formatearDinero } from '../../utils/formato';
+import {
+  construirRutaReservaSalonCliente,
+  construirRutaSalonCliente,
+} from './utils/rutasSalonCliente';
 import type { SalonDetalle } from '../../tipos';
 
 function iniciales(nombre: string): string {
@@ -45,8 +59,20 @@ function agruparPorCategoria(
   return grupos;
 }
 
+function agruparProductosPorCategoria(
+  productos: SalonDetalle['productos'],
+): Record<string, SalonDetalle['productos']> {
+  const grupos: Record<string, SalonDetalle['productos']> = {};
+  for (const producto of productos) {
+    const categoria = producto.categoria?.trim() || 'General';
+    if (!grupos[categoria]) grupos[categoria] = [];
+    grupos[categoria]!.push(producto);
+  }
+  return grupos;
+}
+
 export function PaginaDetalleSalon() {
-  const { id } = useParams<{ id: string }>();
+  const { identificador } = useParams<{ identificador: string }>();
   const navegar = useNavigate();
 
   const {
@@ -54,9 +80,9 @@ export function PaginaDetalleSalon() {
     isLoading,
     isError,
   } = useQuery<SalonDetalle>({
-    queryKey: ['salon-publico', id],
-    queryFn: () => obtenerSalonPublico(id!),
-    enabled: !!id,
+    queryKey: ['salon-publico', identificador],
+    queryFn: () => obtenerSalonPublicoPorIdentificador(identificador!),
+    enabled: !!identificador,
     staleTime: 1000 * 60 * 5,
   });
 
@@ -66,6 +92,14 @@ export function PaginaDetalleSalon() {
       document.title = 'Beauty Time Pro';
     };
   }, [salon?.nombre]);
+
+  useEffect(() => {
+    if (!salon?.slug || !identificador || salon.slug === identificador) {
+      return;
+    }
+
+    navegar(construirRutaSalonCliente(salon), { replace: true });
+  }, [identificador, navegar, salon]);
 
   if (isLoading) {
     return (
@@ -98,6 +132,8 @@ export function PaginaDetalleSalon() {
     : [];
   const dias = salon.diasAtencion ? formatearDias(salon.diasAtencion) : null;
   const serviciosPorCategoria = agruparPorCategoria(salon.servicios);
+  const productosPorCategoria = agruparProductosPorCategoria(salon.productos);
+  const moneda = salon.pais === 'Colombia' ? 'COP' : 'MXN';
 
   return (
     <div className="min-h-screen bg-slate-50 font-sans pb-32">
@@ -262,10 +298,53 @@ export function PaginaDetalleSalon() {
                           </span>
                           {s.price > 0 && (
                             <span className="text-xs font-bold px-2 py-1 bg-green-50 text-green-700 rounded-lg">
-                              {formatearDinero(s.price, salon.pais === 'Colombia' ? 'COP' : 'MXN')}
+                              {formatearDinero(s.price, moneda)}
                             </span>
                           )}
                         </div>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              ))}
+            </div>
+          </section>
+        )}
+
+        {salon.plan === 'PRO' && salon.productos.length > 0 && (
+          <section aria-labelledby="titulo-productos" className="mb-6">
+            <h2
+              id="titulo-productos"
+              className="text-xl font-black text-slate-900 mb-4 flex items-center gap-2"
+            >
+              <Package2 className="w-5 h-5" aria-hidden="true" /> Productos PRO
+            </h2>
+            <div className="space-y-5">
+              {Object.entries(productosPorCategoria).map(([categoria, productos]) => (
+                <div
+                  key={categoria}
+                  className="bg-white rounded-2xl border border-slate-100 overflow-hidden shadow-sm"
+                >
+                  <div
+                    className="px-5 py-3 border-b border-slate-50"
+                    style={{ backgroundColor: color + '10' }}
+                  >
+                    <h3 className="font-bold text-sm" style={{ color }}>
+                      {categoria}
+                    </h3>
+                  </div>
+                  <ul>
+                    {productos.map((producto) => (
+                      <li
+                        key={producto.id}
+                        className="flex items-center justify-between px-5 py-3 border-b border-slate-50 last:border-0"
+                      >
+                        <span className="font-medium text-slate-800 text-sm">
+                          {producto.nombre}
+                        </span>
+                        <span className="text-xs font-bold px-2 py-1 bg-green-50 text-green-700 rounded-lg">
+                          {formatearDinero(producto.precio, moneda)}
+                        </span>
                       </li>
                     ))}
                   </ul>
@@ -279,7 +358,7 @@ export function PaginaDetalleSalon() {
       {/* Botón flotante */}
       <div className="fixed bottom-0 left-0 right-0 p-4 bg-white/80 backdrop-blur-md border-t border-slate-100 flex justify-center z-40">
         <button
-          onClick={() => navegar(`/cliente/salon/${salon.id}/reservar`)}
+          onClick={() => navegar(construirRutaReservaSalonCliente(salon))}
           className="w-full max-w-md py-4 rounded-2xl font-black text-white flex items-center justify-center gap-2 shadow-xl hover:brightness-110 transition-all text-base"
           style={{ backgroundColor: color }}
         >

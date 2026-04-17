@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useEffect, useState } from 'react';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   Building2,
   Check,
@@ -12,10 +12,13 @@ import {
   Mail,
   FileText,
   MessageCircle,
+  Wallet,
 } from 'lucide-react';
-import { obtenerPerfilEstudio } from '../../../servicios/servicioPerfil';
+import { actualizarPerfilEstudio, obtenerPerfilEstudio } from '../../../servicios/servicioPerfil';
+import { obtenerOpcionesMetodosPagoReserva } from '../../../lib/metodosPagoReserva';
 import { usarToast } from '../../../componentes/ui/ProveedorToast';
 import { construirEnlaceSoporteWhatsApp } from '../utils/soporteSalon';
+import type { MetodoPagoReserva } from '../../../tipos';
 
 interface PropsPerfilSalon {
   estudioId: string;
@@ -29,11 +32,32 @@ interface CampoInfo {
 
 export function PerfilSalon({ estudioId }: PropsPerfilSalon) {
   const [valorCopiado, setValorCopiado] = useState<'clave' | 'enlace' | null>(null);
+  const [metodosPagoSeleccionados, setMetodosPagoSeleccionados] = useState<MetodoPagoReserva[]>([]);
   const { mostrarToast } = usarToast();
+  const clienteConsulta = useQueryClient();
   const { data: perfil, isLoading } = useQuery({
     queryKey: ['perfil-estudio', estudioId],
     queryFn: () => obtenerPerfilEstudio(estudioId),
     staleTime: 2 * 60 * 1000,
+  });
+
+  useEffect(() => {
+    if (!perfil) return;
+    setMetodosPagoSeleccionados(perfil.metodosPagoReserva);
+  }, [perfil]);
+
+  const mutacionGuardarMetodosPago = useMutation({
+    mutationFn: () =>
+      actualizarPerfilEstudio(estudioId, {
+        metodosPagoReserva: metodosPagoSeleccionados,
+      }),
+    onSuccess: async () => {
+      await clienteConsulta.invalidateQueries({ queryKey: ['perfil-estudio', estudioId] });
+      mostrarToast('Métodos de pago actualizados');
+    },
+    onError: (error: unknown) => {
+      mostrarToast(error instanceof Error ? error.message : 'No se pudo guardar la configuración');
+    },
   });
 
   if (isLoading || !perfil) {
@@ -56,6 +80,10 @@ export function PerfilSalon({ estudioId }: PropsPerfilSalon) {
     nombreSalon: perfil.nombre,
     nombreResponsable: perfil.propietario,
   });
+  const opcionesMetodosPago = obtenerOpcionesMetodosPagoReserva(perfil.metodosPagoReserva);
+  const cambiosPendientes =
+    metodosPagoSeleccionados.length !== perfil.metodosPagoReserva.length ||
+    metodosPagoSeleccionados.some((metodo) => !perfil.metodosPagoReserva.includes(metodo));
   const enlaceReservas =
     typeof window === 'undefined' || !perfil.claveCliente
       ? null
@@ -75,6 +103,21 @@ export function PerfilSalon({ estudioId }: PropsPerfilSalon) {
     } catch {
       mostrarToast('No se pudo copiar al portapapeles');
     }
+  };
+
+  const alternarMetodoPago = (metodoPago: MetodoPagoReserva) => {
+    setMetodosPagoSeleccionados((actuales) => {
+      if (actuales.includes(metodoPago)) {
+        if (actuales.length === 1) {
+          mostrarToast('Debes mantener al menos un método de pago disponible');
+          return actuales;
+        }
+
+        return actuales.filter((valorActual) => valorActual !== metodoPago);
+      }
+
+      return [...actuales, metodoPago];
+    });
   };
 
   return (
@@ -112,7 +155,8 @@ export function PerfilSalon({ estudioId }: PropsPerfilSalon) {
                 Esta clave es irrepetible y permite abrir el acceso público de reservas de tu salón.
               </p>
               <p className="text-sm text-slate-600">
-                Cuando un cliente la ingresa en la pantalla de acceso o la recibe por QR, el sistema lo redirige a tu enlace de reservas.
+                Cuando un cliente la ingresa en la pantalla de acceso o la recibe por QR, el sistema
+                lo redirige a tu enlace de reservas.
               </p>
             </div>
           </div>
@@ -190,6 +234,56 @@ export function PerfilSalon({ estudioId }: PropsPerfilSalon) {
               <MessageCircle className="h-4 w-4" aria-hidden="true" />
               Contactar por WhatsApp
             </a>
+          </div>
+        </div>
+
+        <div className="rounded-3xl border border-slate-200 bg-slate-50 p-5 space-y-4">
+          <div className="flex items-start gap-3">
+            <div className="bg-white p-2.5 rounded-xl border border-slate-200">
+              <Wallet className="w-4 h-4 text-slate-700" />
+            </div>
+            <div className="space-y-1">
+              <p className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-500">
+                Métodos de pago disponibles
+              </p>
+              <p className="text-sm font-semibold text-slate-800">
+                Define qué métodos verán clientes, empleados y administradores al registrar una
+                reserva.
+              </p>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+            {opcionesMetodosPago.map((metodo) => {
+              const activo = metodosPagoSeleccionados.includes(metodo.valor);
+
+              return (
+                <button
+                  key={metodo.valor}
+                  type="button"
+                  onClick={() => alternarMetodoPago(metodo.valor)}
+                  className={`rounded-2xl border px-4 py-3 text-left text-sm font-black transition-colors ${
+                    activo
+                      ? 'border-pink-300 bg-pink-50 text-pink-700'
+                      : 'border-slate-200 bg-white text-slate-600 hover:border-pink-200'
+                  }`}
+                  aria-pressed={activo}
+                >
+                  {metodo.etiqueta}
+                </button>
+              );
+            })}
+          </div>
+
+          <div className="flex justify-end">
+            <button
+              type="button"
+              onClick={() => mutacionGuardarMetodosPago.mutate()}
+              disabled={!cambiosPendientes || mutacionGuardarMetodosPago.isPending}
+              className="rounded-2xl bg-slate-900 px-5 py-3 text-sm font-black text-white transition hover:bg-slate-800 disabled:opacity-60"
+            >
+              {mutacionGuardarMetodosPago.isPending ? 'Guardando...' : 'Guardar métodos de pago'}
+            </button>
           </div>
         </div>
       </section>

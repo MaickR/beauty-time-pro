@@ -3,7 +3,7 @@ import type { RolUsuario } from '../generated/prisma/enums.js';
 import { generarHashContrasena } from '../utils/contrasenas.js';
 
 const CLAVE_QA = 'QaLogin2026!';
-const EMAIL_EMPLEADO_QA = 'qa.empleado@beautytimepro.com';
+const EMAIL_EMPLEADO_QA = 'qa.empleado@salonpromaster.com';
 const NOMBRE_EMPLEADO_QA = 'QA Especialista';
 
 async function asegurarUsuario(params: {
@@ -113,7 +113,7 @@ export async function asegurarCredencialesQaLogin(): Promise<{
   }
 
   const maestro = await asegurarUsuario({
-    email: 'qa.maestro@beautytimepro.com',
+    email: 'qa.maestro@salonpromaster.com',
     nombre: 'QA Maestro',
     rol: 'maestro',
   });
@@ -142,7 +142,7 @@ export async function asegurarCredencialesQaLogin(): Promise<{
   });
 
   const supervisor = await asegurarUsuario({
-    email: 'qa.supervisor@beautytimepro.com',
+    email: 'qa.supervisor@salonpromaster.com',
     nombre: 'QA Supervisor',
     rol: 'supervisor',
   });
@@ -180,9 +180,9 @@ export async function asegurarCredencialesQaLogin(): Promise<{
     },
   });
 
-  await asegurarUsuario({ email: 'qa.vendedor@beautytimepro.com', nombre: 'QA Vendedor', rol: 'vendedor' });
+  await asegurarUsuario({ email: 'qa.vendedor@salonpromaster.com', nombre: 'QA Vendedor', rol: 'vendedor' });
   await asegurarUsuario({
-    email: 'qa.dueno@beautytimepro.com',
+    email: 'qa.dueno@salonpromaster.com',
     nombre: 'QA Dueño',
     rol: 'dueno',
     estudioId: estudio.id,
@@ -208,7 +208,7 @@ export async function asegurarCredencialesQaLogin(): Promise<{
   });
 
   await prisma.clienteApp.upsert({
-    where: { email: 'qa.cliente@beautytimepro.com' },
+    where: { email: 'qa.cliente@salonpromaster.com' },
     update: {
       nombre: 'QA',
       apellido: 'Cliente',
@@ -218,7 +218,7 @@ export async function asegurarCredencialesQaLogin(): Promise<{
       pais: 'Mexico',
     },
     create: {
-      email: 'qa.cliente@beautytimepro.com',
+      email: 'qa.cliente@salonpromaster.com',
       nombre: 'QA',
       apellido: 'Cliente',
       emailVerificado: true,
@@ -231,12 +231,12 @@ export async function asegurarCredencialesQaLogin(): Promise<{
   return {
     estudioQa: estudio,
     credenciales: {
-      maestro: 'qa.maestro@beautytimepro.com',
-      supervisor: 'qa.supervisor@beautytimepro.com',
-      vendedor: 'qa.vendedor@beautytimepro.com',
-      dueno: 'qa.dueno@beautytimepro.com',
+      maestro: 'qa.maestro@salonpromaster.com',
+      supervisor: 'qa.supervisor@salonpromaster.com',
+      vendedor: 'qa.vendedor@salonpromaster.com',
+      dueno: 'qa.dueno@salonpromaster.com',
       empleado: EMAIL_EMPLEADO_QA,
-      cliente: 'qa.cliente@beautytimepro.com',
+      cliente: 'qa.cliente@salonpromaster.com',
       contrasenaComun: CLAVE_QA,
     },
   };

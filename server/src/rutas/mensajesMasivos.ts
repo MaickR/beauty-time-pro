@@ -5,6 +5,7 @@ import type { FastifyInstance } from 'fastify';
 import sharp from 'sharp';
 import { prisma } from '../prismaCliente.js';
 import { verificarJWT } from '../middleware/autenticacion.js';
+import { tieneAccesoAdministrativoEstudio } from '../lib/accesoEstudio.js';
 import { MENSAJE_FUNCION_PRO, normalizarPlanEstudio } from '../lib/planes.js';
 import { encolarCorreo } from '../lib/colaEmails.js';
 import { registrarAuditoria } from '../utils/auditoria.js';
@@ -16,10 +17,6 @@ const MIME_IMAGEN_PERMITIDOS: Record<string, string> = {
   'image/jpeg': 'jpg',
   'image/png': 'png',
 };
-
-function tieneAccesoAdminEstudio(payload: { rol: string; estudioId: string | null }, estudioId: string): boolean {
-  return payload.rol === 'maestro' || (payload.rol === 'dueno' && payload.estudioId === estudioId);
-}
 
 function obtenerAnioActual(): number {
   return new Date().getFullYear();
@@ -40,7 +37,7 @@ export async function rutasMensajesMasivos(servidor: FastifyInstance): Promise<v
       const payload = solicitud.user as { rol: string; estudioId: string | null };
       const { id } = solicitud.params;
 
-      if (!tieneAccesoAdminEstudio(payload, id)) {
+      if (!tieneAccesoAdministrativoEstudio(payload, id)) {
         return respuesta.code(403).send({ error: 'Sin permisos para esta acción' });
       }
 
@@ -93,7 +90,7 @@ export async function rutasMensajesMasivos(servidor: FastifyInstance): Promise<v
       const payload = solicitud.user as { rol: string; estudioId: string | null };
       const { id } = solicitud.params;
 
-      if (!tieneAccesoAdminEstudio(payload, id)) {
+      if (!tieneAccesoAdministrativoEstudio(payload, id)) {
         return respuesta.code(403).send({ error: 'Sin permisos para esta acción' });
       }
 
@@ -172,7 +169,7 @@ export async function rutasMensajesMasivos(servidor: FastifyInstance): Promise<v
       const payload = solicitud.user as { rol: string; estudioId: string | null; sub: string };
       const { id } = solicitud.params;
 
-      if (!tieneAccesoAdminEstudio(payload, id)) {
+      if (!tieneAccesoAdministrativoEstudio(payload, id)) {
         return respuesta.code(403).send({ error: 'Sin permisos para esta acción' });
       }
 

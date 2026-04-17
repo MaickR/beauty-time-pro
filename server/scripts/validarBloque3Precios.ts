@@ -93,7 +93,7 @@ async function solicitarJSON<T>(url: string, opciones?: RequestInit): Promise<T>
 async function main() {
   const baseUrl = 'http://localhost:3000';
   const credenciales = {
-    email: 'qa.bloque3@beautytimepro.com',
+    email: 'qa.bloque3@salonpromaster.com',
     contrasena: 'Bloque3Test2026',
   };
 
@@ -279,7 +279,7 @@ async function main() {
         const sesion = await solicitarJSON<SesionRespuesta>('http://localhost:3000/auth/iniciar-sesion', {
           method: 'POST',
           body: JSON.stringify({
-            email: 'qa.bloque3@beautytimepro.com',
+            email: 'qa.bloque3@salonpromaster.com',
             contrasena: 'Bloque3Test2026',
           }),
         });

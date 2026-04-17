@@ -13,6 +13,7 @@ interface PropsCalendarioEstadoSalon {
   mostrarCitas?: boolean;
   etiquetaCitas?: string;
   titulo?: string;
+  variante?: 'regular' | 'compacta';
 }
 
 export function CalendarioEstadoSalon({
@@ -23,6 +24,7 @@ export function CalendarioEstadoSalon({
   mostrarCitas = true,
   etiquetaCitas = 'Citas',
   titulo = 'Calendario',
+  variante = 'regular',
 }: PropsCalendarioEstadoSalon) {
   const [detalleCalendario, setDetalleCalendario] = useState<{
     mensaje: string;
@@ -45,6 +47,7 @@ export function CalendarioEstadoSalon({
   });
   const fechaSeleccionadaIso = obtenerFechaLocalISO(fechaSeleccionada);
   const fechasConCitasSet = useMemo(() => new Set(fechasConCitas), [fechasConCitas]);
+  const esCompacta = variante === 'compacta';
 
   const cambiarMes = (offset: number) => {
     alCambiarFecha(
@@ -68,37 +71,55 @@ export function CalendarioEstadoSalon({
   };
 
   return (
-    <div className="bg-white rounded-[3rem] p-6 md:p-8 border border-slate-200 shadow-sm">
-      <div className="flex items-center justify-between mb-8">
+    <div
+      className={`border border-slate-200 bg-white shadow-sm ${
+        esCompacta
+          ? 'mx-auto w-full max-w-[48rem] rounded-[2.5rem] p-4 sm:p-5 lg:p-6'
+          : 'rounded-[3rem] p-6 md:p-8'
+      }`}
+    >
+      <div className={`flex items-center justify-between ${esCompacta ? 'mb-5' : 'mb-8'}`}>
         <button
           onClick={() => cambiarMes(-1)}
           aria-label="Mes anterior"
-          className="p-2 hover:bg-slate-100 rounded-full"
+          className={`rounded-full transition hover:bg-slate-100 ${esCompacta ? 'p-1.5 sm:p-2' : 'p-2'}`}
         >
-          <ChevronLeft className="w-5 h-5" />
+          <ChevronLeft className={esCompacta ? 'h-4 w-4 sm:h-5 sm:w-5' : 'h-5 w-5'} />
         </button>
-        <h3 className="text-xl font-black italic uppercase tracking-tighter text-center">
+        <h3
+          className={`text-center font-black italic uppercase tracking-tighter ${
+            esCompacta ? 'text-lg sm:text-xl' : 'text-xl'
+          }`}
+        >
           {titulo}
-          <span className="mt-1 block text-sm not-italic font-bold tracking-wide text-slate-500">
+          <span
+            className={`mt-1 block not-italic font-bold tracking-wide text-slate-500 ${
+              esCompacta ? 'text-xs sm:text-sm' : 'text-sm'
+            }`}
+          >
             {fechaSeleccionada.toLocaleString('es-ES', { month: 'long', year: 'numeric' })}
           </span>
         </h3>
         <button
           onClick={() => cambiarMes(1)}
           aria-label="Mes siguiente"
-          className="p-2 hover:bg-slate-100 rounded-full"
+          className={`rounded-full transition hover:bg-slate-100 ${esCompacta ? 'p-1.5 sm:p-2' : 'p-2'}`}
         >
-          <ChevronRight className="w-5 h-5" />
+          <ChevronRight className={esCompacta ? 'h-4 w-4 sm:h-5 sm:w-5' : 'h-5 w-5'} />
         </button>
       </div>
 
-      <div className="grid grid-cols-7 mb-4 text-center text-[10px] font-black text-slate-400 uppercase">
+      <div
+        className={`grid grid-cols-7 text-center font-black uppercase text-slate-400 ${
+          esCompacta ? 'mb-3 text-[9px] sm:text-[10px]' : 'mb-4 text-[10px]'
+        }`}
+      >
         {['D', 'L', 'M', 'M', 'J', 'V', 'S'].map((dia, indice) => (
           <div key={`${dia}-${indice}`}>{dia}</div>
         ))}
       </div>
 
-      <div className="grid grid-cols-7 gap-1.5 md:gap-2">
+      <div className={`grid grid-cols-7 ${esCompacta ? 'gap-1 sm:gap-1.5' : 'gap-1.5 md:gap-2'}`}>
         {diasCalendario.map((dia, indice) => {
           if (!dia) {
             return <div key={`vacio-${indice}`} />;
@@ -127,29 +148,44 @@ export function CalendarioEstadoSalon({
             <div key={estadoDia.fecha} className="aspect-square flex items-center justify-center">
               <button
                 onClick={() => manejarSeleccionFecha(fecha)}
-                className={`w-full h-full rounded-2xl font-black text-xs md:text-sm transition-all relative flex flex-col items-center justify-center ${clasesBase}`}
+                className={`relative flex h-full w-full flex-col items-center justify-center font-black transition-all ${
+                  esCompacta
+                    ? 'rounded-[1.15rem] text-[11px] sm:text-xs lg:text-sm'
+                    : 'rounded-2xl text-xs md:text-sm'
+                } ${clasesBase}`}
                 aria-label={estadoDia.fecha}
                 aria-pressed={seleccionado}
               >
                 {dia}
-                {!seleccionado && (tieneCitas || estadoDia.esCierre || estadoDia.tieneHorarioModificado) && (
-                  <span className="absolute bottom-1 flex items-center gap-1">
-                    {tieneCitas && <span className="h-1.5 w-1.5 rounded-full bg-pink-500" />}
-                    {estadoDia.esCierre && (
-                      <span className="h-1.5 w-1.5 rounded-full bg-orange-500" />
-                    )}
-                    {estadoDia.tieneHorarioModificado && (
-                      <span className="h-1.5 w-1.5 rounded-full bg-blue-500" />
-                    )}
-                  </span>
-                )}
+                {!seleccionado &&
+                  (tieneCitas || estadoDia.esCierre || estadoDia.tieneHorarioModificado) && (
+                    <span
+                      className={`absolute flex items-center gap-1 ${esCompacta ? 'bottom-0.5' : 'bottom-1'}`}
+                    >
+                      {tieneCitas && (
+                        <span
+                          className={`${esCompacta ? 'h-1.5 w-1.5' : 'h-1.5 w-1.5'} rounded-full bg-pink-500`}
+                        />
+                      )}
+                      {estadoDia.esCierre && (
+                        <span className="h-1.5 w-1.5 rounded-full bg-orange-500" />
+                      )}
+                      {estadoDia.tieneHorarioModificado && (
+                        <span className="h-1.5 w-1.5 rounded-full bg-blue-500" />
+                      )}
+                    </span>
+                  )}
               </button>
             </div>
           );
         })}
       </div>
 
-      <div className="mt-5 flex flex-wrap items-center justify-center gap-4 text-[10px] font-black uppercase tracking-wide text-slate-500">
+      <div
+        className={`flex flex-wrap items-center justify-center gap-4 font-black uppercase tracking-wide text-slate-500 ${
+          esCompacta ? 'mt-4 text-[9px] sm:text-[10px]' : 'mt-5 text-[10px]'
+        }`}
+      >
         {mostrarCitas && (
           <span className="inline-flex items-center gap-1.5">
             <span className="h-2 w-2 rounded-full bg-pink-500" /> {etiquetaCitas}

@@ -1,9 +1,10 @@
 import { useQuery } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
-import { CheckCircle2, Scissors } from 'lucide-react';
+import { CheckCircle2 } from 'lucide-react';
 import { usarTituloPagina } from '../../hooks/usarTituloPagina';
 import { obtenerPreciosPublicos } from '../../servicios/servicioPreciosPlanes';
 import { formatearDinero } from '../../utils/formato';
+import { MarcaAplicacion } from '../../componentes/ui/MarcaAplicacion';
 
 function obtenerPrecioPlan(
   precios: Awaited<ReturnType<typeof obtenerPreciosPublicos>> | undefined,
@@ -31,25 +32,20 @@ export function PaginaBienvenida() {
   });
 
   return (
-    <div className="min-h-screen bg-[radial-gradient(circle_at_top_left,_rgba(194,24,91,0.14),_transparent_32%),radial-gradient(circle_at_bottom_right,_rgba(240,98,146,0.14),_transparent_34%),linear-gradient(180deg,_#fff8fb_0%,_#ffffff_42%,_#fafafa_100%)]">
+    <div className="min-h-screen bg-[radial-gradient(circle_at_top_left,rgba(194,24,91,0.14),transparent_32%),radial-gradient(circle_at_bottom_right,rgba(240,98,146,0.14),transparent_34%),linear-gradient(180deg,#fff8fb_0%,#ffffff_42%,#fafafa_100%)]">
       <header className="mx-auto flex max-w-6xl items-center justify-between px-6 py-5">
-        <div className="flex items-center gap-2">
-          <div className="rounded-xl bg-linear-to-br from-[#880E4F] to-[#F06292] p-2">
-            <Scissors className="h-5 w-5 text-white" aria-hidden="true" />
-          </div>
-          <span className="text-lg font-black text-[var(--color-texto)]">Beauty Time Pro</span>
-        </div>
+        <MarcaAplicacion />
       </header>
 
       <main className="mx-auto max-w-6xl px-6 pb-20 pt-8">
-        <section className="rounded-[2rem] border border-[var(--color-borde)] bg-white/95 p-8 shadow-[0_28px_60px_-40px_rgba(194,24,91,0.45)]">
+        <section className="rounded-4xl border border-(--color-borde) bg-white/95 p-8 shadow-[0_28px_60px_-40px_rgba(194,24,91,0.45)]">
           <p className="inline-flex rounded-full border border-pink-200 bg-pink-50 px-4 py-2 text-xs font-black uppercase tracking-tight text-pink-700">
             Plataforma para salones en México y Colombia
           </p>
-          <h1 className="mt-6 max-w-3xl text-4xl font-black leading-tight text-[var(--color-texto)] md:text-6xl">
+          <h1 className="mt-6 max-w-3xl text-4xl font-black leading-tight text-(--color-texto) md:text-6xl">
             Tu salón, siempre organizado
           </h1>
-          <p className="mt-5 max-w-3xl text-lg leading-8 text-[var(--color-texto-suave)]">
+          <p className="mt-5 max-w-3xl text-lg leading-8 text-(--color-texto-suave)">
             Beauty Time Pro es la plataforma que usan los mejores salones de México y Colombia para
             gestionar su agenda, fidelizar clientes y hacer crecer su negocio. Simple para el
             cliente. Poderosa para el salón.
@@ -59,21 +55,21 @@ export function PaginaBienvenida() {
             <button
               type="button"
               onClick={() => navegar('/iniciar-sesion')}
-              className="rounded-2xl bg-[var(--color-primario)] px-6 py-3 text-sm font-black uppercase tracking-tight text-white transition-colors hover:bg-[var(--color-primario-oscuro)]"
+              className="rounded-2xl bg-(--color-primario) px-6 py-3 text-sm font-black uppercase tracking-tight text-white transition-colors hover:bg-(--color-primario-oscuro)"
             >
               Iniciar sesión
             </button>
             <button
               type="button"
               onClick={() => navegar('/iniciar-sesion')}
-              className="rounded-2xl border border-[var(--color-borde)] bg-white px-6 py-3 text-sm font-black text-[var(--color-texto)] transition-colors hover:bg-[var(--color-primario-suave)]"
+              className="rounded-2xl border border-(--color-borde) bg-white px-6 py-3 text-sm font-black text-(--color-texto) transition-colors hover:bg-(--color-primario-suave)"
             >
               Administración
             </button>
             <button
               type="button"
               onClick={() => navegar('/iniciar-sesion')}
-              className="rounded-2xl border border-[var(--color-borde)] bg-white px-6 py-3 text-sm font-black text-[var(--color-texto)] transition-colors hover:bg-[var(--color-primario-suave)]"
+              className="rounded-2xl border border-(--color-borde) bg-white px-6 py-3 text-sm font-black text-(--color-texto) transition-colors hover:bg-(--color-primario-suave)"
             >
               Reserva cliente
             </button>
@@ -81,37 +77,37 @@ export function PaginaBienvenida() {
         </section>
 
         <section className="mt-8 grid grid-cols-1 gap-4 md:grid-cols-3">
-          <article className="rounded-3xl border border-[var(--color-borde)] bg-white p-6">
-            <h2 className="text-lg font-black text-[var(--color-texto)]">Reservas en 2 minutos</h2>
-            <p className="mt-3 text-sm leading-6 text-[var(--color-texto-suave)]">
+          <article className="rounded-3xl border border-(--color-borde) bg-white p-6">
+            <h2 className="text-lg font-black text-(--color-texto)">Reservas en 2 minutos</h2>
+            <p className="mt-3 text-sm leading-6 text-(--color-texto-suave)">
               Tus clientes reservan escaneando un QR. Sin apps, sin registros, sin complicaciones.
             </p>
           </article>
-          <article className="rounded-3xl border border-[var(--color-borde)] bg-white p-6">
-            <h2 className="text-lg font-black text-[var(--color-texto)]">Agenda siempre al día</h2>
-            <p className="mt-3 text-sm leading-6 text-[var(--color-texto-suave)]">
+          <article className="rounded-3xl border border-(--color-borde) bg-white p-6">
+            <h2 className="text-lg font-black text-(--color-texto)">Agenda siempre al día</h2>
+            <p className="mt-3 text-sm leading-6 text-(--color-texto-suave)">
               Ve todas las citas del día, por especialista, en tiempo real. Crea citas manuales en
               segundos.
             </p>
           </article>
-          <article className="rounded-3xl border border-[var(--color-borde)] bg-white p-6">
-            <h2 className="text-lg font-black text-[var(--color-texto)]">Clientes que regresan</h2>
-            <p className="mt-3 text-sm leading-6 text-[var(--color-texto-suave)]">
+          <article className="rounded-3xl border border-(--color-borde) bg-white p-6">
+            <h2 className="text-lg font-black text-(--color-texto)">Clientes que regresan</h2>
+            <p className="mt-3 text-sm leading-6 text-(--color-texto-suave)">
               El programa de fidelidad premia a tus clientes frecuentes automáticamente. Tú
               configuras las reglas.
             </p>
           </article>
         </section>
 
-        <section className="mt-8 rounded-[2rem] border border-[var(--color-borde)] bg-white p-8">
-          <h2 className="text-2xl font-black text-[var(--color-texto)]">Planes</h2>
+        <section className="mt-8 rounded-4xl border border-(--color-borde) bg-white p-8">
+          <h2 className="text-2xl font-black text-(--color-texto)">Planes</h2>
           <div className="mt-6 grid grid-cols-1 gap-4 md:grid-cols-2">
-            <article className="rounded-2xl border border-[var(--color-borde)] bg-[var(--color-superficie)] p-5">
+            <article className="rounded-2xl border border-(--color-borde) bg-(--color-superficie) p-5">
               <p className="text-xs font-black uppercase tracking-tight text-pink-700">Estándar</p>
-              <p className="mt-2 text-lg font-black text-[var(--color-texto)]">
+              <p className="mt-2 text-lg font-black text-(--color-texto)">
                 {obtenerPrecioPlan(preciosPublicos, 'STANDARD')}
               </p>
-              <ul className="mt-4 space-y-2 text-sm text-[var(--color-texto-suave)]">
+              <ul className="mt-4 space-y-2 text-sm text-(--color-texto-suave)">
                 <li className="flex items-center gap-2">
                   <CheckCircle2 className="h-4 w-4 text-pink-600" />
                   Agenda
@@ -126,12 +122,12 @@ export function PaginaBienvenida() {
                 </li>
               </ul>
             </article>
-            <article className="rounded-2xl border border-[var(--color-borde)] bg-[var(--color-superficie)] p-5">
+            <article className="rounded-2xl border border-(--color-borde) bg-(--color-superficie) p-5">
               <p className="text-xs font-black uppercase tracking-tight text-pink-700">Pro</p>
-              <p className="mt-2 text-lg font-black text-[var(--color-texto)]">
+              <p className="mt-2 text-lg font-black text-(--color-texto)">
                 {obtenerPrecioPlan(preciosPublicos, 'PRO')}
               </p>
-              <ul className="mt-4 space-y-2 text-sm text-[var(--color-texto-suave)]">
+              <ul className="mt-4 space-y-2 text-sm text-(--color-texto-suave)">
                 <li className="flex items-center gap-2">
                   <CheckCircle2 className="h-4 w-4 text-pink-600" />
                   Todo lo anterior
@@ -154,7 +150,7 @@ export function PaginaBienvenida() {
         </section>
       </main>
 
-      <footer className="pb-8 text-center text-sm text-[var(--color-texto-suave)]">
+      <footer className="pb-8 text-center text-sm text-(--color-texto-suave)">
         Beauty Time Pro © 2026
       </footer>
     </div>

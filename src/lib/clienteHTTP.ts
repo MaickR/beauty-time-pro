@@ -82,6 +82,10 @@ function construirUrlFallback(ruta: string, error: unknown): string | null {
   return null;
 }
 
+function debeIntentarRefreshAnte401(ruta: string): boolean {
+  return !/^\/auth\/iniciar-sesion(?:\/|$)?/.test(ruta);
+}
+
 function esperar(ms: number): Promise<void> {
   return new Promise((resolve) => globalThis.setTimeout(resolve, ms));
 }
@@ -289,8 +293,10 @@ export async function peticion<T>(ruta: string, opciones: RequestInit = {}): Pro
     throw error;
   }
 
-  // Intento único de refresh ante 401
-  if (respuesta.status === 401) {
+  // Intento único de refresh ante 401 para rutas autenticadas.
+  // El login debe conservar su error original y no degradarse a
+  // “Sesión expirada” cuando las credenciales son inválidas.
+  if (respuesta.status === 401 && debeIntentarRefreshAnte401(ruta)) {
     const nuevoToken = await intentarRefrescar();
     if (nuevoToken) {
       cabeceras.set('Authorization', `Bearer ${nuevoToken}`);

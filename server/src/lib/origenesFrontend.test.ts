@@ -11,13 +11,13 @@ describe('origenesFrontend', () => {
   it('normaliza el origen principal y los adicionales exactos', () => {
     expect(
       obtenerPatronesOrigenFrontend(
-        'https://app.beautytimepro.com/login',
-        'https://beauty-time-pro.vercel.app, https://demo.beautytimepro.com/ruta',
+        'https://salonpromaster.com/login',
+        'https://beauty-time-pro.vercel.app, https://demo.salonpromaster.com/ruta',
       ),
     ).toEqual([
-      'https://app.beautytimepro.com',
+      'https://salonpromaster.com',
       'https://beauty-time-pro.vercel.app',
-      'https://demo.beautytimepro.com',
+      'https://demo.salonpromaster.com',
     ]);
   });
 
@@ -38,11 +38,11 @@ describe('origenesFrontend', () => {
 
   it('evalua si un origen esta permitido por cualquier patron', () => {
     const patrones = obtenerPatronesOrigenFrontend(
-      'https://app.beautytimepro.com',
+      'https://salonpromaster.com',
       'https://beauty-time-pro-git-*.vercel.app',
     );
 
-    expect(tieneOrigenFrontendPermitido('https://app.beautytimepro.com', patrones)).toBe(true);
+    expect(tieneOrigenFrontendPermitido('https://salonpromaster.com', patrones)).toBe(true);
     expect(
       tieneOrigenFrontendPermitido(
         'https://beauty-time-pro-git-feature-maickr.vercel.app',
@@ -53,15 +53,15 @@ describe('origenesFrontend', () => {
   });
 
   it('extrae el origin desde un referer valido', () => {
-    expect(extraerOrigenDesdeUrl('https://app.beautytimepro.com/agenda?tab=dia')).toBe(
-      'https://app.beautytimepro.com',
+    expect(extraerOrigenDesdeUrl('https://salonpromaster.com/agenda?tab=dia')).toBe(
+      'https://salonpromaster.com',
     );
     expect(extraerOrigenDesdeUrl('no-es-url')).toBeNull();
   });
 
   it('valida patrones exactos y con comodin', () => {
-    expect(esPatronOrigenFrontendValido('https://app.beautytimepro.com')).toBe(true);
+    expect(esPatronOrigenFrontendValido('https://salonpromaster.com')).toBe(true);
     expect(esPatronOrigenFrontendValido('https://beauty-time-pro-git-*.vercel.app')).toBe(true);
-    expect(esPatronOrigenFrontendValido('app.beautytimepro.com')).toBe(false);
+    expect(esPatronOrigenFrontendValido('salonpromaster.com')).toBe(false);
   });
 });

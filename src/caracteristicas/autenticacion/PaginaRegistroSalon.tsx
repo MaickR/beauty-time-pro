@@ -6,7 +6,6 @@ import { z } from 'zod';
 import {
   Eye,
   EyeOff,
-  Scissors,
   ChevronLeft,
   ChevronRight,
   Clock3,
@@ -19,6 +18,7 @@ import {
   Lock,
 } from 'lucide-react';
 import { Spinner } from '../../componentes/ui/Spinner';
+import { IconoMarcaAplicacion, MarcaAplicacion } from '../../componentes/ui/MarcaAplicacion';
 import { SelectorHora } from '../../componentes/ui/SelectorHora';
 import {
   CATALOGO_SERVICIOS,
@@ -790,16 +790,15 @@ export function PaginaRegistroSalon() {
     <div className="min-h-screen overflow-x-hidden bg-[#fffafc] lg:grid lg:grid-cols-[minmax(320px,420px)_1fr]">
       <div className="hidden lg:block lg:p-6">
         <div className="flex min-h-[calc(100vh-3rem)] flex-col justify-between overflow-hidden rounded-[36px] bg-linear-to-br from-[#880E4F] via-[#C2185B] to-[#F06292] p-10 shadow-2xl shadow-pink-900/20">
-          <div className="flex items-center gap-3">
-            <div className="rounded-2xl bg-white/20 p-3 backdrop-blur-sm">
-              <Scissors className="text-white w-7 h-7" aria-hidden="true" />
-            </div>
-            <span className="text-white font-black text-xl">Beauty Time Pro</span>
-          </div>
+          <MarcaAplicacion variante="oscura" tamano="lg" />
 
           <div className="space-y-8 text-white">
             <div>
-              <Scissors className="mb-4 h-14 w-14 text-white/60" aria-hidden="true" />
+              <IconoMarcaAplicacion
+                tamano="hero"
+                alt=""
+                className="mb-4 border-white/10 bg-white/10 opacity-85 shadow-[0_24px_60px_rgba(15,23,42,0.18)]"
+              />
               <h2 className="max-w-sm text-4xl font-black leading-tight">
                 Registra tu salón con una experiencia más clara y guiada
               </h2>
@@ -833,12 +832,7 @@ export function PaginaRegistroSalon() {
 
       <div className="flex-1 px-4 py-6 sm:px-6 lg:px-10 lg:py-10">
         <div className="mx-auto w-full max-w-6xl">
-          <div className="flex lg:hidden items-center gap-2 justify-center mb-6">
-            <div className="bg-linear-to-br from-[#880E4F] to-[#F06292] p-2.5 rounded-xl">
-              <Scissors className="text-white w-6 h-6" aria-hidden="true" />
-            </div>
-            <span className="font-black text-lg text-slate-900">Beauty Time Pro</span>
-          </div>
+          <MarcaAplicacion className="mb-6 justify-center lg:hidden" />
 
           <div className="mb-8 w-full max-w-sm mx-auto">
             <div className="flex items-center gap-0 mb-2">

@@ -1,11 +1,12 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Link, useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
-import { Eye, EyeOff, KeyRound, Lock, Mail, Scissors } from 'lucide-react';
+import { Eye, EyeOff, KeyRound, Lock, Mail } from 'lucide-react';
 import { consumirAvisoInicioSesion, usarTiendaAuth } from '../../tienda/tiendaAuth';
 import { usarTituloPagina } from '../../hooks/usarTituloPagina';
+import { MarcaAplicacion } from '../../componentes/ui/MarcaAplicacion';
 
 function esCorreo(valor: string) {
   return z.string().email().safeParse(valor.trim()).success;
@@ -37,6 +38,17 @@ const esquema = z
 
 type CamposFormulario = z.infer<typeof esquema>;
 type PestanaAcceso = 'cuenta' | 'claveSalon';
+
+interface EstadoRutaInicioSesion {
+  desde?: string;
+  demo?: {
+    identificador: string;
+    contrasena: string;
+    autoIniciar?: boolean;
+    titulo?: string;
+    mensaje?: string;
+  };
+}
 
 function obtenerMensajeCodigo(
   codigo: string | null,
@@ -116,23 +128,22 @@ export function PaginaInicioSesion() {
   const navegar = useNavigate();
   const ubicacion = useLocation();
   const { iniciarSesion, iniciarSesionConClave } = usarTiendaAuth();
-  const rutaDesde = (ubicacion.state as { desde?: string } | null)?.desde;
+  const estadoRuta = (ubicacion.state as EstadoRutaInicioSesion | null) ?? null;
+  const accesoDemo = estadoRuta?.demo ?? null;
+  const rutaDesde = estadoRuta?.desde;
+  const intentoAccesoDemo = useRef(false);
 
   const mensajeBloqueoUrl = avisoTransitorio?.mensaje ?? parametros.get('mensaje') ?? '';
-  const codigoBloqueoActivo =
-    codigoBloqueo ?? avisoTransitorio?.codigo ?? parametros.get('codigo');
+  const codigoBloqueoActivo = codigoBloqueo ?? avisoTransitorio?.codigo ?? parametros.get('codigo');
   const avisoBloqueo = obtenerMensajeCodigo(codigoBloqueoActivo, mensajeBloqueoUrl, motivoRechazo);
   const mensajeRegistro =
     avisoTransitorio?.tono === 'emerald'
       ? avisoTransitorio.mensaje
       : parametros.get('registro') === 'ok'
-      ? (parametros.get('mensaje') ?? 'Tu cuenta ya está lista. Inicia sesión para continuar.')
-      : '';
+        ? (parametros.get('mensaje') ?? 'Tu cuenta ya está lista. Inicia sesión para continuar.')
+        : '';
   const avisoInformativo =
-    !avisoBloqueo &&
-    !mensajeRegistro &&
-    avisoTransitorio?.mensaje &&
-    !avisoTransitorio.codigo
+    !avisoBloqueo && !mensajeRegistro && avisoTransitorio?.mensaje && !avisoTransitorio.codigo
       ? {
           titulo: avisoTransitorio.titulo ?? 'Información de acceso',
           descripcion: avisoTransitorio.mensaje,
@@ -142,17 +153,29 @@ export function PaginaInicioSesion() {
               ? 'amber'
               : 'blue') as 'amber' | 'red' | 'blue',
         }
-      : null;
+      : !avisoBloqueo && !mensajeRegistro && accesoDemo
+        ? {
+            titulo: accesoDemo.titulo ?? 'Demo access ready',
+            descripcion:
+              accesoDemo.mensaje ??
+              'We loaded the demo credentials for you. This action switches the current session to the selected demo role.',
+            tono: 'blue' as const,
+          }
+        : null;
 
   const {
     register,
     handleSubmit,
     clearErrors,
     setError,
+    setValue,
     formState: { errors, isSubmitting },
   } = useForm<CamposFormulario>({
     resolver: zodResolver(esquema),
-    defaultValues: { identificador: '', contrasena: '' },
+    defaultValues: {
+      identificador: accesoDemo?.identificador ?? '',
+      contrasena: accesoDemo?.contrasena ?? '',
+    },
   });
 
   const alEnviar = async (datos: CamposFormulario) => {
@@ -185,7 +208,8 @@ export function PaginaInicioSesion() {
       if (resultado.codigo === 'IDENTIFICADOR_REQUERIDO') {
         setRequiereIdentificador(true);
         setError('identificador', {
-          message: 'Encontramos varias cuentas con esa contraseña. Ingresa tu correo para continuar.',
+          message:
+            'Encontramos varias cuentas con esa contraseña. Ingresa tu correo para continuar.',
         });
         return;
       }
@@ -211,8 +235,30 @@ export function PaginaInicioSesion() {
     }
 
     setRequiereIdentificador(false);
-    navegar(rutaDesde ?? resultado.ruta ?? '/');
+    const rutaDestino =
+      resultado.ruta === '/vendedor' ? '/vendedor' : (rutaDesde ?? resultado.ruta ?? '/');
+    navegar(rutaDestino);
   };
+
+  useEffect(() => {
+    if (!accesoDemo) return;
+
+    setPestanaActiva('cuenta');
+    setRequiereIdentificador(false);
+    setMostrarRegistroCliente(false);
+    clearErrors();
+
+    setValue('identificador', accesoDemo.identificador);
+    setValue('contrasena', accesoDemo.contrasena);
+
+    if (accesoDemo.autoIniciar && !intentoAccesoDemo.current) {
+      intentoAccesoDemo.current = true;
+      void alEnviar({
+        identificador: accesoDemo.identificador,
+        contrasena: accesoDemo.contrasena,
+      });
+    }
+  }, [accesoDemo, clearErrors, setValue]);
 
   const alEnviarClaveAcceso = async (evento: React.FormEvent<HTMLFormElement>) => {
     evento.preventDefault();
@@ -260,15 +306,7 @@ export function PaginaInicioSesion() {
 
       <div className="relative flex min-h-screen items-center justify-center px-6 py-10 sm:px-10 lg:px-14 lg:py-14">
         <section className="w-full max-w-md rounded-4xl border border-white/15 bg-[rgba(255,248,243,0.9)] p-6 shadow-[0_30px_100px_rgba(12,5,10,0.45)] backdrop-blur-xl sm:p-8">
-          <div className="mb-8 flex items-center gap-3">
-            <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-[#5d1637] text-white shadow-lg shadow-[#5d1637]/30">
-              <Scissors className="h-5 w-5" aria-hidden="true" />
-            </div>
-            <div>
-              <p className="text-xs uppercase tracking-[0.32em] text-[#8f5a4d]">Beauty Time Pro</p>
-              <p className="text-sm text-slate-600">Acceso al sistema</p>
-            </div>
-          </div>
+          <MarcaAplicacion subtitulo="Acceso al sistema" className="mb-8" />
 
           <div className="mb-7">
             <h1 className="text-3xl font-semibold tracking-tight text-[#24111f] sm:text-[2rem]">
@@ -334,7 +372,9 @@ export function PaginaInicioSesion() {
           ) : null}
 
           {avisoInformativo ? (
-            <div className={`mb-4 rounded-2xl border px-4 py-3 ${clasesAviso(avisoInformativo.tono)}`}>
+            <div
+              className={`mb-4 rounded-2xl border px-4 py-3 ${clasesAviso(avisoInformativo.tono)}`}
+            >
               <p className="text-sm font-semibold">{avisoInformativo.titulo}</p>
               <p className="mt-1 text-sm leading-6 opacity-90">{avisoInformativo.descripcion}</p>
             </div>
@@ -367,10 +407,13 @@ export function PaginaInicioSesion() {
                     </span>
                     <input
                       id="identificador"
-                      name="identificador"
                       type="text"
                       autoComplete="username"
-                      placeholder={requiereIdentificador ? 'usuario@salon.com' : 'usuario@salon.com o 5512345678'}
+                      placeholder={
+                        requiereIdentificador
+                          ? 'usuario@salon.com'
+                          : 'usuario@salon.com o 5512345678'
+                      }
                       className="w-full rounded-2xl border border-[#d8c4ba] bg-white/92 px-10 py-3.5 text-sm text-slate-900 outline-none transition focus:border-[#7d2147] focus:ring-2 focus:ring-[#f2d7c5]"
                       aria-invalid={Boolean(errors.identificador)}
                       {...register('identificador')}
@@ -388,7 +431,10 @@ export function PaginaInicioSesion() {
 
                 <div>
                   <div className="mb-1.5 flex items-center justify-between">
-                    <label htmlFor="contrasena" className="block text-sm font-medium text-slate-700">
+                    <label
+                      htmlFor="contrasena"
+                      className="block text-sm font-medium text-slate-700"
+                    >
                       Contraseña
                     </label>
                     <Link
@@ -405,7 +451,6 @@ export function PaginaInicioSesion() {
                     />
                     <input
                       id="contrasena"
-                      name="contrasena"
                       type={mostrarContrasena ? 'text' : 'password'}
                       autoComplete="current-password"
                       className="w-full rounded-2xl border border-[#d8c4ba] bg-white/92 px-10 py-3.5 pr-12 text-sm text-slate-900 outline-none transition focus:border-[#7d2147] focus:ring-2 focus:ring-[#f2d7c5]"
@@ -418,7 +463,11 @@ export function PaginaInicioSesion() {
                       className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 transition hover:text-slate-700"
                       aria-label={mostrarContrasena ? 'Ocultar contraseña' : 'Mostrar contraseña'}
                     >
-                      {mostrarContrasena ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                      {mostrarContrasena ? (
+                        <EyeOff className="h-4 w-4" />
+                      ) : (
+                        <Eye className="h-4 w-4" />
+                      )}
                     </button>
                   </div>
                   {errors.contrasena ? (
@@ -432,7 +481,11 @@ export function PaginaInicioSesion() {
                   aria-busy={isSubmitting}
                   className="w-full rounded-2xl bg-[linear-gradient(135deg,#6d1d43_0%,#c74674_100%)] px-4 py-3.5 text-sm font-semibold text-white shadow-lg shadow-[#6d1d43]/25 transition hover:brightness-105 disabled:cursor-not-allowed disabled:opacity-60"
                 >
-                  {isSubmitting ? 'Validando acceso...' : requiereIdentificador ? 'Continuar con correo' : 'Entrar al sistema'}
+                  {isSubmitting
+                    ? 'Validando acceso...'
+                    : requiereIdentificador
+                      ? 'Continuar con correo'
+                      : 'Entrar al sistema'}
                 </button>
               </form>
             </section>
@@ -448,7 +501,9 @@ export function PaginaInicioSesion() {
                   <KeyRound className="h-4.5 w-4.5" aria-hidden="true" />
                 </div>
                 <div>
-                  <h2 className="text-base font-semibold text-[#24111f]">Ingresa con clave del salón</h2>
+                  <h2 className="text-base font-semibold text-[#24111f]">
+                    Ingresa con clave del salón
+                  </h2>
                   <p className="mt-1 text-sm leading-6 text-slate-600">
                     Escribe la clave para continuar.
                   </p>

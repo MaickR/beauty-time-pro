@@ -130,7 +130,9 @@ function PanelDetalleCliente({ clienteId, onCerrar }: PropsPanelCliente) {
           <p className="break-all text-sm font-bold text-slate-500">
             {calcularEdadTexto(cliente.edad)} · {cliente.telefono}
           </p>
-          {cliente.email && <p className="mt-0.5 break-all text-xs text-slate-400">{cliente.email}</p>}
+          {cliente.email && (
+            <p className="mt-0.5 break-all text-xs text-slate-400">{cliente.email}</p>
+          )}
         </div>
         <button
           onClick={onCerrar}
@@ -426,7 +428,10 @@ export function DirectorioClientes({ estudioId }: PropsDirectorioClientes) {
                     </button>
 
                     {expandida && (
-                      <div id={`detalle-cliente-${cliente.id}`} className="border-t border-slate-100 px-4 py-4">
+                      <div
+                        id={`detalle-cliente-${cliente.id}`}
+                        className="border-t border-slate-100 px-4 py-4"
+                      >
                         <PanelDetalleCliente
                           clienteId={cliente.id}
                           onCerrar={() => setFilaExpandida(null)}
@@ -439,84 +444,87 @@ export function DirectorioClientes({ estudioId }: PropsDirectorioClientes) {
             </div>
 
             <div className="hidden overflow-x-auto rounded-3xl border border-slate-200 bg-white shadow-sm md:block">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b border-slate-100">
-                  <th
-                    scope="col"
-                    className="text-left px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest"
-                  >
-                    Nombre
-                  </th>
-                  <th
-                    scope="col"
-                    className="text-left px-4 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest"
-                  >
-                    Contacto
-                  </th>
-                  <th
-                    scope="col"
-                    className="text-left px-4 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest hidden sm:table-cell"
-                  >
-                    Correo
-                  </th>
-                  <th scope="col" className="px-4 py-4">
-                    <span className="sr-only">Acciones</span>
-                  </th>
-                </tr>
-              </thead>
-              <tbody>
-                {clientes.map((c) => {
-                  const expandida = filaExpandida === c.id;
-                  return (
-                    <tr
-                      key={c.id}
-                      className={`border-b border-slate-50 hover:bg-slate-50 transition-colors cursor-pointer ${clienteSeleccionado === c.id ? 'bg-pink-50' : ''}`}
-                      onClick={() => setClienteSeleccionado(c.id)}
-                      role="button"
-                      tabIndex={0}
-                      onKeyDown={(e) => {
-                        if (e.key === 'Enter' || e.key === ' ') {
-                          setClienteSeleccionado(c.id);
-                        }
-                      }}
-                      aria-label={`Ver detalle de ${c.nombre}`}
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b border-slate-100">
+                    <th
+                      scope="col"
+                      className="text-left px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest"
                     >
-                      <td className="px-6 py-4">
-                        <div className="flex items-center gap-2">
-                          <span className="font-black text-slate-800">{c.nombre}</span>
-                          {c.edad !== null && c.edad < 18 && (
-                            <span className="px-2 py-0.5 bg-yellow-100 text-yellow-800 text-[9px] font-black uppercase rounded-full shrink-0">
-                              Menor
+                      Nombre
+                    </th>
+                    <th
+                      scope="col"
+                      className="text-left px-4 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest"
+                    >
+                      Contacto
+                    </th>
+                    <th
+                      scope="col"
+                      className="text-left px-4 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest hidden sm:table-cell"
+                    >
+                      Correo
+                    </th>
+                    <th scope="col" className="px-4 py-4">
+                      <span className="sr-only">Acciones</span>
+                    </th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {clientes.map((c) => {
+                    return (
+                      <tr
+                        key={c.id}
+                        className={`border-b border-slate-50 hover:bg-slate-50 transition-colors cursor-pointer ${clienteSeleccionado === c.id ? 'bg-pink-50' : ''}`}
+                        onClick={() => setClienteSeleccionado(c.id)}
+                        role="button"
+                        tabIndex={0}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter' || e.key === ' ') {
+                            setClienteSeleccionado(c.id);
+                          }
+                        }}
+                        aria-label={`Ver detalle de ${c.nombre}`}
+                      >
+                        <td className="px-6 py-4">
+                          <div className="flex items-center gap-2">
+                            <span className="font-black text-slate-800">{c.nombre}</span>
+                            {c.edad !== null && c.edad < 18 && (
+                              <span className="px-2 py-0.5 bg-yellow-100 text-yellow-800 text-[9px] font-black uppercase rounded-full shrink-0">
+                                Menor
+                              </span>
+                            )}
+                          </div>
+                          <div className="flex items-center gap-3 mt-0.5 sm:hidden">
+                            <span className="text-xs text-slate-400 flex items-center gap-1">
+                              <Phone className="w-3 h-3" aria-hidden="true" />
+                              {c.telefono}
                             </span>
-                          )}
-                        </div>
-                        <div className="flex items-center gap-3 mt-0.5 sm:hidden">
-                          <span className="text-xs text-slate-400 flex items-center gap-1">
-                            <Phone className="w-3 h-3" aria-hidden="true" />
+                          </div>
+                        </td>
+                        <td className="px-4 py-4">
+                          <span className="flex items-center gap-1 text-slate-600 font-medium">
+                            <Phone className="w-3 h-3 text-slate-400" aria-hidden="true" />{' '}
                             {c.telefono}
                           </span>
-                        </div>
-                      </td>
-                      <td className="px-4 py-4">
-                        <span className="flex items-center gap-1 text-slate-600 font-medium">
-                          <Phone className="w-3 h-3 text-slate-400" aria-hidden="true" />{' '}
-                          {c.telefono}
-                        </span>
-                      </td>
-                      <td className="px-4 py-4 hidden sm:table-cell">
-                        <span className="flex items-center gap-1 text-xs text-slate-500 mt-0.5">
-                          <Mail className="w-3 h-3" aria-hidden="true" /> {c.email ?? 'Sin correo'}
-                        </span>
-                      </td>
-                      <td className="px-4 py-4 text-right">
-                        <ChevronRight className="ml-auto h-4 w-4 text-slate-300" aria-hidden="true" />
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
+                        </td>
+                        <td className="px-4 py-4 hidden sm:table-cell">
+                          <span className="flex items-center gap-1 text-xs text-slate-500 mt-0.5">
+                            <Mail className="w-3 h-3" aria-hidden="true" />{' '}
+                            {c.email ?? 'Sin correo'}
+                          </span>
+                        </td>
+                        <td className="px-4 py-4 text-right">
+                          <ChevronRight
+                            className="ml-auto h-4 w-4 text-slate-300"
+                            aria-hidden="true"
+                          />
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
             </div>
           </>
         )}

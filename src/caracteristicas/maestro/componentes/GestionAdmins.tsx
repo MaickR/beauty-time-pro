@@ -63,6 +63,7 @@ interface Colaborador {
   email: string;
   nombre: string;
   rol: string;
+  porcentajeComision: number;
   activo: boolean;
   protegido?: boolean;
   creadoEn: string;
@@ -87,6 +88,11 @@ const esquemaNuevoColaborador = z.object({
   cargo: z.enum(['maestro', 'supervisor', 'vendedor'], {
     message: 'El rol es obligatorio',
   }),
+  porcentajeComision: z
+    .number()
+    .int('Ingresa un porcentaje entero')
+    .min(0, 'El porcentaje mínimo es 0')
+    .max(100, 'El porcentaje máximo es 100'),
 });
 
 type CamposNuevoColaborador = z.infer<typeof esquemaNuevoColaborador>;
@@ -286,7 +292,7 @@ export function GestionAdmins() {
     formState: { errors, isSubmitting },
   } = useForm<CamposNuevoColaborador>({
     resolver: zodResolver(esquemaNuevoColaborador),
-    defaultValues: { cargo: 'maestro' },
+    defaultValues: { cargo: 'maestro', porcentajeComision: 0 },
   });
 
   const cargoWatch = watch('cargo');
@@ -300,6 +306,8 @@ export function GestionAdmins() {
         cuerpo.permisos = normalizarPermisosMaestro(permisosMaestroEditando);
       } else if (datos.cargo === 'supervisor') {
         cuerpo.permisosSupervisor = permisosSupervisorEditando;
+      } else {
+        cuerpo.porcentajeComision = datos.porcentajeComision;
       }
       await peticion('/admin/admins', {
         method: 'POST',
@@ -377,6 +385,8 @@ export function GestionAdmins() {
         cuerpo['permisos'] = normalizarPermisosMaestro(permisosMaestroEditando);
       } else if (datos.cargo === 'supervisor') {
         cuerpo['permisosSupervisor'] = permisosSupervisorEditando;
+      } else {
+        cuerpo['porcentajeComision'] = datos.porcentajeComision;
       }
 
       await peticion(`/admin/admins/${datos.id}`, {
@@ -432,6 +442,7 @@ export function GestionAdmins() {
       nombre: colaborador.nombre,
       email: colaborador.email,
       contrasena: '',
+      porcentajeComision: colaborador.porcentajeComision,
     });
   };
 
@@ -566,7 +577,13 @@ export function GestionAdmins() {
             onClick={() => {
               setColaboradorEdicionGeneral(null);
               setMostrarFormulario(true);
-              reset({ cargo: 'maestro', nombre: '', email: '', contrasena: '' });
+              reset({
+                cargo: 'maestro',
+                nombre: '',
+                email: '',
+                contrasena: '',
+                porcentajeComision: 0,
+              });
               setPermisosMaestroEditando(PERMISOS_MAESTRO_VACIOS);
               setPermisosSupervisorEditando(PERMISOS_SUPERVISOR_VACIOS);
             }}
@@ -674,6 +691,11 @@ export function GestionAdmins() {
                             {ETIQUETAS_CARGO[colaborador.rol as CargoColaborador] ??
                               colaborador.rol}
                           </span>
+                          {colaborador.rol === 'vendedor' && (
+                            <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700">
+                              Comisión {colaborador.porcentajeComision}%
+                            </span>
+                          )}
                           {colaborador.rol === 'maestro' &&
                             colaborador.permisos?.esMaestroTotal && (
                               <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-yellow-100 text-yellow-700">
@@ -894,6 +916,11 @@ export function GestionAdmins() {
                     >
                       {ETIQUETAS_CARGO[colaborador.rol as CargoColaborador] ?? colaborador.rol}
                     </span>
+                    {colaborador.rol === 'vendedor' && (
+                      <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700">
+                        Comisión {colaborador.porcentajeComision}%
+                      </span>
+                    )}
                     <span
                       className={`text-xs font-semibold px-2 py-0.5 rounded-full ${colaborador.activo ? 'bg-green-100 text-green-700' : 'bg-slate-200 text-slate-600'}`}
                     >
@@ -1123,9 +1150,33 @@ export function GestionAdmins() {
 
               {/* Info vendedor */}
               {cargoWatch === 'vendedor' && (
-                <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 text-sm text-blue-700">
-                  Los vendedores tienen acceso restringido. Solo pueden gestionar sus pre-registros
-                  y los salones asociados a su flujo comercial.
+                <div className="space-y-4 rounded-xl border border-blue-200 bg-blue-50 p-4 text-sm text-blue-700">
+                  <p>
+                    Los vendedores tienen acceso restringido. Solo pueden gestionar sus
+                    pre-registros y los salones asociados a su flujo comercial.
+                  </p>
+                  <div>
+                    <label
+                      htmlFor="porcentaje-comision-colaborador"
+                      className="block text-sm font-semibold text-slate-700 mb-1"
+                    >
+                      Comisión del vendedor (%)
+                    </label>
+                    <input
+                      id="porcentaje-comision-colaborador"
+                      type="number"
+                      min={0}
+                      max={100}
+                      step={1}
+                      {...register('porcentajeComision', { valueAsNumber: true })}
+                      className="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-900 outline-none focus:ring-2 focus:ring-pink-400"
+                    />
+                    {errors.porcentajeComision && (
+                      <p className="mt-1 text-xs text-red-500">
+                        {errors.porcentajeComision.message}
+                      </p>
+                    )}
+                  </div>
                 </div>
               )}
 

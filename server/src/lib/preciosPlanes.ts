@@ -160,6 +160,7 @@ export async function asegurarPrecioActualSalon(params: {
       precioPlanProximoId: null,
       fechaAplicacionPrecioProximo: null,
     },
+    select: { id: true },
   });
 
   return precio;

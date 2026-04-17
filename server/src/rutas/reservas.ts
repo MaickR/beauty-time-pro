@@ -2,7 +2,13 @@ import type { FastifyInstance } from 'fastify';
 import crypto from 'crypto';
 import { z } from 'zod';
 import { Prisma } from '../generated/prisma/client.js';
-import { asegurarColumnaTabla, limpiarCacheCompatibilidadEsquema, obtenerTablasDisponibles } from '../lib/compatibilidadEsquema.js';
+import {
+  asegurarColumnaTabla,
+  construirSelectDesdeColumnas,
+  limpiarCacheCompatibilidadEsquema,
+  obtenerColumnasTabla,
+  obtenerTablasDisponibles,
+} from '../lib/compatibilidadEsquema.js';
 import { canjearRecompensaFidelidad, obtenerConfigFidelidad, registrarVisitaFidelidad, revertirVisitaFidelidad } from '../lib/fidelidad.js';
 import {
   calcularResumenServicios,
@@ -21,6 +27,8 @@ import {
   resolverSucursalReserva,
 } from '../lib/reservasPublicas.js';
 import { obtenerExcepcionDisponibilidadAplicada } from '../lib/disponibilidadExcepciones.js';
+import { tieneAccesoAdministrativoEstudio } from '../lib/accesoEstudio.js';
+import { validarMetodoPagoReservaDisponible } from '../lib/metodosPagoReserva.js';
 import { prisma } from '../prismaCliente.js';
 import { enviarEmailConfirmacion } from '../servicios/servicioEmail.js';
 import { verificarJWT, verificarJWTOpcional } from '../middleware/autenticacion.js';
@@ -82,6 +90,42 @@ async function asegurarColumnasAdicionalesReserva(): Promise<boolean> {
   ]);
 
   return resultados.every(Boolean);
+}
+
+async function construirSelectEstudioReserva() {
+  const columnasEstudio = await obtenerColumnasTabla('estudios');
+
+  return {
+    ...construirSelectDesdeColumnas(columnasEstudio, [
+      'id',
+      'nombre',
+      'plan',
+      'fechaVencimiento',
+      'estado',
+      'activo',
+      'horario',
+      'festivos',
+      'excepcionesDisponibilidad',
+      'servicios',
+      'metodosPagoReserva',
+      'sucursales',
+      'estudioPrincipalId',
+      'permiteReservasPublicas',
+      'zonaHoraria',
+      'pais',
+    ]),
+    sedes: {
+      where: { activo: true, estado: 'aprobado' as const },
+      select: {
+        id: true,
+        nombre: true,
+        estudioPrincipalId: true,
+        activo: true,
+        estado: true,
+        permiteReservasPublicas: true,
+      },
+    },
+  } as Prisma.EstudioSelect;
 }
 
 function normalizarMotivoAccion(motivo: unknown): string | null {
@@ -701,7 +745,7 @@ export async function rutasReservas(servidor: FastifyInstance): Promise<void> {
     async (solicitud, respuesta) => {
       const payload = solicitud.user as { rol: string; estudioId: string | null };
       const { id } = solicitud.params;
-      if (!(payload.rol === 'maestro' || (payload.rol === 'dueno' && payload.estudioId === id))) {
+      if (!tieneAccesoAdministrativoEstudio(payload, id)) {
         return respuesta.code(403).send({ error: 'Sin permisos para esta acción' });
       }
       const where: Record<string, unknown> = { estudioId: id };
@@ -879,6 +923,8 @@ export async function rutasReservas(servidor: FastifyInstance): Promise<void> {
       }
     }
 
+    const selectEstudioReserva = await construirSelectEstudioReserva();
+
     const [personal, estudio] = await Promise.all([
       prisma.personal.findFirst({
         where: { id: personalId, estudioId, activo: true },
@@ -886,34 +932,7 @@ export async function rutasReservas(servidor: FastifyInstance): Promise<void> {
       }),
       prisma.estudio.findUnique({
         where: { id: estudioId },
-        select: {
-          id: true,
-          nombre: true,
-          plan: true,
-          fechaVencimiento: true,
-          estado: true,
-          activo: true,
-          horario: true,
-          festivos: true,
-          excepcionesDisponibilidad: true,
-          servicios: true,
-          sucursales: true,
-          estudioPrincipalId: true,
-          permiteReservasPublicas: true,
-          sedes: {
-            where: { activo: true, estado: 'aprobado' },
-            select: {
-              id: true,
-              nombre: true,
-              estudioPrincipalId: true,
-              activo: true,
-              estado: true,
-              permiteReservasPublicas: true,
-            },
-          },
-          zonaHoraria: true,
-          pais: true,
-        },
+        select: selectEstudioReserva,
       }),
     ]);
 
@@ -966,15 +985,24 @@ export async function rutasReservas(servidor: FastifyInstance): Promise<void> {
 
     // ─── Si es un ClienteApp autenticado, rellenar datos desde su perfil ──
     const esClienteApp = payload?.rol === 'cliente' && payload.estudioId === null;
+    let emailClienteAppAutenticado: string | undefined;
     if (esClienteApp) {
       const clienteApp = await prisma.clienteApp.findUnique({
         where: { id: payload.sub },
-        select: { id: true, nombre: true, apellido: true, telefono: true, fechaNacimiento: true },
+        select: {
+          id: true,
+          email: true,
+          nombre: true,
+          apellido: true,
+          telefono: true,
+          fechaNacimiento: true,
+        },
       });
       if (!clienteApp) {
         return respuesta.code(401).send({ error: 'No autenticado' });
       }
       clienteAppId = clienteApp.id;
+      emailClienteAppAutenticado = clienteApp.email.trim().toLowerCase();
       if (!nombreCliente) nombreCliente = `${clienteApp.nombre} ${clienteApp.apellido}`;
       if (!telefonoCliente) {
         if (!clienteApp.telefono) {
@@ -994,7 +1022,8 @@ export async function rutasReservas(servidor: FastifyInstance): Promise<void> {
       }
     }
 
-    const emailNormalizado = email?.trim().toLowerCase() || undefined;
+    const emailNormalizado =
+      email?.trim().toLowerCase() || emailClienteAppAutenticado || undefined;
 
     if (!clienteAppId && emailNormalizado) {
       const clienteAppPorEmail = await prisma.clienteApp.findUnique({
@@ -1025,7 +1054,7 @@ export async function rutasReservas(servidor: FastifyInstance): Promise<void> {
       });
     }
 
-    if (emailNormalizado && !esEmailValido(emailNormalizado)) {
+    if (emailNormalizado && !esClienteApp && !esEmailValido(emailNormalizado)) {
       return respuesta.code(400).send({
         error: 'Solo se aceptan correos personales válidos de Gmail, Hotmail, Outlook o Yahoo',
       });
@@ -1042,6 +1071,13 @@ export async function rutasReservas(servidor: FastifyInstance): Promise<void> {
     if (serviciosNormalizados.length !== serviciosSolicitados.length) {
       return respuesta.code(400).send({
         error: 'Uno o más servicios ya no están disponibles en el catálogo del salón',
+      });
+    }
+
+    if (!validarMetodoPagoReservaDisponible(metodoPago, estudio.metodosPagoReserva)) {
+      return respuesta.code(400).send({
+        error: 'El método de pago seleccionado no está habilitado para este salón',
+        campos: { metodoPago: 'Selecciona un método de pago disponible' },
       });
     }
 
@@ -1179,7 +1215,7 @@ export async function rutasReservas(servidor: FastifyInstance): Promise<void> {
           marcaTinte,
           tonalidad,
           notaMenorEdad: esMenorDeEdad
-            ? sanitizarTexto('Cliente menor de edad - requiere acompanante adulto')
+            ? sanitizarTexto('Cliente menor de edad - requiere acompañante adulto')
             : null,
           clienteAppId: clienteAppId ?? null,
           tokenCancelacion,
@@ -1247,6 +1283,39 @@ export async function rutasReservas(servidor: FastifyInstance): Promise<void> {
     if (!reserva) {
       return respuesta.code(500).send({ error: 'No fue posible recuperar la reserva creada' });
     }
+
+    const usuarioAuditoriaId = payload
+      ? await resolverUsuarioAuditoriaReserva(payload)
+      : null;
+
+    await registrarAuditoria({
+      usuarioId: usuarioAuditoriaId,
+      accion: 'reserva_creada',
+      entidadTipo: 'reserva',
+      entidadId: reserva.id,
+      detalles: {
+        requestId: solicitud.id,
+        actor: payload
+          ? {
+              rol: payload.rol,
+              accesoId: payload.sub,
+            }
+          : { rol: 'publico' },
+        estudioId,
+        clienteId: cliente.id,
+        personalId,
+        fecha,
+        horaInicio,
+        estado: estadoReserva,
+        precioTotal: precioTotalEfectivo,
+        cantidadServicios: serviciosNormalizados.length,
+        cantidadProductos: Array.isArray(productosAdicionalesNormalizados)
+          ? productosAdicionalesNormalizados.length
+          : 0,
+        recompensaUsada: Boolean(usarRecompensa),
+      },
+      ip: solicitud.ip,
+    });
 
     const descripcionRecompensaAplicada = usarRecompensa
       ? (await obtenerConfigFidelidad(estudioId)).descripcionRecompensa
@@ -1377,6 +1446,27 @@ export async function rutasReservas(servidor: FastifyInstance): Promise<void> {
 
       await sincronizarResumenReserva(reserva.id);
 
+      await registrarAuditoria({
+        usuarioId: null,
+        accion: 'reserva_cancelada_publica',
+        entidadTipo: 'reserva',
+        entidadId: reserva.id,
+        detalles: {
+          requestId: solicitud.id,
+          actor: { rol: 'publico' },
+          antes: {
+            estado: reserva.estado,
+          },
+          despues: {
+            estado: 'cancelled',
+          },
+          fecha: reserva.fecha,
+          horaInicio: reserva.horaInicio,
+          estudioNombre: reserva.estudio.nombre,
+        },
+        ip: solicitud.ip,
+      });
+
       const reservaCompleta = await obtenerReservaConRelacionesPorId(actualizada.id);
       if (reservaCompleta) {
         void notificarCitaCancelada(reservaCompleta);
@@ -1412,6 +1502,7 @@ export async function rutasReservas(servidor: FastifyInstance): Promise<void> {
           estudioId: true,
           estado: true,
           clienteId: true,
+          motivoCancelacion: true,
         },
       });
       if (!reservaExistente) return respuesta.code(404).send({ error: 'Reserva no encontrada' });
@@ -1512,8 +1603,19 @@ export async function rutasReservas(servidor: FastifyInstance): Promise<void> {
           entidadTipo: 'reserva',
           entidadId: actualizada.id,
           detalles: {
-            estadoAnterior: reservaExistente.estado,
-            estadoNuevo: estado,
+            requestId: solicitud.id,
+            actor: {
+              rol: payload.rol,
+              accesoId: payload.sub,
+            },
+            antes: {
+              estado: reservaExistente.estado,
+              motivoCancelacion: reservaExistente.motivoCancelacion ?? null,
+            },
+            despues: {
+              estado,
+              motivoCancelacion: motivoNormalizado,
+            },
             motivo: motivoNormalizado,
           },
           ip: solicitud.ip,
@@ -1609,6 +1711,7 @@ export async function rutasReservas(servidor: FastifyInstance): Promise<void> {
           id: true,
           estado: true,
           nombre: true,
+          motivo: true,
         },
       });
 
@@ -1630,10 +1733,21 @@ export async function rutasReservas(servidor: FastifyInstance): Promise<void> {
           entidadTipo: 'reserva',
           entidadId: solicitud.params.id,
           detalles: {
+            requestId: solicitud.id,
+            actor: {
+              rol: payload.rol,
+              accesoId: payload.sub,
+            },
             servicioId: servicioExistente.id,
             servicioNombre: servicioExistente.nombre,
-            estadoAnterior: servicioExistente.estado,
-            estadoNuevo: estado,
+            antes: {
+              estado: servicioExistente.estado,
+              motivo: servicioExistente.motivo ?? null,
+            },
+            despues: {
+              estado,
+              motivo: motivoNormalizado,
+            },
             motivo: motivoNormalizado,
           },
           ip: solicitud.ip,
@@ -1753,6 +1867,7 @@ export async function rutasReservas(servidor: FastifyInstance): Promise<void> {
           entidadTipo: 'reserva',
           entidadId: solicitud.params.id,
           detalles: {
+            requestId: solicitud.id,
             servicioNombre: nombre,
             duracion,
             precio,
@@ -1907,6 +2022,7 @@ export async function rutasReservas(servidor: FastifyInstance): Promise<void> {
           entidadTipo: 'reserva',
           entidadId: solicitud.params.id,
           detalles: {
+            requestId: solicitud.id,
             productoId: producto.id,
             productoNombre: producto.nombre,
             cantidad: resultado.data.cantidad,

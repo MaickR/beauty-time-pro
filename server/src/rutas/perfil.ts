@@ -5,6 +5,8 @@ import sharp from 'sharp';
 import { z } from 'zod';
 import type { Prisma } from '../generated/prisma/client.js';
 import { construirSelectDesdeColumnas, obtenerColumnasTabla } from '../lib/compatibilidadEsquema.js';
+import { tieneAccesoAdministrativoEstudio } from '../lib/accesoEstudio.js';
+import { normalizarMetodosPagoReserva } from '../lib/metodosPagoReserva.js';
 import { normalizarPlanEstudio } from '../lib/planes.js';
 import { prisma } from '../prismaCliente.js';
 import { verificarJWT } from '../middleware/autenticacion.js';
@@ -24,6 +26,7 @@ const esquemaPerfil = z.object({
   telefono: z.union([z.literal(''), telefonoSchema]).optional(),
   emailContacto: emailOpcionalONuloSchema('emailContacto'),
   colorPrimario: colorHexSchema.optional(),
+  metodosPagoReserva: z.array(z.enum(['cash', 'card', 'bank_transfer', 'digital_transfer'])).min(1, 'Selecciona al menos un método de pago').optional(),
 }).strict().refine((datos) => Object.keys(datos).length > 0, {
   message: 'Debes enviar al menos un campo para actualizar',
 });
@@ -47,6 +50,7 @@ function serializarPerfilCompat(
   colorPrimario: string;
   logoUrl: string | null;
   claveCliente: string | null;
+  metodosPagoReserva: Array<'cash' | 'card' | 'bank_transfer' | 'digital_transfer'>;
   estudioPrincipalId: string | null;
 } {
   return {
@@ -62,6 +66,7 @@ function serializarPerfilCompat(
     colorPrimario: typeof estudio.colorPrimario === 'string' ? estudio.colorPrimario : '#EC4899',
     logoUrl: typeof estudio.logoUrl === 'string' ? estudio.logoUrl : null,
     claveCliente: typeof estudio.claveCliente === 'string' ? estudio.claveCliente : null,
+    metodosPagoReserva: normalizarMetodosPagoReserva((estudio as Record<string, unknown>)['metodosPagoReserva']),
     estudioPrincipalId:
       typeof estudio.estudioPrincipalId === 'string' ? estudio.estudioPrincipalId : null,
   };
@@ -75,7 +80,7 @@ export async function rutasPerfil(servidor: FastifyInstance): Promise<void> {
     async (solicitud, respuesta) => {
       const payload = solicitud.user as { rol: string; estudioId: string | null };
       const { id } = solicitud.params;
-      if (!(payload.rol === 'maestro' || (payload.rol === 'dueno' && payload.estudioId === id))) {
+      if (!tieneAccesoAdministrativoEstudio(payload, id)) {
         return respuesta.code(403).send({ error: 'Sin permisos para esta acción' });
       }
 
@@ -94,6 +99,7 @@ export async function rutasPerfil(servidor: FastifyInstance): Promise<void> {
         'colorPrimario',
         'logoUrl',
         'estudioPrincipalId',
+        'metodosPagoReserva',
       ]) as Prisma.EstudioSelect;
 
       const estudio = await prisma.estudio.findUnique({
@@ -154,6 +160,7 @@ export async function rutasPerfil(servidor: FastifyInstance): Promise<void> {
       telefono?: string;
       emailContacto?: string;
       colorPrimario?: string;
+      metodosPagoReserva?: Array<'cash' | 'card' | 'bank_transfer' | 'digital_transfer'>;
     };
   }>(
     '/estudio/:id/perfil',
@@ -161,7 +168,7 @@ export async function rutasPerfil(servidor: FastifyInstance): Promise<void> {
     async (solicitud, respuesta) => {
       const payload = solicitud.user as { rol: string; estudioId: string | null };
       const { id } = solicitud.params;
-      if (!(payload.rol === 'maestro' || (payload.rol === 'dueno' && payload.estudioId === id))) {
+      if (!tieneAccesoAdministrativoEstudio(payload, id)) {
         return respuesta.code(403).send({ error: 'Sin permisos para esta acción' });
       }
 
@@ -170,7 +177,7 @@ export async function rutasPerfil(servidor: FastifyInstance): Promise<void> {
         return respuesta.code(400).send({ error: obtenerMensajeValidacion(resultado.error) });
       }
 
-      const { nombre, descripcion, direccion, telefono, emailContacto, colorPrimario } = resultado.data;
+      const { nombre, descripcion, direccion, telefono, emailContacto, colorPrimario, metodosPagoReserva } = resultado.data;
 
       const columnasEstudios = await obtenerColumnasTabla('estudios');
       const datosActualizacion: Prisma.EstudioUpdateInput = {
@@ -180,6 +187,9 @@ export async function rutasPerfil(servidor: FastifyInstance): Promise<void> {
         ...(telefono !== undefined && columnasEstudios.has('telefono') && { telefono }),
         ...(emailContacto !== undefined && columnasEstudios.has('emailContacto') && { emailContacto }),
         ...(colorPrimario !== undefined && columnasEstudios.has('colorPrimario') && { colorPrimario }),
+        ...(metodosPagoReserva !== undefined && columnasEstudios.has('metodosPagoReserva') && {
+          metodosPagoReserva: normalizarMetodosPagoReserva(metodosPagoReserva) as Prisma.InputJsonValue,
+        }),
       };
 
       const selectPerfil = construirSelectDesdeColumnas(columnasEstudios, [
@@ -193,6 +203,7 @@ export async function rutasPerfil(servidor: FastifyInstance): Promise<void> {
         'plan',
         'colorPrimario',
         'logoUrl',
+        'metodosPagoReserva',
       ]) as Prisma.EstudioSelect;
 
       const estudio = await prisma.estudio.update({
@@ -223,7 +234,7 @@ export async function rutasPerfil(servidor: FastifyInstance): Promise<void> {
     async (solicitud, respuesta) => {
       const payload = solicitud.user as { rol: string; estudioId: string | null };
       const { id } = solicitud.params;
-      if (!(payload.rol === 'maestro' || (payload.rol === 'dueno' && payload.estudioId === id))) {
+      if (!tieneAccesoAdministrativoEstudio(payload, id)) {
         return respuesta.code(403).send({ error: 'Sin permisos para esta acción' });
       }
 
@@ -288,7 +299,7 @@ export async function rutasPerfil(servidor: FastifyInstance): Promise<void> {
     async (solicitud, respuesta) => {
       const payload = solicitud.user as { rol: string; estudioId: string | null };
       const { id } = solicitud.params;
-      if (!(payload.rol === 'maestro' || (payload.rol === 'dueno' && payload.estudioId === id))) {
+      if (!tieneAccesoAdministrativoEstudio(payload, id)) {
         return respuesta.code(403).send({ error: 'Sin permisos para esta acción' });
       }
 

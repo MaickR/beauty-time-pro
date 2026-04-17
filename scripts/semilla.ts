@@ -72,14 +72,14 @@ const EMAIL_EMPLEADO_DEMO_MIKELOV = 'andrea.color@mikelovstudio.com';
 const CONTRASENA_EMPLEADO_DEMO_MIKELOV = process.env.DEMO_CONTRASENA_EMPLEADO_MIKELOV?.trim() || 'MikelovEmp2026!';
 const ADMINS_SEMILLA = [
   {
-    email: 'miguel@beautytimepro.com',
+    email: 'miguel@salonpromaster.com',
     nombre: 'Miguel',
     apellido: 'Baigts',
     alias: 'Miguel Baigts',
     contrasena: CONTRASENA_ADMIN_PRINCIPAL,
   },
   {
-    email: 'admin.secundario@beautytimepro.com',
+    email: 'admin.secundario@salonpromaster.com',
     nombre: 'Mike',
     apellido: 'Admin',
     alias: 'Mike Admin',
@@ -94,8 +94,8 @@ const ENTORNO_ACTUAL = process.env.ENTORNO ?? 'development';
 
 function informarCredencialesSemilla() {
   console.log('🔐 Credenciales de semilla activas:');
-  console.log(`   Maestro principal: miguel@beautytimepro.com / ${CONTRASENA_ADMIN_PRINCIPAL}`);
-  console.log(`   Maestro secundario: admin.secundario@beautytimepro.com / ${CONTRASENA_ADMIN_SECUNDARIO}`);
+  console.log(`   Maestro principal: miguel@salonpromaster.com / ${CONTRASENA_ADMIN_PRINCIPAL}`);
+  console.log(`   Maestro secundario: admin.secundario@salonpromaster.com / ${CONTRASENA_ADMIN_SECUNDARIO}`);
   console.log(`   Dueño demo MIKELOV: ${EMAIL_DUENO_MIKELOV} / ${CONTRASENA_DUENO_DEMO}`);
   console.log(`   Empleado demo MIKELOV: ${EMAIL_EMPLEADO_DEMO_MIKELOV} / ${CONTRASENA_EMPLEADO_DEMO_MIKELOV}`);
 }

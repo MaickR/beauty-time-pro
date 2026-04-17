@@ -1,6 +1,7 @@
 node_modules/
 dist/
 server/dist/
+*.tsbuildinfo
 .env
 .env.*
 .env.local
@@ -17,7 +18,10 @@ yarn-error.log*
 pnpm-debug.log*
 .DS_Store
 Thumbs.db
+.vscode/
 tmp-*.txt
+tmp-*.png
+.tmp-*.txt
 backup.txt
 backup-*.txt
 *.log
@@ -25,6 +29,20 @@ backup-*.txt
 *.key
 *.p12
 *.crt
+
+# Tooling and support files not required by the app runtime
+.agents/
+skills-lock.json
+.github/copilot-instructions.md
+
+# Top-level planning and audit documents
+/*.md
+!/README.md
+/*.txt
+
+# Local design exports not used by the app
+public/Logo-App.png
+public/LOGO-BTP.png
 
 uploads/
 !uploads/

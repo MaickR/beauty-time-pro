@@ -2,7 +2,7 @@ import { prisma } from '../src/prismaCliente.js';
 
 async function main() {
   const usuario = await prisma.usuario.findUnique({
-    where: { email: 'qa.bloque3@beautytimepro.com' },
+    where: { email: 'qa.bloque3@salonpromaster.com' },
     select: { id: true },
   });
 

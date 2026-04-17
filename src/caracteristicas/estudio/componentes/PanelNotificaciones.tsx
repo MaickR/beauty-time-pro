@@ -32,6 +32,10 @@ function obtenerIconoTipo(tipo: NotificacionEstudio['tipo']) {
       return <ShieldAlert className="w-5 h-5 text-red-500 shrink-0" aria-hidden="true" />;
     case 'nueva_reserva':
       return <CalendarClock className="w-5 h-5 text-pink-500 shrink-0" aria-hidden="true" />;
+    case 'reserva_cancelada':
+      return <AlertTriangle className="w-5 h-5 text-rose-500 shrink-0" aria-hidden="true" />;
+    case 'reserva_reagendada':
+      return <CalendarClock className="w-5 h-5 text-cyan-500 shrink-0" aria-hidden="true" />;
     case 'actualizacion_horario':
       return <CalendarClock className="w-5 h-5 text-indigo-500 shrink-0" aria-hidden="true" />;
     case 'actualizacion_salon':
@@ -51,6 +55,10 @@ function obtenerColorFondo(tipo: NotificacionEstudio['tipo']) {
       return 'bg-red-50 border-red-200';
     case 'nueva_reserva':
       return 'bg-pink-50 border-pink-200';
+    case 'reserva_cancelada':
+      return 'bg-rose-50 border-rose-200';
+    case 'reserva_reagendada':
+      return 'bg-cyan-50 border-cyan-200';
     case 'actualizacion_horario':
       return 'bg-indigo-50 border-indigo-200';
     case 'actualizacion_salon':
@@ -160,7 +168,9 @@ export function PanelNotificaciones({
               <div className="px-5 py-10 text-center">
                 <p className="text-sm font-black text-slate-900">Todo al día</p>
                 <p className="mt-2 text-xs text-slate-500">
-                  No tienes alertas importantes nuevas por ahora. Esta campana mostrará nuevas citas, cambios de horario, ajustes operativos del salón y avisos administrativos relevantes.
+                  No tienes alertas importantes nuevas por ahora. Esta campana mostrará nuevas
+                  citas, cambios de horario, ajustes operativos del salón y avisos administrativos
+                  relevantes.
                 </p>
               </div>
             )}

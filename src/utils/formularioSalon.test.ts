@@ -42,7 +42,7 @@ describe('formularioSalon', () => {
   });
 
   it('genera contrasena de colaborador con nombre, correo y sufijo aleatorio', () => {
-    const contrasena = generarContrasenaColaborador('Miguel Baigts', 'miguel@beautytimepro.com');
+    const contrasena = generarContrasenaColaborador('Miguel Baigts', 'miguel@salonpromaster.com');
 
     expect(contrasena).toHaveLength(8);
     expect(contrasena.startsWith('MIGmig')).toBe(true);

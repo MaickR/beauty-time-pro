@@ -5,6 +5,7 @@ import { useQuery } from '@tanstack/react-query';
 import { obtenerMiPerfil } from '../../servicios/servicioClienteApp';
 import { usarTiendaAuth } from '../../tienda/tiendaAuth';
 import { NavegacionCliente } from '../../componentes/diseno/NavegacionCliente';
+import { construirRutaSalonCliente } from './utils/rutasSalonCliente';
 import type { Pais, ReservaCliente } from '../../tipos';
 
 function etiquetaPais(pais: Pais): string {
@@ -179,7 +180,7 @@ function TarjetaSalon({ salon }: PropsTarjetaSalon) {
 
         {/* Botón */}
         <button
-          onClick={() => navegar(`/cliente/salon/${salon.id}`)}
+          onClick={() => navegar(construirRutaSalonCliente(salon))}
           className="mt-auto w-full py-3 rounded-2xl font-black text-xs text-white flex items-center justify-center gap-1.5 hover:brightness-110 transition-all"
           style={{ backgroundColor: color }}
         >
@@ -244,47 +245,115 @@ export function PaginaInicioCliente() {
   }, []);
 
   const nombreCliente = usuario?.nombre?.split(' ')[0] ?? 'tú';
+  const inicialesCliente = iniciales(usuario?.nombre?.trim() || nombreCliente);
+  const totalCitasHistoricas = useMemo(
+    () => salonesPrivados.reduce((acumulado, salon) => acumulado + salon.totalVisitas, 0),
+    [salonesPrivados],
+  );
+  const ultimaVisitaRegistrada = salonesPrivados[0]?.ultimaVisita ?? null;
 
   return (
     <div className="min-h-screen bg-slate-50 font-sans">
       <NavegacionCliente />
 
       <main className="max-w-7xl mx-auto px-4 md:px-8 pt-8 pb-24">
-        <header className="mb-8 overflow-hidden rounded-4xl border border-slate-200 bg-white shadow-sm">
-          <div className="grid gap-6 px-6 py-7 md:grid-cols-[1.3fr_0.9fr] md:px-8 md:py-8">
-            <div>
-              <div className="mb-3 inline-flex items-center gap-2 rounded-full border border-pink-200 bg-pink-50 px-3 py-1 text-[11px] font-black uppercase tracking-[0.22em] text-pink-700">
-                <Sparkles className="h-3.5 w-3.5" /> Panel del cliente
+        <header className="relative mb-8 overflow-hidden rounded-4xl border border-stone-200/80 bg-[linear-gradient(135deg,#fffdf8_0%,#fff7f1_45%,#fffefe_100%)] shadow-[0_30px_80px_-45px_rgba(15,23,42,0.35)]">
+          <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(244,114,182,0.16),transparent_34%),radial-gradient(circle_at_bottom_right,rgba(251,191,36,0.14),transparent_28%)]" />
+          <div
+            className="absolute -right-12 top-8 h-40 w-40 rounded-full border border-white/70 bg-white/40 blur-2xl"
+            aria-hidden="true"
+          />
+          <div className="relative grid gap-6 px-5 py-6 sm:px-7 sm:py-8 lg:grid-cols-[minmax(0,1.35fr)_minmax(19rem,0.95fr)] lg:items-end lg:gap-8 lg:px-10 lg:py-10">
+            <div className="space-y-5">
+              <div className="inline-flex items-center gap-2 rounded-full border border-rose-200/80 bg-white/80 px-3 py-1.5 text-[11px] font-black uppercase tracking-[0.24em] text-rose-700 backdrop-blur">
+                <Sparkles className="h-3.5 w-3.5" aria-hidden="true" /> Panel del cliente
               </div>
-              <h1 className="text-3xl font-black text-slate-900 md:text-4xl">
-                Bienvenida de vuelta, <span className="text-pink-600">{nombreCliente}</span>
-              </h1>
-              <p className="mt-3 max-w-2xl text-sm font-medium leading-6 text-slate-500 md:text-base">
-                Aquí solo ves los salones donde ya te atendieron, con las sedes y categorías que
-                realmente forman parte de tu historial.
-              </p>
+
+              <div className="flex flex-col gap-4 sm:flex-row sm:items-start">
+                <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-3xl border border-white/80 bg-slate-900 text-lg font-black uppercase tracking-[0.16em] text-white shadow-[0_18px_35px_-24px_rgba(15,23,42,0.8)]">
+                  {inicialesCliente}
+                </div>
+                <div className="space-y-3">
+                  <h1 className="max-w-3xl text-3xl font-black tracking-[-0.03em] text-slate-900 sm:text-[2.5rem] sm:leading-[1.02]">
+                    Bienvenida de vuelta, <span className="text-rose-700">{nombreCliente}</span>
+                  </h1>
+                  <p className="max-w-2xl text-sm font-medium leading-6 text-slate-600 sm:text-base">
+                    Un espacio más limpio para revisar solo los salones que ya forman parte de tu
+                    recorrido, con sedes y categorías respaldadas por tu historial real.
+                  </p>
+                </div>
+              </div>
+
+              <div className="grid gap-3 sm:grid-cols-3">
+                <div className="rounded-3xl border border-stone-200/80 bg-white/80 px-4 py-4 backdrop-blur">
+                  <p className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-500">
+                    País activo
+                  </p>
+                  <p className="mt-2 text-lg font-black text-slate-900">
+                    {etiquetaPais(paisCliente)}
+                  </p>
+                  <p className="mt-1 text-xs leading-5 text-slate-500">
+                    La visibilidad se mantiene restringida a tu país.
+                  </p>
+                </div>
+                <div className="rounded-3xl border border-stone-200/80 bg-white/80 px-4 py-4 backdrop-blur">
+                  <p className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-500">
+                    Historial real
+                  </p>
+                  <p className="mt-2 text-lg font-black text-slate-900">
+                    {salonesPrivados.length} salones
+                  </p>
+                  <p className="mt-1 text-xs leading-5 text-slate-500">
+                    Calculado solo con citas completadas de tu cuenta.
+                  </p>
+                </div>
+                <div className="rounded-3xl border border-stone-200/80 bg-white/80 px-4 py-4 backdrop-blur">
+                  <p className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-500">
+                    Último movimiento
+                  </p>
+                  <p className="mt-2 text-lg font-black text-slate-900">
+                    {ultimaVisitaRegistrada
+                      ? formatearFechaCorta(ultimaVisitaRegistrada)
+                      : 'Sin citas'}
+                  </p>
+                  <p className="mt-1 text-xs leading-5 text-slate-500">
+                    Referencia útil para retomar tu próxima reserva.
+                  </p>
+                </div>
+              </div>
             </div>
-            <div className="grid gap-3 sm:grid-cols-2 md:grid-cols-1">
-              <div className="rounded-3xl border border-slate-200 bg-slate-50 px-4 py-4">
-                <p className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-500">
-                  País activo
-                </p>
-                <p className="mt-2 text-lg font-black text-slate-900">
-                  {etiquetaPais(paisCliente)}
-                </p>
-                <p className="mt-1 text-xs text-slate-500">
-                  Los salones visibles quedan restringidos a tu país.
-                </p>
+
+            <div className="rounded-4xl border border-stone-200/80 bg-slate-950 px-5 py-5 text-white shadow-[0_24px_60px_-34px_rgba(15,23,42,0.9)] sm:px-6 sm:py-6">
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <p className="text-[10px] font-black uppercase tracking-[0.24em] text-rose-200">
+                    Resumen curado
+                  </p>
+                  <p className="mt-2 text-2xl font-black tracking-[-0.03em] text-white sm:text-[2rem]">
+                    {totalCitasHistoricas}
+                  </p>
+                  <p className="mt-1 text-sm text-slate-300">
+                    cita{totalCitasHistoricas === 1 ? '' : 's'} completada
+                    {totalCitasHistoricas === 1 ? '' : 's'} en tu historial.
+                  </p>
+                </div>
+                <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-white/10 text-rose-200 backdrop-blur">
+                  <History className="h-5 w-5" aria-hidden="true" />
+                </div>
               </div>
-              <div className="rounded-3xl border border-slate-200 bg-slate-50 px-4 py-4">
-                <p className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-500">
-                  Historial real
-                </p>
-                <p className="mt-2 text-lg font-black text-slate-900">
-                  {salonesPrivados.length} salones
-                </p>
-                <p className="mt-1 text-xs text-slate-500">
-                  Basado solo en citas completadas de tu cuenta.
+
+              <div className="mt-6 space-y-4 border-t border-white/10 pt-4">
+                <div className="flex items-start justify-between gap-3 text-sm">
+                  <span className="text-slate-300">Salones disponibles para volver a reservar</span>
+                  <span className="font-black text-white">{salonesPrivados.length}</span>
+                </div>
+                <div className="flex items-start justify-between gap-3 text-sm">
+                  <span className="text-slate-300">Categorías consumidas registradas</span>
+                  <span className="font-black text-white">{categoriasDisponibles.length}</span>
+                </div>
+                <p className="rounded-3xl border border-white/10 bg-white/5 px-4 py-3 text-sm leading-6 text-slate-200">
+                  Explora tu historial con filtros más precisos y accede de nuevo a cada salón con
+                  una vista más clara, sobria y enfocada en continuidad.
                 </p>
               </div>
             </div>

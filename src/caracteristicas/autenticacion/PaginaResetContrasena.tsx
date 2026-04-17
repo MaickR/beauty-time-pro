@@ -3,9 +3,10 @@ import { Link, useSearchParams, useNavigate } from 'react-router-dom';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
-import { Eye, EyeOff, Lock, ArrowLeft, CheckCircle, Scissors, AlertCircle } from 'lucide-react';
+import { Eye, EyeOff, Lock, ArrowLeft, CheckCircle, AlertCircle } from 'lucide-react';
 import { confirmarResetAPI } from '../../servicios/servicioAuth';
 import { usarTituloPagina } from '../../hooks/usarTituloPagina';
+import { MarcaAplicacion } from '../../componentes/ui/MarcaAplicacion';
 
 const esquema = z
   .object({
@@ -65,7 +66,9 @@ export function PaginaResetContrasena() {
       setExitoso(true);
     } catch (error) {
       const mensaje =
-        error instanceof Error ? error.message : 'El enlace es inválido o ha expirado. Solicita uno nuevo.';
+        error instanceof Error
+          ? error.message
+          : 'El enlace es inválido o ha expirado. Solicita uno nuevo.';
       setError('root', { message: mensaje });
     }
   };
@@ -73,12 +76,7 @@ export function PaginaResetContrasena() {
   return (
     <div className="min-h-screen flex items-center justify-center bg-gray-50 p-6">
       <div className="w-full max-w-md">
-        <div className="flex items-center gap-2 justify-center mb-8">
-          <div className="bg-linear-to-br from-[#880E4F] to-[#F06292] p-2.5 rounded-xl">
-            <Scissors className="text-white w-6 h-6" aria-hidden="true" />
-          </div>
-          <span className="font-black text-lg text-slate-900">Beauty Time Pro</span>
-        </div>
+        <MarcaAplicacion className="mb-8 justify-center" />
 
         <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-8">
           {exitoso ? (
@@ -114,7 +112,10 @@ export function PaginaResetContrasena() {
               <form onSubmit={handleSubmit(alEnviar)} noValidate className="space-y-4">
                 {/* Nueva contraseña */}
                 <div>
-                  <label htmlFor="contrasena-nueva" className="block text-sm font-semibold text-slate-700 mb-1.5">
+                  <label
+                    htmlFor="contrasena-nueva"
+                    className="block text-sm font-semibold text-slate-700 mb-1.5"
+                  >
                     Nueva contraseña
                   </label>
                   <div className="relative">
@@ -141,7 +142,11 @@ export function PaginaResetContrasena() {
                     </button>
                   </div>
                   {errors.contrasenaNueva && (
-                    <p id="error-nueva" role="alert" className="mt-1 text-xs text-red-500 font-medium">
+                    <p
+                      id="error-nueva"
+                      role="alert"
+                      className="mt-1 text-xs text-red-500 font-medium"
+                    >
                       {errors.contrasenaNueva.message}
                     </p>
                   )}
@@ -149,7 +154,10 @@ export function PaginaResetContrasena() {
 
                 {/* Confirmar contraseña */}
                 <div>
-                  <label htmlFor="confirmar-contrasena" className="block text-sm font-semibold text-slate-700 mb-1.5">
+                  <label
+                    htmlFor="confirmar-contrasena"
+                    className="block text-sm font-semibold text-slate-700 mb-1.5"
+                  >
                     Confirmar contraseña
                   </label>
                   <div className="relative">
@@ -172,11 +180,19 @@ export function PaginaResetContrasena() {
                       className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 transition-colors"
                       aria-label={mostrarConfirmar ? 'Ocultar contraseña' : 'Mostrar contraseña'}
                     >
-                      {mostrarConfirmar ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                      {mostrarConfirmar ? (
+                        <EyeOff className="w-4 h-4" />
+                      ) : (
+                        <Eye className="w-4 h-4" />
+                      )}
                     </button>
                   </div>
                   {errors.confirmarContrasena && (
-                    <p id="error-confirmar" role="alert" className="mt-1 text-xs text-red-500 font-medium">
+                    <p
+                      id="error-confirmar"
+                      role="alert"
+                      className="mt-1 text-xs text-red-500 font-medium"
+                    >
                       {errors.confirmarContrasena.message}
                     </p>
                   )}

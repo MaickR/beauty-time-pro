@@ -1,8 +1,10 @@
 ﻿<div align="center">
 
-# Beauty Time Pro
+# SalonProMaster
 
-**Plataforma SaaS para la gestión integral de salones de belleza**
+**Plataforma SaaS para la operación moderna de salones de belleza**
+
+<p><strong>Dominio oficial:</strong> https://salonpromaster.com</p>
 
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.9-3178C6?style=flat-square&logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
 [![React](https://img.shields.io/badge/React-19-61DAFB?style=flat-square&logo=react&logoColor=black)](https://react.dev/)
@@ -15,7 +17,9 @@
 
 ---
 
-Beauty Time Pro conecta propietarios de salones de belleza con sus clientes en México y Colombia. Desde un solo panel el dueño gestiona agenda, personal, servicios y fidelidad — mientras el cliente encuentra y reserva su cita en segundos.
+SalonProMaster centraliza agenda, reservas, personal, pagos y relación con clientes en una sola plataforma. El proyecto está pensado para una operación comercial real en México y Colombia, con foco en seguridad, consistencia de negocio, rendimiento y una experiencia clara tanto para el salón como para el cliente final.
+
+El repositorio incluye el frontend público y privado, la API backend, validaciones de entorno, auditoría operativa y pruebas automatizadas para flujos críticos.
 
 <br>
 
@@ -36,12 +40,12 @@ Beauty Time Pro conecta propietarios de salones de belleza con sus clientes en M
 ## Características
 
 ### Panel del propietario
-- **Agenda visual** semanal con disponibilidad en tiempo real
-- **Gestión de personal** — especialidades, horarios, descansos y días libres
-- **Catálogo de servicios** con precio, duración y categorías
-- **Programa de fidelidad** configurable por salón (puntos, recompensas)
-- **Perfil de marca** — logo, color primario, descripción y datos de contacto
-- **Control de festivos** y cierre por días especiales
+- **Agenda visual** con disponibilidad, cierres y control operativo en tiempo real
+- **Gestión de personal** con especialidades, horarios, descansos y estado de acceso
+- **Catálogo de servicios** con duración, precio y categorías por salón
+- **Programa de fidelidad** configurable por salón
+- **Perfil comercial** con logo, color primario, descripción y datos de contacto
+- **Control de festivos** y excepciones de disponibilidad
 - Notificaciones push a clientes ante cambios en sus reservas
 
 ### Portal del cliente
@@ -50,7 +54,7 @@ Beauty Time Pro conecta propietarios de salones de belleza con sus clientes en M
 - Recordatorios automáticos por email (24 h antes)
 - Cancelación segura con enlace único por email
 - Historial de citas y próximas reservas
-- Perfil con foto de avatar y acumulación de puntos de fidelidad
+- Perfil de cliente con datos personales e historial de fidelidad
 - Notificaciones push en tiempo real
 
 ### Panel maestro (superadmin)
@@ -206,9 +210,10 @@ VAPID_SUBJECT="mailto:admin@tudominio.com"
 
 ~~~env
 VITE_URL_API=http://localhost:3000
+VITE_URL_PUBLICA=http://localhost:5173
 ~~~
 
-> En producción apunta a la URL pública del backend.
+> En producción usa `VITE_URL_API` con la URL publica del backend y `VITE_URL_PUBLICA=https://salonpromaster.com` para que enlaces, QR y rutas compartidas salgan con el dominio oficial.
 
 <br>
 
@@ -241,7 +246,7 @@ VITE_URL_API=http://localhost:3000
 
 ## Autenticación y seguridad
 
-- **JWT** — access token efímero (15 min) + refresh token en cookie `httpOnly`, `secure`, `sameSite: strict`
+- **JWT** — access token efímero (15 min) + refresh token en cookie `httpOnly`; en cross-origin productivo se emite como `Secure` + `SameSite=None` para frontend Vercel y API en dominio distinto
 - **Bcrypt** — contraseñas hasheadas con factor 12
 - **CSP completo** via `@fastify/helmet` — sin `unsafe-eval`, orígenes explícitos
 - **Rate limiting** en todos los endpoints públicos y de autenticación
@@ -261,14 +266,17 @@ VITE_URL_API=http://localhost:3000
 2. Configurar las variables de entorno del backend
 3. Railway ejecuta `npm run start:railway`, que aplica `prisma migrate deploy` antes de levantar Fastify para evitar 500 por esquema desfasado
 4. Verificar salud: `GET /health` → `{ "status": "ok" }`
-5. Si el frontend vive en Vercel con previews, configurar `FRONTEND_ORIGENES_PERMITIDOS` con orígenes exactos o patrones acotados, por ejemplo `https://beauty-time-pro-git-*.vercel.app`
+5. Si el frontend vive en Vercel con previews, configurar `FRONTEND_ORIGENES_PERMITIDOS` con el dominio oficial y previews, por ejemplo `https://www.salonpromaster.com,https://<tu-proyecto>.vercel.app,https://<tu-proyecto>-git-*.vercel.app`
 
 ### Frontend — Vercel
 
 1. Importar repositorio desde la raíz
 2. Configurar `VITE_URL_API` apuntando al backend publicado
-3. Vercel detecta Vite automáticamente
-4. En despliegue Vercel + Railway el backend ya queda preparado para cookies `SameSite=None; Secure`, necesarias cuando frontend y API viven en dominios distintos
+3. Configurar `VITE_URL_PUBLICA=https://salonpromaster.com` en producción para que links publicos y QR no salgan con el subdominio preview
+4. Asociar el dominio `salonpromaster.com` y, si aplica, `www.salonpromaster.com` en Vercel
+5. Confirmar que el backend tenga esos orígenes en `FRONTEND_URL` y `FRONTEND_ORIGENES_PERMITIDOS`
+6. Vercel detecta Vite automáticamente
+7. En despliegue Vercel + Railway el backend ya queda preparado para cookies `SameSite=None; Secure`, necesarias cuando frontend y API viven en dominios distintos
 
 <br>
 

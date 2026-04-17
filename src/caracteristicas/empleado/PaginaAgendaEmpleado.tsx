@@ -276,8 +276,12 @@ function MetaDatoEmpleado({
         acento ? 'border-pink-100 bg-pink-50/80' : 'border-slate-200 bg-slate-50'
       }`}
     >
-      <p className="text-[9.5px] font-semibold uppercase tracking-wide text-slate-400">{etiqueta}</p>
-      <p className={`mt-1 text-[13px] font-semibold leading-tight ${acento ? 'text-pink-700' : 'text-slate-900'}`}>
+      <p className="text-[9.5px] font-semibold uppercase tracking-wide text-slate-400">
+        {etiqueta}
+      </p>
+      <p
+        className={`mt-1 text-[13px] font-semibold leading-tight ${acento ? 'text-pink-700' : 'text-slate-900'}`}
+      >
         {valor}
       </p>
     </div>
@@ -341,7 +345,10 @@ interface PropsTarjetaReservaEmpleado {
   actualizando: boolean;
   onAbrirDetalle: (reserva: ReservaEmpleado) => void;
   onAbrirExtra: (reservaId: string) => void;
-  onActualizarEstado: (id: string, estado: 'confirmed' | 'working' | 'completed' | 'no_show') => void;
+  onActualizarEstado: (
+    id: string,
+    estado: 'confirmed' | 'working' | 'completed' | 'no_show',
+  ) => void;
 }
 
 function TarjetaReservaEmpleado({
@@ -439,7 +446,9 @@ function TarjetaReservaEmpleado({
               >
                 <div className="flex items-center justify-between gap-3">
                   <span className="font-medium text-slate-800">{servicio.name}</span>
-                  <span className="text-[11px] font-black text-slate-500">{servicio.duration} min</span>
+                  <span className="text-[11px] font-black text-slate-500">
+                    {servicio.duration} min
+                  </span>
                 </div>
               </div>
             ))}
@@ -460,7 +469,8 @@ function TarjetaReservaEmpleado({
                   <div className="min-w-0">
                     <p className="truncate font-semibold text-slate-900">{producto.nombre}</p>
                     <p className="text-[11px] text-slate-500">
-                      {producto.cantidad} × {formatearMontoSinDecimales(producto.precioUnitario, moneda)}
+                      {producto.cantidad} ×{' '}
+                      {formatearMontoSinDecimales(producto.precioUnitario, moneda)}
                     </p>
                   </div>
                   <span className="text-[11px] font-black text-emerald-700">
@@ -473,14 +483,14 @@ function TarjetaReservaEmpleado({
         )}
 
         <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-          <MetaDatoEmpleado label="Sucursal" valor={reserva.sucursal || 'Principal'} />
-          <MetaDatoEmpleado label="Duración" valor={`${reserva.duracion} min`} />
+          <MetaDatoEmpleado etiqueta="Sucursal" valor={reserva.sucursal || 'Principal'} />
+          <MetaDatoEmpleado etiqueta="Duración" valor={`${reserva.duracion} min`} />
           <MetaDatoEmpleado
-            label="Método de pago"
+            etiqueta="Método de pago"
             valor={formatearMetodoPagoEmpleado(reserva.metodoPago)}
           />
           <MetaDatoEmpleado
-            label="Total"
+            etiqueta="Total"
             valor={formatearMontoSinDecimales(reserva.precioTotal, moneda)}
             acento
           />
@@ -509,102 +519,103 @@ function TarjetaReservaEmpleado({
           </div>
         )}
 
-          {mostrarDetalleCompleto && (
-            <div className="space-y-3 rounded-[1.75rem] border border-slate-200 bg-slate-50 p-4">
-              <div className="grid gap-3 md:grid-cols-2">
-                <div className="rounded-2xl bg-white p-4 shadow-sm">
-                  <p className="text-[10px] font-black uppercase tracking-[0.22em] text-slate-500">
-                    Servicios del día
-                  </p>
-                  <div className="mt-3 space-y-2">
-                    {serviciosDetalle.map((servicio) => (
-                      <div
-                        key={`${reserva.id}-detalle-${servicio.order}-${servicio.name}`}
-                        className="flex items-center justify-between gap-3 rounded-2xl border border-slate-100 px-3 py-2"
-                      >
-                        <div>
-                          <p className="text-sm font-black text-slate-800">{servicio.name}</p>
-                          <p className="text-xs text-slate-500">{servicio.duration} min</p>
-                        </div>
-                        <div className="text-right">
-                          <p className="text-sm font-black text-slate-900">
-                            {formatearMontoSinDecimales(servicio.price, moneda)}
-                          </p>
-                          <p className="text-[10px] font-bold uppercase tracking-wide text-slate-400">
-                            {
-                              badgePorEstado(
-                                (servicio.status as ReservaEmpleado['estado']) || reserva.estado,
-                              ).etiqueta
-                            }
-                          </p>
-                        </div>
+        {mostrarDetalleCompleto && (
+          <div className="space-y-3 rounded-[1.75rem] border border-slate-200 bg-slate-50 p-4">
+            <div className="grid gap-3 md:grid-cols-2">
+              <div className="rounded-2xl bg-white p-4 shadow-sm">
+                <p className="text-[10px] font-black uppercase tracking-[0.22em] text-slate-500">
+                  Servicios del día
+                </p>
+                <div className="mt-3 space-y-2">
+                  {serviciosDetalle.map((servicio) => (
+                    <div
+                      key={`${reserva.id}-detalle-${servicio.order}-${servicio.name}`}
+                      className="flex items-center justify-between gap-3 rounded-2xl border border-slate-100 px-3 py-2"
+                    >
+                      <div>
+                        <p className="text-sm font-black text-slate-800">{servicio.name}</p>
+                        <p className="text-xs text-slate-500">{servicio.duration} min</p>
                       </div>
-                    ))}
-                  </div>
-                </div>
-
-                <div className="space-y-3">
-                  {productosAdicionales.length > 0 && (
-                    <div className="rounded-2xl bg-white p-4 shadow-sm">
-                      <p className="inline-flex items-center gap-2 text-[10px] font-black uppercase tracking-[0.22em] text-slate-500">
-                        <Package2 className="h-3.5 w-3.5 text-emerald-600" aria-hidden="true" />
-                        Productos de la cita
-                      </p>
-                      <div className="mt-3 space-y-2">
-                        {productosAdicionales.map((producto) => (
-                          <div
-                            key={`${reserva.id}-producto-${producto.id}`}
-                            className="flex items-center justify-between gap-3 rounded-2xl border border-slate-100 px-3 py-2"
-                          >
-                            <div>
-                              <p className="text-sm font-black text-slate-800">{producto.nombre}</p>
-                              <p className="text-xs text-slate-500">
-                                {producto.cantidad} x {formatearMontoSinDecimales(producto.precioUnitario, moneda)}
-                              </p>
-                            </div>
-                            <p className="text-sm font-black text-emerald-700">
-                              {formatearMontoSinDecimales(producto.total, moneda)}
-                            </p>
-                          </div>
-                        ))}
+                      <div className="text-right">
+                        <p className="text-sm font-black text-slate-900">
+                          {formatearMontoSinDecimales(servicio.price, moneda)}
+                        </p>
+                        <p className="text-[10px] font-bold uppercase tracking-wide text-slate-400">
+                          {
+                            badgePorEstado(
+                              (servicio.status as ReservaEmpleado['estado']) || reserva.estado,
+                            ).etiqueta
+                          }
+                        </p>
                       </div>
                     </div>
-                  )}
-
-                  {(reserva.marcaTinte || reserva.tonalidad) && (
-                    <div className="rounded-2xl bg-white p-4 shadow-sm">
-                      <p className="inline-flex items-center gap-2 text-[10px] font-black uppercase tracking-[0.22em] text-slate-500">
-                        <Palette className="h-3.5 w-3.5 text-pink-500" aria-hidden="true" />
-                        Color y tono
-                      </p>
-                      <p className="mt-2 text-sm font-bold text-slate-800">
-                        {[reserva.marcaTinte, reserva.tonalidad].filter(Boolean).join(' · ')}
-                      </p>
-                    </div>
-                  )}
-
-                  {reserva.observaciones && (
-                    <div className="rounded-2xl bg-white p-4 shadow-sm">
-                      <p className="inline-flex items-center gap-2 text-[10px] font-black uppercase tracking-[0.22em] text-slate-500">
-                        <StickyNote className="h-3.5 w-3.5 text-amber-500" aria-hidden="true" />
-                        Observaciones
-                      </p>
-                      <p className="mt-2 text-sm text-slate-700">{reserva.observaciones}</p>
-                    </div>
-                  )}
-
-                  {reserva.notasMenorEdad && (
-                    <div className="rounded-2xl bg-white p-4 shadow-sm">
-                      <p className="text-[10px] font-black uppercase tracking-[0.22em] text-slate-500">
-                        Nota adicional
-                      </p>
-                      <p className="mt-2 text-sm text-slate-700">{reserva.notasMenorEdad}</p>
-                    </div>
-                  )}
+                  ))}
                 </div>
               </div>
+
+              <div className="space-y-3">
+                {productosAdicionales.length > 0 && (
+                  <div className="rounded-2xl bg-white p-4 shadow-sm">
+                    <p className="inline-flex items-center gap-2 text-[10px] font-black uppercase tracking-[0.22em] text-slate-500">
+                      <Package2 className="h-3.5 w-3.5 text-emerald-600" aria-hidden="true" />
+                      Productos de la cita
+                    </p>
+                    <div className="mt-3 space-y-2">
+                      {productosAdicionales.map((producto) => (
+                        <div
+                          key={`${reserva.id}-producto-${producto.id}`}
+                          className="flex items-center justify-between gap-3 rounded-2xl border border-slate-100 px-3 py-2"
+                        >
+                          <div>
+                            <p className="text-sm font-black text-slate-800">{producto.nombre}</p>
+                            <p className="text-xs text-slate-500">
+                              {producto.cantidad} x{' '}
+                              {formatearMontoSinDecimales(producto.precioUnitario, moneda)}
+                            </p>
+                          </div>
+                          <p className="text-sm font-black text-emerald-700">
+                            {formatearMontoSinDecimales(producto.total, moneda)}
+                          </p>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {(reserva.marcaTinte || reserva.tonalidad) && (
+                  <div className="rounded-2xl bg-white p-4 shadow-sm">
+                    <p className="inline-flex items-center gap-2 text-[10px] font-black uppercase tracking-[0.22em] text-slate-500">
+                      <Palette className="h-3.5 w-3.5 text-pink-500" aria-hidden="true" />
+                      Color y tono
+                    </p>
+                    <p className="mt-2 text-sm font-bold text-slate-800">
+                      {[reserva.marcaTinte, reserva.tonalidad].filter(Boolean).join(' · ')}
+                    </p>
+                  </div>
+                )}
+
+                {reserva.observaciones && (
+                  <div className="rounded-2xl bg-white p-4 shadow-sm">
+                    <p className="inline-flex items-center gap-2 text-[10px] font-black uppercase tracking-[0.22em] text-slate-500">
+                      <StickyNote className="h-3.5 w-3.5 text-amber-500" aria-hidden="true" />
+                      Observaciones
+                    </p>
+                    <p className="mt-2 text-sm text-slate-700">{reserva.observaciones}</p>
+                  </div>
+                )}
+
+                {reserva.notasMenorEdad && (
+                  <div className="rounded-2xl bg-white p-4 shadow-sm">
+                    <p className="text-[10px] font-black uppercase tracking-[0.22em] text-slate-500">
+                      Nota adicional
+                    </p>
+                    <p className="mt-2 text-sm text-slate-700">{reserva.notasMenorEdad}</p>
+                  </div>
+                )}
+              </div>
             </div>
-          )}
+          </div>
+        )}
 
         <div className="grid grid-cols-1 gap-2 pt-0.5 sm:grid-cols-2 xl:grid-cols-4">
           <button
@@ -874,7 +885,8 @@ function ModalDetalleReservaEmpleado({
                   <div>
                     <p className="font-black text-slate-900">{producto.nombre}</p>
                     <p className="text-sm text-slate-500">
-                      {producto.cantidad} x {formatearMontoSinDecimales(producto.precioUnitario, moneda)}
+                      {producto.cantidad} x{' '}
+                      {formatearMontoSinDecimales(producto.precioUnitario, moneda)}
                     </p>
                   </div>
                   <span className="font-black text-emerald-700">
@@ -939,9 +951,7 @@ export function PaginaAgendaEmpleado() {
   const [filtroServicioReservas, setFiltroServicioReservas] = useState('todos');
   const [ordenReservas, setOrdenReservas] = useState<'tempranas' | 'tardias'>('tempranas');
   const [mostrarModalCrearCita, setMostrarModalCrearCita] = useState(false);
-  const [modalMetricaActiva, setModalMetricaActiva] = useState<PeriodoMetricaEmpleado | null>(
-    null,
-  );
+  const [modalMetricaActiva, setModalMetricaActiva] = useState<PeriodoMetricaEmpleado | null>(null);
   const [qrReserva, setQrReserva] = useState<string | null>(null);
   const clienteConsulta = useQueryClient();
   const { mostrarToast } = usarToast();
@@ -1039,8 +1049,13 @@ export function PaginaAgendaEmpleado() {
   });
 
   const mutacionEstado = useMutation({
-    mutationFn: ({ id, estado }: { id: string; estado: 'confirmed' | 'working' | 'completed' | 'no_show' }) =>
-      actualizarEstadoReservaEmpleado(id, estado),
+    mutationFn: ({
+      id,
+      estado,
+    }: {
+      id: string;
+      estado: 'confirmed' | 'working' | 'completed' | 'no_show';
+    }) => actualizarEstadoReservaEmpleado(id, estado),
     onSuccess: async (_, variables) => {
       const aplicarActualizacionEstado = (reservas: ReservaEmpleado[] | undefined) =>
         (reservas ?? []).map((reserva) => {
@@ -1139,8 +1154,14 @@ export function PaginaAgendaEmpleado() {
           };
         });
 
-      clienteConsulta.setQueryData<ReservaEmpleado[]>(['mi-agenda', fechaSeleccionada], aplicarActualizacionLocal);
-      clienteConsulta.setQueryData<ReservaEmpleado[]>(['mi-agenda-mes', mesSeleccionado], aplicarActualizacionLocal);
+      clienteConsulta.setQueryData<ReservaEmpleado[]>(
+        ['mi-agenda', fechaSeleccionada],
+        aplicarActualizacionLocal,
+      );
+      clienteConsulta.setQueryData<ReservaEmpleado[]>(
+        ['mi-agenda-mes', mesSeleccionado],
+        aplicarActualizacionLocal,
+      );
 
       cerrarModalAdicional();
       await clienteConsulta.invalidateQueries({ queryKey: ['mi-agenda'] });
@@ -1244,7 +1265,8 @@ export function PaginaAgendaEmpleado() {
   const consultaProductos = useQuery({
     queryKey: ['productos-agenda-empleado', perfil?.estudio.id],
     queryFn: () => obtenerProductos(perfil!.estudio.id),
-    enabled: Boolean(modalAdicional) && perfil?.estudio.plan === 'PRO' && Boolean(perfil?.estudio.id),
+    enabled:
+      Boolean(modalAdicional) && perfil?.estudio.plan === 'PRO' && Boolean(perfil?.estudio.id),
     staleTime: 60_000,
   });
   const productosCatalogo = useMemo(
@@ -1268,7 +1290,15 @@ export function PaginaAgendaEmpleado() {
   useEffect(() => {
     setPaginaReservas(1);
     setPaginaHistorial(1);
-  }, [fechaSeleccionada, vistaActiva, modoHistorial, busquedaReservas, filtroEstadoReservas, filtroServicioReservas, ordenReservas]);
+  }, [
+    fechaSeleccionada,
+    vistaActiva,
+    modoHistorial,
+    busquedaReservas,
+    filtroEstadoReservas,
+    filtroServicioReservas,
+    ordenReservas,
+  ]);
 
   useEffect(() => {
     if (!fechaAltaEmpleado) {
@@ -1391,7 +1421,7 @@ export function PaginaAgendaEmpleado() {
     }
 
     const primeraReserva = reservasResumenDiaSeleccionado[0];
-    const ultimaReserva = reservasResumenDiaSeleccionado.at(-1);
+    const ultimaReserva = reservasResumenDiaSeleccionado[reservasResumenDiaSeleccionado.length - 1];
 
     return {
       cantidad: reservasResumenDiaSeleccionado.length,
@@ -1461,7 +1491,9 @@ export function PaginaAgendaEmpleado() {
             reserva.telefonoCliente,
             reserva.fecha,
             reserva.horaInicio,
-            (reserva.serviciosDetalle ?? reserva.servicios).map((servicio) => servicio.name).join(' '),
+            (reserva.serviciosDetalle ?? reserva.servicios)
+              .map((servicio) => servicio.name)
+              .join(' '),
           ]
             .join(' ')
             .toLowerCase()
@@ -1492,9 +1524,13 @@ export function PaginaAgendaEmpleado() {
   );
   const reservaEnProceso = reservasAgendaBase.find((reserva) => reserva.estado === 'working');
   const cargandoHistorial =
-    consultaAgendaMes.isLoading || consultaAgendaMesAnterior.isLoading || consultaAgendaMesSiguiente.isLoading;
+    consultaAgendaMes.isLoading ||
+    consultaAgendaMesAnterior.isLoading ||
+    consultaAgendaMesSiguiente.isLoading;
   const errorHistorial =
-    consultaAgendaMes.isError || consultaAgendaMesAnterior.isError || consultaAgendaMesSiguiente.isError;
+    consultaAgendaMes.isError ||
+    consultaAgendaMesAnterior.isError ||
+    consultaAgendaMesSiguiente.isError;
   const cargandoVista = vistaActiva === 'historial' ? cargandoHistorial : consultaAgenda.isLoading;
   const errorVista = vistaActiva === 'historial' ? errorHistorial : consultaAgenda.isError;
 
@@ -1562,7 +1598,11 @@ export function PaginaAgendaEmpleado() {
               </p>
               <p className="mt-2 text-sm text-slate-200">{perfil?.estudio.nombre ?? 'Tu salón'}</p>
               <div className="mt-3 space-y-2 text-xs font-bold uppercase tracking-wide text-pink-100">
-                <p>{reservaEnProceso ? 'Tienes un servicio en proceso' : 'Sin servicio en proceso ahora'}</p>
+                <p>
+                  {reservaEnProceso
+                    ? 'Tienes un servicio en proceso'
+                    : 'Sin servicio en proceso ahora'}
+                </p>
                 <p>Historial visible desde {formatearFechaHumana(fechaMinimaAgenda)}</p>
               </div>
             </div>
@@ -1609,6 +1649,7 @@ export function PaginaAgendaEmpleado() {
                   mostrarCitas
                   etiquetaCitas="Mis citas"
                   titulo="Calendario de citas"
+                  variante="compacta"
                 />
               ) : (
                 <div
@@ -1679,11 +1720,13 @@ export function PaginaAgendaEmpleado() {
 
                 {vistaActiva === 'historial' && (
                   <div className="flex flex-wrap gap-2">
-                    {([
-                      { valor: 'dia', etiqueta: 'Historial diario' },
-                      { valor: 'semana', etiqueta: 'Historial semanal' },
-                      { valor: 'mes', etiqueta: 'Historial mensual' },
-                    ] as const).map((opcion) => (
+                    {(
+                      [
+                        { valor: 'dia', etiqueta: 'Historial diario' },
+                        { valor: 'semana', etiqueta: 'Historial semanal' },
+                        { valor: 'mes', etiqueta: 'Historial mensual' },
+                      ] as const
+                    ).map((opcion) => (
                       <button
                         key={opcion.valor}
                         type="button"
@@ -1704,7 +1747,9 @@ export function PaginaAgendaEmpleado() {
                   <select
                     value={filtroEstadoReservas}
                     onChange={(evento) =>
-                      setFiltroEstadoReservas(evento.target.value as 'todos' | ReservaEmpleado['estado'])
+                      setFiltroEstadoReservas(
+                        evento.target.value as 'todos' | ReservaEmpleado['estado'],
+                      )
                     }
                     className="w-full rounded-2xl border border-slate-200 px-4 py-3 text-sm font-medium text-slate-700 outline-none transition focus:border-pink-300 focus:ring-2 focus:ring-pink-200"
                   >
@@ -1731,7 +1776,9 @@ export function PaginaAgendaEmpleado() {
 
                   <select
                     value={ordenReservas}
-                    onChange={(evento) => setOrdenReservas(evento.target.value as 'tempranas' | 'tardias')}
+                    onChange={(evento) =>
+                      setOrdenReservas(evento.target.value as 'tempranas' | 'tardias')
+                    }
                     className="w-full rounded-2xl border border-slate-200 px-4 py-3 text-sm font-medium text-slate-700 outline-none transition focus:border-pink-300 focus:ring-2 focus:ring-pink-200"
                   >
                     <option value="tempranas">Orden: ascendente</option>
@@ -1764,7 +1811,11 @@ export function PaginaAgendaEmpleado() {
               </div>
 
               {cargandoVista && (
-                <div className="space-y-3" aria-busy="true" aria-label="Cargando citas del empleado">
+                <div
+                  className="space-y-3"
+                  aria-busy="true"
+                  aria-label="Cargando citas del empleado"
+                >
                   {[...Array(3)].map((_, indice) => (
                     <div key={indice} className="h-36 animate-pulse rounded-4xl bg-slate-100" />
                   ))}
@@ -1839,7 +1890,7 @@ export function PaginaAgendaEmpleado() {
                 </p>
                 {claveSalon && (
                   <div className="mb-3 rounded-3xl border border-emerald-200 bg-emerald-50 px-4 py-3">
-                    <div className="flex items-start justify-between gap-3">
+                    <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                       <div>
                         <p className="text-[10px] font-black uppercase tracking-[0.22em] text-emerald-700">
                           Clave pública verificada
@@ -1848,7 +1899,8 @@ export function PaginaAgendaEmpleado() {
                           {claveSalon}
                         </p>
                         <p className="mt-2 text-xs text-emerald-800">
-                          Comparte esta clave con el cliente si necesita entrar manualmente al flujo de reserva.
+                          Comparte esta clave con el cliente si necesita entrar manualmente al flujo
+                          de reserva.
                         </p>
                       </div>
                       <button
@@ -1866,8 +1918,12 @@ export function PaginaAgendaEmpleado() {
                   {linkReservas}
                 </div>
                 {qrReserva && (
-                  <div className="mt-3 flex items-center gap-3 rounded-3xl border border-slate-100 bg-slate-50 p-3">
-                    <img src={qrReserva} alt="QR del enlace de reservas del salón" className="h-20 w-20 rounded-2xl bg-white p-2" />
+                  <div className="mt-3 flex flex-col gap-3 rounded-3xl border border-slate-100 bg-slate-50 p-3 sm:flex-row sm:items-center">
+                    <img
+                      src={qrReserva}
+                      alt="QR del enlace de reservas del salón"
+                      className="h-20 w-20 rounded-2xl bg-white p-2"
+                    />
                     <p className="text-xs font-medium text-slate-500">
                       Escanéalo o descárgalo para enviarlo rápido desde mostrador, chat o WhatsApp.
                     </p>
@@ -2080,7 +2136,9 @@ export function PaginaAgendaEmpleado() {
                 type="button"
                 onClick={() => setTabAdicional('servicio')}
                 className={`rounded-xl px-3 py-2 text-xs font-black uppercase transition ${
-                  tabAdicional === 'servicio' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500'
+                  tabAdicional === 'servicio'
+                    ? 'bg-white text-slate-900 shadow-sm'
+                    : 'text-slate-500'
                 }`}
               >
                 Servicio
@@ -2090,7 +2148,9 @@ export function PaginaAgendaEmpleado() {
                 disabled={perfil?.estudio.plan !== 'PRO'}
                 onClick={() => setTabAdicional('producto')}
                 className={`rounded-xl px-3 py-2 text-xs font-black uppercase transition ${
-                  tabAdicional === 'producto' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500'
+                  tabAdicional === 'producto'
+                    ? 'bg-white text-slate-900 shadow-sm'
+                    : 'text-slate-500'
                 } disabled:cursor-not-allowed disabled:opacity-50`}
               >
                 Producto {perfil?.estudio.plan !== 'PRO' ? '· PRO' : ''}
@@ -2204,7 +2264,9 @@ export function PaginaAgendaEmpleado() {
                 disabled={
                   tabAdicional === 'servicio'
                     ? !servicioAdicionalSeleccionado || mutacionAdicional.isPending
-                    : !productoAdicionalSeleccionado || mutacionProductoAdicional.isPending || perfil?.estudio.plan !== 'PRO'
+                    : !productoAdicionalSeleccionado ||
+                      mutacionProductoAdicional.isPending ||
+                      perfil?.estudio.plan !== 'PRO'
                 }
                 onClick={() => {
                   if (!modalAdicional) return;

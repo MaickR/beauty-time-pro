@@ -33,6 +33,16 @@ import { generarSlugUnico } from '../utils/generarSlug.js';
 const REFRESH_EXPIRA = env.JWT_REFRESH_EXPIRA_EN;
 const COOKIE_REFRESH = obtenerNombreCookieRefreshActual();
 const CABECERA_CSRF = 'x-csrf-token';
+const CONFIG_RATE_LIMIT_LOGIN =
+  env.ENTORNO === 'development'
+    ? undefined
+    : {
+        max: 10,
+        timeWindow: '15 minutes',
+        errorResponseBuilder: () => ({
+          error: 'Demasiados intentos. Espera 15 minutos.',
+        }),
+      };
 
 function obtenerMaxAgeRefreshSegundos() {
   const coincidencia = REFRESH_EXPIRA.trim().match(/^(\d+)([smhd])$/i);
@@ -304,6 +314,7 @@ async function registrarAuditoriaAcceso(
     entidadTipo: 'sesion',
     entidadId: payload.sesionId ?? payload.sub,
     detalles: {
+      requestId: solicitud.id,
       actor: {
         rol: payload.rol,
         sujetoId: payload.sub,
@@ -325,17 +336,13 @@ export async function rutasAuth(servidor: FastifyInstance): Promise<void> {
   servidor.post<{ Body: { email?: string; identificador?: string; contrasena?: string; clave?: string } }>(
     '/auth/iniciar-sesion',
     {
-      config: {
-        rateLimit: {
-          max: 10,
-          timeWindow: '15 minutes',
-          errorResponseBuilder: () => ({
-            error: 'Demasiados intentos. Espera 15 minutos.',
-          }),
-        },
-      },
+      config: CONFIG_RATE_LIMIT_LOGIN ? { rateLimit: CONFIG_RATE_LIMIT_LOGIN } : {},
     },
     async (solicitud, respuesta) => {
+      if (!tieneOrigenPermitidoParaCookie(solicitud.headers.origin, solicitud.headers.referer)) {
+        return respuesta.code(403).send({ error: 'Origen no permitido' });
+      }
+
       const { email, identificador, contrasena, clave } = solicitud.body;
 
       // ─── Modo clave (clientes + dueños legados) ───────────────────────────
@@ -489,7 +496,14 @@ export async function rutasAuth(servidor: FastifyInstance): Promise<void> {
             }),
             prisma.usuario.findUnique({
               where: { email: credencial.valor },
-              include: {
+              select: {
+                id: true,
+                email: true,
+                hashContrasena: true,
+                nombre: true,
+                rol: true,
+                activo: true,
+                estudioId: true,
                 estudio: {
                   select: {
                     id: true,
@@ -583,7 +597,14 @@ export async function rutasAuth(servidor: FastifyInstance): Promise<void> {
             },
           }),
           prisma.usuario.findMany({
-            include: {
+            select: {
+              id: true,
+              email: true,
+              hashContrasena: true,
+              nombre: true,
+              rol: true,
+              activo: true,
+              estudioId: true,
               estudio: {
                 select: {
                   id: true,

@@ -1,28 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import {
-  obtenerEtiquetaEstadoReserva,
-  obtenerEtiquetaPeriodoFinanciero,
-  obtenerSegmentoPeriodoFinancieroArchivo,
-} from './metricasSalon';
-
-describe('metricasSalon', () => {
-  it('muestra las citas pendientes con la etiqueta correcta', () => {
-    expect(obtenerEtiquetaEstadoReserva('pending')).toBe('Pendiente');
-    expect(obtenerEtiquetaEstadoReserva('confirmed')).toBe('Confirmada');
-  });
-
-  it('mapea correctamente los periodos financieros para etiqueta y exportación', () => {
-    expect(obtenerEtiquetaPeriodoFinanciero('dia')).toBe('Hoy');
-    expect(obtenerEtiquetaPeriodoFinanciero('semana')).toBe('Semana');
-    expect(obtenerSegmentoPeriodoFinancieroArchivo('semana')).toBe('semana');
-  });
-});import { describe, expect, it } from 'vitest';
-import {
   construirFilasAcumuladas,
   filtrarCitasDashboard,
   filtrarEspecialistasDashboard,
   filtrarIngresosDashboard,
   obtenerEtiquetaEstadoReserva,
+  obtenerEtiquetaPeriodoFinanciero,
+  obtenerSegmentoPeriodoFinancieroArchivo,
 } from './metricasSalon';
 
 describe('metricasSalon', () => {
@@ -170,7 +154,14 @@ describe('metricasSalon', () => {
   });
 
   it('traduce estados de reserva', () => {
+    expect(obtenerEtiquetaEstadoReserva('pending')).toBe('Pendiente');
     expect(obtenerEtiquetaEstadoReserva('confirmed')).toBe('Confirmada');
     expect(obtenerEtiquetaEstadoReserva('no_show')).toBe('No asistió');
+  });
+
+  it('mapea correctamente los periodos financieros para etiqueta y exportación', () => {
+    expect(obtenerEtiquetaPeriodoFinanciero('dia')).toBe('Hoy');
+    expect(obtenerEtiquetaPeriodoFinanciero('semana')).toBe('Semana');
+    expect(obtenerSegmentoPeriodoFinancieroArchivo('semana')).toBe('semana');
   });
 });

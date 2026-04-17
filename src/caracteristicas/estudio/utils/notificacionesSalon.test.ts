@@ -9,6 +9,8 @@ describe('notificacionesSalon', () => {
     expect(esTipoNotificacionSalonRelevante('recordatorio_pago')).toBe(true);
     expect(esTipoNotificacionSalonRelevante('cambio_precio_plan')).toBe(true);
     expect(esTipoNotificacionSalonRelevante('nueva_reserva')).toBe(true);
+    expect(esTipoNotificacionSalonRelevante('reserva_cancelada')).toBe(true);
+    expect(esTipoNotificacionSalonRelevante('reserva_reagendada')).toBe(true);
     expect(esTipoNotificacionSalonRelevante('actualizacion_horario')).toBe(true);
     expect(esTipoNotificacionSalonRelevante('promocion_marketing')).toBe(false);
   });
@@ -36,6 +38,15 @@ describe('notificacionesSalon', () => {
       {
         id: '3',
         estudioId: 'est-1',
+        tipo: 'reserva_reagendada',
+        titulo: 'Reagenda',
+        mensaje: 'Cliente movió una cita.',
+        leida: false,
+        creadoEn: '2026-04-01T11:30:00.000Z',
+      },
+      {
+        id: '4',
+        estudioId: 'est-1',
         tipo: 'promocion_marketing',
         titulo: 'Marketing',
         mensaje: 'Oferta genérica.',
@@ -44,8 +55,9 @@ describe('notificacionesSalon', () => {
       },
     ]);
 
-    expect(resultado).toHaveLength(2);
+    expect(resultado).toHaveLength(3);
     expect(resultado[0]?.tipo).toBe('recordatorio_pago');
     expect(resultado[1]?.tipo).toBe('nueva_reserva');
+    expect(resultado[2]?.tipo).toBe('reserva_reagendada');
   });
 });

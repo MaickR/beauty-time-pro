@@ -3,8 +3,8 @@ import { chromium } from 'playwright';
 
 const baseUrl = process.env.BTP_FRONTEND_URL ?? 'http://localhost:5173';
 const credenciales = {
-  dueno: process.env.BTP_DUENO_EMAIL ?? 'qa.dueno@beautytimepro.com',
-  empleado: process.env.BTP_EMPLEADO_EMAIL ?? 'qa.empleado@beautytimepro.com',
+  dueno: process.env.BTP_DUENO_EMAIL ?? 'qa.dueno@salonpromaster.com',
+  empleado: process.env.BTP_EMPLEADO_EMAIL ?? 'qa.empleado@salonpromaster.com',
   contrasena: process.env.BTP_SMOKE_PASSWORD ?? 'QaLogin2026!',
 };
 

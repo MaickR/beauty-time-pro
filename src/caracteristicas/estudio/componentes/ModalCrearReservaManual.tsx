@@ -7,6 +7,7 @@ import { z } from 'zod';
 import { SelectorFecha } from '../../../componentes/ui/SelectorFecha';
 import { usarToast } from '../../../componentes/ui/ProveedorToast';
 import { DIAS_SEMANA } from '../../../lib/constantes';
+import { obtenerOpcionesMetodosPagoReserva } from '../../../lib/metodosPagoReserva';
 import { crearReserva, obtenerDisponibilidadEstudio } from '../../../servicios/servicioReservas';
 import { obtenerFechaLocalISO, formatearDinero } from '../../../utils/formato';
 import type { Estudio, Moneda, Servicio } from '../../../tipos';
@@ -43,13 +44,6 @@ const PALABRAS_COLOR = [
   'mechas',
 ];
 
-const METODOS_PAGO = [
-  { valor: 'cash', etiqueta: 'Efectivo' },
-  { valor: 'card', etiqueta: 'Tarjeta' },
-  { valor: 'bank_transfer', etiqueta: 'Transferencia bancaria' },
-  { valor: 'digital_transfer', etiqueta: 'Transferencia digital' },
-] as const;
-
 export function ModalCrearReservaManual({
   abierto,
   estudio,
@@ -67,6 +61,7 @@ export function ModalCrearReservaManual({
   const serviciosDisponibles = personalSeleccionado
     ? estudio.selectedServices.filter((servicio) => miembro?.specialties.includes(servicio.name))
     : [];
+  const metodosPagoDisponibles = obtenerOpcionesMetodosPagoReserva(estudio.metodosPagoReserva);
   const totalDuracion = serviciosSeleccionados.reduce(
     (total, servicio) => total + servicio.duration,
     0,
@@ -100,7 +95,7 @@ export function ModalCrearReservaManual({
       telefonoCliente: '',
       fechaNacimiento: '',
       email: '',
-      metodoPago: 'cash',
+      metodoPago: metodosPagoDisponibles[0]?.valor ?? 'cash',
       marcaTinte: '',
       observaciones: '',
     },
@@ -142,7 +137,7 @@ export function ModalCrearReservaManual({
         telefonoCliente: '',
         fechaNacimiento: '',
         email: '',
-        metodoPago: 'cash',
+        metodoPago: metodosPagoDisponibles[0]?.valor ?? 'cash',
         marcaTinte: '',
         observaciones: '',
       });
@@ -371,7 +366,7 @@ export function ModalCrearReservaManual({
                 {...formulario.register('metodoPago')}
                 className="w-full rounded-2xl border border-slate-200 px-4 py-3 text-sm font-medium text-slate-800 focus:outline-none focus:ring-2 focus:ring-pink-400"
               >
-                {METODOS_PAGO.map((metodo) => (
+                {metodosPagoDisponibles.map((metodo) => (
                   <option key={metodo.valor} value={metodo.valor}>
                     {metodo.etiqueta}
                   </option>

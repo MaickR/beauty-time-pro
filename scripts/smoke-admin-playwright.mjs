@@ -3,7 +3,7 @@ import { chromium } from 'playwright';
 
 const baseUrl = process.env.BTP_FRONTEND_URL ?? 'http://localhost:5174';
 const credenciales = {
-  email: process.env.BTP_SMOKE_EMAIL ?? 'qa.maestro@beautytimepro.com',
+  email: process.env.BTP_SMOKE_EMAIL ?? 'qa.maestro@salonpromaster.com',
   contrasena: process.env.BTP_SMOKE_PASSWORD ?? 'QaLogin2026!',
 };
 

@@ -18,12 +18,14 @@ const NOMBRES_DIAS: Record<number, string> = {
 const DIAS_LABORALES_PREDETERMINADOS = [1, 2, 3, 4, 5];
 
 function obtenerIniciales(nombreCompleto: string) {
-  return nombreCompleto
-    .trim()
-    .split(/\s+/)
-    .slice(0, 2)
-    .map((fragmento) => fragmento.slice(0, 1).toUpperCase())
-    .join('') || 'NS';
+  return (
+    nombreCompleto
+      .trim()
+      .split(/\s+/)
+      .slice(0, 2)
+      .map((fragmento) => fragmento.slice(0, 1).toUpperCase())
+      .join('') || 'NS'
+  );
 }
 
 interface PropsModalEditarPersonal {
@@ -37,7 +39,6 @@ interface PropsModalEditarPersonal {
 
 export function ModalEditarPersonal({
   abierto,
-  estudioId,
   personal,
   serviciosDisponibles,
   onCerrar,

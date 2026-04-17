@@ -1,20 +1,13 @@
 import type { FastifyInstance } from 'fastify';
 import { prisma } from '../prismaCliente.js';
 import { verificarJWT } from '../middleware/autenticacion.js';
+import { tieneAccesoAdministrativoEstudio } from '../lib/accesoEstudio.js';
 import {
   calcularRecompensasDisponibles,
   canjearRecompensaFidelidad,
   obtenerConfigFidelidad,
 } from '../lib/fidelidad.js';
 import { MENSAJE_FUNCION_PRO, normalizarPlanEstudio } from '../lib/planes.js';
-
-function tieneAccesoEstudio(payload: { rol: string; estudioId: string | null }, estudioId: string): boolean {
-  return payload.rol === 'maestro' || (payload.rol === 'dueno' && payload.estudioId === estudioId);
-}
-
-function tieneAccesoAdminEstudio(payload: { rol: string; estudioId: string | null }, estudioId: string): boolean {
-  return payload.rol === 'maestro' || (payload.rol === 'dueno' && payload.estudioId === estudioId);
-}
 
 export async function rutasFidelidad(servidor: FastifyInstance): Promise<void> {
   servidor.get<{ Params: { id: string } }>(
@@ -23,7 +16,7 @@ export async function rutasFidelidad(servidor: FastifyInstance): Promise<void> {
     async (solicitud, respuesta) => {
       const payload = solicitud.user as { rol: string; estudioId: string | null };
       const { id } = solicitud.params;
-      if (!tieneAccesoAdminEstudio(payload, id)) {
+      if (!tieneAccesoAdministrativoEstudio(payload, id)) {
         return respuesta.code(403).send({ error: 'Sin permisos para esta acción' });
       }
 
@@ -55,7 +48,7 @@ export async function rutasFidelidad(servidor: FastifyInstance): Promise<void> {
     async (solicitud, respuesta) => {
       const payload = solicitud.user as { rol: string; estudioId: string | null };
       const { id } = solicitud.params;
-      if (!tieneAccesoAdminEstudio(payload, id)) {
+      if (!tieneAccesoAdministrativoEstudio(payload, id)) {
         return respuesta.code(403).send({ error: 'Sin permisos para esta acción' });
       }
 
@@ -108,7 +101,7 @@ export async function rutasFidelidad(servidor: FastifyInstance): Promise<void> {
     async (solicitud, respuesta) => {
       const payload = solicitud.user as { rol: string; estudioId: string | null };
       const { id } = solicitud.params;
-      if (!tieneAccesoAdminEstudio(payload, id)) {
+      if (!tieneAccesoAdministrativoEstudio(payload, id)) {
         return respuesta.code(403).send({ error: 'Sin permisos para esta acción' });
       }
 
@@ -156,7 +149,7 @@ export async function rutasFidelidad(servidor: FastifyInstance): Promise<void> {
     async (solicitud, respuesta) => {
       const payload = solicitud.user as { rol: string; estudioId: string | null };
       const { id, estudioId } = solicitud.params;
-      if (!tieneAccesoEstudio(payload, estudioId)) {
+      if (!tieneAccesoAdministrativoEstudio(payload, estudioId)) {
         return respuesta.code(403).send({ error: 'Sin permisos para esta acción' });
       }
 
@@ -260,7 +253,7 @@ export async function rutasFidelidad(servidor: FastifyInstance): Promise<void> {
     async (solicitud, respuesta) => {
       const payload = solicitud.user as { rol: string; estudioId: string | null };
       const { clienteId, estudioId } = solicitud.body;
-      if (!tieneAccesoAdminEstudio(payload, estudioId)) {
+      if (!tieneAccesoAdministrativoEstudio(payload, estudioId)) {
         return respuesta.code(403).send({ error: 'Sin permisos para esta acción' });
       }
 

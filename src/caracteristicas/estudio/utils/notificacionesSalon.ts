@@ -4,6 +4,8 @@ export type TipoNotificacionSalonRelevante =
   | 'suspension'
   | 'cambio_precio_plan'
   | 'nueva_reserva'
+  | 'reserva_cancelada'
+  | 'reserva_reagendada'
   | 'actualizacion_horario'
   | 'actualizacion_salon';
 
@@ -23,6 +25,8 @@ const TIPOS_RELEVANTES = new Set<TipoNotificacionSalonRelevante>([
   'suspension',
   'cambio_precio_plan',
   'nueva_reserva',
+  'reserva_cancelada',
+  'reserva_reagendada',
   'actualizacion_horario',
   'actualizacion_salon',
 ]);

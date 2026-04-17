@@ -3,12 +3,9 @@ import type { Prisma } from '../generated/prisma/client.js';
 import { z } from 'zod';
 import { prisma } from '../prismaCliente.js';
 import { verificarJWT } from '../middleware/autenticacion.js';
+import { tieneAccesoAdministrativoEstudio } from '../lib/accesoEstudio.js';
 import { registrarAuditoria } from '../utils/auditoria.js';
 import { normalizarZonaHorariaEstudio, obtenerFechaISOEnZona } from '../utils/zonasHorarias.js';
-
-function tieneAccesoAdminEstudio(payload: { rol: string; estudioId: string | null }, estudioId: string): boolean {
-  return payload.rol === 'maestro' || (payload.rol === 'dueno' && payload.estudioId === estudioId);
-}
 
 const esquemaRegistrarVentaProducto = z.object({
   productoId: z.string().trim().min(1, 'Debes seleccionar un producto'),
@@ -107,7 +104,7 @@ export async function rutasProductos(servidor: FastifyInstance): Promise<void> {
       const payload = solicitud.user as { rol: string; estudioId: string | null };
       const { id } = solicitud.params;
 
-      if (!tieneAccesoAdminEstudio(payload, id)) {
+      if (!tieneAccesoAdministrativoEstudio(payload, id)) {
         return respuesta.code(403).send({ error: 'Sin permisos para esta acción' });
       }
 
@@ -137,7 +134,7 @@ export async function rutasProductos(servidor: FastifyInstance): Promise<void> {
       const payload = solicitud.user as { rol: string; estudioId: string | null };
       const { id } = solicitud.params;
 
-      if (!tieneAccesoAdminEstudio(payload, id)) {
+      if (!tieneAccesoAdministrativoEstudio(payload, id)) {
         return respuesta.code(403).send({ error: 'Sin permisos para esta acción' });
       }
 
@@ -186,7 +183,7 @@ export async function rutasProductos(servidor: FastifyInstance): Promise<void> {
       const payload = solicitud.user as { rol: string; estudioId: string | null };
       const { id, productoId } = solicitud.params;
 
-      if (!tieneAccesoAdminEstudio(payload, id)) {
+      if (!tieneAccesoAdministrativoEstudio(payload, id)) {
         return respuesta.code(403).send({ error: 'Sin permisos para esta acción' });
       }
 
@@ -232,7 +229,7 @@ export async function rutasProductos(servidor: FastifyInstance): Promise<void> {
       const payload = solicitud.user as { rol: string; estudioId: string | null };
       const { id, productoId } = solicitud.params;
 
-      if (!tieneAccesoAdminEstudio(payload, id)) {
+      if (!tieneAccesoAdministrativoEstudio(payload, id)) {
         return respuesta.code(403).send({ error: 'Sin permisos para esta acción' });
       }
 
@@ -281,7 +278,7 @@ export async function rutasProductos(servidor: FastifyInstance): Promise<void> {
       };
       const { id } = solicitud.params;
 
-      if (!tieneAccesoAdminEstudio(payload, id)) {
+      if (!tieneAccesoAdministrativoEstudio(payload, id)) {
         return respuesta.code(403).send({ error: 'Sin permisos para esta acción' });
       }
 

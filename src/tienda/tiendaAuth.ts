@@ -385,7 +385,13 @@ export const usarTiendaAuth = create<EstadoAuth>((set) => ({
       limpiarSesionReserva();
       limpiarToken();
       inicializacionPendiente = false;
-      set({ usuario: null, rol: null, estudioActual: null, claveClienteActual: null });
+      set({
+        usuario: null,
+        rol: null,
+        estudioActual: null,
+        slugEstudioActual: null,
+        claveClienteActual: null,
+      });
     }
   },
 
@@ -410,6 +416,7 @@ registrarCallbackSesionExpirada(({ mensaje, codigo }) => {
     usuario: null,
     rol: null,
     estudioActual: null,
+    slugEstudioActual: null,
     claveClienteActual: null,
   });
   if (typeof window !== 'undefined') {

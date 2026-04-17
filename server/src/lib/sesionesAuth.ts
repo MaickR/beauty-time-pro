@@ -1,6 +1,9 @@
 import crypto from 'node:crypto';
 import { prisma } from '../prismaCliente.js';
+import { hashValorSesion, validarCredencialesSesion } from './sesionesAuthCredenciales.js';
 import { env } from './env.js';
+
+export { hashValorSesion } from './sesionesAuthCredenciales.js';
 
 export type TipoSujetoSesion = 'usuario' | 'cliente_app' | 'empleado_acceso';
 
@@ -15,6 +18,16 @@ interface TokensSesionRotada {
   csrfToken: string;
   expiraEn: Date;
 }
+
+type SesionConCredencialesHash = {
+  refreshTokenHash: string;
+  csrfTokenHash: string;
+};
+
+export type ResultadoValidacionCredencialesSesion =
+  | 'valida'
+  | 'refresh_invalido'
+  | 'csrf_invalido';
 
 function convertirDuracionAMilisegundos(valor: string): number {
   const coincidencia = valor.trim().match(/^(\d+)([smhd])$/i);
@@ -41,10 +54,6 @@ function convertirDuracionAMilisegundos(valor: string): number {
 
 function generarSecretoSeguro(longitud = 32): string {
   return crypto.randomBytes(longitud).toString('hex');
-}
-
-export function hashValorSesion(valor: string): string {
-  return crypto.createHash('sha256').update(valor).digest('hex');
 }
 
 function obtenerExpiracionRefresh(): Date {
@@ -103,10 +112,7 @@ export async function validarRefreshSesion(params: {
     return false;
   }
 
-  return (
-    sesion.refreshTokenHash === hashValorSesion(params.refreshTokenId) &&
-    sesion.csrfTokenHash === hashValorSesion(params.csrfToken)
-  );
+  return validarCredencialesSesion(sesion, params.refreshTokenId, params.csrfToken) === 'valida';
 }
 
 export async function rotarSesionAutenticacion(
@@ -120,10 +126,18 @@ export async function rotarSesionAutenticacion(
     return null;
   }
 
-  if (
-    sesion.refreshTokenHash !== hashValorSesion(refreshTokenIdActual) ||
-    sesion.csrfTokenHash !== hashValorSesion(csrfTokenActual)
-  ) {
+  const resultadoValidacion = validarCredencialesSesion(
+    sesion,
+    refreshTokenIdActual,
+    csrfTokenActual,
+  );
+
+  if (resultadoValidacion === 'refresh_invalido') {
+    await revocarSesionAutenticacion(sesionId, 'refresh_reutilizado_o_invalido');
+    return null;
+  }
+
+  if (resultadoValidacion !== 'valida') {
     return null;
   }
 

@@ -57,7 +57,7 @@ export function ModalVentas({ onCerrar }: PropsModalVentas) {
       role="dialog"
       aria-modal="true"
       aria-labelledby="modal-ventas-titulo"
-      className="fixed inset-0 z-[200] flex items-center justify-center bg-black/70 backdrop-blur-sm p-4"
+      className="fixed inset-0 z-200 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4"
       onKeyDown={(e) => e.key === 'Escape' && onCerrar()}
     >
       <div className="bg-white rounded-3xl w-full max-w-lg max-h-[90vh] overflow-hidden flex flex-col shadow-2xl">
@@ -85,13 +85,13 @@ export function ModalVentas({ onCerrar }: PropsModalVentas) {
             <>
               {/* Totales globales */}
               <div className="grid grid-cols-2 gap-3">
-                <div className="bg-gradient-to-br from-green-50 via-white to-red-50 rounded-2xl p-4 text-center border border-green-100">
+                <div className="bg-linear-to-br from-green-50 via-white to-red-50 rounded-2xl p-4 text-center border border-green-100">
                   <p className="text-xs font-black text-green-700 uppercase mb-1">México · MXN</p>
                   <p className="text-2xl font-black text-green-800">
                     {formatearSinSimbolo(data.datos.mexico.total)}
                   </p>
                 </div>
-                <div className="bg-gradient-to-br from-yellow-50 via-blue-50 to-red-50 rounded-2xl p-4 text-center border border-yellow-200">
+                <div className="bg-linear-to-br from-yellow-50 via-blue-50 to-red-50 rounded-2xl p-4 text-center border border-yellow-200">
                   <p className="text-xs font-black text-blue-700 uppercase mb-1">Colombia · COP</p>
                   <p className="text-2xl font-black text-blue-800">
                     {formatearSinSimbolo(data.datos.colombia.total)}

@@ -7,6 +7,7 @@ import { obtenerMiPerfil } from '../../servicios/servicioClienteApp';
 import { usarTemaSalon } from '../../hooks/usarTemaSalon';
 import { usarNotificacionesPush } from '../../hooks/usarNotificacionesPush';
 import { BannerNotificacionesPush } from '../ui/BannerNotificacionesPush';
+import { MarcaAplicacion } from '../ui/MarcaAplicacion';
 
 function inicialesDesdeNombre(nombre: string): string {
   return nombre
@@ -79,14 +80,8 @@ export function NavegacionCliente() {
       {/* Header desktop */}
       <header className="bg-white border-b border-slate-100 sticky top-0 z-50 hidden md:block">
         <div className="max-w-5xl mx-auto px-8 h-16 flex items-center justify-between">
-          <Link to="/cliente/inicio" className="flex items-center gap-2 select-none">
-            <span
-              className="w-8 h-8 rounded-full bg-pink-600 flex items-center justify-center text-white font-black text-sm"
-              aria-hidden="true"
-            >
-              B
-            </span>
-            <span className="font-black text-slate-900 text-lg">Beauty Time Pro</span>
+          <Link to="/cliente/inicio" className="select-none">
+            <MarcaAplicacion tamano="sm" />
           </Link>
 
           {/* Dropdown de usuario */}
@@ -157,14 +152,8 @@ export function NavegacionCliente() {
       {/* Header móvil */}
       <header className="bg-white border-b border-slate-100 sticky top-0 z-50 md:hidden">
         <div className="px-4 h-14 flex items-center justify-between">
-          <Link to="/cliente/inicio" className="flex items-center gap-2">
-            <span
-              className="w-7 h-7 rounded-full bg-pink-600 flex items-center justify-center text-white font-black text-xs"
-              aria-hidden="true"
-            >
-              B
-            </span>
-            <span className="font-black text-slate-900">Beauty Time Pro</span>
+          <Link to="/cliente/inicio">
+            <MarcaAplicacion tamano="sm" />
           </Link>
           <Link to="/cliente/perfil" aria-label="Mi perfil">
             {avatarUrl ? (

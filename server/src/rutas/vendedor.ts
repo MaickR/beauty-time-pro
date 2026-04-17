@@ -2,8 +2,19 @@ import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import { prisma } from '../prismaCliente.js';
 import { verificarJWT } from '../middleware/autenticacion.js';
+import {
+  asegurarCampoPorcentajeComisionUsuario,
+  calcularComisionVendedor,
+  resolverPorcentajeComisionVendedor,
+  estudioTienePagoPendiente,
+} from '../lib/comisionVendedor.js';
 import { obtenerMensajeValidacion, textoSchema, telefonoSchema } from '../lib/validacion.js';
-import { obtenerSalonDemoVendedor, reiniciarSalonDemoVendedor } from '../lib/demoVendedor.js';
+import {
+  actualizarPlanSalonDemoVendedor,
+  obtenerCredencialesDemoVendedor,
+  obtenerSalonDemoVendedor,
+  reiniciarSalonDemoVendedor,
+} from '../lib/demoVendedor.js';
 import { registrarAuditoria } from '../utils/auditoria.js';
 
 // ─── Helpers ─────────────────────────────────────────────────────────────
@@ -24,6 +35,9 @@ const esquemaPreregistro = z.object({
   plan: z.enum(['STANDARD', 'PRO']).optional().default('STANDARD'),
   notas: z.string().trim().max(500).optional().transform((v) => v ?? null),
 });
+const esquemaPlanDemo = z.object({
+  plan: z.enum(['STANDARD', 'PRO']),
+});
 
 // ─── Plugin de rutas ─────────────────────────────────────────────────────
 export async function rutasVendedor(servidor: FastifyInstance) {
@@ -33,10 +47,20 @@ export async function rutasVendedor(servidor: FastifyInstance) {
       return respuesta.code(403).send({ error: 'Sin permisos para esta accion' });
     }
 
+    const vendedor = await prisma.usuario.findUnique({
+      where: { id: payload.sub },
+      select: { email: true, nombre: true },
+    });
     const salonDemo = await obtenerSalonDemoVendedor(payload.sub);
-    if (!salonDemo) {
+    if (!salonDemo || !vendedor) {
       return respuesta.code(404).send({ error: 'Salon demo no disponible' });
     }
+
+    const credencialesDemo = obtenerCredencialesDemoVendedor({
+      usuarioId: payload.sub,
+      emailBase: vendedor.email,
+      nombreBase: vendedor.nombre ?? undefined,
+    });
 
     return respuesta.send({
       datos: {
@@ -55,6 +79,48 @@ export async function rutasVendedor(servidor: FastifyInstance) {
           personal: salonDemo._count.personal,
           productos: salonDemo._count.productos,
         },
+        credencialesDemo: {
+          adminEmail: credencialesDemo.adminEmail,
+          adminContrasena: credencialesDemo.adminContrasena,
+          empleadoEmail: credencialesDemo.empleadoEmail,
+          empleadoContrasena: credencialesDemo.empleadoContrasena,
+          contrasenaCompartida: credencialesDemo.contrasenaCompartida,
+        },
+      },
+    });
+  });
+
+  servidor.patch<{
+    Body: { plan: 'STANDARD' | 'PRO' };
+  }>('/vendedor/demo/plan', { preHandler: verificarJWT }, async (solicitud, respuesta) => {
+    const payload = solicitud.user as { sub: string; rol: string };
+    if (!soloVendedor(payload)) {
+      return respuesta.code(403).send({ error: 'Sin permisos para esta accion' });
+    }
+
+    const resultado = esquemaPlanDemo.safeParse(solicitud.body);
+    if (!resultado.success) {
+      return respuesta.code(400).send({ error: obtenerMensajeValidacion(resultado.error) });
+    }
+
+    const salonDemo = await actualizarPlanSalonDemoVendedor(payload.sub, resultado.data.plan);
+    if (!salonDemo) {
+      return respuesta.code(404).send({ error: 'Salon demo no disponible' });
+    }
+
+    await registrarAuditoria({
+      usuarioId: payload.sub,
+      accion: 'actualizar_plan_demo_vendedor',
+      entidadTipo: 'Estudio',
+      entidadId: salonDemo.id,
+      detalles: { plan: resultado.data.plan },
+    });
+
+    return respuesta.send({
+      datos: {
+        id: salonDemo.id,
+        slug: salonDemo.slug,
+        plan: salonDemo.plan,
       },
     });
   });
@@ -285,15 +351,51 @@ export async function rutasVendedor(servidor: FastifyInstance) {
         return respuesta.code(403).send({ error: 'Sin permisos para esta acción' });
       }
 
-      const [totalPreregistros, pendientes, aprobados, rechazados, totalSalones, salonesActivos] =
-        await Promise.all([
-          prisma.preregistroSalon.count({ where: { vendedorId: payload.sub } }),
-          prisma.preregistroSalon.count({ where: { vendedorId: payload.sub, estado: 'pendiente' } }),
-          prisma.preregistroSalon.count({ where: { vendedorId: payload.sub, estado: 'aprobado' } }),
-          prisma.preregistroSalon.count({ where: { vendedorId: payload.sub, estado: 'rechazado' } }),
-          prisma.estudio.count({ where: { vendedorId: payload.sub } }),
-          prisma.estudio.count({ where: { vendedorId: payload.sub, activo: true, estado: 'aprobado' } }),
-        ]);
+      const hoy = new Date().toISOString().slice(0, 10);
+      const columnaComisionDisponible = await asegurarCampoPorcentajeComisionUsuario().catch(() => false);
+      const [
+        totalPreregistros,
+        pendientes,
+        aprobados,
+        rechazados,
+        totalSalones,
+        salonesActivos,
+        salonesPendientesPago,
+        ventasAgregadas,
+        vendedor,
+      ] = await Promise.all([
+        prisma.preregistroSalon.count({ where: { vendedorId: payload.sub } }),
+        prisma.preregistroSalon.count({ where: { vendedorId: payload.sub, estado: 'pendiente' } }),
+        prisma.preregistroSalon.count({ where: { vendedorId: payload.sub, estado: 'aprobado' } }),
+        prisma.preregistroSalon.count({ where: { vendedorId: payload.sub, estado: 'rechazado' } }),
+        prisma.estudio.count({ where: { vendedorId: payload.sub } }),
+        prisma.estudio.count({ where: { vendedorId: payload.sub, activo: true, estado: 'aprobado' } }),
+        prisma.estudio.count({
+          where: {
+            vendedorId: payload.sub,
+            activo: true,
+            estado: 'aprobado',
+            fechaVencimiento: { lt: hoy },
+          },
+        }),
+        prisma.pago.aggregate({
+          where: { estudio: { vendedorId: payload.sub } },
+          _count: { id: true },
+          _sum: { monto: true },
+        }),
+        columnaComisionDisponible
+          ? prisma.usuario.findUnique({
+              where: { id: payload.sub },
+              select: { porcentajeComision: true },
+            })
+          : Promise.resolve(null),
+      ]);
+
+      const ingresosGenerados = ventasAgregadas._sum.monto ?? 0;
+      const ventasRegistradas = ventasAgregadas._count.id ?? 0;
+      const porcentajeComision = resolverPorcentajeComisionVendedor(
+        columnaComisionDisponible ? vendedor?.porcentajeComision : undefined,
+      );
 
       return respuesta.send({
         datos: {
@@ -303,13 +405,18 @@ export async function rutasVendedor(servidor: FastifyInstance) {
           rechazados,
           totalSalones,
           salonesActivos,
+          salonesPendientesPago,
+          ventasRegistradas,
+          ingresosGenerados,
+          porcentajeComision,
+          comisionGenerada: calcularComisionVendedor(ingresosGenerados, porcentajeComision),
         },
       });
     },
   );
 
   servidor.get<{
-    Querystring: { fechaDesde?: string; fechaHasta?: string };
+    Querystring: { fechaDesde?: string; fechaHasta?: string; soloPendientesPago?: string };
   }>('/vendedor/ventas', { preHandler: verificarJWT }, async (solicitud, respuesta) => {
     const payload = solicitud.user as { sub: string; rol: string };
     if (!soloVendedor(payload)) {
@@ -318,10 +425,29 @@ export async function rutasVendedor(servidor: FastifyInstance) {
 
     const fechaDesde = solicitud.query.fechaDesde?.trim();
     const fechaHasta = solicitud.query.fechaHasta?.trim();
+    const soloPendientesPago = ['1', 'true', 'si'].includes(
+      solicitud.query.soloPendientesPago?.trim().toLowerCase() ?? '',
+    );
+    const hoy = new Date().toISOString().slice(0, 10);
+    const columnaComisionDisponible = await asegurarCampoPorcentajeComisionUsuario().catch(() => false);
+    const vendedor = columnaComisionDisponible
+      ? await prisma.usuario.findUnique({
+          where: { id: payload.sub },
+          select: { porcentajeComision: true },
+        })
+      : null;
+    const porcentajeComision = resolverPorcentajeComisionVendedor(
+      columnaComisionDisponible ? vendedor?.porcentajeComision : undefined,
+    );
 
     const ventas = await prisma.pago.findMany({
       where: {
-        estudio: { vendedorId: payload.sub },
+        estudio: {
+          vendedorId: payload.sub,
+          ...(soloPendientesPago
+            ? { activo: true, estado: 'aprobado', fechaVencimiento: { lt: hoy } }
+            : {}),
+        },
         ...(fechaDesde || fechaHasta
           ? {
               fecha: {
@@ -345,24 +471,53 @@ export async function rutasVendedor(servidor: FastifyInstance) {
             nombre: true,
             plan: true,
             pais: true,
+            suscripcion: true,
+            fechaVencimiento: true,
+            activo: true,
+            estado: true,
+            usuarios: {
+              where: { rol: 'dueno' },
+              take: 1,
+              select: {
+                nombre: true,
+                email: true,
+              },
+            },
           },
         },
       },
     });
 
     return respuesta.send({
-      datos: ventas.map((venta) => ({
-        id: venta.id,
-        fecha: venta.fecha,
-        monto: venta.monto,
-        moneda: venta.moneda,
-        concepto: venta.concepto,
-        referencia: venta.referencia,
-        salonId: venta.estudio.id,
-        salonNombre: venta.estudio.nombre,
-        plan: venta.estudio.plan,
-        pais: venta.estudio.pais,
-      })),
+      datos: ventas.map((venta) => {
+        const dueno = venta.estudio.usuarios[0] ?? null;
+        const pendientePago = estudioTienePagoPendiente({
+          activo: venta.estudio.activo,
+          estado: venta.estudio.estado,
+          fechaVencimiento: venta.estudio.fechaVencimiento,
+          hoy,
+        });
+
+        return {
+          id: venta.id,
+          fecha: venta.fecha,
+          monto: venta.monto,
+          moneda: venta.moneda,
+          concepto: venta.concepto,
+          referencia: venta.referencia,
+          salonId: venta.estudio.id,
+          salonNombre: venta.estudio.nombre,
+          adminSalonNombre: dueno?.nombre ?? venta.estudio.nombre,
+          adminSalonEmail: dueno?.email ?? null,
+          plan: venta.estudio.plan,
+          tipoSuscripcion: venta.estudio.suscripcion,
+          valorSuscripcion: venta.monto,
+          pais: venta.estudio.pais,
+          fechaVencimiento: venta.estudio.fechaVencimiento,
+          pendientePago,
+          comision: calcularComisionVendedor(venta.monto, porcentajeComision),
+        };
+      }),
     });
   });
 }

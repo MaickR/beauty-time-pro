@@ -3,7 +3,13 @@ import crypto from 'node:crypto';
 import { prisma } from '../prismaCliente.js';
 import { esEmailAdminProtegido, verificarJWT } from '../middleware/autenticacion.js';
 import { requierePermiso } from '../middleware/verificarPermiso.js';
+import {
+  asegurarCampoPorcentajeComisionUsuario,
+  normalizarPorcentajeComision,
+  resolverPorcentajeComisionVendedor,
+} from '../lib/comisionVendedor.js';
 import { revocarSesionesPorSujeto } from '../lib/sesionesAuth.js';
+import { asegurarSalonDemoVendedor } from '../lib/demoVendedor.js';
 import { registrarAuditoria } from '../utils/auditoria.js';
 import { esEmailColaboradorValido } from '../utils/validarEmail.js';
 import { generarHashContrasena } from '../utils/contrasenas.js';
@@ -130,6 +136,9 @@ export async function rutasAdmins(servidor: FastifyInstance): Promise<void> {
           email: true,
           nombre: true,
           rol: true,
+          ...(await asegurarCampoPorcentajeComisionUsuario().catch(() => false)
+            ? { porcentajeComision: true }
+            : {}),
           activo: true,
           creadoEn: true,
           ultimoAcceso: true,
@@ -167,6 +176,10 @@ export async function rutasAdmins(servidor: FastifyInstance): Promise<void> {
       return respuesta.send({
         datos: colaboradores.map((col) => ({
           ...col,
+          porcentajeComision:
+            col.rol === 'vendedor'
+              ? resolverPorcentajeComisionVendedor('porcentajeComision' in col ? col.porcentajeComision : undefined)
+              : ('porcentajeComision' in col ? col.porcentajeComision ?? 0 : 0),
           protegido: esAdminProtegido(col),
         })),
       });
@@ -182,6 +195,7 @@ export async function rutasAdmins(servidor: FastifyInstance): Promise<void> {
       nombre: string;
       contrasena: string;
       cargo: string;
+        porcentajeComision?: number;
       permisos?: {
         aprobarSalones?: boolean;
         gestionarPagos?: boolean;
@@ -211,7 +225,7 @@ export async function rutasAdmins(servidor: FastifyInstance): Promise<void> {
     { preHandler: [verificarJWT, requierePermiso('crearAdmins')] },
     async (solicitud, respuesta) => {
       const payload = solicitud.user as { sub: string };
-      const { email, nombre, contrasena, cargo, permisos, permisosSupervisor } = solicitud.body;
+      const { email, nombre, contrasena, cargo, permisos, permisosSupervisor, porcentajeComision } = solicitud.body;
 
       if (!email || !nombre || !contrasena) {
         return respuesta.code(400).send({ error: 'email, nombre y contrasena son requeridos' });
@@ -239,6 +253,10 @@ export async function rutasAdmins(servidor: FastifyInstance): Promise<void> {
       }
 
       const hashContrasena = await generarHashContrasena(contrasena);
+      const columnaComisionDisponible = await asegurarCampoPorcentajeComisionUsuario().catch(() => false);
+      const porcentajeComisionNormalizado = cargo === 'vendedor'
+        ? normalizarPorcentajeComision(porcentajeComision)
+        : 0;
 
       const nuevoColaborador = await prisma.usuario.create({
         data: {
@@ -246,6 +264,7 @@ export async function rutasAdmins(servidor: FastifyInstance): Promise<void> {
           nombre: limpiarNombreColaborador(nombre),
           hashContrasena,
           rol: cargo,
+          ...(columnaComisionDisponible ? { porcentajeComision: porcentajeComisionNormalizado } : {}),
           activo: true,
           emailVerificado: true,
         },
@@ -269,12 +288,25 @@ export async function rutasAdmins(servidor: FastifyInstance): Promise<void> {
       }
       // Vendedor no tiene permisos granulares
 
+      if (cargo === 'vendedor') {
+        await asegurarSalonDemoVendedor({
+          usuarioId: nuevoColaborador.id,
+          nombre: nuevoColaborador.nombre,
+          email: nuevoColaborador.email,
+        });
+      }
+
       await registrarAuditoria({
         usuarioId: payload.sub,
         accion: 'crear_colaborador',
         entidadTipo: 'usuario',
         entidadId: nuevoColaborador.id,
-        detalles: { email: nuevoColaborador.email, nombre: nuevoColaborador.nombre, cargo },
+        detalles: {
+          email: nuevoColaborador.email,
+          nombre: nuevoColaborador.nombre,
+          cargo,
+          porcentajeComision: porcentajeComisionNormalizado,
+        },
         ip: solicitud.ip,
       });
 
@@ -291,6 +323,7 @@ export async function rutasAdmins(servidor: FastifyInstance): Promise<void> {
       nombre?: string;
       contrasena?: string;
       cargo?: string;
+        porcentajeComision?: number;
       permisos?: {
         aprobarSalones?: boolean;
         gestionarPagos?: boolean;
@@ -321,7 +354,7 @@ export async function rutasAdmins(servidor: FastifyInstance): Promise<void> {
     async (solicitud, respuesta) => {
       const payload = solicitud.user as { sub: string };
       const { id } = solicitud.params;
-      const { email, nombre, contrasena, cargo, permisos, permisosSupervisor } = solicitud.body;
+      const { email, nombre, contrasena, cargo, permisos, permisosSupervisor, porcentajeComision } = solicitud.body;
 
       const colaborador = await prisma.usuario.findUnique({
         where: { id },
@@ -352,6 +385,9 @@ export async function rutasAdmins(servidor: FastifyInstance): Promise<void> {
         cargoNormalizado && esRolColaboradorValido(cargoNormalizado)
           ? cargoNormalizado
           : colaborador.rol;
+      const columnaComisionDisponible = await asegurarCampoPorcentajeComisionUsuario().catch(() => false);
+      const porcentajeComisionNormalizado =
+        siguienteCargo === 'vendedor' ? normalizarPorcentajeComision(porcentajeComision) : 0;
 
       if (cargoNormalizado && !esRolColaboradorValido(cargoNormalizado)) {
         return respuesta.code(400).send({ error: 'El cargo debe ser: maestro, supervisor o vendedor' });
@@ -390,6 +426,9 @@ export async function rutasAdmins(servidor: FastifyInstance): Promise<void> {
       if (cargoNormalizado && cargoNormalizado !== colaborador.rol) {
         actualizacionUsuario['rol'] = cargoNormalizado;
       }
+      if (columnaComisionDisponible) {
+        actualizacionUsuario['porcentajeComision'] = porcentajeComisionNormalizado;
+      }
       if (contrasena) {
         actualizacionUsuario['hashContrasena'] = await generarHashContrasena(contrasena);
       }
@@ -425,6 +464,17 @@ export async function rutasAdmins(servidor: FastifyInstance): Promise<void> {
 
       await revocarSesionesPorSujeto('usuario', id, 'colaborador_actualizado');
 
+      if (siguienteCargo === 'vendedor') {
+        const nombreFinal = (actualizacionUsuario['nombre'] as string | undefined) ?? colaborador.nombre;
+        const emailFinal = (actualizacionUsuario['email'] as string | undefined) ?? colaborador.email;
+
+        await asegurarSalonDemoVendedor({
+          usuarioId: id,
+          nombre: nombreFinal,
+          email: emailFinal,
+        });
+      }
+
       await registrarAuditoria({
         usuarioId: payload.sub,
         accion: 'actualizar_colaborador',
@@ -440,6 +490,7 @@ export async function rutasAdmins(servidor: FastifyInstance): Promise<void> {
             email: emailNormalizado ?? colaborador.email,
             nombre: typeof nombre === 'string' && nombre.trim() ? nombre.trim() : colaborador.nombre,
             rol: siguienteCargo,
+            porcentajeComision: porcentajeComisionNormalizado,
           },
           sesionRevocada: true,
         },
@@ -500,13 +551,27 @@ export async function rutasAdmins(servidor: FastifyInstance): Promise<void> {
       }
 
       if (colaborador.rol === 'maestro') {
+        const permisosAnteriores = await prisma.permisosMaestro.findUnique({
+          where: { usuarioId: id },
+          select: {
+            aprobarSalones: true,
+            gestionarPagos: true,
+            crearAdmins: true,
+            verAuditLog: true,
+            verMetricas: true,
+            suspenderSalones: true,
+            esMaestroTotal: true,
+          },
+        });
+        const permisosNormalizados = normalizarPermisos(solicitud.body);
+
         const permisosActualizados = await prisma.permisosMaestro.upsert({
           where: { usuarioId: id },
           create: {
             usuarioId: id,
-            ...normalizarPermisos(solicitud.body),
+            ...permisosNormalizados,
           },
-          update: normalizarPermisos(solicitud.body),
+          update: permisosNormalizados,
         });
 
         await registrarAuditoria({
@@ -514,7 +579,12 @@ export async function rutasAdmins(servidor: FastifyInstance): Promise<void> {
           accion: 'actualizar_permisos',
           entidadTipo: 'usuario',
           entidadId: id,
-          detalles: solicitud.body as Record<string, unknown>,
+          detalles: {
+            requestId: solicitud.id,
+            rolObjetivo: colaborador.rol,
+            antes: permisosAnteriores,
+            despues: permisosNormalizados,
+          },
           ip: solicitud.ip,
         });
 
@@ -525,13 +595,32 @@ export async function rutasAdmins(servidor: FastifyInstance): Promise<void> {
 
       if (colaborador.rol === 'supervisor' && solicitud.body.permisosSupervisor) {
         const ps = solicitud.body.permisosSupervisor;
+        const permisosAnteriores = await prisma.permisosSupervisor.findUnique({
+          where: { usuarioId: id },
+          select: {
+            verTotalSalones: true,
+            verControlSalones: true,
+            verReservas: true,
+            verVentas: true,
+            verDirectorio: true,
+            editarDirectorio: true,
+            verControlCobros: true,
+            accionRecordatorio: true,
+            accionRegistroPago: true,
+            accionSuspension: true,
+            activarSalones: true,
+            verPreregistros: true,
+          },
+        });
+        const permisosNormalizados = normalizarPermisosSupervisor(ps);
+
         const permisosActualizados = await prisma.permisosSupervisor.upsert({
           where: { usuarioId: id },
           create: {
             usuarioId: id,
-            ...normalizarPermisosSupervisor(ps),
+            ...permisosNormalizados,
           },
-          update: normalizarPermisosSupervisor(ps),
+          update: permisosNormalizados,
         });
 
         await registrarAuditoria({
@@ -539,7 +628,12 @@ export async function rutasAdmins(servidor: FastifyInstance): Promise<void> {
           accion: 'actualizar_permisos',
           entidadTipo: 'usuario',
           entidadId: id,
-          detalles: solicitud.body.permisosSupervisor as Record<string, unknown>,
+          detalles: {
+            requestId: solicitud.id,
+            rolObjetivo: colaborador.rol,
+            antes: permisosAnteriores,
+            despues: permisosNormalizados,
+          },
           ip: solicitud.ip,
         });
 

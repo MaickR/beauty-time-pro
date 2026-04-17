@@ -5,6 +5,8 @@ import { renderConProveedores } from '../../test/renderConProveedores';
 import { PaginaAgendaEmpleado } from './PaginaAgendaEmpleado';
 import type { PerfilEmpleado, ProductoAdicionalReserva, ReservaEmpleado } from '../../tipos';
 
+const calendarioEmpleadoMock = vi.hoisted(() => vi.fn());
+
 const mocksServicioEmpleados = vi.hoisted(() => ({
   obtenerMiAgenda: vi.fn(),
   obtenerMiAgendaMes: vi.fn(),
@@ -29,7 +31,10 @@ vi.mock('../../componentes/diseno/NavegacionEmpleado', () => ({
 }));
 
 vi.mock('../../componentes/ui/CalendarioEstadoSalon', () => ({
-  CalendarioEstadoSalon: () => <div>calendario empleado</div>,
+  CalendarioEstadoSalon: (props: { variante?: 'regular' | 'compacta' }) => {
+    calendarioEmpleadoMock(props);
+    return <div>calendario empleado</div>;
+  },
 }));
 
 vi.mock('../estudio/componentes/ModalSuspension', () => ({
@@ -133,7 +138,8 @@ function crearReservaEmpleado(
     duracion: 90,
     estado: 'confirmed',
     servicios: [{ name: 'Balayage', duration: 90, price: 180000, category: 'Color' }],
-    precioTotal: 180000 + productosAdicionales.reduce((total, producto) => total + producto.total, 0),
+    precioTotal:
+      180000 + productosAdicionales.reduce((total, producto) => total + producto.total, 0),
     nombreCliente: 'Carla Ruiz',
     telefonoCliente: '5511223344',
     clienteAppId: null,
@@ -162,7 +168,9 @@ describe('PaginaAgendaEmpleado', () => {
       citasSemana: 1,
       citasMes: 1,
     });
-    mocksServicioEmpleados.actualizarEstadoReservaEmpleado.mockResolvedValue(crearReservaEmpleado());
+    mocksServicioEmpleados.actualizarEstadoReservaEmpleado.mockResolvedValue(
+      crearReservaEmpleado(),
+    );
     mocksServicioReservas.agregarServicioAReserva.mockResolvedValue(crearReservaEmpleado());
     mocksServicioReservas.agregarProductoAReserva.mockResolvedValue(crearReservaEmpleado());
     mocksServicioProductos.obtenerProductos.mockResolvedValue([
@@ -180,6 +188,16 @@ describe('PaginaAgendaEmpleado', () => {
 
   afterEach(() => {
     vi.clearAllMocks();
+  });
+
+  it('usa la variante compacta del calendario en la agenda del empleado', async () => {
+    renderConProveedores(<PaginaAgendaEmpleado />, { rutaInicial: '/empleado/agenda' });
+
+    await screen.findByText('calendario empleado');
+
+    expect(calendarioEmpleadoMock).toHaveBeenCalledWith(
+      expect.objectContaining({ variante: 'compacta' }),
+    );
   });
 
   it('permite copiar la clave del salón y agregar productos en plan PRO', async () => {
@@ -212,7 +230,9 @@ describe('PaginaAgendaEmpleado', () => {
   });
 
   it('bloquea la pestaña de productos cuando el salón no es PRO', async () => {
-    mocksServicioEmpleados.obtenerMiPerfilEmpleado.mockResolvedValue(crearPerfilEmpleado('STANDARD'));
+    mocksServicioEmpleados.obtenerMiPerfilEmpleado.mockResolvedValue(
+      crearPerfilEmpleado('STANDARD'),
+    );
 
     renderConProveedores(<PaginaAgendaEmpleado />, { rutaInicial: '/empleado/agenda' });
 

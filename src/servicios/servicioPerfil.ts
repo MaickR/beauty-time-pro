@@ -1,6 +1,6 @@
 import { obtenerCabecerasAutenticadas, peticion } from '../lib/clienteHTTP';
 import { URL_BASE } from '../lib/clienteHTTP';
-import type { Pais, PlanEstudio } from '../tipos';
+import type { MetodoPagoReserva, Pais, PlanEstudio } from '../tipos';
 
 export interface PerfilEstudio {
   id: string;
@@ -16,6 +16,7 @@ export interface PerfilEstudio {
   colorPrimario: string;
   logoUrl: string | null;
   claveCliente: string | null;
+  metodosPagoReserva: MetodoPagoReserva[];
   estudioPrincipalId?: string | null;
   estudioPrincipal?: { id: string; nombre: string } | null;
   sedes?: Array<{
@@ -57,6 +58,8 @@ export async function actualizarPerfilEstudio(
     cuerpo['emailContacto'] = emailContacto === '' ? null : emailContacto;
   }
   if (datos.colorPrimario !== undefined) cuerpo['colorPrimario'] = datos.colorPrimario;
+  if (datos.metodosPagoReserva !== undefined)
+    cuerpo['metodosPagoReserva'] = datos.metodosPagoReserva;
 
   const res = await peticion<{ datos: PerfilEstudio }>(`/estudio/${estudioId}/perfil`, {
     method: 'PUT',

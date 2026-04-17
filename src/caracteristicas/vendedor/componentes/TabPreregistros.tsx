@@ -1,32 +1,20 @@
 import { useEffect, useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { useForm } from 'react-hook-form';
-import { zodResolver } from '@hookform/resolvers/zod';
-import { z } from 'zod';
-import { Plus, X, Clock, CheckCircle, XCircle, FileText, Search } from 'lucide-react';
-import { obtenerMisPreregistros, crearPreregistro } from '../../../servicios/servicioVendedor';
+import { PlusCircle, Clock, CheckCircle, XCircle, FileText, Search } from 'lucide-react';
+import {
+  obtenerMisPreregistros,
+  crearPreregistro,
+  obtenerMisSalones,
+} from '../../../servicios/servicioVendedor';
 import type { PreregistroSalon } from '../../../servicios/servicioVendedor';
+import { ModalEstudio } from '../../maestro/componentes/ModalEstudio';
+import {
+  usarFormularioEstudio,
+  type FormularioEstudio,
+} from '../../maestro/hooks/usarFormularioEstudio';
+import { usarToast } from '../../../componentes/ui/ProveedorToast';
 
-const CLAVE_BORRADOR_PREREGISTRO = 'vendedor_preregistro_salon_borrador_v1';
-
-// ─── Schema ──────────────────────────────────────────────────────────────
-const esquemaFormulario = z.object({
-  nombreSalon: z.string().trim().min(2, 'Mínimo 2 caracteres').max(120),
-  propietario: z.string().trim().min(2, 'Mínimo 2 caracteres').max(120),
-  emailPropietario: z.string().trim().email('Correo inválido').max(120),
-  telefonoPropietario: z
-    .string()
-    .trim()
-    .regex(/^\d{10}$/, 'Se requieren 10 dígitos'),
-  pais: z.enum(['Mexico', 'Colombia']),
-  direccion: z.string().trim().max(180).optional(),
-  descripcion: z.string().trim().max(500).optional(),
-  categorias: z.string().trim().max(240).optional(),
-  plan: z.enum(['STANDARD', 'PRO']),
-  notas: z.string().trim().max(500).optional(),
-});
-
-type CamposFormulario = z.infer<typeof esquemaFormulario>;
+const CLAVE_BORRADOR_PREREGISTRO = 'vendedor_preregistro_salon_borrador_v2';
 
 const ESTADOS_BADGE: Record<string, { etiqueta: string; color: string; icono: typeof Clock }> = {
   pendiente: { etiqueta: 'Pendiente', color: 'bg-amber-100 text-amber-700', icono: Clock },
@@ -34,92 +22,122 @@ const ESTADOS_BADGE: Record<string, { etiqueta: string; color: string; icono: ty
   rechazado: { etiqueta: 'Rechazado', color: 'bg-red-100 text-red-700', icono: XCircle },
 };
 
+function construirCategoriasPreregistro(formulario: FormularioEstudio): string | undefined {
+  const categorias = Array.from(
+    new Set(
+      formulario.customServices
+        .map((servicio) => servicio.category?.trim())
+        .filter((categoria): categoria is string => Boolean(categoria)),
+    ),
+  );
+
+  if (categorias.length > 0) {
+    return categorias.join(', ').slice(0, 240);
+  }
+
+  const servicios = formulario.selectedServices
+    .map((servicio) => servicio.name.trim())
+    .filter(Boolean);
+  return servicios.length > 0 ? servicios.join(', ').slice(0, 240) : undefined;
+}
+
+function construirNotasPreregistro(formulario: FormularioEstudio): string | undefined {
+  const sitioWeb = formulario.website?.trim() ?? '';
+  const lineas = [
+    sitioWeb ? `Website: ${sitioWeb}` : null,
+    formulario.subscriptionStart ? `Operations start: ${formulario.subscriptionStart}` : null,
+    `Registration type: ${formulario.tipoVinculacion === 'SEDE' ? 'Branch' : 'Independent salon'}`,
+    formulario.estudioPrincipalId ? `Primary salon ID: ${formulario.estudioPrincipalId}` : null,
+    `Public bookings: ${formulario.permiteReservasPublicas ? 'Enabled' : 'Disabled'}`,
+    formulario.branches.length > 0 ? `Branches: ${formulario.branches.join(', ')}` : null,
+    formulario.selectedServices.length > 0
+      ? `Services: ${formulario.selectedServices.map((servicio) => servicio.name).join(', ')}`
+      : null,
+    formulario.staff.length > 0
+      ? `Staff: ${formulario.staff.map((persona) => persona.name).join(', ')}`
+      : null,
+    formulario.productos.length > 0
+      ? `Products: ${formulario.productos.map((producto) => producto.nombre).join(', ')}`
+      : null,
+  ].filter((linea): linea is string => Boolean(linea));
+
+  return lineas.length > 0 ? lineas.join('\n').slice(0, 500) : undefined;
+}
+
 // ─── Componente ──────────────────────────────────────────────────────────
 export function TabPreregistros() {
-  const [mostrarFormulario, setMostrarFormulario] = useState(false);
-  const [busqueda, setBusqueda] = useState('');
+  const [busquedaTexto, setBusquedaTexto] = useState('');
+  const [busquedaAplicada, setBusquedaAplicada] = useState('');
   const [estado, setEstado] = useState<'pendiente' | 'aprobado' | 'rechazado' | ''>('');
   const [pagina, setPagina] = useState(1);
   const clienteConsulta = useQueryClient();
+  const { mostrarToast } = usarToast();
+
+  const mutacion = useMutation({
+    mutationFn: crearPreregistro,
+  });
+
+  const hookFormulario = usarFormularioEstudio({
+    claveBorrador: CLAVE_BORRADOR_PREREGISTRO,
+    procesarAlta: async ({ formulario }) => {
+      const resultado = await mutacion.mutateAsync({
+        nombreSalon: formulario.name,
+        propietario: formulario.owner,
+        emailPropietario: formulario.emailDueno,
+        telefonoPropietario: formulario.phone,
+        pais: formulario.country,
+        direccion: formulario.direccion || undefined,
+        categorias: construirCategoriasPreregistro(formulario),
+        plan: formulario.plan,
+        notas: construirNotasPreregistro(formulario),
+      });
+
+      return {
+        mensajeExito: `Pre-registro "${resultado.nombreSalon}" enviado correctamente.`,
+        cerrarModal: true,
+      };
+    },
+  });
+
+  useEffect(() => {
+    const temporizador = window.setTimeout(() => {
+      setBusquedaAplicada(busquedaTexto.trim());
+      setPagina(1);
+    }, 300);
+
+    return () => window.clearTimeout(temporizador);
+  }, [busquedaTexto]);
 
   const { data, isLoading } = useQuery({
-    queryKey: ['vendedor', 'preregistros', busqueda, estado, pagina],
+    queryKey: ['vendedor', 'preregistros', busquedaAplicada, estado, pagina],
     queryFn: () =>
-      obtenerMisPreregistros({ busqueda, estado: estado || undefined, pagina, limite: 10 }),
+      obtenerMisPreregistros({
+        busqueda: busquedaAplicada,
+        estado: estado || undefined,
+        pagina,
+        limite: 10,
+      }),
     staleTime: 1000 * 60 * 2,
   });
+
+  const { data: salonesVendedor = [] } = useQuery({
+    queryKey: ['vendedor', 'mis-salones-opciones'],
+    queryFn: obtenerMisSalones,
+    staleTime: 1000 * 60 * 5,
+  });
+
+  const estudiosPrincipales = salonesVendedor.map((salon) => ({
+    id: salon.id,
+    name: salon.nombre,
+    estudioPrincipalId: null,
+  }));
 
   const preregistros = data?.datos ?? [];
   const total = data?.total ?? 0;
   const totalPaginas = Math.max(1, Math.ceil(total / 10));
-
-  const {
-    register,
-    handleSubmit,
-    reset,
-    watch,
-    formState: { errors, isSubmitting },
-  } = useForm<CamposFormulario>({
-    resolver: zodResolver(esquemaFormulario),
-    defaultValues: { pais: 'Mexico', plan: 'STANDARD' },
-  });
-
-  const [errorServidor, setErrorServidor] = useState('');
-
-  useEffect(() => {
-    try {
-      const borrador = window.localStorage.getItem(CLAVE_BORRADOR_PREREGISTRO);
-      if (!borrador) return;
-      reset(JSON.parse(borrador) as CamposFormulario);
-    } catch {
-      // Ignorar borrador inválido.
-    }
-  }, [reset]);
-
-  useEffect(() => {
-    const suscripcion = watch((valores) => {
-      try {
-        window.localStorage.setItem(
-          CLAVE_BORRADOR_PREREGISTRO,
-          JSON.stringify({
-            nombreSalon: valores.nombreSalon ?? '',
-            propietario: valores.propietario ?? '',
-            emailPropietario: valores.emailPropietario ?? '',
-            telefonoPropietario: valores.telefonoPropietario ?? '',
-            pais: valores.pais ?? 'Mexico',
-            direccion: valores.direccion ?? '',
-            descripcion: valores.descripcion ?? '',
-            categorias: valores.categorias ?? '',
-            plan: valores.plan ?? 'STANDARD',
-            notas: valores.notas ?? '',
-          }),
-        );
-      } catch {
-        // Ignorar almacenamiento no disponible.
-      }
-    });
-
-    return () => suscripcion.unsubscribe();
-  }, [watch]);
-
-  const mutacion = useMutation({
-    mutationFn: crearPreregistro,
-    onSuccess: () => {
-      clienteConsulta.invalidateQueries({ queryKey: ['vendedor'] });
-      setMostrarFormulario(false);
-      reset();
-      window.localStorage.removeItem(CLAVE_BORRADOR_PREREGISTRO);
-      setErrorServidor('');
-    },
-    onError: (err: Error) => {
-      setErrorServidor(err.message || 'Ocurrió un error.');
-    },
-  });
-
-  const alEnviar = (datos: CamposFormulario) => {
-    setErrorServidor('');
-    mutacion.mutate(datos);
-  };
+  const pendientesVisibles = preregistros.filter((item) => item.estado === 'pendiente').length;
+  const aprobadosVisibles = preregistros.filter((item) => item.estado === 'aprobado').length;
+  const rechazadosVisibles = preregistros.filter((item) => item.estado === 'rechazado').length;
 
   if (isLoading) {
     return (
@@ -143,19 +161,12 @@ export function TabPreregistros() {
           </div>
           <button
             onClick={() => {
-              setMostrarFormulario(true);
-              try {
-                const borrador = window.localStorage.getItem(CLAVE_BORRADOR_PREREGISTRO);
-                reset(borrador ? (JSON.parse(borrador) as CamposFormulario) : undefined);
-              } catch {
-                reset();
-              }
-              setErrorServidor('');
+              hookFormulario.abrirModalAlta();
             }}
-            className="flex items-center justify-center gap-2 rounded-full bg-slate-900 px-5 py-3 text-sm font-bold text-white transition hover:bg-slate-800"
+            className="no-imprimir bg-pink-600 text-white px-8 py-4 rounded-2xl font-black shadow-xl flex items-center justify-center gap-2 hover:bg-pink-700 transition-all"
           >
-            <Plus className="w-4 h-4" />
-            Nuevo pre-registro
+            <PlusCircle className="w-4 h-4" aria-hidden="true" />
+            Registrar nuevo salón
           </button>
         </div>
 
@@ -163,28 +174,64 @@ export function TabPreregistros() {
           <label className="relative block">
             <Search className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
             <input
-              value={busqueda}
-              onChange={(evento) => {
-                setBusqueda(evento.target.value);
-                setPagina(1);
-              }}
+              value={busquedaTexto}
+              onChange={(evento) => setBusquedaTexto(evento.target.value)}
               className="w-full rounded-2xl border border-slate-300 py-3 pl-11 pr-4 text-sm text-slate-900"
               placeholder="Buscar por salón o propietario"
             />
           </label>
-          <select
-            value={estado}
-            onChange={(evento) => {
-              setEstado(evento.target.value as typeof estado);
-              setPagina(1);
-            }}
-            className="w-full rounded-2xl border border-slate-300 px-4 py-3 text-sm text-slate-900"
-          >
-            <option value="">Todos los estados</option>
-            <option value="pendiente">Pendiente</option>
-            <option value="aprobado">Aprobado</option>
-            <option value="rechazado">Rechazado</option>
-          </select>
+          <div className="flex flex-col gap-3 sm:flex-row">
+            <select
+              value={estado}
+              onChange={(evento) => {
+                setEstado(evento.target.value as typeof estado);
+                setPagina(1);
+              }}
+              className="w-full rounded-2xl border border-slate-300 px-4 py-3 text-sm text-slate-900"
+            >
+              <option value="">Todos los estados</option>
+              <option value="pendiente">Pendiente</option>
+              <option value="aprobado">Aprobado</option>
+              <option value="rechazado">Rechazado</option>
+            </select>
+            <button
+              type="button"
+              onClick={() => {
+                setBusquedaTexto('');
+                setBusquedaAplicada('');
+                setEstado('');
+                setPagina(1);
+              }}
+              className="rounded-2xl border border-slate-300 px-4 py-3 text-sm font-bold text-slate-700 transition hover:border-slate-400 hover:text-slate-900"
+            >
+              Limpiar filtros
+            </button>
+          </div>
+        </div>
+
+        <div className="mt-6 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+          <TarjetaResumenPreregistro etiqueta="Total filtrado" valor={total} tono="claro" />
+          <TarjetaResumenPreregistro
+            etiqueta="Pendientes visibles"
+            valor={pendientesVisibles}
+            tono="pendiente"
+          />
+          <TarjetaResumenPreregistro
+            etiqueta="Aprobados visibles"
+            valor={aprobadosVisibles}
+            tono="aprobado"
+          />
+          <TarjetaResumenPreregistro
+            etiqueta="Rechazados visibles"
+            valor={rechazadosVisibles}
+            tono="rechazado"
+          />
+        </div>
+
+        <div className="mt-4 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600">
+          {busquedaTexto !== busquedaAplicada
+            ? 'Updating search results...'
+            : 'Search is debounced to avoid unnecessary requests while you type.'}
         </div>
       </section>
 
@@ -195,143 +242,47 @@ export function TabPreregistros() {
         </p>
       </div>
 
-      {/* Modal formulario */}
-      {mostrarFormulario && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
-          role="dialog"
-          aria-labelledby="titulo-preregistro"
-          onClick={() => setMostrarFormulario(false)}
-        >
-          <div
-            className="bg-white rounded-2xl shadow-xl max-w-lg w-full p-6 max-h-[90vh] overflow-y-auto"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="flex items-center justify-between mb-4">
-              <h3 id="titulo-preregistro" className="text-lg font-bold text-slate-900">
-                Nuevo pre-registro
-              </h3>
-              <button
-                onClick={() => setMostrarFormulario(false)}
-                className="p-1 rounded-lg hover:bg-slate-100 transition-colors"
-                aria-label="Cerrar"
-              >
-                <X className="w-5 h-5 text-slate-500" />
-              </button>
-            </div>
-
-            <div className="mb-4 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-medium text-slate-600">
-              El borrador se guarda automáticamente mientras completas este pre-registro.
-            </div>
-
-            <form onSubmit={handleSubmit(alEnviar)} className="space-y-4">
-              <Campo etiqueta="Nombre del salón" error={errors.nombreSalon?.message}>
-                <input
-                  {...register('nombreSalon')}
-                  className={estiloInput}
-                  placeholder="Ej. Studio Bella"
-                />
-              </Campo>
-
-              <Campo etiqueta="Nombre del propietario" error={errors.propietario?.message}>
-                <input
-                  {...register('propietario')}
-                  className={estiloInput}
-                  placeholder="Nombre completo"
-                />
-              </Campo>
-
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <Campo etiqueta="Correo del propietario" error={errors.emailPropietario?.message}>
-                  <input
-                    {...register('emailPropietario')}
-                    type="email"
-                    className={estiloInput}
-                    placeholder="correo@ejemplo.com"
-                  />
-                </Campo>
-                <Campo
-                  etiqueta="Teléfono del propietario"
-                  error={errors.telefonoPropietario?.message}
-                >
-                  <input
-                    {...register('telefonoPropietario')}
-                    className={estiloInput}
-                    placeholder="10 dígitos"
-                  />
-                </Campo>
-              </div>
-
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <Campo etiqueta="País" error={errors.pais?.message}>
-                  <select {...register('pais')} className={estiloInput}>
-                    <option value="Mexico">México</option>
-                    <option value="Colombia">Colombia</option>
-                  </select>
-                </Campo>
-                <Campo etiqueta="Plan" error={errors.plan?.message}>
-                  <select {...register('plan')} className={estiloInput}>
-                    <option value="STANDARD">Estándar</option>
-                    <option value="PRO">Pro</option>
-                  </select>
-                </Campo>
-              </div>
-
-              <Campo etiqueta="Dirección" error={errors.direccion?.message}>
-                <input {...register('direccion')} className={estiloInput} placeholder="Opcional" />
-              </Campo>
-
-              <Campo etiqueta="Categorías" error={errors.categorias?.message}>
-                <input
-                  {...register('categorias')}
-                  className={estiloInput}
-                  placeholder="Ej. Hair, Nails, Spa"
-                />
-              </Campo>
-
-              <Campo etiqueta="Descripción" error={errors.descripcion?.message}>
-                <textarea
-                  {...register('descripcion')}
-                  className={estiloInput}
-                  rows={2}
-                  placeholder="Notas opcionales sobre el salón"
-                />
-              </Campo>
-
-              <Campo etiqueta="Notas internas" error={errors.notas?.message}>
-                <textarea
-                  {...register('notas')}
-                  className={estiloInput}
-                  rows={2}
-                  placeholder="Notas para el equipo administrativo"
-                />
-              </Campo>
-
-              {errorServidor && <p className="text-sm text-red-600 font-medium">{errorServidor}</p>}
-
-              <div className="flex gap-3 justify-end pt-2">
-                <button
-                  type="button"
-                  onClick={() => {
-                    window.localStorage.removeItem(CLAVE_BORRADOR_PREREGISTRO);
-                    reset();
-                    setMostrarFormulario(false);
-                  }}
-                  className="px-4 py-2 text-sm font-semibold text-slate-600 rounded-lg hover:bg-slate-100 transition-colors"
-                >
-                  Limpiar borrador
-                </button>
-                <button
-                  type="submit"
-                  disabled={isSubmitting || mutacion.isPending}
-                  className="px-5 py-2 text-sm font-bold text-white bg-pink-600 rounded-lg hover:bg-pink-700 disabled:opacity-50 transition-colors"
-                >
-                  {mutacion.isPending ? 'Enviando...' : 'Enviar pre-registro'}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
+      {hookFormulario.modoModal && (
+        <ModalEstudio
+          modo={hookFormulario.modoModal}
+          formulario={hookFormulario.formulario}
+          estudiosPrincipales={estudiosPrincipales}
+          setFormulario={hookFormulario.setFormulario}
+          catalogoProps={{
+            alternarServicio: hookFormulario.alternarServicio,
+            actualizarCampoServicio: hookFormulario.actualizarCampoServicio,
+            agregarServicioPersonalizado: hookFormulario.agregarServicioPersonalizado,
+            entradaServicioPersonalizado: hookFormulario.entradaServicioPersonalizado,
+            setEntradaServicioPersonalizado: hookFormulario.setEntradaServicioPersonalizado,
+          }}
+          onAgregarPersonal={hookFormulario.agregarPersonal}
+          onEnviar={(evento) =>
+            void hookFormulario.enviarFormulario(
+              evento,
+              async () => {
+                await clienteConsulta.invalidateQueries({ queryKey: ['vendedor'] });
+              },
+              (mensaje) =>
+                mostrarToast({
+                  mensaje,
+                  variante: 'exito',
+                  icono: '✓',
+                }),
+              (mensaje) =>
+                mostrarToast({
+                  mensaje,
+                  variante: 'error',
+                  icono: '✗',
+                }),
+            )
+          }
+          onCerrar={hookFormulario.cerrarModal}
+          confirmacionAlta={hookFormulario.confirmacionAlta}
+          onRegenerarContrasenaDueno={hookFormulario.regenerarContrasenaDueno}
+          onDescartarBorrador={hookFormulario.descartarBorrador}
+          logoArchivo={hookFormulario.logoArchivo}
+          onCambiarLogo={hookFormulario.setLogoArchivo}
+        />
       )}
 
       {/* Lista de preregistros */}
@@ -375,6 +326,32 @@ export function TabPreregistros() {
   );
 }
 
+function TarjetaResumenPreregistro({
+  etiqueta,
+  valor,
+  tono,
+}: {
+  etiqueta: string;
+  valor: number;
+  tono: 'claro' | 'pendiente' | 'aprobado' | 'rechazado';
+}) {
+  const estilos =
+    tono === 'pendiente'
+      ? 'bg-amber-50 border-amber-100 text-amber-900'
+      : tono === 'aprobado'
+        ? 'bg-emerald-50 border-emerald-100 text-emerald-900'
+        : tono === 'rechazado'
+          ? 'bg-rose-50 border-rose-100 text-rose-900'
+          : 'bg-white border-slate-200 text-slate-900';
+
+  return (
+    <article className={`rounded-3xl border p-4 ${estilos}`}>
+      <p className="text-[11px] font-black uppercase tracking-[0.2em] opacity-70">{etiqueta}</p>
+      <p className="mt-2 text-3xl font-black">{valor}</p>
+    </article>
+  );
+}
+
 // ─── Tarjeta ─────────────────────────────────────────────────────────────
 
 function TarjetaPreregistro({ preregistro: pr }: { preregistro: PreregistroSalon }) {
@@ -406,28 +383,5 @@ function TarjetaPreregistro({ preregistro: pr }: { preregistro: PreregistroSalon
         </span>
       </div>
     </article>
-  );
-}
-
-// ─── Helpers de estilo ───────────────────────────────────────────────────
-
-const estiloInput =
-  'w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-pink-500 focus:border-transparent transition-colors';
-
-function Campo({
-  etiqueta,
-  error,
-  children,
-}: {
-  etiqueta: string;
-  error?: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <div>
-      <label className="block text-sm font-medium text-slate-700 mb-1">{etiqueta}</label>
-      {children}
-      {error && <p className="text-xs text-red-600 mt-1">{error}</p>}
-    </div>
   );
 }

@@ -6,6 +6,12 @@ import { Proveedores } from './src/app/proveedores';
 import './src/index.css';
 import './styles.css';
 
+declare global {
+  interface Window {
+    __ocultarPreloader?: () => void;
+  }
+}
+
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
     <Proveedores>
@@ -13,3 +19,7 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
     </Proveedores>
   </React.StrictMode>
 );
+
+window.requestAnimationFrame(() => {
+  window.__ocultarPreloader?.();
+});

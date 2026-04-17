@@ -8,11 +8,140 @@
     <meta property="og:title" content="Beauty Time Pro" />
     <meta property="og:description" content="Plataforma SaaS para gestión de salones de belleza." />
     <meta property="og:type" content="website" />
-    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="icon" type="image/svg+xml" href="/Logo-App.svg" />
+    <link rel="apple-touch-icon" href="/Logo-App.svg" />
     <title>Beauty Time Pro</title>
+    <style>
+      :root {
+        color-scheme: light;
+      }
+
+      #app-preloader {
+        position: fixed;
+        inset: 0;
+        z-index: 9999;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 24px;
+        background:
+          radial-gradient(circle at top, rgba(236, 72, 153, 0.12), transparent 30%),
+          linear-gradient(180deg, #fffdfb 0%, #f8fafc 100%);
+        transition: opacity 180ms ease, visibility 180ms ease, transform 180ms ease;
+      }
+
+      #app-preloader[data-hidden='true'] {
+        opacity: 0;
+        visibility: hidden;
+        transform: scale(1.015);
+        pointer-events: none;
+      }
+
+      .app-preloader__card {
+        width: min(100%, 420px);
+        display: grid;
+        justify-items: center;
+        gap: 18px;
+        padding: 28px 24px;
+        border: 1px solid rgba(148, 163, 184, 0.16);
+        border-radius: 32px;
+        background: rgba(255, 255, 255, 0.9);
+        box-shadow: 0 24px 80px rgba(15, 23, 42, 0.12);
+        text-align: center;
+        backdrop-filter: blur(18px);
+      }
+
+      .app-preloader__logo {
+        width: clamp(84px, 18vw, 132px);
+        height: clamp(84px, 18vw, 132px);
+        object-fit: contain;
+        animation: app-preloader-float 1.35s ease-in-out infinite;
+      }
+
+      .app-preloader__title {
+        margin: 0;
+        font: 800 clamp(1.15rem, 1rem + 0.7vw, 1.55rem)/1.1 'Segoe UI', sans-serif;
+        color: #0f172a;
+      }
+
+      .app-preloader__text {
+        margin: 0;
+        max-width: 26ch;
+        font: 500 0.95rem/1.55 'Segoe UI', sans-serif;
+        color: #475569;
+      }
+
+      .app-preloader__bar {
+        position: relative;
+        width: min(100%, 220px);
+        height: 8px;
+        overflow: hidden;
+        border-radius: 999px;
+        background: rgba(226, 232, 240, 0.9);
+      }
+
+      .app-preloader__bar::after {
+        content: '';
+        position: absolute;
+        inset: 0;
+        border-radius: inherit;
+        background: linear-gradient(90deg, #ec4899 0%, #be185d 55%, #0f766e 100%);
+        transform: translateX(-58%);
+        animation: app-preloader-progress 1.1s ease-in-out infinite;
+      }
+
+      .app-preloader__meta {
+        font: 700 0.76rem/1 'Segoe UI', sans-serif;
+        letter-spacing: 0.22em;
+        text-transform: uppercase;
+        color: #a16207;
+      }
+
+      @keyframes app-preloader-progress {
+        0% { transform: translateX(-58%); }
+        50% { transform: translateX(-8%); }
+        100% { transform: translateX(58%); }
+      }
+
+      @keyframes app-preloader-float {
+        0%, 100% { transform: translateY(0); }
+        50% { transform: translateY(-6px); }
+      }
+
+      @media (prefers-reduced-motion: reduce) {
+        .app-preloader__logo,
+        .app-preloader__bar::after {
+          animation: none;
+        }
+      }
+    </style>
   </head>
   <body class="bg-slate-50">
+    <div id="app-preloader" aria-live="polite">
+      <div class="app-preloader__card">
+        <img class="app-preloader__logo" src="/LOGO-BTP.svg" alt="Beauty Time Pro" />
+        <div class="app-preloader__meta">SalonProMaster.com</div>
+        <h1 class="app-preloader__title">Preparando tu espacio de trabajo</h1>
+        <p class="app-preloader__text">Cargando agenda, permisos y herramientas activas de tu salón.</p>
+        <div class="app-preloader__bar" aria-hidden="true"></div>
+      </div>
+    </div>
     <div id="root"></div>
+    <script>
+      window.__ocultarPreloader = function () {
+        const nodo = document.getElementById('app-preloader');
+        if (!nodo || nodo.dataset.hidden === 'true') return;
+        nodo.dataset.hidden = 'true';
+        window.setTimeout(function () {
+          nodo.remove();
+        }, 220);
+      };
+      window.addEventListener('load', function () {
+        if (typeof window.__ocultarPreloader === 'function') {
+          window.__ocultarPreloader();
+        }
+      }, { once: true });
+    </script>
     <script type="module" src="/main.tsx"></script>
   </body>
 </html>

@@ -1,5 +1,9 @@
 import { peticion } from '../lib/clienteHTTP';
-import { combinarExcepcionesDisponibilidad, normalizarExcepcionesDisponibilidad } from '../lib/disponibilidadExcepciones';
+import {
+  combinarExcepcionesDisponibilidad,
+  normalizarExcepcionesDisponibilidad,
+} from '../lib/disponibilidadExcepciones';
+import { normalizarMetodosPagoReserva } from '../lib/metodosPagoReserva';
 import { construirUrlArchivo } from '../utils/archivos';
 import type {
   ReservaCliente,
@@ -38,6 +42,13 @@ interface RespuestaSlots {
     time?: string;
     status?: SlotTiempo['status'];
   }>;
+}
+
+const REGEX_UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const REGEX_CUID = /^c[a-z0-9]{20,}$/i;
+
+function pareceIdSalon(valor: string): boolean {
+  return REGEX_UUID.test(valor) || REGEX_CUID.test(valor);
 }
 
 function normalizarSlots(
@@ -85,11 +96,16 @@ function normalizarSalonDetalle(salon: SalonDetalle): SalonDetalle {
     personal: salon.personal,
     servicios: salon.servicios,
     productos: Array.isArray(salon.productos) ? salon.productos : [],
+    metodosPagoReserva: normalizarMetodosPagoReserva(
+      (salon as unknown as Record<string, unknown>)['metodosPagoReserva'],
+    ),
     horario: salon.horario,
     festivos: salon.festivos,
     availabilityExceptions: combinarExcepcionesDisponibilidad(
       Array.isArray(salon.festivos) ? salon.festivos : [],
-      normalizarExcepcionesDisponibilidad((salon as unknown as Record<string, unknown>)['excepcionesDisponibilidad']),
+      normalizarExcepcionesDisponibilidad(
+        (salon as unknown as Record<string, unknown>)['excepcionesDisponibilidad'],
+      ),
     ),
   };
 }
@@ -134,6 +150,22 @@ export async function obtenerSalonesPublicos(params?: {
 export async function obtenerSalonPublico(id: string): Promise<SalonDetalle> {
   const res = await peticion<RespuestaSalon>(`/salones/publicos/${id}`);
   return normalizarSalonDetalle(res.datos);
+}
+
+export async function obtenerSalonPublicoPorIdentificador(
+  identificador: string,
+): Promise<SalonDetalle> {
+  const identificadorLimpio = identificador.trim();
+
+  if (pareceIdSalon(identificadorLimpio)) {
+    try {
+      return await obtenerSalonPublico(identificadorLimpio);
+    } catch {
+      return obtenerSalonPublicoPorClave(identificadorLimpio);
+    }
+  }
+
+  return obtenerSalonPublicoPorClave(identificadorLimpio);
 }
 
 export async function obtenerSalonPublicoPorClave(clave: string): Promise<SalonDetalle> {

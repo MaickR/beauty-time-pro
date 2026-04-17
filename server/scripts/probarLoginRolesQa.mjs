@@ -1,11 +1,11 @@
 ﻿const baseUrl = 'http://localhost:3000';
 const usuarios = [
-  { rol: 'maestro', email: 'qa.maestro@beautytimepro.com' },
-  { rol: 'supervisor', email: 'qa.supervisor@beautytimepro.com' },
-  { rol: 'vendedor', email: 'qa.vendedor@beautytimepro.com' },
-  { rol: 'dueno', email: 'qa.dueno@beautytimepro.com' },
-  { rol: 'empleado', email: 'qa.empleado@beautytimepro.com' },
-  { rol: 'cliente', email: 'qa.cliente@beautytimepro.com' },
+  { rol: 'maestro', email: 'qa.maestro@salonpromaster.com' },
+  { rol: 'supervisor', email: 'qa.supervisor@salonpromaster.com' },
+  { rol: 'vendedor', email: 'qa.vendedor@salonpromaster.com' },
+  { rol: 'dueno', email: 'qa.dueno@salonpromaster.com' },
+  { rol: 'empleado', email: 'qa.empleado@salonpromaster.com' },
+  { rol: 'cliente', email: 'qa.cliente@salonpromaster.com' },
 ];
 const contrasena = 'QaLogin2026!';
 

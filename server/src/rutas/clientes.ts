@@ -2,6 +2,7 @@ import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import { prisma } from '../prismaCliente.js';
 import { verificarJWT } from '../middleware/autenticacion.js';
+import { tieneAccesoAdministrativoEstudio } from '../lib/accesoEstudio.js';
 import {
   calcularEdadDesdeFechaNacimiento,
   emailSchema,
@@ -33,7 +34,7 @@ export async function rutasClientes(servidor: FastifyInstance): Promise<void> {
     async (solicitud, respuesta) => {
       const payload = solicitud.user as { sub: string; rol: string; estudioId: string | null };
       const { id } = solicitud.params;
-      if (!(payload.rol === 'maestro' || (payload.rol === 'dueno' && payload.estudioId === id))) {
+      if (!tieneAccesoAdministrativoEstudio(payload, id)) {
         return respuesta.code(403).send({ error: 'Sin permisos para esta acción' });
       }
       if (payload.rol === 'dueno') {
@@ -122,7 +123,7 @@ export async function rutasClientes(servidor: FastifyInstance): Promise<void> {
         },
       });
       if (!cliente) return respuesta.code(404).send({ error: 'Cliente no encontrado' });
-      if (!(payload.rol === 'maestro' || (payload.rol === 'dueno' && payload.estudioId === cliente.estudioId))) {
+      if (!tieneAccesoAdministrativoEstudio(payload, cliente.estudioId)) {
         return respuesta.code(403).send({ error: 'Sin permisos para esta acción' });
       }
 
@@ -152,7 +153,7 @@ export async function rutasClientes(servidor: FastifyInstance): Promise<void> {
         select: { estudioId: true },
       });
       if (!clienteExistente) return respuesta.code(404).send({ error: 'Cliente no encontrado' });
-      if (!(payload.rol === 'maestro' || (payload.rol === 'dueno' && payload.estudioId === clienteExistente.estudioId))) {
+      if (!tieneAccesoAdministrativoEstudio(payload, clienteExistente.estudioId)) {
         return respuesta.code(403).send({ error: 'Sin permisos para esta acción' });
       }
 

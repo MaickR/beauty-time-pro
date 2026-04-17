@@ -1,4 +1,4 @@
 User-agent: *
 Allow: /
 
-Sitemap: https://beautytimepro.com/sitemap.xml
+Sitemap: https://salonpromaster.com/sitemap.xml

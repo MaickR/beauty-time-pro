@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import {
+  ArrowLeft,
   Store,
   LogOut,
   Calendar,
@@ -41,7 +42,7 @@ export function PaginaAdminEstudio() {
   const { slug } = useParams<{ slug: string }>();
   const navegar = useNavigate();
   const { estudios, reservas, cargando } = usarContextoApp();
-  const { cerrarSesion } = usarTiendaAuth();
+  const { cerrarSesion, usuario } = usarTiendaAuth();
   const [seccion, setSeccion] = useState<
     'ingresos' | 'clientes' | 'fidelidad' | 'salon' | 'equipo' | 'productos' | 'contacto'
   >('ingresos');
@@ -51,7 +52,8 @@ export function PaginaAdminEstudio() {
   const estudio = estudios.find((s) => s.slug === slug || s.clientKey === slug || s.id === slug);
   const estudioId = estudio?.id;
   const { notificaciones, marcarLeida } = usarNotificacionesEstudio(estudioId);
-  const identificadorRutaPrivada = estudio?.slug?.trim() || estudio?.clientKey?.trim() || estudio?.id;
+  const identificadorRutaPrivada =
+    estudio?.slug?.trim() || estudio?.clientKey?.trim() || estudio?.id;
 
   useEffect(() => {
     if (!identificadorRutaPrivada || !slug || slug === identificadorRutaPrivada) return;
@@ -112,6 +114,15 @@ export function PaginaAdminEstudio() {
     },
   ];
 
+  const volverPanelVendedor = () => {
+    navegar('/vendedor');
+  };
+
+  const manejarCerrarSesion = async () => {
+    await cerrarSesion();
+    navegar('/iniciar-sesion', { replace: true });
+  };
+
   return (
     <div className="min-h-screen bg-slate-50 font-sans pb-20">
       <BannerNotificacionesPush
@@ -143,13 +154,24 @@ export function PaginaAdminEstudio() {
           </div>
         </div>
         <div className="flex items-center gap-3">
+          {usuario?.rol === 'vendedor' && (
+            <button
+              onClick={volverPanelVendedor}
+              className="inline-flex items-center gap-2 rounded-full border border-sky-200 bg-sky-50 px-4 py-2 text-sm font-bold text-sky-800 transition hover:bg-sky-100"
+            >
+              <ArrowLeft className="h-4 w-4" />
+              Volver al panel vendedor
+            </button>
+          )}
           <PanelNotificaciones
             notificaciones={notificaciones}
             pais={estudio?.country ?? 'Mexico'}
             onMarcarLeida={marcarLeida}
           />
           <button
-            onClick={cerrarSesion}
+            onClick={() => {
+              void manejarCerrarSesion();
+            }}
             aria-label="Cerrar sesión"
             className="p-3 bg-slate-100 rounded-full hover:bg-slate-200 text-slate-400"
           >
@@ -277,7 +299,8 @@ export function PaginaAdminEstudio() {
               <div>
                 <h2 className="text-3xl font-black italic uppercase tracking-tighter">Mi Salón</h2>
                 <p className="mt-1 text-sm text-slate-500">
-                  Ordena la información general del salón y la gestión de horario en espacios separados.
+                  Ordena la información general del salón y la gestión de horario en espacios
+                  separados.
                 </p>
               </div>
 
@@ -314,7 +337,8 @@ export function PaginaAdminEstudio() {
                       Horarios, descansos y festivos del salón
                     </h3>
                     <p className="text-sm text-slate-500">
-                      Mantén aquí la programación operativa para que la agenda y la reserva pública respeten estos límites.
+                      Mantén aquí la programación operativa para que la agenda y la reserva pública
+                      respeten estos límites.
                     </p>
                   </div>
                 </div>

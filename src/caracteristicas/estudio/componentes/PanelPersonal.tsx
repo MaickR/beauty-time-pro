@@ -344,6 +344,7 @@ export function PanelPersonal({ estudio, reservas, fechaVista }: PropsPanelPerso
                 estudioId={estudio.id}
                 personalId={st.id}
                 nombreEmpleado={st.name}
+                activoPersonal={st.active}
               />
             </div>
           );

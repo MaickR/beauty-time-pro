@@ -4,6 +4,7 @@ import { z } from 'zod';
 import { prisma } from '../prismaCliente.js';
 import { verificarJWT } from '../middleware/autenticacion.js';
 import { requierePermiso } from '../middleware/verificarPermiso.js';
+import { tieneAccesoAdministrativoEstudio } from '../lib/accesoEstudio.js';
 import { revocarSesionesPorSujeto } from '../lib/sesionesAuth.js';
 import { registrarAuditoria } from '../utils/auditoria.js';
 import { normalizarZonaHorariaEstudio, obtenerFechaISOEnZona } from '../utils/zonasHorarias.js';
@@ -200,7 +201,7 @@ export async function rutasPagos(servidor: FastifyInstance): Promise<void> {
     async (solicitud, respuesta) => {
       const payload = solicitud.user as { rol: string; estudioId: string | null };
       const { id } = solicitud.params;
-      if (!(payload.rol === 'maestro' || (payload.rol === 'dueno' && payload.estudioId === id))) {
+      if (!tieneAccesoAdministrativoEstudio(payload, id)) {
         return respuesta.code(403).send({ error: 'Sin permisos para esta acción' });
       }
       const pagos = await prisma.pago.findMany({
@@ -389,6 +390,7 @@ export async function rutasPagos(servidor: FastifyInstance): Promise<void> {
       entidadTipo: 'pago',
       entidadId: pago.id,
       detalles: {
+        requestId: solicitud.id,
         estudioId,
         estudioNombre: estudio.nombre,
         montoSolicitado: monto,
@@ -404,6 +406,20 @@ export async function rutasPagos(servidor: FastifyInstance): Promise<void> {
         fechaBase: fechaBaseCobro,
         nuevaFechaVencimiento: renovacion?.nuevaFechaVencimiento ?? null,
         estrategia: renovacion?.estrategia ?? null,
+        antes: {
+          estado: estudio.estado,
+          activo: estudio.activo,
+          fechaVencimiento: estudio.fechaVencimiento,
+          precioPlanActualId: estudio.precioPlanActualId,
+          precioPlanProximoId: estudio.precioPlanProximoId,
+        },
+        despues: {
+          estado: actualizacionEstudio.estado ?? estudio.estado,
+          activo: actualizacionEstudio.activo ?? estudio.activo,
+          fechaVencimiento: actualizacionEstudio.fechaVencimiento ?? estudio.fechaVencimiento,
+          precioPlanActualId: actualizacionEstudio.precioPlanActualId ?? estudio.precioPlanActualId,
+          precioPlanProximoId: actualizacionEstudio.precioPlanProximoId ?? estudio.precioPlanProximoId,
+        },
       },
       ip: solicitud.ip,
     });
@@ -427,8 +443,18 @@ export async function rutasPagos(servidor: FastifyInstance): Promise<void> {
         entidadTipo: 'estudio',
         entidadId: estudioId,
         detalles: {
+          requestId: solicitud.id,
           estudioNombre: estudio.nombre,
           nuevaFechaVencimiento: renovacion.nuevaFechaVencimiento,
+          usuariosReactivados: duenos.length,
+          antes: {
+            estado: estudio.estado,
+            activo: estudio.activo,
+          },
+          despues: {
+            estado: 'aprobado',
+            activo: true,
+          },
         },
         ip: solicitud.ip,
       });

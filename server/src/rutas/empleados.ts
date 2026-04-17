@@ -8,6 +8,7 @@ import { revocarSesionesPorSujeto } from '../lib/sesionesAuth.js';
 import { prisma } from '../prismaCliente.js';
 import { verificarJWT } from '../middleware/autenticacion.js';
 import type { PayloadJWT } from '../middleware/autenticacion.js';
+import { tieneAccesoPropietarioDemo } from '../lib/accesoEstudio.js';
 import { emailSchema, textoSchema } from '../lib/validacion.js';
 import { enviarEmailBienvenidaEmpleado } from '../servicios/servicioEmail.js';
 import { env } from '../lib/env.js';
@@ -79,7 +80,6 @@ export async function rutasEmpleados(servidor: FastifyInstance): Promise<void> {
         where: {
           personalId: payload.personalId,
           fecha,
-          ...(fechaAlta ? { fecha: { gte: fechaAlta, lte: fecha } } : {}),
         },
         orderBy: { horaInicio: 'asc' },
         include: incluirServiciosDetalleReserva,
@@ -434,10 +434,10 @@ export async function rutasEmpleados(servidor: FastifyInstance): Promise<void> {
     { preHandler: verificarJWT },
     async (solicitud, respuesta) => {
       const payload = solicitud.user as PayloadJWT;
-      if (payload.rol !== 'dueno' && payload.rol !== 'maestro') {
+      if (payload.rol !== 'dueno' && payload.rol !== 'maestro' && payload.rol !== 'vendedor') {
         return respuesta.code(403).send({ error: 'Sin permisos para esta acción' });
       }
-      if (payload.rol === 'dueno' && payload.estudioId !== solicitud.params.id) {
+      if (payload.rol !== 'maestro' && !tieneAccesoPropietarioDemo(payload, solicitud.params.id)) {
         return respuesta.code(403).send({ error: 'Sin permisos para esta acción' });
       }
 
@@ -501,10 +501,7 @@ export async function rutasEmpleados(servidor: FastifyInstance): Promise<void> {
     },
     async (solicitud, respuesta) => {
       const payload = solicitud.user as PayloadJWT;
-      if (payload.rol !== 'dueno') {
-        return respuesta.code(403).send({ error: 'Sin permisos para esta acción' });
-      }
-      if (payload.estudioId !== solicitud.params.id) {
+      if (!tieneAccesoPropietarioDemo(payload, solicitud.params.id)) {
         return respuesta.code(403).send({ error: 'Sin permisos para esta acción' });
       }
 
@@ -621,10 +618,7 @@ export async function rutasEmpleados(servidor: FastifyInstance): Promise<void> {
     { preHandler: verificarJWT },
     async (solicitud, respuesta) => {
       const payload = solicitud.user as PayloadJWT;
-      if (payload.rol !== 'dueno') {
-        return respuesta.code(403).send({ error: 'Sin permisos para esta acción' });
-      }
-      if (payload.estudioId !== solicitud.params.id) {
+      if (!tieneAccesoPropietarioDemo(payload, solicitud.params.id)) {
         return respuesta.code(403).send({ error: 'Sin permisos para esta acción' });
       }
 
@@ -715,10 +709,7 @@ export async function rutasEmpleados(servidor: FastifyInstance): Promise<void> {
     { preHandler: verificarJWT },
     async (solicitud, respuesta) => {
       const payload = solicitud.user as PayloadJWT;
-      if (payload.rol !== 'dueno') {
-        return respuesta.code(403).send({ error: 'Sin permisos para esta acción' });
-      }
-      if (payload.estudioId !== solicitud.params.id) {
+      if (!tieneAccesoPropietarioDemo(payload, solicitud.params.id)) {
         return respuesta.code(403).send({ error: 'Sin permisos para esta acción' });
       }
 

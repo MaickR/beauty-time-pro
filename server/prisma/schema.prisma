@@ -70,6 +70,7 @@ model Estudio {
   serviciosCustom   Json         // ServicioPersonalizado[]
   festivos          Json         // string[] fechas bloqueadas
   excepcionesDisponibilidad Json? // Excepciones por fecha/sede para cierres y horarios modificados
+  metodosPagoReserva Json?      // MetodoPagoReserva[] habilitados por el salon
   colorPrimario     String?      @default("#C2185B")
   logoUrl           String?
   descripcion       String?
@@ -444,6 +445,7 @@ model Usuario {
   hashContrasena  String
   nombre          String        @default("")
   rol             RolUsuario    @default(dueno)
+  porcentajeComision Int        @default(10)
   activo          Boolean       @default(true)
   emailVerificado Boolean       @default(false)
   estudioId       String?

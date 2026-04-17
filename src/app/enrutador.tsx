@@ -258,7 +258,7 @@ export function Enrutador() {
             }
           />
           <Route
-            path="/cliente/salon/:id"
+            path="/cliente/salon/:identificador"
             element={
               <LimiteError>
                 <PaginaDetalleSalon />
@@ -266,7 +266,7 @@ export function Enrutador() {
             }
           />
           <Route
-            path="/cliente/salon/:id/reservar"
+            path="/cliente/salon/:identificador/reservar"
             element={
               <LimiteError>
                 <PaginaReservaCliente />

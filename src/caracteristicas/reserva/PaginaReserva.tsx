@@ -11,7 +11,10 @@ import { SelectorCalendario } from './componentes/SelectorCalendario';
 import { SelectorEspecialistaHorario } from './componentes/SelectorEspecialistaHorario';
 import { FormularioContacto } from './componentes/FormularioContacto';
 import { ConfirmacionReserva } from './componentes/ConfirmacionReserva';
-import { PanelIdentificacionReserva, type ClienteReservaVinculado } from './componentes/PanelIdentificacionReserva';
+import {
+  PanelIdentificacionReserva,
+  type ClienteReservaVinculado,
+} from './componentes/PanelIdentificacionReserva';
 import { SelectorProductosPublicos } from './componentes/SelectorProductosPublicos';
 import { Spinner } from '../../componentes/ui/Spinner';
 import { URL_BASE } from '../../lib/clienteHTTP';
@@ -251,24 +254,23 @@ export function PaginaReserva() {
           </>
         ) : (
           <section className="rounded-4xl border border-dashed border-slate-300 bg-slate-50 px-5 py-8 text-center text-sm font-semibold text-slate-600">
-            Primero identifica al cliente o crea su cuenta para habilitar el calendario y el resto del flujo de reserva.
+            Primero identifica al cliente o crea su cuenta para habilitar el calendario y el resto
+            del flujo de reserva.
           </section>
         )}
 
-        {clienteListo &&
-          flujo.serviciosSeleccionados.length > 0 &&
-          totalDuracion > 0 && (
-            <SelectorEspecialistaHorario
-              salonId={estudioActivo.id}
-              sucursalSeleccionada={sucursalActiva}
-              fecha={fechaStr}
-              totalDuracion={totalDuracion}
-              serviciosSeleccionados={flujo.serviciosSeleccionados}
-              personalSeleccionado={flujo.personalSeleccionado}
-              horaSeleccionada={flujo.horaSeleccionada}
-              onSeleccionar={flujo.seleccionarEspecialistaYHora}
-            />
-          )}
+        {clienteListo && flujo.serviciosSeleccionados.length > 0 && totalDuracion > 0 && (
+          <SelectorEspecialistaHorario
+            salonId={estudioActivo.id}
+            sucursalSeleccionada={sucursalActiva}
+            fecha={fechaStr}
+            totalDuracion={totalDuracion}
+            serviciosSeleccionados={flujo.serviciosSeleccionados}
+            personalSeleccionado={flujo.personalSeleccionado}
+            horaSeleccionada={flujo.horaSeleccionada}
+            onSeleccionar={flujo.seleccionarEspecialistaYHora}
+          />
+        )}
 
         {/* Paso 4: Formulario de contacto */}
         {clienteListo && flujo.horaSeleccionada && flujo.personalSeleccionado && (
@@ -318,6 +320,7 @@ function mapearSalonDetalleAEstudio(salon: SalonDetalle, claveSalon: string): Es
     descripcion: salon.descripcion,
     direccion: salon.direccion,
     emailContacto: salon.emailContacto,
+    metodosPagoReserva: salon.metodosPagoReserva,
     createdAt: '',
     updatedAt: '',
     estudioPrincipalId: salon.estudioPrincipalId ?? null,

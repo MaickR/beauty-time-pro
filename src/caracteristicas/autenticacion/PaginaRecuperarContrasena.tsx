@@ -3,9 +3,10 @@ import { Link } from 'react-router-dom';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
-import { Mail, ArrowLeft, CheckCircle, Scissors } from 'lucide-react';
+import { Mail, ArrowLeft, CheckCircle } from 'lucide-react';
 import { solicitarResetAPI } from '../../servicios/servicioAuth';
 import { usarTituloPagina } from '../../hooks/usarTituloPagina';
+import { MarcaAplicacion } from '../../componentes/ui/MarcaAplicacion';
 
 const esquema = z.object({
   email: z.string().email('Ingresa un correo electrónico válido'),
@@ -36,12 +37,7 @@ export function PaginaRecuperarContrasena() {
   return (
     <div className="min-h-screen flex items-center justify-center bg-gray-50 p-6">
       <div className="w-full max-w-md">
-        <div className="flex items-center gap-2 justify-center mb-8">
-          <div className="bg-linear-to-br from-[#880E4F] to-[#F06292] p-2.5 rounded-xl">
-            <Scissors className="text-white w-6 h-6" aria-hidden="true" />
-          </div>
-          <span className="font-black text-lg text-slate-900">Beauty Time Pro</span>
-        </div>
+        <MarcaAplicacion className="mb-8 justify-center" />
 
         <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-8">
           {enviado ? (
@@ -49,7 +45,8 @@ export function PaginaRecuperarContrasena() {
               <CheckCircle className="w-14 h-14 text-green-500 mx-auto mb-4" aria-hidden="true" />
               <h1 className="text-2xl font-black text-slate-900 mb-2">Revisa tu correo</h1>
               <p className="text-slate-500 text-sm mb-6">
-                Si el correo existe en nuestra plataforma, recibirás instrucciones para restablecer tu contraseña en breve.
+                Si el correo existe en nuestra plataforma, recibirás instrucciones para restablecer
+                tu contraseña en breve.
               </p>
               <Link
                 to="/iniciar-sesion"
@@ -77,7 +74,10 @@ export function PaginaRecuperarContrasena() {
 
               <form onSubmit={handleSubmit(alEnviar)} noValidate className="space-y-4">
                 <div>
-                  <label htmlFor="email-recuperar" className="block text-sm font-semibold text-slate-700 mb-1.5">
+                  <label
+                    htmlFor="email-recuperar"
+                    className="block text-sm font-semibold text-slate-700 mb-1.5"
+                  >
                     Correo electrónico
                   </label>
                   <div className="relative">
@@ -96,7 +96,11 @@ export function PaginaRecuperarContrasena() {
                     />
                   </div>
                   {errors.email && (
-                    <p id="error-email-recuperar" role="alert" className="mt-1 text-xs text-red-500 font-medium">
+                    <p
+                      id="error-email-recuperar"
+                      role="alert"
+                      className="mt-1 text-xs text-red-500 font-medium"
+                    >
                       {errors.email.message}
                     </p>
                   )}

@@ -19,6 +19,10 @@ const RETRASO_BUSQUEDA = 300;
 const UMBRAL_RECORDATORIO = 10;
 
 const PAISES_FILTRO = ['Todos', 'Mexico', 'Colombia'] as const;
+const FILTROS_COBRO = [
+  { valor: 'todos', etiqueta: 'Todos' },
+  { valor: 'pendientes_pago', etiqueta: 'Pendientes de pago' },
+] as const;
 
 interface PropsPanelFinanciero {
   estudios: Estudio[];
@@ -32,6 +36,7 @@ export function PanelFinanciero({ estudios, onAbrirPago, onRecargar }: PropsPane
   const [busqueda, setBusqueda] = useState('');
   const [busquedaAplicada, setBusquedaAplicada] = useState('');
   const [filtroPais, setFiltroPais] = useState<string>('Todos');
+  const [filtroCobro, setFiltroCobro] = useState<(typeof FILTROS_COBRO)[number]['valor']>('todos');
   const [pagina, setPagina] = useState(1);
   const temporizadorRef = useRef<ReturnType<typeof setTimeout>>(undefined);
 
@@ -46,6 +51,11 @@ export function PanelFinanciero({ estudios, onAbrirPago, onRecargar }: PropsPane
 
   const cambiarPais = (pais: string) => {
     setFiltroPais(pais);
+    setPagina(1);
+  };
+
+  const cambiarFiltroCobro = (valor: (typeof FILTROS_COBRO)[number]['valor']) => {
+    setFiltroCobro(valor);
     setPagina(1);
   };
 
@@ -78,6 +88,12 @@ export function PanelFinanciero({ estudios, onAbrirPago, onRecargar }: PropsPane
   const { filtrados, totalPaginas, paginados } = useMemo(() => {
     let resultado = [...estudios];
     if (filtroPais !== 'Todos') resultado = resultado.filter((e) => e.country === filtroPais);
+    if (filtroCobro === 'pendientes_pago') {
+      resultado = resultado.filter((estudio) => {
+        const sub = obtenerEstadoSuscripcion(estudio);
+        return Boolean(sub && sub.daysRemaining < 0);
+      });
+    }
     if (busquedaAplicada) {
       const termino = busquedaAplicada.toLowerCase();
       resultado = resultado.filter((e) => e.name.toLowerCase().includes(termino));
@@ -94,7 +110,7 @@ export function PanelFinanciero({ estudios, onAbrirPago, onRecargar }: PropsPane
       totalPaginas: total,
       paginados: resultado.slice(inicio, inicio + REGISTROS_POR_PAGINA),
     };
-  }, [estudios, filtroPais, busquedaAplicada, pagina]);
+  }, [estudios, filtroCobro, filtroPais, busquedaAplicada, pagina]);
 
   return (
     <div className="space-y-6">
@@ -117,6 +133,17 @@ export function PanelFinanciero({ estudios, onAbrirPago, onRecargar }: PropsPane
               className={`px-4 py-2 rounded-lg text-xs font-black uppercase transition-all ${filtroPais === p ? 'bg-white shadow-sm text-slate-900' : 'text-slate-500 hover:text-slate-700'}`}
             >
               {formatearPais(p)}
+            </button>
+          ))}
+        </div>
+        <div className="flex gap-1 bg-slate-100 p-1 rounded-xl border border-slate-200">
+          {FILTROS_COBRO.map((filtro) => (
+            <button
+              key={filtro.valor}
+              onClick={() => cambiarFiltroCobro(filtro.valor)}
+              className={`px-4 py-2 rounded-lg text-xs font-black uppercase transition-all ${filtroCobro === filtro.valor ? 'bg-white shadow-sm text-slate-900' : 'text-slate-500 hover:text-slate-700'}`}
+            >
+              {filtro.etiqueta}
             </button>
           ))}
         </div>

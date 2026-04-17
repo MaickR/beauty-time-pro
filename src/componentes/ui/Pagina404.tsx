@@ -1,7 +1,7 @@
 import { Home, LifeBuoy, LogIn, Mail, MessageCircle, Search } from 'lucide-react';
 import { Link } from 'react-router-dom';
 
-const EMAIL_SOPORTE = 'soporte@beautytimepro.com';
+const EMAIL_SOPORTE = 'soporte@salonpromaster.com';
 const WHATSAPP_SOPORTE = '525512345678';
 
 export function Pagina404() {

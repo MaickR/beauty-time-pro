@@ -646,19 +646,32 @@ async function eliminarRegistrosCompat(tabla: string, whereCampo: string, whereV
   switch (tabla) {
     case 'personal':
       if (whereCampo !== 'estudioId' || typeof whereValor !== 'string') break;
-      await prisma.personal.deleteMany({ where: { estudioId: whereValor } });
-      return;
-    case 'pagos':
-      if (whereCampo !== 'estudioId' || typeof whereValor !== 'string') break;
-      await prisma.pago.deleteMany({ where: { estudioId: whereValor } });
+      await prisma.personal.updateMany({
+        where: { estudioId: whereValor },
+        data: {
+          activo: false,
+          eliminadoEn: new Date(),
+        },
+      });
       return;
     case 'estudios':
       if (whereCampo !== 'id' || typeof whereValor !== 'string') break;
-      await prisma.estudio.deleteMany({ where: { id: whereValor } });
+      await prisma.estudio.updateMany({
+        where: { id: whereValor },
+        data: {
+          activo: false,
+          estado: 'bloqueado',
+          motivoBloqueo: 'alta_fallida_rollback',
+          fechaBloqueo: new Date(),
+        },
+      });
       return;
     case 'usuarios':
       if (whereCampo !== 'id' || typeof whereValor !== 'string') break;
-      await prisma.usuario.deleteMany({ where: { id: whereValor } });
+      await prisma.usuario.updateMany({
+        where: { id: whereValor },
+        data: { activo: false },
+      });
       return;
     default:
       break;
@@ -1376,7 +1389,6 @@ export async function rutasAdmin(servidor: FastifyInstance): Promise<void> {
           }
         } catch (error) {
           await eliminarRegistrosCompat('personal', 'estudioId', estudioCreadoId).catch(() => undefined);
-          await eliminarRegistrosCompat('pagos', 'estudioId', estudioCreadoId).catch(() => undefined);
           await eliminarRegistrosCompat('estudios', 'id', estudioCreadoId).catch(() => undefined);
           await eliminarRegistrosCompat('usuarios', 'id', usuarioCreadoId).catch(() => undefined);
 
@@ -2258,9 +2270,8 @@ export async function rutasAdmin(servidor: FastifyInstance): Promise<void> {
         });
       } catch (error) {
         // Rollback manual
-        await prisma.pago.deleteMany({ where: { estudioId: estudioCreadoId } }).catch(() => undefined);
-        await prisma.estudio.delete({ where: { id: estudioCreadoId } }).catch(() => undefined);
-        await prisma.usuario.delete({ where: { id: usuarioCreadoId } }).catch(() => undefined);
+        await eliminarRegistrosCompat('estudios', 'id', estudioCreadoId).catch(() => undefined);
+        await eliminarRegistrosCompat('usuarios', 'id', usuarioCreadoId).catch(() => undefined);
 
         solicitud.log.error({ err: error }, 'Fallo al aprobar preregistro');
         return respuesta.code(500).send({ error: 'No se pudo completar la aprobación' });

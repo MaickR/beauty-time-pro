@@ -5,6 +5,7 @@ import { z } from 'zod';
 import { prisma } from '../prismaCliente.js';
 import { Prisma } from '../generated/prisma/client.js';
 import { verificarJWT } from '../middleware/autenticacion.js';
+import { tieneAccesoAdministrativoEstudio } from '../lib/accesoEstudio.js';
 import { horaOpcionalONulaSchema, obtenerMensajeValidacion, textoSchema } from '../lib/validacion.js';
 import { detectarTipoImagen } from '../utils/validarImagen.js';
 import { obtenerDesactivacionesProgramadasPersonal } from '../lib/reactivacionPersonalProgramada.js';
@@ -75,7 +76,7 @@ export async function rutasPersonal(servidor: FastifyInstance): Promise<void> {
     async (solicitud, respuesta) => {
       const payload = solicitud.user as { rol: string; estudioId: string | null };
       const { id } = solicitud.params;
-      if (!(payload.rol === 'maestro' || (payload.rol === 'dueno' && payload.estudioId === id))) {
+      if (!tieneAccesoAdministrativoEstudio(payload, id)) {
         return respuesta.code(403).send({ error: 'Sin permisos para esta acción' });
       }
       const personal = await prisma.personal.findMany({
@@ -108,7 +109,7 @@ export async function rutasPersonal(servidor: FastifyInstance): Promise<void> {
     async (solicitud, respuesta) => {
       const payload = solicitud.user as { sub: string; rol: string; estudioId: string | null };
       const { id } = solicitud.params;
-      if (!(payload.rol === 'maestro' || (payload.rol === 'dueno' && payload.estudioId === id))) {
+      if (!tieneAccesoAdministrativoEstudio(payload, id)) {
         return respuesta.code(403).send({ error: 'Sin permisos para esta acción' });
       }
       if (payload.rol === 'dueno') {
@@ -170,7 +171,7 @@ export async function rutasPersonal(servidor: FastifyInstance): Promise<void> {
         select: { estudioId: true },
       });
       if (!empleadoExistente) return respuesta.code(404).send({ error: 'Personal no encontrado' });
-      if (!(payload.rol === 'maestro' || (payload.rol === 'dueno' && payload.estudioId === empleadoExistente.estudioId))) {
+      if (!tieneAccesoAdministrativoEstudio(payload, empleadoExistente.estudioId)) {
         return respuesta.code(403).send({ error: 'Sin permisos para esta acción' });
       }
       if (payload.rol === 'dueno') {
@@ -233,7 +234,7 @@ export async function rutasPersonal(servidor: FastifyInstance): Promise<void> {
         return respuesta.code(404).send({ error: 'Personal no encontrado' });
       }
 
-      if (!(payload.rol === 'maestro' || (payload.rol === 'dueno' && payload.estudioId === empleadoExistente.estudioId))) {
+      if (!tieneAccesoAdministrativoEstudio(payload, empleadoExistente.estudioId)) {
         return respuesta.code(403).send({ error: 'Sin permisos para esta acción' });
       }
 
@@ -281,7 +282,7 @@ export async function rutasPersonal(servidor: FastifyInstance): Promise<void> {
       const payload = solicitud.user as { sub: string; rol: string; estudioId: string | null };
       const { id, personalId } = solicitud.params;
 
-      if (!(payload.rol === 'maestro' || (payload.rol === 'dueno' && payload.estudioId === id))) {
+      if (!tieneAccesoAdministrativoEstudio(payload, id)) {
         return respuesta.code(403).send({ error: 'Sin permisos para esta acción' });
       }
 

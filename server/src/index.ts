@@ -82,6 +82,26 @@ function esOrigenPermitido(origen: string | undefined, esProduccion: boolean): b
   );
 }
 
+function obtenerMensajePublicoError(codigoEstado: number): string {
+  switch (codigoEstado) {
+    case 400:
+    case 422:
+      return 'Solicitud inválida';
+    case 401:
+      return 'No autenticado';
+    case 403:
+      return 'Sin permisos para esta acción';
+    case 404:
+      return 'Recurso no encontrado';
+    case 409:
+      return 'Conflicto con el estado actual del recurso';
+    case 413:
+      return 'El contenido supera el límite permitido';
+    default:
+      return 'Solicitud inválida';
+  }
+}
+
 void (async () => {
   const servidor = Fastify({ logger: true, bodyLimit: 1_048_576 /* 1 MB */ });
 
@@ -136,7 +156,7 @@ void (async () => {
     return payload;
   });
 
-  servidor.setErrorHandler((error: FastifyError | unknown, _solicitud, respuesta) => {
+  servidor.setErrorHandler((error: FastifyError | unknown, solicitud, respuesta) => {
     const errorConPropiedades =
       typeof error === 'object' && error !== null ? (error as Record<string, unknown>) : null;
     const codigoEstado =
@@ -169,11 +189,15 @@ void (async () => {
     }
 
     if (codigoEstado === 401) {
-      return respuesta.code(401).send({ error: mensajeError || 'No autenticado' });
+      return respuesta.code(401).send({ error: 'No autenticado' });
     }
 
     if (codigoEstado && codigoEstado >= 400 && codigoEstado < 500) {
-      return respuesta.code(codigoEstado).send({ error: mensajeError || 'Solicitud inválida' });
+      servidor.log.warn(
+        { err: error, requestId: solicitud.id, codigoEstado, codigoError, mensajeError },
+        'Error 4xx controlado por el manejador global',
+      );
+      return respuesta.code(codigoEstado).send({ error: obtenerMensajePublicoError(codigoEstado) });
     }
 
     servidor.log.error(error);
