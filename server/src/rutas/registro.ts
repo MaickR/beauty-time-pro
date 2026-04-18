@@ -20,7 +20,7 @@ import {
 	textoSoloLetrasSchema,
 	urlOpcionalSchema,
 } from '../lib/validacion.js';
-import { validarCantidadServiciosPlan } from '../lib/planes.js';
+import { validarCantidadEmpleadosActivosPlan, validarCantidadServiciosPlan } from '../lib/planes.js';
 import { obtenerFechaISOEnZona, obtenerZonaHorariaPorPais } from '../utils/zonasHorarias.js';
 
 const REGEX_CONTRASENA = /^(?=.*[A-Z])(?=.*[a-z])(?=.*[0-9])(?=.*[^A-Za-z0-9]).{8,}$/;
@@ -818,6 +818,14 @@ export async function rutasRegistro(servidor: FastifyInstance): Promise<void> {
 		});
 		if (errorServiciosPlan) {
 			return respuesta.code(400).send({ error: errorServiciosPlan, codigo: 'LIMITE_PLAN' });
+		}
+
+		const errorPersonalPlan = validarCantidadEmpleadosActivosPlan({
+			plan: 'STANDARD',
+			cantidadNueva: personal.length,
+		});
+		if (errorPersonalPlan) {
+			return respuesta.code(400).send({ error: errorPersonalPlan, codigo: 'LIMITE_PLAN' });
 		}
 
 		if (existeCliente ?? existeUsuario) {

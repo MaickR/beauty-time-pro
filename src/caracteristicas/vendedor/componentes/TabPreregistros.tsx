@@ -1,11 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { PlusCircle, Clock, CheckCircle, XCircle, FileText, Search } from 'lucide-react';
-import {
-  obtenerMisPreregistros,
-  crearPreregistro,
-  obtenerMisSalones,
-} from '../../../servicios/servicioVendedor';
+import { obtenerMisPreregistros, crearPreregistro } from '../../../servicios/servicioVendedor';
 import type { PreregistroSalon } from '../../../servicios/servicioVendedor';
 import { ModalEstudio } from '../../maestro/componentes/ModalEstudio';
 import {
@@ -119,18 +115,6 @@ export function TabPreregistros() {
       }),
     staleTime: 1000 * 60 * 2,
   });
-
-  const { data: salonesVendedor = [] } = useQuery({
-    queryKey: ['vendedor', 'mis-salones-opciones'],
-    queryFn: obtenerMisSalones,
-    staleTime: 1000 * 60 * 5,
-  });
-
-  const estudiosPrincipales = salonesVendedor.map((salon) => ({
-    id: salon.id,
-    name: salon.nombre,
-    estudioPrincipalId: null,
-  }));
 
   const preregistros = data?.datos ?? [];
   const total = data?.total ?? 0;
@@ -246,7 +230,6 @@ export function TabPreregistros() {
         <ModalEstudio
           modo={hookFormulario.modoModal}
           formulario={hookFormulario.formulario}
-          estudiosPrincipales={estudiosPrincipales}
           setFormulario={hookFormulario.setFormulario}
           catalogoProps={{
             alternarServicio: hookFormulario.alternarServicio,
@@ -279,9 +262,6 @@ export function TabPreregistros() {
           onCerrar={hookFormulario.cerrarModal}
           confirmacionAlta={hookFormulario.confirmacionAlta}
           onRegenerarContrasenaDueno={hookFormulario.regenerarContrasenaDueno}
-          onDescartarBorrador={hookFormulario.descartarBorrador}
-          logoArchivo={hookFormulario.logoArchivo}
-          onCambiarLogo={hookFormulario.setLogoArchivo}
         />
       )}
 

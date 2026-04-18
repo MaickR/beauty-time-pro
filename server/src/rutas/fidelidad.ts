@@ -7,7 +7,7 @@ import {
   canjearRecompensaFidelidad,
   obtenerConfigFidelidad,
 } from '../lib/fidelidad.js';
-import { MENSAJE_FUNCION_PRO, normalizarPlanEstudio } from '../lib/planes.js';
+import { obtenerMensajeRestriccionPlan, planPermiteFuncion } from '../lib/planes.js';
 
 export async function rutasFidelidad(servidor: FastifyInstance): Promise<void> {
   servidor.get<{ Params: { id: string } }>(
@@ -24,8 +24,8 @@ export async function rutasFidelidad(servidor: FastifyInstance): Promise<void> {
       if (!estudio) {
         return respuesta.code(404).send({ error: 'Estudio no encontrado' });
       }
-      if (normalizarPlanEstudio(estudio.plan) !== 'PRO') {
-        return respuesta.code(403).send({ error: MENSAJE_FUNCION_PRO });
+      if (!planPermiteFuncion({ plan: estudio.plan, funcion: 'fidelidad' })) {
+        return respuesta.code(403).send({ error: obtenerMensajeRestriccionPlan('fidelidad') });
       }
 
       const config = await obtenerConfigFidelidad(id);
@@ -56,8 +56,8 @@ export async function rutasFidelidad(servidor: FastifyInstance): Promise<void> {
       if (!estudio) {
         return respuesta.code(404).send({ error: 'Estudio no encontrado' });
       }
-      if (normalizarPlanEstudio(estudio.plan) !== 'PRO') {
-        return respuesta.code(403).send({ error: MENSAJE_FUNCION_PRO });
+      if (!planPermiteFuncion({ plan: estudio.plan, funcion: 'fidelidad' })) {
+        return respuesta.code(403).send({ error: obtenerMensajeRestriccionPlan('fidelidad') });
       }
 
       const datos = solicitud.body;
@@ -109,8 +109,8 @@ export async function rutasFidelidad(servidor: FastifyInstance): Promise<void> {
       if (!estudio) {
         return respuesta.code(404).send({ error: 'Estudio no encontrado' });
       }
-      if (normalizarPlanEstudio(estudio.plan) !== 'PRO') {
-        return respuesta.code(403).send({ error: MENSAJE_FUNCION_PRO });
+      if (!planPermiteFuncion({ plan: estudio.plan, funcion: 'fidelidad' })) {
+        return respuesta.code(403).send({ error: obtenerMensajeRestriccionPlan('fidelidad') });
       }
 
       const limite = Math.min(50, Math.max(1, parseInt(solicitud.query.limite ?? '20', 10)));
@@ -264,8 +264,8 @@ export async function rutasFidelidad(servidor: FastifyInstance): Promise<void> {
       if (!estudio) {
         return respuesta.code(404).send({ error: 'Estudio no encontrado' });
       }
-      if (normalizarPlanEstudio(estudio.plan) !== 'PRO') {
-        return respuesta.code(403).send({ error: MENSAJE_FUNCION_PRO });
+      if (!planPermiteFuncion({ plan: estudio.plan, funcion: 'fidelidad' })) {
+        return respuesta.code(403).send({ error: obtenerMensajeRestriccionPlan('fidelidad') });
       }
 
       try {

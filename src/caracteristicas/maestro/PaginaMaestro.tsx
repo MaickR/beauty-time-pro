@@ -269,7 +269,6 @@ export function PaginaMaestro() {
         <ModalEstudio
           modo={hook.modoModal}
           formulario={hook.formulario}
-          estudiosPrincipales={estudios}
           setFormulario={hook.setFormulario}
           confirmacionAlta={hook.confirmacionAlta}
           catalogoProps={{
@@ -281,9 +280,6 @@ export function PaginaMaestro() {
           }}
           onAgregarPersonal={hook.agregarPersonal}
           onRegenerarContrasenaDueno={hook.regenerarContrasenaDueno}
-          onDescartarBorrador={hook.descartarBorrador}
-          logoArchivo={hook.logoArchivo}
-          onCambiarLogo={hook.setLogoArchivo}
           onEnviar={(e) => hook.enviarFormulario(e, recargar, mostrarToast, mostrarToast)}
           onCerrar={hook.cerrarModal}
         />

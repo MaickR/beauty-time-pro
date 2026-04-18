@@ -1,4 +1,4 @@
-import type { FastifyInstance } from 'fastify';
+import type { FastifyInstance, FastifyReply } from 'fastify';
 import type { Prisma } from '../generated/prisma/client.js';
 import { z } from 'zod';
 import { prisma } from '../prismaCliente.js';
@@ -6,6 +6,7 @@ import { verificarJWT } from '../middleware/autenticacion.js';
 import { tieneAccesoAdministrativoEstudio } from '../lib/accesoEstudio.js';
 import { registrarAuditoria } from '../utils/auditoria.js';
 import { normalizarZonaHorariaEstudio, obtenerFechaISOEnZona } from '../utils/zonasHorarias.js';
+import { obtenerMensajeRestriccionPlan, planPermiteFuncion } from '../lib/planes.js';
 
 const esquemaRegistrarVentaProducto = z.object({
   productoId: z.string().trim().min(1, 'Debes seleccionar un producto'),
@@ -93,6 +94,28 @@ function obtenerSucursalPredeterminada(sucursales: Prisma.JsonValue): string {
   return 'Principal';
 }
 
+async function validarPlanProductosOResponder(params: {
+  estudioId: string;
+  respuesta: FastifyReply;
+}): Promise<boolean> {
+  const estudio = await prisma.estudio.findUnique({
+    where: { id: params.estudioId },
+    select: { plan: true },
+  });
+
+  if (!estudio) {
+    params.respuesta.code(404).send({ error: 'Salón no encontrado' });
+    return false;
+  }
+
+  if (!planPermiteFuncion({ plan: estudio.plan, funcion: 'productos' })) {
+    params.respuesta.code(403).send({ error: obtenerMensajeRestriccionPlan('productos') });
+    return false;
+  }
+
+  return true;
+}
+
 export async function rutasProductos(servidor: FastifyInstance): Promise<void> {
   /**
    * GET /estudio/:id/productos — listar productos del salón
@@ -106,6 +129,11 @@ export async function rutasProductos(servidor: FastifyInstance): Promise<void> {
 
       if (!tieneAccesoAdministrativoEstudio(payload, id)) {
         return respuesta.code(403).send({ error: 'Sin permisos para esta acción' });
+      }
+
+      const puedeContinuar = await validarPlanProductosOResponder({ estudioId: id, respuesta });
+      if (!puedeContinuar) {
+        return;
       }
 
       const productos = await prisma.producto.findMany({
@@ -136,6 +164,11 @@ export async function rutasProductos(servidor: FastifyInstance): Promise<void> {
 
       if (!tieneAccesoAdministrativoEstudio(payload, id)) {
         return respuesta.code(403).send({ error: 'Sin permisos para esta acción' });
+      }
+
+      const puedeContinuar = await validarPlanProductosOResponder({ estudioId: id, respuesta });
+      if (!puedeContinuar) {
+        return;
       }
 
       const { nombre, categoria, precio } = solicitud.body;
@@ -187,6 +220,11 @@ export async function rutasProductos(servidor: FastifyInstance): Promise<void> {
         return respuesta.code(403).send({ error: 'Sin permisos para esta acción' });
       }
 
+      const puedeContinuar = await validarPlanProductosOResponder({ estudioId: id, respuesta });
+      if (!puedeContinuar) {
+        return;
+      }
+
       const existente = await prisma.producto.findFirst({
         where: { id: productoId, estudioId: id },
       });
@@ -231,6 +269,11 @@ export async function rutasProductos(servidor: FastifyInstance): Promise<void> {
 
       if (!tieneAccesoAdministrativoEstudio(payload, id)) {
         return respuesta.code(403).send({ error: 'Sin permisos para esta acción' });
+      }
+
+      const puedeContinuar = await validarPlanProductosOResponder({ estudioId: id, respuesta });
+      if (!puedeContinuar) {
+        return;
       }
 
       const existente = await prisma.producto.findFirst({
@@ -303,8 +346,10 @@ export async function rutasProductos(servidor: FastifyInstance): Promise<void> {
         return respuesta.code(404).send({ error: 'Salón no encontrado' });
       }
 
-      if (estudio.plan !== 'PRO') {
-        return respuesta.code(403).send({ error: 'Esta función está disponible únicamente para planes PRO' });
+      if (!planPermiteFuncion({ plan: estudio.plan, funcion: 'ventasProductos' })) {
+        return respuesta
+          .code(403)
+          .send({ error: obtenerMensajeRestriccionPlan('ventasProductos') });
       }
 
       const datos = validacion.data;

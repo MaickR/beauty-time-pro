@@ -6,12 +6,15 @@ import sharp from 'sharp';
 import { prisma } from '../prismaCliente.js';
 import { verificarJWT } from '../middleware/autenticacion.js';
 import { tieneAccesoAdministrativoEstudio } from '../lib/accesoEstudio.js';
-import { MENSAJE_FUNCION_PRO, normalizarPlanEstudio } from '../lib/planes.js';
+import {
+  obtenerLimiteMensajesMasivosAnual,
+  obtenerMensajeRestriccionPlan,
+  planPermiteFuncion,
+} from '../lib/planes.js';
 import { encolarCorreo } from '../lib/colaEmails.js';
 import { registrarAuditoria } from '../utils/auditoria.js';
 import { detectarTipoImagen } from '../utils/validarImagen.js';
 
-const LIMITE_MENSAJES_ANUALES = 3;
 const LIMITE_BYTES_IMAGEN = 2 * 1024 * 1024;
 const MIME_IMAGEN_PERMITIDOS: Record<string, string> = {
   'image/jpeg': 'jpg',
@@ -20,6 +23,26 @@ const MIME_IMAGEN_PERMITIDOS: Record<string, string> = {
 
 function obtenerAnioActual(): number {
   return new Date().getFullYear();
+}
+
+function obtenerRangoAnual(anio: number): { desde: Date; hastaExclusivo: Date } {
+  return {
+    desde: new Date(Date.UTC(anio, 0, 1, 0, 0, 0, 0)),
+    hastaExclusivo: new Date(Date.UTC(anio + 1, 0, 1, 0, 0, 0, 0)),
+  };
+}
+
+async function contarMensajesAnuales(estudioId: string, anio: number): Promise<number> {
+  const rango = obtenerRangoAnual(anio);
+  return prisma.mensajeMasivo.count({
+    where: {
+      estudioId,
+      fechaEnvio: {
+        gte: rango.desde,
+        lt: rango.hastaExclusivo,
+      },
+    },
+  });
 }
 
 function dirImagenesMensajesMasivos(): string {
@@ -50,23 +73,32 @@ export async function rutasMensajesMasivos(servidor: FastifyInstance): Promise<v
         return respuesta.code(404).send({ error: 'Estudio no encontrado' });
       }
 
-      if (normalizarPlanEstudio(estudio.plan) !== 'PRO') {
-        return respuesta.code(403).send({ error: MENSAJE_FUNCION_PRO });
+      if (!planPermiteFuncion({ plan: estudio.plan, funcion: 'mensajesMasivos' })) {
+        return respuesta
+          .code(403)
+          .send({ error: obtenerMensajeRestriccionPlan('mensajesMasivos') });
       }
+
+      const anioActual = obtenerAnioActual();
+      const usadosAnio = await contarMensajesAnuales(id, anioActual);
 
       const mensajes = await prisma.mensajeMasivo.findMany({
         where: { estudioId: id },
         orderBy: { creadoEn: 'desc' },
       });
 
-      const limiteTotal = LIMITE_MENSAJES_ANUALES + estudio.mensajesMasivosExtra;
+      const limiteTotal = obtenerLimiteMensajesMasivosAnual({
+        plan: estudio.plan,
+        extrasAprobados: estudio.mensajesMasivosExtra,
+      });
 
       return respuesta.send({
         datos: {
           mensajes,
-          usados: estudio.mensajesMasivosUsados,
+          usados: usadosAnio,
           limite: limiteTotal,
           extra: estudio.mensajesMasivosExtra,
+          anio: anioActual,
         },
       });
     },
@@ -103,8 +135,10 @@ export async function rutasMensajesMasivos(servidor: FastifyInstance): Promise<v
         return respuesta.code(404).send({ error: 'Estudio no encontrado' });
       }
 
-      if (normalizarPlanEstudio(estudio.plan) !== 'PRO') {
-        return respuesta.code(403).send({ error: MENSAJE_FUNCION_PRO });
+      if (!planPermiteFuncion({ plan: estudio.plan, funcion: 'mensajesMasivos' })) {
+        return respuesta
+          .code(403)
+          .send({ error: obtenerMensajeRestriccionPlan('mensajesMasivos') });
       }
 
       const archivo = await solicitud.file({ limits: { fileSize: LIMITE_BYTES_IMAGEN } });
@@ -187,13 +221,20 @@ export async function rutasMensajesMasivos(servidor: FastifyInstance): Promise<v
         return respuesta.code(404).send({ error: 'Estudio no encontrado' });
       }
 
-      if (normalizarPlanEstudio(estudio.plan) !== 'PRO') {
-        return respuesta.code(403).send({ error: MENSAJE_FUNCION_PRO });
+      if (!planPermiteFuncion({ plan: estudio.plan, funcion: 'mensajesMasivos' })) {
+        return respuesta
+          .code(403)
+          .send({ error: obtenerMensajeRestriccionPlan('mensajesMasivos') });
       }
 
-      const limiteTotal = LIMITE_MENSAJES_ANUALES + estudio.mensajesMasivosExtra;
+      const anioActual = obtenerAnioActual();
+      const usadosAnio = await contarMensajesAnuales(id, anioActual);
+      const limiteTotal = obtenerLimiteMensajesMasivosAnual({
+        plan: estudio.plan,
+        extrasAprobados: estudio.mensajesMasivosExtra,
+      });
 
-      if (estudio.mensajesMasivosUsados >= limiteTotal) {
+      if (usadosAnio >= limiteTotal) {
         return respuesta.code(403).send({
           error: 'Has agotado tus mensajes masivos. Contacta a soporte para adquirir envíos adicionales.',
           codigo: 'LIMITE_MENSAJES_ALCANZADO',
@@ -283,8 +324,8 @@ export async function rutasMensajesMasivos(servidor: FastifyInstance): Promise<v
           estudioId: id,
           titulo: titulo.trim(),
           destinatarios: encolados,
-          anio: obtenerAnioActual(),
-          usoActual: estudio.mensajesMasivosUsados + 1,
+          anio: anioActual,
+          usoActual: usadosAnio + 1,
           limiteTotal,
         },
         ip: solicitud.ip,

@@ -15,7 +15,6 @@ import {
   limpiarTelefonoEntrada,
 } from '../../../utils/formularioSalon';
 import type { Estudio, Servicio, Personal, TurnoTrabajo } from '../../../tipos';
-import { subirLogo } from '../../../servicios/servicioPerfil';
 
 const CLAVE_BORRADOR_ALTA_SALON = 'maestro_alta_salon_borrador_v1';
 
@@ -139,7 +138,6 @@ interface OpcionesFormularioEstudio {
   claveBorrador?: string;
   procesarAlta?: (contexto: {
     formulario: FormularioEstudio;
-    logoArchivo: File | null;
   }) => Promise<ResultadoAltaFormularioEstudio>;
 }
 
@@ -148,7 +146,6 @@ export function usarFormularioEstudio(opciones?: OpcionesFormularioEstudio) {
   const [modoModal, setModoModal] = useState<'ADD' | 'EDIT' | 'CONFIRMACION' | null>(null);
   const [formulario, setFormulario] = useState<FormularioEstudio>(crearEstadoInicial());
   const [confirmacionAlta, setConfirmacionAlta] = useState<ConfirmacionAltaSalon | null>(null);
-  const [logoArchivo, setLogoArchivo] = useState<File | null>(null);
   const [entradaServicioPersonalizado, setEntradaServicioPersonalizado] = useState<
     Record<string, string>
   >({});
@@ -187,7 +184,6 @@ export function usarFormularioEstudio(opciones?: OpcionesFormularioEstudio) {
   const descartarBorrador = () => {
     limpiarBorradorAlta(claveBorrador);
     setFormulario(crearEstadoInicial());
-    setLogoArchivo(null);
   };
 
   const regenerarContrasenaDueno = () => {
@@ -319,7 +315,7 @@ export function usarFormularioEstudio(opciones?: OpcionesFormularioEstudio) {
         }
 
         const resultadoAlta = opciones?.procesarAlta
-          ? await opciones.procesarAlta({ formulario: datosGuardar, logoArchivo })
+          ? await opciones.procesarAlta({ formulario: datosGuardar })
           : await (async (): Promise<ResultadoAltaFormularioEstudio> => {
               const resultado = await crearSalonAdmin({
                 nombreSalon: datosGuardar.name,
@@ -350,9 +346,6 @@ export function usarFormularioEstudio(opciones?: OpcionesFormularioEstudio) {
                   descansoFin: persona.breakEnd ?? undefined,
                 })),
               });
-              if (logoArchivo) {
-                await subirLogo(resultado.estudio.id, logoArchivo);
-              }
               return {
                 mensajeExito: `Salón "${resultado.estudio.name}" creado correctamente.`,
                 confirmacionAlta: {
@@ -368,7 +361,6 @@ export function usarFormularioEstudio(opciones?: OpcionesFormularioEstudio) {
             })();
 
         limpiarBorradorAlta(claveBorrador);
-        setLogoArchivo(null);
 
         if (resultadoAlta.confirmacionAlta) {
           setConfirmacionAlta(resultadoAlta.confirmacionAlta);
@@ -407,8 +399,6 @@ export function usarFormularioEstudio(opciones?: OpcionesFormularioEstudio) {
     cerrarModal,
     descartarBorrador,
     confirmacionAlta,
-    logoArchivo,
-    setLogoArchivo,
     regenerarContrasenaDueno,
     alternarServicio,
     actualizarCampoServicio,

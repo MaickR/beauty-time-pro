@@ -12,7 +12,6 @@ import {
   EyeOff,
   Copy,
   Download,
-  ImagePlus,
   RefreshCw,
   Package,
   Trash2,
@@ -25,7 +24,7 @@ import {
 import { SelectorFecha } from '../../../componentes/ui/SelectorFecha';
 import { SelectorHora } from '../../../componentes/ui/SelectorHora';
 import { SeccionPersonalFormulario } from './SeccionPersonalFormulario';
-import type { Estudio, Personal } from '../../../tipos';
+import type { Personal } from '../../../tipos';
 import type { ConfirmacionAltaSalon, FormularioEstudio } from '../hooks/usarFormularioEstudio';
 import { obtenerDefinicionPlan } from '../../../lib/planes';
 import { convertirCentavosAMoneda, formatearDinero } from '../../../utils/formato';
@@ -44,12 +43,9 @@ interface PropsCatalogo {
   setEntradaServicioPersonalizado: Dispatch<SetStateAction<Record<string, string>>>;
 }
 
-type OpcionSalonPrincipal = Pick<Estudio, 'id' | 'name' | 'estudioPrincipalId'>;
-
 interface PropsModalEstudio {
   modo: 'ADD' | 'EDIT' | 'CONFIRMACION';
   formulario: FormularioEstudio;
-  estudiosPrincipales: OpcionSalonPrincipal[];
   setFormulario: Dispatch<SetStateAction<FormularioEstudio>>;
   catalogoProps: PropsCatalogo;
   onAgregarPersonal: (personal: Personal) => void;
@@ -57,13 +53,8 @@ interface PropsModalEstudio {
   onCerrar: () => void;
   confirmacionAlta: ConfirmacionAltaSalon | null;
   onRegenerarContrasenaDueno: () => void;
-  onDescartarBorrador: () => void;
-  logoArchivo: File | null;
-  onCambiarLogo: (archivo: File | null) => void;
   textosModoAgregar?: {
     titulo: string;
-    descripcionBorrador: string;
-    textoBotonDescartar: string;
     tituloInformativo: string;
     descripcionInformativa: string;
     textoBotonEnviar: string;
@@ -72,8 +63,6 @@ interface PropsModalEstudio {
 
 const TEXTOS_MODO_AGREGAR_POR_DEFECTO = {
   titulo: 'Registro completo',
-  descripcionBorrador: 'Este formulario guarda tu avance mientras trabajas.',
-  textoBotonDescartar: 'Limpiar borrador',
   tituloInformativo: 'Credenciales automáticas',
   descripcionInformativa:
     'La clave del dueño y la ClaveClientes se generan automáticamente al guardar. Al finalizar verás la ClaveClientes lista para copiar y descargar en QR.',
@@ -83,7 +72,6 @@ const TEXTOS_MODO_AGREGAR_POR_DEFECTO = {
 export function ModalEstudio({
   modo,
   formulario,
-  estudiosPrincipales,
   setFormulario,
   catalogoProps,
   onAgregarPersonal,
@@ -91,9 +79,6 @@ export function ModalEstudio({
   onCerrar,
   confirmacionAlta,
   onRegenerarContrasenaDueno,
-  onDescartarBorrador,
-  logoArchivo,
-  onCambiarLogo,
   textosModoAgregar,
 }: PropsModalEstudio) {
   const [mostrarContrasena, setMostrarContrasena] = useState(false);
@@ -109,9 +94,6 @@ export function ModalEstudio({
     setEntradaServicioPersonalizado,
   } = catalogoProps;
   const textosAgregar = textosModoAgregar ?? TEXTOS_MODO_AGREGAR_POR_DEFECTO;
-  const _estudiosPadreDisponibles = estudiosPrincipales.filter(
-    (estudio) => !estudio.estudioPrincipalId && estudio.id !== formulario.id,
-  );
 
   useEffect(() => {
     setPrefijoTelefono(formulario.country === 'Colombia' ? '+57' : '+52');
@@ -362,26 +344,6 @@ export function ModalEstudio({
         </div>
 
         <form onSubmit={onEnviar} className="flex-1 overflow-y-auto px-4 py-8 sm:p-10 space-y-12">
-          {modo === 'ADD' && (
-            <div className="flex flex-col gap-3 rounded-4xl border border-slate-200 bg-slate-50 px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
-              <div>
-                <p className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-500">
-                  Borrador automático
-                </p>
-                <p className="mt-1 text-sm font-medium text-slate-500">
-                  {textosAgregar.descripcionBorrador}
-                </p>
-              </div>
-              <button
-                type="button"
-                onClick={onDescartarBorrador}
-                className="rounded-full border border-slate-200 bg-white px-4 py-2 text-[10px] font-black uppercase text-slate-700"
-              >
-                {textosAgregar.textoBotonDescartar}
-              </button>
-            </div>
-          )}
-
           {/* SECCIÓN 1: IDENTIDAD */}
           <section className="grid grid-cols-1 sm:grid-cols-2 gap-6">
             <div className="col-span-full font-black text-xs text-pink-600 uppercase tracking-widest mb-2 flex items-center gap-2">
@@ -541,29 +503,6 @@ export function ModalEstudio({
                     {formulario.reintentosContrasenaDueno}/5.
                   </p>
                 </div>
-                <div className="col-span-full sm:col-span-2">
-                  <label className="mb-2 block text-[10px] font-black uppercase tracking-widest text-slate-400">
-                    Ícono del salón (opcional)
-                  </label>
-                  <label className="flex cursor-pointer items-center justify-between gap-3 rounded-2xl border border-dashed border-slate-300 bg-slate-50 px-4 py-4 text-sm font-semibold text-slate-600">
-                    <span className="inline-flex items-center gap-2">
-                      <ImagePlus className="h-4 w-4" />
-                      {logoArchivo ? logoArchivo.name : 'Seleccionar PNG, JPG o JPEG'}
-                    </span>
-                    <input
-                      type="file"
-                      accept="image/png,image/jpeg"
-                      className="hidden"
-                      onChange={(evento) => {
-                        const archivo = evento.target.files?.[0] ?? null;
-                        onCambiarLogo(archivo);
-                      }}
-                    />
-                    <span className="rounded-full bg-white px-3 py-1 text-[10px] font-black uppercase text-slate-700">
-                      Elegir
-                    </span>
-                  </label>
-                </div>
               </>
             )}
             <div>
@@ -662,30 +601,59 @@ export function ModalEstudio({
               <p className="mt-2 text-xs font-medium text-slate-500">
                 {obtenerDefinicionPlan(formulario.plan).resumen}
               </p>
-              <div className="mt-3 grid gap-3 sm:grid-cols-2">
-                <div className="rounded-2xl border border-slate-200 bg-white p-3">
-                  <p className="text-[10px] font-black uppercase tracking-[0.2em] text-emerald-600">
-                    Incluye
-                  </p>
-                  <ul className="mt-2 space-y-1 text-xs font-medium text-slate-600">
-                    {obtenerDefinicionPlan(formulario.plan).capacidades.map((item) => (
-                      <li key={item}>• {item}</li>
-                    ))}
-                  </ul>
-                </div>
-                <div className="rounded-2xl border border-slate-200 bg-white p-3">
-                  <p className="text-[10px] font-black uppercase tracking-[0.2em] text-amber-600">
-                    Restricciones
-                  </p>
-                  <ul className="mt-2 space-y-1 text-xs font-medium text-slate-600">
-                    {(obtenerDefinicionPlan(formulario.plan).restricciones.length > 0
-                      ? obtenerDefinicionPlan(formulario.plan).restricciones
-                      : ['Sin restricciones operativas en este bloque.']
-                    ).map((item) => (
-                      <li key={item}>• {item}</li>
-                    ))}
-                  </ul>
-                </div>
+              <div className="mt-4">
+                {(() => {
+                  const definicion = obtenerDefinicionPlan(formulario.plan);
+                  const esPlanPro = formulario.plan === 'PRO';
+
+                  return (
+                    <article
+                      className={`w-full rounded-3xl border p-4 transition-colors sm:p-5 ${
+                        esPlanPro
+                          ? 'border-emerald-300 bg-emerald-50'
+                          : 'border-slate-300 bg-slate-50'
+                      }`}
+                    >
+                      <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+                        <div className="flex items-center gap-2">
+                          <span
+                            className={`rounded-full px-2.5 py-1 text-xs font-bold ${
+                              esPlanPro
+                                ? 'bg-emerald-100 text-emerald-800'
+                                : 'bg-slate-200 text-slate-700'
+                            }`}
+                          >
+                            Plan {definicion.nombre}
+                          </span>
+                        </div>
+                        <p className="text-sm font-medium text-slate-600">{definicion.resumen}</p>
+                      </div>
+
+                      <div className="grid w-full gap-3 lg:grid-cols-2">
+                        <section className="rounded-2xl border border-slate-200 bg-white/90 p-3">
+                          <p className="text-xs font-bold text-emerald-700">Incluye</p>
+                          <ul className="mt-2 space-y-1 text-xs font-medium text-slate-700">
+                            {definicion.capacidades.map((item) => (
+                              <li key={`${formulario.plan}-incluye-${item}`}>• {item}</li>
+                            ))}
+                          </ul>
+                        </section>
+
+                        <section className="rounded-2xl border border-slate-200 bg-white/90 p-3">
+                          <p className="text-xs font-bold text-amber-700">Restricciones</p>
+                          <ul className="mt-2 space-y-1 text-xs font-medium text-slate-700">
+                            {(definicion.restricciones.length > 0
+                              ? definicion.restricciones
+                              : ['Sin restricciones operativas adicionales.']
+                            ).map((item) => (
+                              <li key={`${formulario.plan}-restriccion-${item}`}>• {item}</li>
+                            ))}
+                          </ul>
+                        </section>
+                      </div>
+                    </article>
+                  );
+                })()}
               </div>
             </div>
             <div>

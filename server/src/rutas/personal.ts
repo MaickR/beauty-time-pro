@@ -6,6 +6,7 @@ import { prisma } from '../prismaCliente.js';
 import { Prisma } from '../generated/prisma/client.js';
 import { verificarJWT } from '../middleware/autenticacion.js';
 import { tieneAccesoAdministrativoEstudio } from '../lib/accesoEstudio.js';
+import { validarCantidadEmpleadosActivosPlan } from '../lib/planes.js';
 import { horaOpcionalONulaSchema, obtenerMensajeValidacion, textoSchema } from '../lib/validacion.js';
 import { detectarTipoImagen } from '../utils/validarImagen.js';
 import { obtenerDesactivacionesProgramadasPersonal } from '../lib/reactivacionPersonalProgramada.js';
@@ -129,11 +130,32 @@ export async function rutasPersonal(servidor: FastifyInstance): Promise<void> {
         return respuesta.code(400).send({ error: obtenerMensajeValidacion(resultado.error) });
       }
 
-      // Verificar límite de especialistas activos (50 por estudio)
-      const totalPersonalActivo = await prisma.personal.count({
-        where: { estudioId: id, activo: true },
+      const [estudio, totalPersonalActivo] = await Promise.all([
+        prisma.estudio.findUnique({
+          where: { id },
+          select: { plan: true },
+        }),
+        prisma.personal.count({
+          where: { estudioId: id, activo: true },
+        }),
+      ]);
+
+      if (!estudio) {
+        return respuesta.code(404).send({ error: 'Estudio no encontrado' });
+      }
+
+      const activoSolicitado = resultado.data.activo ?? true;
+      const errorPlanPersonal = validarCantidadEmpleadosActivosPlan({
+        plan: estudio.plan,
+        cantidadActual: totalPersonalActivo,
+        cantidadNueva: totalPersonalActivo + (activoSolicitado ? 1 : 0),
       });
-      if (totalPersonalActivo >= 50) {
+      if (errorPlanPersonal) {
+        return respuesta.code(400).send({ error: errorPlanPersonal, codigo: 'LIMITE_PLAN' });
+      }
+
+      // Verificar límite operativo global de especialistas activos (50 por estudio)
+      if (activoSolicitado && totalPersonalActivo >= 50) {
         return respuesta.code(400).send({
           error: 'Límite de especialistas alcanzado. Contacta a soporte para ampliarlo.',
         });
@@ -168,7 +190,13 @@ export async function rutasPersonal(servidor: FastifyInstance): Promise<void> {
       const payload = solicitud.user as { sub: string; rol: string; estudioId: string | null };
       const empleadoExistente = await prisma.personal.findUnique({
         where: { id: solicitud.params.id },
-        select: { estudioId: true },
+        select: {
+          estudioId: true,
+          activo: true,
+          estudio: {
+            select: { plan: true },
+          },
+        },
       });
       if (!empleadoExistente) return respuesta.code(404).send({ error: 'Personal no encontrado' });
       if (!tieneAccesoAdministrativoEstudio(payload, empleadoExistente.estudioId)) {
@@ -195,6 +223,29 @@ export async function rutasPersonal(servidor: FastifyInstance): Promise<void> {
       }
 
       const datos = resultado.data;
+
+      const estaReactivando = datos.activo === true && !empleadoExistente.activo;
+      if (estaReactivando) {
+        const totalPersonalActivo = await prisma.personal.count({
+          where: { estudioId: empleadoExistente.estudioId, activo: true },
+        });
+
+        const errorPlanPersonal = validarCantidadEmpleadosActivosPlan({
+          plan: empleadoExistente.estudio?.plan,
+          cantidadActual: totalPersonalActivo,
+          cantidadNueva: totalPersonalActivo + 1,
+        });
+
+        if (errorPlanPersonal) {
+          return respuesta.code(400).send({ error: errorPlanPersonal, codigo: 'LIMITE_PLAN' });
+        }
+
+        if (totalPersonalActivo >= 50) {
+          return respuesta.code(400).send({
+            error: 'Límite de especialistas alcanzado. Contacta a soporte para ampliarlo.',
+          });
+        }
+      }
 
       const actualizado = datos.activo === false
         ? await desactivarPersonal(solicitud.params.id)

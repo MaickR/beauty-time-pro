@@ -19,7 +19,13 @@ import { revocarSesionesPorSujeto } from '../lib/sesionesAuth.js';
 import { normalizarServiciosEntrada } from '../lib/serializacionReservas.js';
 import { colorHexSchema, emailOpcionalONuloSchema, fechaIsoSchema, horaOpcionalONulaSchema, horaSchema, obtenerMensajeValidacion, telefonoSchema, textoOpcionalONuloSchema, textoSchema, urlOpcionalSchema } from '../lib/validacion.js';
 import { esClaveSalonSegura, sanitizarClaveSalon } from '../lib/clavesSalon.js';
-import { normalizarPlanEstudio, obtenerDefinicionPlan, validarCantidadServiciosPlan } from '../lib/planes.js';
+import {
+  normalizarPlanEstudio,
+  obtenerDefinicionPlan,
+  validarCantidadEmpleadosActivosPlan,
+  validarCantidadServiciosPlan,
+  validarReglasSucursalesPorPlan,
+} from '../lib/planes.js';
 import { asegurarPrecioActualSalon, obtenerPrecioPlanActual, resolverPrecioRenovacion } from '../lib/preciosPlanes.js';
 import { obtenerNombresSucursales, obtenerSedesRelacionadas } from '../lib/sedes.js';
 import {
@@ -1218,6 +1224,15 @@ export async function rutasEstudios(servidor: FastifyInstance): Promise<void> {
         return respuesta.code(400).send({ error: errorServiciosPlan, codigo: 'LIMITE_PLAN' });
       }
 
+      const errorSucursalesPlan = validarReglasSucursalesPorPlan({
+        plan: planNormalizado,
+        estudioPrincipalId: datos.estudioPrincipalId ?? null,
+        sucursales: datos.sucursales,
+      });
+      if (errorSucursalesPlan) {
+        return respuesta.code(400).send({ error: errorSucursalesPlan, codigo: 'LIMITE_PLAN' });
+      }
+
       const estudio = await prisma.estudio.create({
         data: {
           nombre: datos.nombre,
@@ -1349,6 +1364,18 @@ export async function rutasEstudios(servidor: FastifyInstance): Promise<void> {
         }
 
         const planSiguiente = normalizarPlanEstudio(datos.plan ?? estudioExistente.plan);
+        const estudioPrincipalSiguiente =
+          datos.estudioPrincipalId !== undefined
+            ? datos.estudioPrincipalId
+            : ('estudioPrincipalId' in estudioExistente
+                ? ((estudioExistente as { estudioPrincipalId?: string | null }).estudioPrincipalId ?? null)
+                : null);
+        const sucursalesSiguientes =
+          datos.sucursales !== undefined
+            ? datos.sucursales
+            : (Array.isArray((estudioAccesible as { sucursales?: unknown }).sucursales)
+                ? ((estudioAccesible as { sucursales?: string[] }).sucursales ?? [])
+                : []);
         const serviciosActuales = Array.isArray(estudioExistente.servicios)
           ? estudioExistente.servicios.length
           : 0;
@@ -1362,6 +1389,31 @@ export async function rutasEstudios(servidor: FastifyInstance): Promise<void> {
         });
         if (errorServicios) {
           return respuesta.code(400).send({ error: errorServicios, codigo: 'LIMITE_PLAN' });
+        }
+
+        const errorSucursalesPlan = validarReglasSucursalesPorPlan({
+          plan: planSiguiente,
+          estudioPrincipalId: estudioPrincipalSiguiente,
+          sucursales: sucursalesSiguientes,
+        });
+        if (errorSucursalesPlan) {
+          return respuesta.code(400).send({ error: errorSucursalesPlan, codigo: 'LIMITE_PLAN' });
+        }
+
+        if (datos.plan !== undefined && planSiguiente === 'STANDARD') {
+          const totalPersonalActivo = await prisma.personal.count({
+            where: { estudioId: id, activo: true },
+          });
+
+          const errorPersonalPlan = validarCantidadEmpleadosActivosPlan({
+            plan: planSiguiente,
+            cantidadActual: totalPersonalActivo,
+            cantidadNueva: totalPersonalActivo,
+          });
+
+          if (errorPersonalPlan) {
+            return respuesta.code(400).send({ error: errorPersonalPlan, codigo: 'LIMITE_PLAN' });
+          }
         }
 
         const limiteServiciosStandard = obtenerDefinicionPlan('STANDARD').maxServicios;

@@ -8,6 +8,11 @@ interface DefinicionPlanEstudio {
   nombre: 'Estándar' | 'Pro';
   maxServicios: number;
   fidelidad: boolean;
+  productos: boolean;
+  ventasProductos: boolean;
+  sucursales: boolean;
+  mensajesMasivos: boolean;
+  limiteMensajesMasivosAnualBase: number;
   resumen: string;
   capacidades: string[];
   restricciones: string[];
@@ -19,19 +24,24 @@ const PLANES_ESTUDIO: Record<PlanEstudio, DefinicionPlanEstudio> = {
     nombre: 'Estándar',
     maxServicios: Number.POSITIVE_INFINITY,
     fidelidad: false,
-    resumen: 'Servicios ilimitados, sin fidelidad, sin productos y con límite de 5 empleados.',
+    productos: false,
+    ventasProductos: false,
+    sucursales: false,
+    mensajesMasivos: false,
+    limiteMensajesMasivosAnualBase: 0,
+    resumen: 'Operación base del salón con agenda y reservas, sin módulos comerciales Pro.',
     capacidades: [
-      'Servicios ilimitados',
-      'Agenda, reservas y dashboard operativo',
-      'Cobro mensual estándar por país',
-      'Un solo salón sin sucursales Pro',
+      'Agenda, reservas y operación base del salón.',
+      'Dashboard administrativo normal.',
+      'Servicios ilimitados.',
+      'Un solo salón, sin sucursales adicionales.',
     ],
     restricciones: [
-      'Sin programa de fidelidad',
-      'Sin módulo de productos',
-      'Sin sucursales adicionales',
-      'Máximo 5 empleados',
-      'Sin envíos masivos ni herramientas Pro avanzadas',
+      'Sin programa de fidelidad.',
+      'Sin módulo de productos.',
+      'Sin ventas de productos integradas a reservas o agenda.',
+      'Sin mensajes masivos.',
+      'Máximo de 5 empleados activos por salón.',
     ],
   },
   PRO: {
@@ -39,16 +49,24 @@ const PLANES_ESTUDIO: Record<PlanEstudio, DefinicionPlanEstudio> = {
     nombre: 'Pro',
     maxServicios: Number.POSITIVE_INFINITY,
     fidelidad: true,
+    productos: true,
+    ventasProductos: true,
+    sucursales: true,
+    mensajesMasivos: true,
+    limiteMensajesMasivosAnualBase: 3,
     resumen:
-      'Servicios, productos y sucursales habilitados con fidelidad y funciones comerciales completas.',
+      'Operación base + crecimiento comercial, fidelización, productos, sucursales y campañas.',
     capacidades: [
-      'Servicios ilimitados',
-      'Programa de fidelidad',
-      'Productos del salón',
-      'Sucursales adicionales',
-      'Herramientas comerciales Pro',
+      'Todo lo del Standard.',
+      'Programa de fidelidad completo.',
+      'Módulo de productos del salón.',
+      'Venta de productos integrada al flujo operativo y financiero.',
+      'Productos adicionales dentro de reservas/citas.',
+      'Sucursales adicionales.',
+      'Mensajes masivos (3 por año + extras aprobados).',
+      'Automatizaciones y funciones comerciales más completas.',
     ],
-    restricciones: [],
+    restricciones: ['Sin restricciones operativas adicionales dentro del alcance actual.'],
   },
 };
 

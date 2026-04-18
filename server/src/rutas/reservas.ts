@@ -28,6 +28,7 @@ import {
 } from '../lib/reservasPublicas.js';
 import { obtenerExcepcionDisponibilidadAplicada } from '../lib/disponibilidadExcepciones.js';
 import { tieneAccesoAdministrativoEstudio } from '../lib/accesoEstudio.js';
+import { obtenerMensajeRestriccionPlan, planPermiteFuncion } from '../lib/planes.js';
 import { validarMetodoPagoReservaDisponible } from '../lib/metodosPagoReserva.js';
 import { prisma } from '../prismaCliente.js';
 import { enviarEmailConfirmacion } from '../servicios/servicioEmail.js';
@@ -1085,9 +1086,9 @@ export async function rutasReservas(servidor: FastifyInstance): Promise<void> {
     let productosAdicionalesNormalizados: Prisma.InputJsonValue = [];
 
     if (productosSeleccionados.length > 0) {
-      if (estudio.plan !== 'PRO') {
+      if (!planPermiteFuncion({ plan: estudio.plan, funcion: 'ventasProductos' })) {
         return respuesta.code(403).send({
-          error: 'Los productos opcionales solo están disponibles en salones con plan PRO',
+          error: obtenerMensajeRestriccionPlan('ventasProductos'),
         });
       }
 
@@ -1956,8 +1957,10 @@ export async function rutasReservas(servidor: FastifyInstance): Promise<void> {
         return respuesta.code(403).send({ error: 'Solo puedes agregar productos a tus propias citas' });
       }
 
-      if (reservaExistente.estudio.plan !== 'PRO') {
-        return respuesta.code(403).send({ error: 'La venta de productos adicionales en agenda está disponible solo para planes PRO' });
+      if (!planPermiteFuncion({ plan: reservaExistente.estudio.plan, funcion: 'ventasProductos' })) {
+        return respuesta
+          .code(403)
+          .send({ error: obtenerMensajeRestriccionPlan('ventasProductos') });
       }
 
       const producto = await prisma.producto.findFirst({

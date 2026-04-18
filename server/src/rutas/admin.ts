@@ -13,7 +13,11 @@ import { enviarEmailBienvenidaSalon, enviarEmailRechazoSalon, enviarEmailCancela
 import { generarHashContrasena } from '../utils/contrasenas.js';
 import { registrarAuditoria } from '../utils/auditoria.js';
 import { emailSchema, fechaIsoSchema, obtenerMensajeValidacion, telefonoSchema, textoSchema } from '../lib/validacion.js';
-import { normalizarPlanEstudio, validarCantidadServiciosPlan } from '../lib/planes.js';
+import {
+  normalizarPlanEstudio,
+  validarCantidadEmpleadosActivosPlan,
+  validarCantidadServiciosPlan,
+} from '../lib/planes.js';
 import { generarClavesSalonUnicas } from '../lib/clavesSalon.js';
 import { asegurarPrecioActualSalon, obtenerPrecioPlanActual, obtenerResumenSuscripcionesActivas } from '../lib/preciosPlanes.js';
 import { obtenerFechaISOEnZona, obtenerZonaHorariaPorPais } from '../utils/zonasHorarias.js';
@@ -582,7 +586,11 @@ async function crearPagoAdminCompat(
   }
 }
 
-async function insertarRegistroCompat(tabla: string, datos: Record<string, unknown>) {
+async function insertarRegistroCompat(
+  tabla: string,
+  datos: Record<string, unknown>,
+  columnasDisponibles?: Set<string>,
+) {
   const datosLimpios = Object.fromEntries(
     Object.entries(datos).filter(([, valor]) => valor !== undefined),
   );
@@ -592,16 +600,75 @@ async function insertarRegistroCompat(tabla: string, datos: Record<string, unkno
 
   switch (tabla) {
     case 'estudios':
-      await prisma.estudio.create({ data: datosLimpios as Prisma.EstudioCreateInput });
+      await prisma.estudio.create({
+        data: datosLimpios as Prisma.EstudioCreateInput,
+        ...(columnasDisponibles
+          ? {
+              select: construirSelectDesdeColumnas(columnasDisponibles, [
+                'id',
+                'nombre',
+                'propietario',
+                'telefono',
+                'pais',
+                'estado',
+                'activo',
+                'plan',
+                'emailContacto',
+                'fechaVencimiento',
+                'creadoEn',
+              ]) as Prisma.EstudioSelect,
+            }
+          : {}),
+      });
       return;
     case 'usuarios':
-      await prisma.usuario.create({ data: datosLimpios as Prisma.UsuarioCreateInput });
+      await prisma.usuario.create({
+        data: datosLimpios as Prisma.UsuarioCreateInput,
+        ...(columnasDisponibles
+          ? {
+              select: construirSelectDesdeColumnas(columnasDisponibles, [
+                'id',
+                'email',
+                'rol',
+                'activo',
+                'estudioId',
+                'creadoEn',
+              ]) as Prisma.UsuarioSelect,
+            }
+          : {}),
+      });
       return;
     case 'personal':
-      await prisma.personal.create({ data: datosLimpios as Prisma.PersonalCreateInput });
+      await prisma.personal.create({
+        data: datosLimpios as Prisma.PersonalCreateInput,
+        ...(columnasDisponibles
+          ? {
+              select: construirSelectDesdeColumnas(columnasDisponibles, [
+                'id',
+                'estudioId',
+                'nombre',
+                'activo',
+              ]) as Prisma.PersonalSelect,
+            }
+          : {}),
+      });
       return;
     case 'pagos':
-      await prisma.pago.create({ data: datosLimpios as Prisma.PagoCreateInput });
+      await prisma.pago.create({
+        data: datosLimpios as Prisma.PagoCreateInput,
+        ...(columnasDisponibles
+          ? {
+              select: construirSelectDesdeColumnas(columnasDisponibles, [
+                'id',
+                'estudioId',
+                'monto',
+                'moneda',
+                'concepto',
+                'fecha',
+              ]) as Prisma.PagoSelect,
+            }
+          : {}),
+      });
       return;
     default:
       throw new Error(`Tabla no soportada en inserción compat: ${tabla}`);
@@ -1221,6 +1288,14 @@ export async function rutasAdmin(servidor: FastifyInstance): Promise<void> {
           return respuesta.code(400).send({ error: errorServiciosPlan, codigo: 'LIMITE_PLAN' });
         }
 
+        const errorPersonalPlan = validarCantidadEmpleadosActivosPlan({
+          plan: planNormalizado,
+          cantidadNueva: personal.length,
+        });
+        if (errorPersonalPlan) {
+          return respuesta.code(400).send({ error: errorPersonalPlan, codigo: 'LIMITE_PLAN' });
+        }
+
         const emailNorm = email.trim().toLowerCase();
         const existente = await buscarUsuarioPorEmailCompat(emailNorm);
         if (existente) {
@@ -1323,7 +1398,7 @@ export async function rutasAdmin(servidor: FastifyInstance): Promise<void> {
             ...(columnasEstudios.has('fechaSolicitud') && { fechaSolicitud: marcaTiempoActual }),
             ...(columnasEstudios.has('fechaAprobacion') && { fechaAprobacion: marcaTiempoActual }),
             ...(columnasEstudios.has('actualizadoEn') && { actualizadoEn: marcaTiempoActual }),
-          });
+          }, columnasEstudios);
 
           await insertarRegistroCompat('usuarios', {
             id: usuarioCreadoId,
@@ -1335,7 +1410,7 @@ export async function rutasAdmin(servidor: FastifyInstance): Promise<void> {
             ...(columnasUsuarios.has('activo') && { activo: true }),
             ...(columnasUsuarios.has('emailVerificado') && { emailVerificado: true }),
             ...(columnasUsuarios.has('actualizadoEn') && { actualizadoEn: marcaTiempoActual }),
-          });
+          }, columnasUsuarios);
 
           estudio = await obtenerEstudioCreadoCompat(
             estudioCreadoId,
@@ -1361,7 +1436,7 @@ export async function rutasAdmin(servidor: FastifyInstance): Promise<void> {
                 ...(columnasPersonal.has('descansoFin') && {
                   descansoFin: persona.descansoFin ?? null,
                 }),
-              });
+              }, columnasPersonal);
             }
           }
 
@@ -1387,7 +1462,7 @@ export async function rutasAdmin(servidor: FastifyInstance): Promise<void> {
               fecha: formatearFecha(fechaInicio),
               ...(columnasPagos.has('tipo') && { tipo: 'suscripcion' }),
               ...(columnasPagos.has('referencia') && { referencia: 'alta_inicial' }),
-            });
+            }, columnasPagos);
           } catch (error) {
             solicitud.log.warn({ err: error, estudioId: estudioCreadoId }, 'No se pudo registrar el pago inicial del salon');
           }
@@ -2269,7 +2344,7 @@ export async function rutasAdmin(servidor: FastifyInstance): Promise<void> {
           ...(columnasEstudios.has('fechaAprobacion') && { fechaAprobacion: marcaTiempoActual }),
           ...(columnasEstudios.has('actualizadoEn') && { actualizadoEn: marcaTiempoActual }),
           ...(columnasEstudios.has('vendedorId') && { vendedorId: preregistro.vendedorId }),
-        });
+        }, columnasEstudios);
 
         await insertarRegistroCompat('usuarios', {
           id: usuarioCreadoId,
@@ -2281,7 +2356,7 @@ export async function rutasAdmin(servidor: FastifyInstance): Promise<void> {
           ...(columnasUsuarios.has('activo') && { activo: true }),
           ...(columnasUsuarios.has('emailVerificado') && { emailVerificado: true }),
           ...(columnasUsuarios.has('actualizadoEn') && { actualizadoEn: marcaTiempoActual }),
-        });
+        }, columnasUsuarios);
 
         try {
           await insertarRegistroCompat('pagos', {
@@ -2293,7 +2368,7 @@ export async function rutasAdmin(servidor: FastifyInstance): Promise<void> {
             fecha: formatearFecha(fechaInicio),
             ...(columnasPagos.has('tipo') && { tipo: 'suscripcion' }),
             ...(columnasPagos.has('referencia') && { referencia: 'alta_inicial' }),
-          });
+          }, columnasPagos);
         } catch (error) {
           solicitud.log.warn({ err: error, estudioId: estudioCreadoId }, 'No se pudo registrar pago inicial del preregistro');
         }
@@ -2920,6 +2995,22 @@ export async function rutasAdmin(servidor: FastifyInstance): Promise<void> {
       }
 
       if (plan && (plan === 'STANDARD' || plan === 'PRO')) {
+        if (plan === 'STANDARD') {
+          const totalPersonalActivo = await prisma.personal.count({
+            where: { estudioId: id, activo: true },
+          });
+
+          const errorPersonalPlan = validarCantidadEmpleadosActivosPlan({
+            plan,
+            cantidadActual: totalPersonalActivo,
+            cantidadNueva: totalPersonalActivo,
+          });
+
+          if (errorPersonalPlan) {
+            return respuesta.code(400).send({ error: errorPersonalPlan, codigo: 'LIMITE_PLAN' });
+          }
+        }
+
         detallesAudit.planAnterior = estudio.plan;
         actualizacion.plan = plan;
       }
@@ -3361,6 +3452,22 @@ export async function rutasAdmin(servidor: FastifyInstance): Promise<void> {
 
       if (actualizacion.plan !== undefined && actualizacion.plan !== 'STANDARD' && actualizacion.plan !== 'PRO') {
         return respuesta.code(400).send({ error: 'Plan inválido' });
+      }
+
+      if (actualizacion.plan === 'STANDARD') {
+        const totalPersonalActivo = await prisma.personal.count({
+          where: { estudioId: id, activo: true },
+        });
+
+        const errorPersonalPlan = validarCantidadEmpleadosActivosPlan({
+          plan: actualizacion.plan,
+          cantidadActual: totalPersonalActivo,
+          cantidadNueva: totalPersonalActivo,
+        });
+
+        if (errorPersonalPlan) {
+          return respuesta.code(400).send({ error: errorPersonalPlan, codigo: 'LIMITE_PLAN' });
+        }
       }
 
       if (actualizacion.inicioSuscripcion !== undefined) {

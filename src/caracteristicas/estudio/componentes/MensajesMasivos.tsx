@@ -23,7 +23,7 @@ export function MensajesMasivos({ estudioId, plan }: PropsMensajesMasivos) {
   const definicionPlan = obtenerDefinicionPlan(plan);
   const { mostrarToast } = usarToast();
   const clienteConsulta = useQueryClient();
-  const esPro = definicionPlan.fidelidad; // PRO = fidelidad habilitada
+  const esPro = definicionPlan.mensajesMasivos;
 
   const { data, isLoading } = useQuery({
     queryKey: ['mensajes-masivos', estudioId],
