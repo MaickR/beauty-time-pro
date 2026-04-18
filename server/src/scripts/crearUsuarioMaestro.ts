@@ -4,6 +4,7 @@ import { generarHashContrasena } from '../utils/contrasenas.js';
 import { asegurarCampoPorcentajeComisionUsuario } from '../lib/comisionVendedor.js';
 
 const REGEX_CONTRASENA = /^(?=.*[A-Z])(?=.*[0-9]).{8,}$/;
+const EMAIL_MIKE_LEGADO = 'msrl.dev420@gmail.com';
 
 interface DatosMaestro {
 	email: string;
@@ -31,6 +32,38 @@ function leerMaestrosDesdeEnv(): DatosMaestro[] {
 	}
 
 	return maestros;
+}
+
+async function migrarCorreoMikeLegado(emailObjetivo: string, nombreObjetivo: string): Promise<void> {
+	const emailNormalizado = emailObjetivo.trim().toLowerCase();
+	if (!emailNormalizado || emailNormalizado === EMAIL_MIKE_LEGADO) {
+		return;
+	}
+
+	const [usuarioObjetivo, usuarioLegado] = await Promise.all([
+		prisma.usuario.findUnique({
+			where: { email: emailNormalizado },
+			select: { id: true },
+		}),
+		prisma.usuario.findUnique({
+			where: { email: EMAIL_MIKE_LEGADO },
+			select: { id: true },
+		}),
+	]);
+
+	if (!usuarioLegado || usuarioObjetivo) {
+		return;
+	}
+
+	await prisma.usuario.update({
+		where: { id: usuarioLegado.id },
+		data: {
+			email: emailNormalizado,
+			nombre: nombreObjetivo,
+		},
+	});
+
+	console.log(`[maestro] Correo legado migrado: ${EMAIL_MIKE_LEGADO} -> ${emailNormalizado}`);
 }
 
 async function asegurarMaestro(datos: DatosMaestro): Promise<void> {
@@ -95,6 +128,10 @@ async function crearUsuarioMaestro(): Promise<void> {
 	}
 
 	await asegurarCampoPorcentajeComisionUsuario();
+
+	if (maestros.length > 0) {
+		await migrarCorreoMikeLegado(maestros[0]!.email, maestros[0]!.nombre);
+	}
 
 	for (const maestro of maestros) {
 		await asegurarMaestro(maestro);
