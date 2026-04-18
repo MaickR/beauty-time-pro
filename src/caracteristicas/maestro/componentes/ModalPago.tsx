@@ -25,9 +25,9 @@ export function ModalPago({ estudio, onConfirmar, onCerrar }: PropsModalPago) {
       role="dialog"
       aria-modal="true"
       aria-labelledby="modal-pago-titulo"
-      className="fixed inset-0 bg-black/80 backdrop-blur-xl z-70 flex items-center justify-center p-4"
+      className="fixed inset-0 z-70 flex items-center justify-center bg-black/80 p-3 backdrop-blur-xl sm:p-4"
     >
-      <div className="bg-white max-w-md w-full rounded-[3rem] p-8 text-center shadow-2xl">
+      <div className="max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-3xl bg-white p-4 text-center shadow-2xl sm:max-h-[92vh] sm:rounded-[2.5rem] sm:p-6 md:p-8">
         <div className="w-16 h-16 bg-green-100 text-green-600 rounded-full flex items-center justify-center mx-auto mb-4">
           <DollarSign className="w-8 h-8" />
         </div>
@@ -37,10 +37,10 @@ export function ModalPago({ estudio, onConfirmar, onCerrar }: PropsModalPago) {
         >
           Abonar Pago
         </h2>
-        <p className="text-slate-500 font-bold mb-8">
+        <p className="mb-6 text-slate-500 font-bold sm:mb-8">
           Salón: <span className="text-pink-600 uppercase">{estudio.name}</span>
         </p>
-        <div className="rounded-4xl border border-slate-200 bg-slate-50 p-5 text-left mb-6">
+        <div className="mb-5 rounded-3xl border border-slate-200 bg-slate-50 p-4 text-left sm:mb-6 sm:rounded-4xl sm:p-5">
           <p className="text-[10px] uppercase font-black text-slate-400 tracking-widest">
             Moneda asignada
           </p>
@@ -59,7 +59,7 @@ export function ModalPago({ estudio, onConfirmar, onCerrar }: PropsModalPago) {
           )}
         </div>
 
-        <div className="rounded-4xl border border-emerald-200 bg-emerald-50 p-5 text-left mb-8">
+        <div className="mb-6 rounded-3xl border border-emerald-200 bg-emerald-50 p-4 text-left sm:mb-8 sm:rounded-4xl sm:p-5">
           <p className="text-[10px] uppercase font-black text-emerald-700 tracking-widest">
             Cómo se sumará el mes
           </p>
@@ -73,11 +73,11 @@ export function ModalPago({ estudio, onConfirmar, onCerrar }: PropsModalPago) {
         <button
           onClick={() => onConfirmar(monto, moneda)}
           disabled={monto <= 0}
-          className="w-full bg-slate-900 text-white font-black py-4 rounded-2xl hover:bg-black hover:scale-[1.02] transition-all flex items-center justify-center gap-2 shadow-sm mb-3"
+          className="mb-3 flex w-full items-center justify-center gap-2 rounded-2xl bg-slate-900 py-3.5 text-sm font-black text-white shadow-sm transition-all hover:scale-[1.02] hover:bg-black sm:py-4"
         >
           Registrar {formatearDinero(monto, moneda)} y sumar 1 mes
         </button>
-        <p className="text-xs text-slate-500 mb-8">
+        <p className="mb-6 text-xs text-slate-500 sm:mb-8">
           Vigencia actual:{' '}
           {estudio.paidUntil ? formatearFechaHumana(estudio.paidUntil) : 'Sin vigencia registrada'}
         </p>

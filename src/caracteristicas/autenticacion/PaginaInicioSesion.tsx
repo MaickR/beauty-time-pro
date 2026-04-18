@@ -155,10 +155,10 @@ export function PaginaInicioSesion() {
         }
       : !avisoBloqueo && !mensajeRegistro && accesoDemo
         ? {
-            titulo: accesoDemo.titulo ?? 'Demo access ready',
+            titulo: accesoDemo.titulo ?? 'Acceso de demostración listo',
             descripcion:
               accesoDemo.mensaje ??
-              'We loaded the demo credentials for you. This action switches the current session to the selected demo role.',
+              'Cargamos las credenciales de demostración por ti. Esta acción cambia la sesión actual al rol demo seleccionado.',
             tono: 'blue' as const,
           }
         : null;

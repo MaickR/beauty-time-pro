@@ -243,7 +243,7 @@ function SeccionDashboard({ resumen, salonDemo, salones, cargando, alCambiarTab 
             </div>
             <div className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-bold text-slate-600">
               <RefreshCcw className="h-3.5 w-3.5" aria-hidden="true" />
-              Sync cada 30 s
+              Sincroniza cada 30 s
             </div>
           </div>
           <div className="mt-6 grid grid-cols-2 gap-4 md:grid-cols-4">

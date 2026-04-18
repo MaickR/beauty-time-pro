@@ -151,14 +151,15 @@ function formatearFechaHoraSQL(fecha: Date): Date {
   return fecha;
 }
 
-function fechaInicioEsValidaParaAlta(fecha: Date): boolean {
-  const hoy = new Date();
-  hoy.setHours(0, 0, 0, 0);
+function fechaInicioEsValidaParaAlta(fechaInicioISO: string, pais?: string | null): boolean {
+  const zonaHoraria = obtenerZonaHorariaPorPais(pais);
+  const hoyISO = obtenerFechaISOActual(zonaHoraria, pais);
 
-  const fechaMaxima = new Date(hoy);
+  const fechaMaxima = crearFechaDesdeISO(hoyISO);
   fechaMaxima.setFullYear(fechaMaxima.getFullYear() + 10);
+  const fechaMaximaISO = formatearFechaISO(fechaMaxima);
 
-  return fecha >= hoy && fecha <= fechaMaxima;
+  return fechaInicioISO >= hoyISO && fechaInicioISO <= fechaMaximaISO;
 }
 
 function obtenerMonedaPorPais(pais?: string | null): 'MXN' | 'COP' {
@@ -1241,20 +1242,23 @@ export async function rutasAdmin(servidor: FastifyInstance): Promise<void> {
               )
             : [];
 
-        const fechaInicio = inicioSuscripcion ? crearFechaDesdeISO(inicioSuscripcion) : new Date();
-        fechaInicio.setHours(0, 0, 0, 0);
+        const zonaHorariaPais = obtenerZonaHorariaPorPais(pais);
+        const fechaInicioISO = inicioSuscripcion ?? obtenerFechaISOActual(zonaHorariaPais, pais);
 
-        if (!fechaInicioEsValidaParaAlta(fechaInicio)) {
+        if (!fechaInicioEsValidaParaAlta(fechaInicioISO, pais)) {
           return respuesta.code(400).send({
-            error: 'La fecha de inicio de operaciones no es válida. Verifica día, mes y año.',
+            error: 'La fecha de inicio de operaciones no es válida. Debe ser hoy o una fecha futura.',
           });
         }
+
+        const fechaInicio = crearFechaDesdeISO(fechaInicioISO);
+        fechaInicio.setHours(0, 0, 0, 0);
 
         const vencimiento = new Date(fechaInicio);
         vencimiento.setMonth(vencimiento.getMonth() + 1);
 
         const formatearFecha = (d: Date) =>
-          obtenerFechaISOEnZona(d, obtenerZonaHorariaPorPais(pais), pais);
+          obtenerFechaISOEnZona(d, zonaHorariaPais, pais);
 
         const diasSemana = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado', 'Domingo'];
         const horario = Object.fromEntries(
@@ -1615,75 +1619,97 @@ export async function rutasAdmin(servidor: FastifyInstance): Promise<void> {
     '/admin/salones/:id/recordatorio',
     { preHandler: [verificarJWT, requierePermiso('gestionarPagos')] },
     async (solicitud, respuesta) => {
-      const payload = solicitud.user as { rol: string; sub: string };
-      if (!esAdministradorConPermisos(payload.rol)) {
-        return respuesta.code(403).send({ error: 'Sin permisos para esta acción' });
-      }
+      try {
+        const payload = solicitud.user as { rol: string; sub: string };
+        if (!esAdministradorConPermisos(payload.rol)) {
+          return respuesta.code(403).send({ error: 'Sin permisos para esta acción' });
+        }
 
-      const estudio = await prisma.estudio.findUnique({
-        where: { id: solicitud.params.id },
-        include: {
-          usuarios: {
-            where: { rol: 'dueno' },
-            take: 1,
-            select: { email: true, nombre: true },
+        const estudio = await prisma.estudio.findUnique({
+          where: { id: solicitud.params.id },
+          include: {
+            usuarios: {
+              where: { rol: 'dueno' },
+              take: 1,
+              select: { email: true, nombre: true },
+            },
           },
-        },
-      });
+        });
 
-      if (!estudio) {
-        return respuesta.code(404).send({ error: 'Salón no encontrado' });
-      }
+        if (!estudio) {
+          return respuesta.code(404).send({ error: 'Salón no encontrado' });
+        }
 
-      // Calcular días restantes
-      const hoy = new Date();
-      hoy.setHours(0, 0, 0, 0);
-      const partesFecha = estudio.fechaVencimiento.split('-').map(Number);
-      const fechaVencimiento = new Date(partesFecha[0]!, partesFecha[1]! - 1, partesFecha[2]!);
-      const diasRestantes = Math.ceil((fechaVencimiento.getTime() - hoy.getTime()) / (1000 * 60 * 60 * 24));
+        // Calcular días restantes
+        const hoy = new Date();
+        hoy.setHours(0, 0, 0, 0);
+        const partesFecha = estudio.fechaVencimiento.split('-').map(Number);
+        const fechaVencimiento = new Date(partesFecha[0]!, partesFecha[1]! - 1, partesFecha[2]!);
+        const diasRestantes = Math.ceil((fechaVencimiento.getTime() - hoy.getTime()) / (1000 * 60 * 60 * 24));
 
-      if (diasRestantes > 10) {
-        return respuesta.code(400).send({ error: 'El recordatorio solo se puede enviar cuando faltan 10 días o menos para el corte' });
-      }
+        if (diasRestantes > 10) {
+          return respuesta.code(400).send({ error: 'El recordatorio solo se puede enviar cuando faltan 10 días o menos para el corte' });
+        }
 
-      const dueno = estudio.usuarios[0];
-      if (!dueno?.email) {
-        return respuesta.code(400).send({ error: 'El salón no tiene correo de contacto del dueño' });
-      }
+        const dueno = estudio.usuarios[0];
+        if (!dueno?.email) {
+          return respuesta.code(400).send({ error: 'El salón no tiene correo de contacto del dueño' });
+        }
 
-      await enviarEmailRecordatorioPagoSalon({
-        email: dueno.email,
-        nombreDueno: dueno.nombre || 'equipo del salón',
-        nombreSalon: estudio.nombre,
-        fechaVencimiento: estudio.fechaVencimiento,
-        diasRestantes: Math.max(0, diasRestantes),
-      });
-
-      // Crear notificación interna para el dashboard del salón
-      await prisma.notificacionEstudio.create({
-        data: {
-          estudioId: estudio.id,
-          tipo: 'recordatorio_pago',
-          titulo: 'Tu suscripción está por vencer',
-          mensaje: `Quedan ${Math.max(0, diasRestantes)} día${diasRestantes !== 1 ? 's' : ''}. Comunícate con nosotros para renovar.`,
-        },
-      });
-
-      await registrarAuditoria({
-        usuarioId: payload.sub,
-        accion: 'recordatorio_pago_salon',
-        entidadTipo: 'estudio',
-        entidadId: estudio.id,
-        detalles: {
-          nombre: estudio.nombre,
+        await enviarEmailRecordatorioPagoSalon({
+          email: dueno.email,
+          nombreDueno: dueno.nombre || 'equipo del salón',
+          nombreSalon: estudio.nombre,
           fechaVencimiento: estudio.fechaVencimiento,
-          diasRestantes,
-          emailDestino: dueno.email,
-        },
-        ip: solicitud.ip,
-      });
+          diasRestantes: Math.max(0, diasRestantes),
+        });
 
-      return respuesta.send({ datos: { mensaje: 'Recordatorio enviado correctamente' } });
+        // Crear notificación interna para el dashboard del salón.
+        try {
+          await prisma.notificacionEstudio.create({
+            data: {
+              estudioId: estudio.id,
+              tipo: 'recordatorio_pago',
+              titulo: 'Tu suscripción está por vencer',
+              mensaje: `Quedan ${Math.max(0, diasRestantes)} día${diasRestantes !== 1 ? 's' : ''}. Comunícate con nosotros para renovar.`,
+            },
+          });
+        } catch (errorNotificacion) {
+          solicitud.log.warn(
+            { err: errorNotificacion, estudioId: estudio.id },
+            'No se pudo crear la notificación interna del recordatorio',
+          );
+        }
+
+        try {
+          await registrarAuditoria({
+            usuarioId: payload.sub,
+            accion: 'recordatorio_pago_salon',
+            entidadTipo: 'estudio',
+            entidadId: estudio.id,
+            detalles: {
+              nombre: estudio.nombre,
+              fechaVencimiento: estudio.fechaVencimiento,
+              diasRestantes,
+              emailDestino: dueno.email,
+            },
+            ip: solicitud.ip,
+          });
+        } catch (errorAuditoria) {
+          solicitud.log.warn(
+            { err: errorAuditoria, estudioId: estudio.id },
+            'No se pudo registrar auditoría del recordatorio',
+          );
+        }
+
+        return respuesta.send({ datos: { mensaje: 'Recordatorio enviado correctamente' } });
+      } catch (error) {
+        solicitud.log.error(
+          { err: error, estudioId: solicitud.params.id },
+          'Error al enviar recordatorio de pago',
+        );
+        return respuesta.code(500).send({ error: 'No se pudo enviar el recordatorio' });
+      }
     },
   );
 
@@ -1694,90 +1720,112 @@ export async function rutasAdmin(servidor: FastifyInstance): Promise<void> {
     '/admin/salones/:id/aviso-suspension',
     { preHandler: [verificarJWT, requierePermiso('suspenderSalones')] },
     async (solicitud, respuesta) => {
-      const payload = solicitud.user as { rol: string; sub: string };
-      if (!esAdministradorConPermisos(payload.rol)) {
-        return respuesta.code(403).send({ error: 'Sin permisos para esta acción' });
-      }
-
-      const { id } = solicitud.params;
-
-      const estudio = await prisma.estudio.findUnique({
-        where: { id },
-        include: {
-          usuarios: {
-            where: { rol: 'dueno' },
-            take: 1,
-            select: { id: true, email: true, nombre: true },
-          },
-        },
-      });
-
-      if (!estudio) {
-        return respuesta.code(404).send({ error: 'Salón no encontrado' });
-      }
-
-      if (estudio.estado === 'suspendido') {
-        return respuesta.code(400).send({ error: 'El salón ya se encuentra suspendido' });
-      }
-
-      // Suspender el salón y su usuario dueño
-      await prisma.estudio.update({
-        where: { id },
-        data: {
-          estado: 'suspendido',
-          activo: false,
-          fechaSuspension: new Date(),
-        },
-      });
-
-      const dueno = estudio.usuarios[0];
-      if (dueno) {
-        await prisma.usuario.update({
-          where: { id: dueno.id },
-          data: { activo: false },
-        });
-      }
-
-      await revocarAccesosEstudio(id, 'salon_suspendido_por_falta_pago');
-
-      // Crear notificación interna de suspensión
-      await prisma.notificacionEstudio.create({
-        data: {
-          estudioId: id,
-          tipo: 'suspension',
-          titulo: 'Tu cuenta ha sido suspendida',
-          mensaje: 'Tu suscripción fue suspendida por falta de pago. Contacta al equipo de Beauty Time Pro para reactivar tu cuenta.',
-        },
-      });
-
-      // Enviar email de suspensión al dueño
-      if (dueno?.email) {
-        try {
-          await enviarEmailRecordatorioPagoSalon({
-            email: dueno.email,
-            nombreDueno: dueno.nombre || 'equipo del salón',
-            nombreSalon: estudio.nombre,
-            fechaVencimiento: estudio.fechaVencimiento,
-          });
-        } catch (errEmail) {
-          solicitud.log.warn({ err: errEmail, estudioId: id }, 'No se pudo enviar email de suspensión');
+      try {
+        const payload = solicitud.user as { rol: string; sub: string };
+        if (!esAdministradorConPermisos(payload.rol)) {
+          return respuesta.code(403).send({ error: 'Sin permisos para esta acción' });
         }
+
+        const { id } = solicitud.params;
+
+        const estudio = await prisma.estudio.findUnique({
+          where: { id },
+          include: {
+            usuarios: {
+              where: { rol: 'dueno' },
+              take: 1,
+              select: { id: true, email: true, nombre: true },
+            },
+          },
+        });
+
+        if (!estudio) {
+          return respuesta.code(404).send({ error: 'Salón no encontrado' });
+        }
+
+        if (estudio.estado === 'suspendido') {
+          return respuesta.code(400).send({ error: 'El salón ya se encuentra suspendido' });
+        }
+
+        // Suspender el salón y su usuario dueño.
+        await prisma.estudio.update({
+          where: { id },
+          data: {
+            estado: 'suspendido',
+            activo: false,
+            fechaSuspension: new Date(),
+          },
+        });
+
+        const dueno = estudio.usuarios[0];
+        if (dueno) {
+          await prisma.usuario.update({
+            where: { id: dueno.id },
+            data: { activo: false },
+          });
+        }
+
+        await revocarAccesosEstudio(id, 'salon_suspendido_por_falta_pago');
+
+        // Crear notificación interna de suspensión (no bloqueante).
+        try {
+          await prisma.notificacionEstudio.create({
+            data: {
+              estudioId: id,
+              tipo: 'suspension',
+              titulo: 'Tu cuenta ha sido suspendida',
+              mensaje: 'Tu suscripción fue suspendida por falta de pago. Contacta al equipo de Beauty Time Pro para reactivar tu cuenta.',
+            },
+          });
+        } catch (errorNotificacion) {
+          solicitud.log.warn(
+            { err: errorNotificacion, estudioId: id },
+            'No se pudo crear la notificación interna de suspensión',
+          );
+        }
+
+        // Enviar email de suspensión al dueño (no bloqueante).
+        if (dueno?.email) {
+          try {
+            await enviarEmailRecordatorioPagoSalon({
+              email: dueno.email,
+              nombreDueno: dueno.nombre || 'equipo del salón',
+              nombreSalon: estudio.nombre,
+              fechaVencimiento: estudio.fechaVencimiento,
+            });
+          } catch (errEmail) {
+            solicitud.log.warn({ err: errEmail, estudioId: id }, 'No se pudo enviar email de suspensión');
+          }
+        }
+
+        try {
+          await registrarAuditoria({
+            usuarioId: payload.sub,
+            accion: 'suspender_salon',
+            entidadTipo: 'estudio',
+            entidadId: id,
+            detalles: {
+              nombre: estudio.nombre,
+              motivo: 'falta_de_pago',
+              fechaVencimiento: estudio.fechaVencimiento,
+            },
+            ip: solicitud.ip,
+          });
+        } catch (errorAuditoria) {
+          solicitud.log.warn(
+            { err: errorAuditoria, estudioId: id },
+            'No se pudo registrar auditoría de suspensión',
+          );
+        }
+
+        return respuesta.send({ datos: { mensaje: `Salón "${estudio.nombre}" suspendido correctamente` } });
+      } catch (error) {
+        solicitud.log.error(
+          { err: error, estudioId: solicitud.params.id },
+          'Error al suspender salón por falta de pago',
+        );
+        return respuesta.code(500).send({ error: 'No se pudo suspender el salón' });
       }
-
-      await registrarAuditoria({
-        usuarioId: payload.sub,
-        accion: 'suspender_salon',
-        entidadTipo: 'estudio',
-        entidadId: id,
-        detalles: {
-          nombre: estudio.nombre,
-          motivo: 'falta_de_pago',
-          fechaVencimiento: estudio.fechaVencimiento,
-        },
-        ip: solicitud.ip,
-      });
-
-      return respuesta.send({ datos: { mensaje: `Salón "${estudio.nombre}" suspendido correctamente` } });
     },
   );
 
@@ -2147,13 +2195,23 @@ export async function rutasAdmin(servidor: FastifyInstance): Promise<void> {
       const { claveDueno, claveCliente } = await generarClavesSalonUnicas(preregistro.nombreSalon);
       const slugEstudio = await generarSlugUnico(preregistro.nombreSalon);
 
-      const fechaInicio = inicioSuscripcion ? crearFechaDesdeISO(inicioSuscripcion) : new Date();
+      const zonaHorariaPais = obtenerZonaHorariaPorPais(preregistro.pais);
+      const fechaInicioISO =
+        inicioSuscripcion ?? obtenerFechaISOActual(zonaHorariaPais, preregistro.pais);
+
+      if (!fechaInicioEsValidaParaAlta(fechaInicioISO, preregistro.pais)) {
+        return respuesta.code(400).send({
+          error: 'La fecha de inicio de operaciones no es válida. Debe ser hoy o una fecha futura.',
+        });
+      }
+
+      const fechaInicio = crearFechaDesdeISO(fechaInicioISO);
       fechaInicio.setHours(0, 0, 0, 0);
       const vencimiento = new Date(fechaInicio);
       vencimiento.setMonth(vencimiento.getMonth() + 1);
 
       const formatearFecha = (d: Date) =>
-        obtenerFechaISOEnZona(d, obtenerZonaHorariaPorPais(preregistro.pais), preregistro.pais);
+        obtenerFechaISOEnZona(d, zonaHorariaPais, preregistro.pais);
 
       const diasSemana = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado', 'Domingo'];
       const horario = Object.fromEntries(
