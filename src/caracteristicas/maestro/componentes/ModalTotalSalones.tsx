@@ -4,6 +4,7 @@ import { X, Download, Search } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { obtenerTotalSalones } from '../../../servicios/servicioAdmin';
 import type { SalonTotalMetrica } from '../../../servicios/servicioAdmin';
+import { construirNombreArchivoExportacion } from '../../../utils/archivos';
 import { formatearFechaHumana } from '../../../utils/formato';
 import { EsqueletoTarjeta } from '../../../componentes/ui/Esqueleto';
 
@@ -140,20 +141,6 @@ export function ModalTotalSalones({ onCerrar }: PropsModalTotalSalones) {
     return direccionOrden === 'asc' ? '↑' : '↓';
   };
 
-  const construirNombreArchivo = () => {
-    const segmentos = ['total-salones'];
-    if (filtrosplan.length > 0) segmentos.push(`plan-${filtrosplan.join('-').toLowerCase()}`);
-    if (filtrosPais.length > 0) segmentos.push(`pais-${filtrosPais.join('-').toLowerCase()}`);
-    if (vendedorDebounced.trim()) {
-      segmentos.push(`vendedor-${vendedorDebounced.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-')}`);
-    }
-    if (buscarDebounced.trim()) {
-      segmentos.push(`busqueda-${buscarDebounced.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-')}`);
-    }
-    segmentos.push(new Date().toISOString().slice(0, 10));
-    return `${segmentos.join('_')}.xlsx`;
-  };
-
   const exportarExcel = async () => {
     if (exportando) return;
     setExportando(true);
@@ -194,7 +181,7 @@ export function ModalTotalSalones({ onCerrar }: PropsModalTotalSalones) {
       const hoja = XLSX.utils.json_to_sheet(filas);
       const libro = XLSX.utils.book_new();
       XLSX.utils.book_append_sheet(libro, hoja, 'Total Salones');
-      XLSX.writeFile(libro, construirNombreArchivo());
+      XLSX.writeFile(libro, construirNombreArchivoExportacion('total salones'));
     } finally {
       setExportando(false);
     }

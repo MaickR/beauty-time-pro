@@ -2,7 +2,11 @@ import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { X, CalendarDays, Download } from 'lucide-react';
 import * as XLSX from 'xlsx';
-import { obtenerReservasMetrica } from '../../../servicios/servicioAdmin';
+import {
+  obtenerReservasMetrica,
+  obtenerTodasLasReservasMetrica,
+} from '../../../servicios/servicioAdmin';
+import { construirNombreArchivoExportacion } from '../../../utils/archivos';
 import { formatearFechaHumana } from '../../../utils/formato';
 import { EsqueletoTarjeta } from '../../../componentes/ui/Esqueleto';
 
@@ -39,6 +43,7 @@ export function ModalReservas({ onCerrar }: PropsModalReservas) {
   const [estadosFiltro, setEstadosFiltro] = useState<string[]>([]);
   const [paisFiltro, setPaisFiltro] = useState<string[]>([]);
   const [pagina, setPagina] = useState(1);
+  const [exportando, setExportando] = useState(false);
 
   const estadoStr = estadosFiltro.length > 0 ? estadosFiltro.join(',') : undefined;
   const paisStr = paisFiltro.length > 0 ? paisFiltro.join(',') : undefined;
@@ -105,18 +110,31 @@ export function ModalReservas({ onCerrar }: PropsModalReservas) {
     }
   };
 
-  const exportarExcel = () => {
-    if (!data?.datos?.length) return;
-    const filas = data.datos.map((r) => ({
-      Salón: r.salon,
-      Fecha: formatearFechaHumana(r.fecha),
-      Estado: etiquetaEstado(r.estado),
-      País: r.pais,
-    }));
-    const hoja = XLSX.utils.json_to_sheet(filas);
-    const libro = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(libro, hoja, 'Reservas');
-    XLSX.writeFile(libro, 'reservas.xlsx');
+  const exportarExcel = async () => {
+    if (exportando || (data?.total ?? 0) === 0) return;
+    setExportando(true);
+
+    try {
+      const reservas = await obtenerTodasLasReservasMetrica({
+        fechaInicio,
+        fechaFin,
+        estado: estadoStr,
+        pais: paisStr,
+      });
+
+      const filas = reservas.map((r) => ({
+        Salón: r.salon,
+        Fecha: formatearFechaHumana(r.fecha),
+        Estado: etiquetaEstado(r.estado),
+        País: r.pais,
+      }));
+      const hoja = XLSX.utils.json_to_sheet(filas);
+      const libro = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(libro, hoja, 'Reservas');
+      XLSX.writeFile(libro, construirNombreArchivoExportacion('reservas'));
+    } finally {
+      setExportando(false);
+    }
   };
 
   return (
@@ -124,7 +142,7 @@ export function ModalReservas({ onCerrar }: PropsModalReservas) {
       role="dialog"
       aria-modal="true"
       aria-labelledby="modal-reservas-titulo"
-      className="fixed inset-0 z-[200] flex items-center justify-center bg-black/70 backdrop-blur-sm p-4"
+      className="fixed inset-0 z-200 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4"
       onKeyDown={(e) => e.key === 'Escape' && onCerrar()}
     >
       <div className="bg-white rounded-3xl w-full max-w-4xl max-h-[90vh] overflow-hidden flex flex-col shadow-2xl">
@@ -298,10 +316,11 @@ export function ModalReservas({ onCerrar }: PropsModalReservas) {
               Siguiente
             </button>
             <button
-              onClick={exportarExcel}
-              className="px-3 py-1.5 bg-emerald-600 text-white rounded-lg text-xs font-bold flex items-center gap-1 hover:bg-emerald-700"
+              onClick={() => void exportarExcel()}
+              disabled={exportando || (data?.total ?? 0) === 0}
+              className="px-3 py-1.5 bg-emerald-600 text-white rounded-lg text-xs font-bold flex items-center gap-1 hover:bg-emerald-700 disabled:opacity-60"
             >
-              <Download className="w-3.5 h-3.5" /> Exportar Excel
+              <Download className="w-3.5 h-3.5" /> {exportando ? 'Exportando...' : 'Exportar Excel'}
             </button>
           </div>
         </div>

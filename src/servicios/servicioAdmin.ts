@@ -266,13 +266,12 @@ async function obtenerTodosLosSalonesPaginados<T>(
   }
 
   const paginasRestantes = await Promise.all(
-    Array.from({ length: primeraPagina.totalPaginas - 1 }, (_, indice) => cargador(indice + 2, limite)),
+    Array.from({ length: primeraPagina.totalPaginas - 1 }, (_, indice) =>
+      cargador(indice + 2, limite),
+    ),
   );
 
-  return [
-    ...primeraPagina.datos,
-    ...paginasRestantes.flatMap((pagina) => pagina.datos),
-  ];
+  return [...primeraPagina.datos, ...paginasRestantes.flatMap((pagina) => pagina.datos)];
 }
 
 export function obtenerTodosLosSalonesActivos(): Promise<SalonActivo[]> {
@@ -333,6 +332,36 @@ export async function obtenerReservasMetrica(params: {
   if (params.pagina) qs.set('pagina', String(params.pagina));
   if (params.limite) qs.set('limite', String(params.limite));
   return peticion<RespuestaReservasMetrica>(`/admin/metricas/reservas?${qs}`);
+}
+
+export async function obtenerTodasLasReservasMetrica(params: {
+  fechaInicio?: string;
+  fechaFin?: string;
+  estado?: string;
+  pais?: string;
+}): Promise<ReservaMetrica[]> {
+  const limite = 100;
+  const primeraPagina = await obtenerReservasMetrica({
+    ...params,
+    pagina: 1,
+    limite,
+  });
+
+  if (primeraPagina.totalPaginas <= 1) {
+    return primeraPagina.datos;
+  }
+
+  const paginasRestantes = await Promise.all(
+    Array.from({ length: primeraPagina.totalPaginas - 1 }, (_, indice) =>
+      obtenerReservasMetrica({
+        ...params,
+        pagina: indice + 2,
+        limite,
+      }),
+    ),
+  );
+
+  return [...primeraPagina.datos, ...paginasRestantes.flatMap((pagina) => pagina.datos)];
 }
 
 export async function obtenerVentasMetrica(): Promise<RespuestaVentas> {

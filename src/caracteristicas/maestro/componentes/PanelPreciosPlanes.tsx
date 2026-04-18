@@ -21,17 +21,40 @@ interface PrecioEditable {
   monto: string;
 }
 
-function TarjetaResumen({ etiqueta, valor }: { etiqueta: string; valor: number }) {
+const ORDEN_PAIS: Record<string, number> = { Mexico: 0, Colombia: 1 };
+const ORDEN_PLAN: Record<string, number> = { STANDARD: 0, PRO: 1 };
+
+const INDICADOR_PAIS: Record<string, string> = { Mexico: '🇲🇽', Colombia: '🇨🇴' };
+
+function TarjetaResumen({
+  etiqueta,
+  valor,
+  colorFondo = 'bg-slate-950',
+  colorTexto = 'text-white',
+  colorEtiqueta = 'text-white/60',
+}: {
+  etiqueta: string;
+  valor: number;
+  colorFondo?: string;
+  colorTexto?: string;
+  colorEtiqueta?: string;
+}) {
   return (
-    <article className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
-      <p className="text-[11px] font-black uppercase tracking-[0.2em] text-slate-500">{etiqueta}</p>
-      <p className="mt-3 text-3xl font-black text-slate-900">{valor.toLocaleString('es-MX')}</p>
+    <article className={`flex flex-col justify-between rounded-3xl ${colorFondo} p-6 shadow-sm`}>
+      <p className={`text-[11px] font-black uppercase tracking-[0.2em] ${colorEtiqueta}`}>
+        {etiqueta}
+      </p>
+      <p className={`mt-4 text-4xl font-black ${colorTexto}`}>{valor.toLocaleString('es-MX')}</p>
     </article>
   );
 }
 
 function ordenarPrecios(precios: PrecioPlanActual[]) {
-  return [...precios].sort((a, b) => `${a.plan}-${a.pais}`.localeCompare(`${b.plan}-${b.pais}`));
+  return [...precios].sort(
+    (a, b) =>
+      (ORDEN_PAIS[a.pais] ?? 99) - (ORDEN_PAIS[b.pais] ?? 99) ||
+      (ORDEN_PLAN[a.plan] ?? 99) - (ORDEN_PLAN[b.plan] ?? 99),
+  );
 }
 
 export function PanelPreciosPlanes({ onActualizado }: PropsPanelPreciosPlanes) {
@@ -92,7 +115,8 @@ export function PanelPreciosPlanes({ onActualizado }: PropsPanelPreciosPlanes) {
   };
 
   return (
-    <section aria-labelledby="titulo-precios-planes" className="space-y-5">
+    <section aria-labelledby="titulo-precios-planes" className="space-y-6">
+      {/* Header */}
       <div>
         <h2 id="titulo-precios-planes" className="text-2xl font-black text-slate-900 mb-2">
           Precios y planes
@@ -103,79 +127,127 @@ export function PanelPreciosPlanes({ onActualizado }: PropsPanelPreciosPlanes) {
         </p>
       </div>
 
+      {/* Métricas: 1 col en móvil → 3 col desde sm */}
       {isLoading ? (
-        <div className="grid grid-cols-1 gap-4 xl:grid-cols-3">
-          {Array.from({ length: 3 }).map((_, indice) => (
-            <EsqueletoTarjeta key={indice} className="h-28 rounded-3xl" />
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+          {Array.from({ length: 3 }).map((_, i) => (
+            <EsqueletoTarjeta key={i} className="h-32 rounded-3xl" />
           ))}
         </div>
       ) : (
-        <div className="grid grid-cols-1 gap-4 xl:grid-cols-3">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
           <TarjetaResumen
             etiqueta="Suscripciones activas"
             valor={data?.metricas.totalSuscripcionesActivas ?? 0}
+            colorFondo="bg-slate-950"
+            colorTexto="text-white"
+            colorEtiqueta="text-white/60"
           />
           <TarjetaResumen
             etiqueta="Activas Standard"
             valor={data?.metricas.totalActivasStandard ?? 0}
+            colorFondo="bg-slate-100"
+            colorTexto="text-slate-900"
+            colorEtiqueta="text-slate-500"
           />
-          <TarjetaResumen etiqueta="Activas Pro" valor={data?.metricas.totalActivasPro ?? 0} />
+          <TarjetaResumen
+            etiqueta="Activas Pro"
+            valor={data?.metricas.totalActivasPro ?? 0}
+            colorFondo="bg-pink-600"
+            colorTexto="text-white"
+            colorEtiqueta="text-white/70"
+          />
         </div>
       )}
 
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2 2xl:grid-cols-4">
-        {isLoading
-          ? Array.from({ length: 4 }).map((_, indice) => (
-              <EsqueletoTarjeta key={indice} className="h-48 rounded-3xl" />
-            ))
-          : precios.map((precio) => (
-              <article
-                key={precio.id}
-                className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm"
-              >
-                <div className="flex items-start justify-between gap-4">
-                  <div>
-                    <p className="text-[11px] font-black uppercase tracking-[0.2em] text-slate-500">
-                      {formatearPlan(precio.plan)}
-                    </p>
-                    <h3 className="mt-2 text-xl font-black text-slate-900">{precio.pais}</h3>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => abrirEdicion(precio)}
-                    className="rounded-2xl border border-pink-200 bg-pink-50 p-3 text-pink-700 transition-colors hover:bg-pink-100"
-                    aria-label={`Editar precio ${precio.plan} ${precio.pais}`}
-                  >
-                    <PencilLine className="h-4 w-4" />
-                  </button>
-                </div>
-
-                <div className="mt-5 rounded-3xl bg-slate-950 p-5 text-white">
-                  <p className="text-[11px] font-black uppercase tracking-[0.2em] text-white/60">
-                    Precio vigente
-                  </p>
-                  <p className="mt-3 text-3xl font-black">
-                    {formatearDinero(precio.monto, precio.moneda)}
-                  </p>
-                  <p className="mt-2 text-sm font-medium text-white/70">Versión {precio.version}</p>
-                </div>
-
-                <div className="mt-4 space-y-2 text-sm text-slate-600">
-                  <p className="flex items-center gap-2">
-                    <WalletCards className="h-4 w-4 text-slate-400" /> Moneda: {precio.moneda}
-                  </p>
-                  <p className="flex items-center gap-2">
-                    <Tags className="h-4 w-4 text-slate-400" /> Vigente desde:{' '}
-                    {new Date(precio.vigenteDesde).toLocaleDateString('es-MX')}
-                  </p>
-                </div>
-              </article>
+      {/* Planes: 1 col móvil → 2 col desde sm → 4 col desde lg */}
+      <div>
+        <h3 className="mb-4 text-xs font-black uppercase tracking-[0.2em] text-slate-400">
+          Precios vigentes por plan y país
+        </h3>
+        {isLoading ? (
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+            {Array.from({ length: 4 }).map((_, i) => (
+              <EsqueletoTarjeta key={i} className="h-52 rounded-3xl" />
             ))}
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+            {precios.map((precio) => {
+              const esPro = precio.plan === 'PRO';
+              return (
+                <article
+                  key={precio.id}
+                  className="flex flex-col rounded-3xl border border-slate-100 bg-white shadow-sm overflow-hidden"
+                >
+                  {/* Banda superior según plan */}
+                  <div
+                    className={`flex items-center justify-between px-5 py-3 ${esPro ? 'bg-pink-600' : 'bg-slate-950'}`}
+                  >
+                    <div className="flex items-center gap-2">
+                      <span className="text-lg">{INDICADOR_PAIS[precio.pais] ?? '🌎'}</span>
+                      <span className="text-[11px] font-black uppercase tracking-[0.18em] text-white">
+                        {formatearPlan(precio.plan)}
+                      </span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => abrirEdicion(precio)}
+                      className="rounded-xl bg-white/15 p-2 text-white transition-colors hover:bg-white/25"
+                      aria-label={`Editar precio ${precio.plan} ${precio.pais}`}
+                    >
+                      <PencilLine className="h-3.5 w-3.5" />
+                    </button>
+                  </div>
+
+                  {/* Cuerpo */}
+                  <div className="flex flex-1 flex-col gap-4 p-5">
+                    <div>
+                      <p className="text-[11px] font-black uppercase tracking-[0.2em] text-slate-400">
+                        País
+                      </p>
+                      <p className="mt-1 text-base font-black text-slate-900">{precio.pais}</p>
+                    </div>
+
+                    <div className="rounded-2xl bg-slate-50 px-4 py-4">
+                      <p className="text-[11px] font-black uppercase tracking-[0.18em] text-slate-400">
+                        Precio mensual
+                      </p>
+                      <p className="mt-1 text-2xl font-black text-slate-900">
+                        {formatearDinero(precio.monto, precio.moneda)}
+                      </p>
+                      <p className="mt-1 text-xs font-semibold text-slate-400">
+                        {precio.moneda} · v{precio.version}
+                      </p>
+                    </div>
+
+                    <div className="mt-auto flex flex-col gap-1.5 text-xs font-semibold text-slate-500">
+                      <span className="inline-flex items-center gap-1.5">
+                        <WalletCards className="h-3.5 w-3.5 text-slate-400" />
+                        Moneda: {precio.moneda}
+                      </span>
+                      <span className="inline-flex items-center gap-1.5">
+                        <Tags className="h-3.5 w-3.5 text-slate-400" />
+                        Vigente desde:{' '}
+                        {new Date(precio.vigenteDesde).toLocaleDateString('es-MX', {
+                          day: '2-digit',
+                          month: 'short',
+                          year: 'numeric',
+                        })}
+                      </span>
+                    </div>
+                  </div>
+                </article>
+              );
+            })}
+          </div>
+        )}
       </div>
 
+      {/* Modal edición */}
       {precioEditable && (
-        <div className="fixed inset-0 z-[220] flex items-center justify-center bg-black/70 backdrop-blur-sm p-4">
-          <div className="w-full max-w-md rounded-[2rem] bg-white p-6 shadow-2xl">
+        <div className="fixed inset-0 z-220 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4">
+          <div className="w-full max-w-md rounded-4xl bg-white p-6 shadow-2xl">
             <h3 className="text-2xl font-black text-slate-900">
               Editar precio {formatearPlan(precioEditable.plan)} · {precioEditable.pais}
             </h3>

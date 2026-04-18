@@ -63,7 +63,7 @@ const crearEstadoInicial = (): FormularioEstudio => ({
   productos: [],
   holidays: [],
   schedule: DIAS_SEMANA.reduce<Record<string, TurnoTrabajo>>(
-    (acc, dia) => ({ ...acc, [dia]: { isOpen: true, openTime: '09:00', closeTime: '19:00' } }),
+    (acc, dia) => ({ ...acc, [dia]: { isOpen: true, openTime: '09:00', closeTime: '22:00' } }),
     {},
   ),
   assignedKey: '',
@@ -94,9 +94,12 @@ function restaurarBorradorAlta(claveBorrador: string): FormularioEstudio | null 
     if (!borrador) return null;
 
     const datos = JSON.parse(borrador) as Partial<FormularioEstudio>;
+    const hoy = obtenerFechaLocalISO(new Date());
     return {
       ...crearEstadoInicial(),
       ...datos,
+      subscriptionStart:
+        datos.subscriptionStart && datos.subscriptionStart >= hoy ? datos.subscriptionStart : hoy,
       contrasenaDueno: datos.contrasenaDueno?.trim() || generarContrasenaSalon(datos.name ?? ''),
       phone: limpiarTelefonoEntrada(datos.phone ?? ''),
       reintentosContrasenaDueno: Math.min(5, Math.max(1, datos.reintentosContrasenaDueno ?? 1)),

@@ -29,6 +29,7 @@ import type {
   SalonSuspendido,
   SalonBloqueado,
 } from '../../../servicios/servicioAdmin';
+import { construirNombreArchivoExportacion } from '../../../utils/archivos';
 import { formatearFechaHumana } from '../../../utils/formato';
 import { generarContrasenaSegura } from '../../../utils/seguridad';
 import { EsqueletoTarjeta } from '../../../componentes/ui/Esqueleto';
@@ -181,11 +182,15 @@ export function ModalControlSalones({ onCerrar }: PropsModalControlSalones) {
     mutEditar.mutate({ id: modalEditar.id, datos });
   };
 
-  const exportarCSV = (titulo: string, filas: Record<string, string>[]) => {
+  const exportarExcel = (
+    nombreArchivo: string,
+    tituloHoja: string,
+    filas: Record<string, string>[],
+  ) => {
     const hoja = XLSX.utils.json_to_sheet(filas);
     const libro = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(libro, hoja, titulo);
-    XLSX.writeFile(libro, `${titulo}.xlsx`);
+    XLSX.utils.book_append_sheet(libro, hoja, tituloHoja);
+    XLSX.writeFile(libro, construirNombreArchivoExportacion(nombreArchivo));
   };
 
   const exportarSalones = async (tabObjetivo: TabControl) => {
@@ -194,8 +199,9 @@ export function ModalControlSalones({ onCerrar }: PropsModalControlSalones) {
     try {
       if (tabObjetivo === 'activos') {
         const salones = await obtenerTodosLosSalonesActivos();
-        exportarCSV(
-          'salones-activos',
+        exportarExcel(
+          'salones activos',
+          'Salones Activos',
           salones.map((salon) => ({
             Salón: salon.nombre,
             Dueño: salon.dueno,
@@ -209,8 +215,9 @@ export function ModalControlSalones({ onCerrar }: PropsModalControlSalones) {
 
       if (tabObjetivo === 'suspendidos') {
         const salones = await obtenerTodosLosSalonesSuspendidos();
-        exportarCSV(
-          'salones-suspendidos',
+        exportarExcel(
+          'salones suspendidos',
+          'Salones Suspendidos',
           salones.map((salon) => ({
             Salón: salon.nombre,
             Correo: salon.correo ?? '',
@@ -222,8 +229,9 @@ export function ModalControlSalones({ onCerrar }: PropsModalControlSalones) {
 
       if (tabObjetivo === 'bloqueados') {
         const salones = await obtenerTodosLosSalonesBloqueados();
-        exportarCSV(
-          'salones-bloqueados',
+        exportarExcel(
+          'salones bloqueados',
+          'Salones Bloqueados',
           salones.map((salon) => ({
             Salón: salon.nombre,
             Correo: salon.correo ?? '',

@@ -12,12 +12,11 @@ interface PropsSelectorHora {
   ocultarEtiqueta?: boolean;
 }
 
-export const FRANJAS_HORARIAS = Array.from({ length: 33 }, (_, indice) => {
-  const totalMinutos = 360 + indice * 30;
-  const horas = Math.floor(totalMinutos / 60)
+export const FRANJAS_HORARIAS = Array.from({ length: 48 }, (_, indice) => {
+  const horas = Math.floor(indice / 2)
     .toString()
     .padStart(2, '0');
-  const minutos = (totalMinutos % 60).toString().padStart(2, '0');
+  const minutos = ((indice % 2) * 30).toString().padStart(2, '0');
   return `${horas}:${minutos}`;
 });
 

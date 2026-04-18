@@ -109,7 +109,7 @@ export function ModalEstudio({
     setEntradaServicioPersonalizado,
   } = catalogoProps;
   const textosAgregar = textosModoAgregar ?? TEXTOS_MODO_AGREGAR_POR_DEFECTO;
-  const estudiosPadreDisponibles = estudiosPrincipales.filter(
+  const _estudiosPadreDisponibles = estudiosPrincipales.filter(
     (estudio) => !estudio.estudioPrincipalId && estudio.id !== formulario.id,
   );
 
@@ -694,136 +694,9 @@ export function ModalEstudio({
                 etiqueta="Día de Inicio Operaciones (Cobro)"
                 valor={formulario.subscriptionStart ?? ''}
                 alCambiar={(valor) => setFormulario((p) => ({ ...p, subscriptionStart: valor }))}
-                min={new Date().toISOString().split('T')[0]}
+                min={new Date().toLocaleDateString('sv-SE')}
                 requerido
               />
-            </div>
-            <div className="col-span-full rounded-4xl border border-slate-200 bg-slate-50 p-5">
-              <div className="grid gap-5 lg:grid-cols-2">
-                <div>
-                  <p className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-500">
-                    Estructura comercial
-                  </p>
-                  <p className="mt-1 text-sm font-medium text-slate-500">
-                    Cada sede opera como suscripción independiente y puede tener su propio
-                    administrador.
-                  </p>
-                </div>
-                <div className="grid gap-4 sm:grid-cols-2">
-                  <label className="block">
-                    <span className="mb-2 block text-[10px] font-black uppercase tracking-[0.2em] text-slate-500">
-                      Tipo de registro
-                    </span>
-                    <select
-                      value={formulario.tipoVinculacion}
-                      onChange={(evento) => {
-                        const tipoVinculacion = evento.target.value as 'INDEPENDIENTE' | 'SEDE';
-                        setFormulario((prev) => ({
-                          ...prev,
-                          tipoVinculacion,
-                          estudioPrincipalId:
-                            tipoVinculacion === 'SEDE' ? (prev.estudioPrincipalId ?? null) : null,
-                          permiteReservasPublicas:
-                            tipoVinculacion === 'SEDE'
-                              ? (prev.permiteReservasPublicas ?? true)
-                              : true,
-                          branches: tipoVinculacion === 'SEDE' ? [] : prev.branches,
-                        }));
-                      }}
-                      className="w-full rounded-2xl border border-slate-200 bg-white p-4 font-bold outline-none focus:ring-2 focus:ring-pink-500"
-                    >
-                      <option value="INDEPENDIENTE">Salón independiente</option>
-                      <option value="SEDE">Sede de un salón principal</option>
-                    </select>
-                  </label>
-
-                  <label className="block">
-                    <span className="mb-2 block text-[10px] font-black uppercase tracking-[0.2em] text-slate-500">
-                      Reservas públicas
-                    </span>
-                    <label className="flex items-center gap-3 rounded-2xl border border-slate-200 bg-white px-4 py-4 text-sm font-bold text-slate-700">
-                      <input
-                        type="checkbox"
-                        checked={formulario.permiteReservasPublicas ?? true}
-                        onChange={(evento) =>
-                          setFormulario((prev) => ({
-                            ...prev,
-                            permiteReservasPublicas: evento.target.checked,
-                          }))
-                        }
-                        className="accent-pink-600"
-                      />
-                      Permitir reservas en línea para esta sede
-                    </label>
-                  </label>
-                </div>
-              </div>
-
-              {formulario.tipoVinculacion === 'SEDE' && (
-                <div className="mt-5 grid gap-4 lg:grid-cols-[1.2fr_0.8fr]">
-                  <label className="block">
-                    <span className="mb-2 block text-[10px] font-black uppercase tracking-[0.2em] text-slate-500">
-                      Salón principal
-                    </span>
-                    <select
-                      value={formulario.estudioPrincipalId ?? ''}
-                      onChange={(evento) =>
-                        setFormulario((prev) => ({
-                          ...prev,
-                          estudioPrincipalId: evento.target.value || null,
-                        }))
-                      }
-                      className="w-full rounded-2xl border border-slate-200 bg-white p-4 font-bold outline-none focus:ring-2 focus:ring-pink-500"
-                      required
-                    >
-                      <option value="">Selecciona un salón principal</option>
-                      {estudiosPadreDisponibles.map((estudioPadre) => (
-                        <option key={estudioPadre.id} value={estudioPadre.id}>
-                          {estudioPadre.name}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
-                  <div className="rounded-2xl border border-slate-200 bg-white p-4 text-sm text-slate-600">
-                    <p className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-500">
-                      Regla operativa
-                    </p>
-                    <p className="mt-2 font-medium">
-                      El salón principal puede gestionar esta sede, pero la facturación y el plan se
-                      mantienen en este registro.
-                    </p>
-                  </div>
-                </div>
-              )}
-
-              {formulario.sedes && formulario.sedes.length > 0 && (
-                <div className="mt-5 overflow-hidden rounded-2xl border border-slate-200 bg-white">
-                  <table className="min-w-full text-left text-sm">
-                    <thead className="bg-slate-50 text-[10px] font-black uppercase tracking-[0.2em] text-slate-500">
-                      <tr>
-                        <th className="px-4 py-3">Sede</th>
-                        <th className="px-4 py-3">Plan</th>
-                        <th className="px-4 py-3">Estado</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {formulario.sedes.map((sede) => (
-                        <tr key={sede.id} className="border-t border-slate-100">
-                          <td className="px-4 py-3 font-semibold text-slate-700">{sede.nombre}</td>
-                          <td className="px-4 py-3 font-semibold text-slate-700">
-                            {sede.plan === 'PRO' ? 'Pro' : 'Estándar'}
-                          </td>
-                          <td className="px-4 py-3 font-semibold text-slate-700">
-                            {sede.permiteReservasPublicas
-                              ? 'Reservas públicas activas'
-                              : 'Reservas públicas desactivadas'}
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              )}
             </div>
           </section>
 
@@ -1154,7 +1027,7 @@ export function ModalEstudio({
                         etiqueta="Cierre"
                         id={`cierre-${dia.toLowerCase()}`}
                         nombre={`cierre-${dia.toLowerCase()}`}
-                        valor={formulario.schedule[dia]?.closeTime ?? '19:00'}
+                        valor={formulario.schedule[dia]?.closeTime ?? '22:00'}
                         alCambiar={(valor) =>
                           setFormulario((p) => ({
                             ...p,
