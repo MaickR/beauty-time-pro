@@ -8,6 +8,34 @@ interface ReparacionMigracion {
   reparar: () => Promise<boolean>;
 }
 
+async function asegurarEnumEstadoSalon(): Promise<boolean> {
+  try {
+    // Verificar si el enum ya tiene los valores correctos
+    const columnas = await prisma.$queryRaw<Array<{ COLUMN_TYPE: string }>>`
+      SELECT COLUMN_TYPE
+      FROM information_schema.COLUMNS
+      WHERE TABLE_SCHEMA = DATABASE()
+        AND TABLE_NAME = 'estudios'
+        AND COLUMN_NAME = 'estado'
+    `;
+
+    const tipo = columnas[0]?.COLUMN_TYPE ?? '';
+    if (tipo.includes('suspendido') && tipo.includes('bloqueado')) {
+      return true;
+    }
+
+    // Ampliar el enum para incluir suspendido y bloqueado
+    await prisma.$executeRawUnsafe(
+      `ALTER TABLE \`estudios\` MODIFY COLUMN \`estado\` ENUM('pendiente','aprobado','rechazado','suspendido','bloqueado') NOT NULL DEFAULT 'pendiente'`,
+    );
+    console.log('[migracion] ENUM estado ampliado con suspendido y bloqueado');
+    return true;
+  } catch (error) {
+    console.error('[migracion] Error ampliando ENUM estado:', error);
+    return false;
+  }
+}
+
 const REPARACIONES_MIGRACION: ReparacionMigracion[] = [
   {
     nombre: '20260318171150_agregar_pin_motivo_servicio',
@@ -19,6 +47,20 @@ const REPARACIONES_MIGRACION: ReparacionMigracion[] = [
       ]);
 
       return columnaPinOk && columnaMotivoOk;
+    },
+  },
+  {
+    nombre: '20260330004244_estados_estudio',
+    tablasBase: ['estudios'],
+    reparar: async () => {
+      const [enumOk, colSuspensionOk, colBloqueoOk, colMotivoBloqueoOk] = await Promise.all([
+        asegurarEnumEstadoSalon(),
+        asegurarColumnaTabla('estudios', 'fechaSuspension', 'DATETIME(3) NULL'),
+        asegurarColumnaTabla('estudios', 'fechaBloqueo', 'DATETIME(3) NULL'),
+        asegurarColumnaTabla('estudios', 'motivoBloqueo', 'VARCHAR(191) NULL'),
+      ]);
+
+      return enumOk && colSuspensionOk && colBloqueoOk && colMotivoBloqueoOk;
     },
   },
   {

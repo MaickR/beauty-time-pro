@@ -1877,13 +1877,25 @@ export async function rutasAdmin(servidor: FastifyInstance): Promise<void> {
             'Fallo al guardar fecha de suspensión; reintentando sin fechaSuspension',
           );
 
-          await prisma.estudio.update({
-            where: { id },
-            data: {
-              estado: 'suspendido',
-              activo: false,
-            },
-          });
+          try {
+            await prisma.estudio.update({
+              where: { id },
+              data: {
+                estado: 'suspendido',
+                activo: false,
+              },
+            });
+          } catch (errorFallback) {
+            solicitud.log.warn(
+              { err: errorFallback, estudioId: id },
+              'Fallo Prisma update; usando SQL directo como último recurso',
+            );
+
+            await prisma.$executeRawUnsafe(
+              `UPDATE estudios SET estado = 'suspendido', activo = 0 WHERE id = ?`,
+              id,
+            );
+          }
         }
 
         const dueno = estudio.usuarios[0];
