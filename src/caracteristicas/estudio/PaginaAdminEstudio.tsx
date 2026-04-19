@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import {
   ArrowLeft,
@@ -55,8 +55,17 @@ export function PaginaAdminEstudio() {
   const identificadorRutaPrivada =
     estudio?.slug?.trim() || estudio?.clientKey?.trim() || estudio?.id;
 
+  // Navegar una sola vez si la URL usa clientKey/id en lugar del slug.
+  // Usar ref para no repetir la navegación en cada refetch de datos.
+  const navegacionRealizadaRef = useRef(false);
   useEffect(() => {
-    if (!identificadorRutaPrivada || !slug || slug === identificadorRutaPrivada) return;
+    if (navegacionRealizadaRef.current) return;
+    if (!identificadorRutaPrivada || !slug) return;
+    if (slug === identificadorRutaPrivada) {
+      navegacionRealizadaRef.current = true;
+      return;
+    }
+    navegacionRealizadaRef.current = true;
     navegar(`/estudio/${identificadorRutaPrivada}/admin`, { replace: true });
   }, [identificadorRutaPrivada, slug, navegar]);
 

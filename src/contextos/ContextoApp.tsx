@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useState, useCallback } from 'react';
+import { createContext, useContext, useEffect, useRef, useState, useCallback } from 'react';
 import type { PropsWithChildren } from 'react';
 import { ErrorAPI, peticion } from '../lib/clienteHTTP';
 import { normalizarMetodosPagoReserva } from '../lib/metodosPagoReserva';
@@ -26,6 +26,8 @@ export function ProveedorContextoApp({ children }: PropsWithChildren) {
   const [pagos, setPagos] = useState<Pago[]>([]);
   const [cargando, setCargando] = useState(true);
   const [contador, setContador] = useState(0);
+  // Identifica cuándo las credenciales cambian vs. un simple refetch por contador
+  const credencialesRef = useRef('');
 
   useEffect(() => {
     const desuscribir = inicializarAutenticacion();
@@ -86,7 +88,12 @@ export function ProveedorContextoApp({ children }: PropsWithChildren) {
       return;
     }
 
-    setCargando(true);
+    // Solo mostrar spinner en la carga inicial; los refetch por foco/intervalo
+    // no deben causar un flash de spinner que parezca una recarga de página.
+    const credencialesActuales = `${usuario?.id ?? ''}-${rol ?? ''}-${estudioActual ?? ''}`;
+    const esRefetch = credencialesActuales === credencialesRef.current;
+    credencialesRef.current = credencialesActuales;
+    if (!esRefetch) setCargando(true);
 
     void (async () => {
       try {
