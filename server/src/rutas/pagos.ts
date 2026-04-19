@@ -2,6 +2,7 @@ import type { FastifyInstance } from 'fastify';
 import type { Prisma } from '../generated/prisma/client.js';
 import { z } from 'zod';
 import { prisma } from '../prismaCliente.js';
+import { construirSelectDesdeColumnas, obtenerColumnasTabla, obtenerTablasDisponibles } from '../lib/compatibilidadEsquema.js';
 import { verificarJWT } from '../middleware/autenticacion.js';
 import { requierePermiso } from '../middleware/verificarPermiso.js';
 import { tieneAccesoAdministrativoEstudio } from '../lib/accesoEstudio.js';
@@ -13,6 +14,59 @@ import { asegurarPrecioActualSalon, obtenerPrecioPlanActual, resolverPrecioRenov
 
 type PaisPago = 'Mexico' | 'Colombia';
 type MonedaPago = 'MXN' | 'COP';
+
+interface PrecioPlanLigeroPago {
+  id: string;
+  plan: 'STANDARD' | 'PRO';
+  pais: string;
+  moneda: string;
+  monto: number;
+  version: number;
+  vigenteDesde: Date;
+}
+
+interface EstudioPagoCompat {
+  id: string;
+  nombre: string;
+  pais: string;
+  plan: 'STANDARD' | 'PRO';
+  zonaHoraria: string | null;
+  fechaVencimiento: string | null;
+  inicioSuscripcion: string | null;
+  estado: string;
+  activo: boolean;
+  emailContacto: string | null;
+  propietario: string | null;
+  precioPlanActualId: string | null;
+  precioPlanProximoId: string | null;
+  fechaAplicacionPrecioProximo: string | null;
+  precioPlanActual: PrecioPlanLigeroPago | null;
+  precioPlanProximo: PrecioPlanLigeroPago | null;
+  columnas: {
+    precioPlanActualId: boolean;
+    precioPlanProximoId: boolean;
+    fechaAplicacionPrecioProximo: boolean;
+    fechaSuspension: boolean;
+    estado: boolean;
+    activo: boolean;
+    fechaVencimiento: boolean;
+  };
+}
+
+interface PagoListadoCompat {
+  id: string;
+  estudioId: string;
+  monto: number;
+  moneda: string;
+  concepto: string;
+  fecha: string;
+  referencia: string | null;
+  creadoEn: Date;
+  estudio: {
+    nombre: string;
+    pais: string;
+  };
+}
 
 const esquemaCrearPago = z.object({
   estudioId: z.string().trim().min(1, 'estudioId es requerido'),
@@ -97,6 +151,241 @@ async function crearPagoCompat(datos: {
       },
     });
   }
+}
+
+function esErrorCompatibilidadEstudio(error: unknown): boolean {
+  const codigo =
+    typeof error === 'object' && error !== null && 'code' in error
+      ? String((error as { code?: unknown }).code ?? '')
+      : '';
+  const mensaje = error instanceof Error ? error.message : '';
+
+  return (
+    codigo === 'P2022' ||
+    /Unknown column/i.test(mensaje) ||
+    /(precioPlanActualId|precioPlanProximoId|fechaAplicacionPrecioProximo|fechaSuspension|fechaBloqueo|motivoBloqueo)/i.test(mensaje)
+  );
+}
+
+async function listarPagosCompat(where?: Prisma.PagoWhereInput): Promise<PagoListadoCompat[]> {
+  const [columnasPagos, columnasEstudios] = await Promise.all([
+    obtenerColumnasTabla('pagos'),
+    obtenerColumnasTabla('estudios'),
+  ]);
+
+  const seleccionPago = construirSelectDesdeColumnas(columnasPagos, [
+    'id',
+    'estudioId',
+    'monto',
+    'moneda',
+    'concepto',
+    'fecha',
+    'referencia',
+    'creadoEn',
+  ]);
+
+  const seleccionEstudio = construirSelectDesdeColumnas(columnasEstudios, ['nombre', 'pais']);
+  const orden = columnasPagos.has('creadoEn')
+    ? ({ creadoEn: 'desc' } as Prisma.PagoOrderByWithRelationInput)
+    : ({ fecha: 'desc' } as Prisma.PagoOrderByWithRelationInput);
+
+  const pagosCrudos = (await prisma.pago.findMany({
+    ...(where ? { where } : {}),
+    orderBy: orden,
+    select: {
+      ...(seleccionPago as Prisma.PagoSelect),
+      estudio: {
+        select: seleccionEstudio as Prisma.EstudioSelect,
+      },
+    },
+  })) as Array<Record<string, unknown>>;
+
+  return pagosCrudos
+    .map((pago) => {
+      const estudio =
+        typeof pago['estudio'] === 'object' && pago['estudio'] !== null
+          ? (pago['estudio'] as Record<string, unknown>)
+          : {};
+      const creadoEnRaw = pago['creadoEn'];
+      const creadoEn =
+        creadoEnRaw instanceof Date
+          ? creadoEnRaw
+          : typeof creadoEnRaw === 'string'
+            ? new Date(creadoEnRaw)
+            : new Date();
+
+      return {
+        id: typeof pago['id'] === 'string' ? pago['id'] : '',
+        estudioId: typeof pago['estudioId'] === 'string' ? pago['estudioId'] : '',
+        monto: typeof pago['monto'] === 'number' ? pago['monto'] : 0,
+        moneda: typeof pago['moneda'] === 'string' ? pago['moneda'] : 'MXN',
+        concepto: typeof pago['concepto'] === 'string' ? pago['concepto'] : 'Suscripción mensual Beauty Time Pro',
+        fecha: typeof pago['fecha'] === 'string' ? pago['fecha'] : obtenerFechaISOActual(),
+        referencia: typeof pago['referencia'] === 'string' ? pago['referencia'] : null,
+        creadoEn,
+        estudio: {
+          nombre: typeof estudio['nombre'] === 'string' ? estudio['nombre'] : 'Salón',
+          pais: typeof estudio['pais'] === 'string' ? estudio['pais'] : 'Mexico',
+        },
+      };
+    })
+    .filter((pago) => pago.id.length > 0 && pago.estudioId.length > 0);
+}
+
+async function obtenerPrecioPorIdCompat(precioId: string): Promise<PrecioPlanLigeroPago | null> {
+  try {
+    const precio = await prisma.precioPlan.findUnique({
+      where: { id: precioId },
+      select: {
+        id: true,
+        plan: true,
+        pais: true,
+        moneda: true,
+        monto: true,
+        version: true,
+        vigenteDesde: true,
+      },
+    });
+
+    if (!precio) {
+      return null;
+    }
+
+    return {
+      id: precio.id,
+      plan: precio.plan,
+      pais: precio.pais,
+      moneda: precio.moneda,
+      monto: precio.monto,
+      version: precio.version,
+      vigenteDesde: precio.vigenteDesde,
+    };
+  } catch (error) {
+    if (!esErrorCompatibilidadEstudio(error)) {
+      throw error;
+    }
+    return null;
+  }
+}
+
+async function obtenerEstudioCompatParaPago(estudioId: string): Promise<EstudioPagoCompat | null> {
+  const [columnasEstudios, tablas] = await Promise.all([
+    obtenerColumnasTabla('estudios'),
+    obtenerTablasDisponibles(),
+  ]);
+
+  const seleccionEstudio = construirSelectDesdeColumnas(columnasEstudios, [
+    'id',
+    'nombre',
+    'pais',
+    'plan',
+    'zonaHoraria',
+    'fechaVencimiento',
+    'inicioSuscripcion',
+    'estado',
+    'activo',
+    'emailContacto',
+    'propietario',
+    'precioPlanActualId',
+    'precioPlanProximoId',
+    'fechaAplicacionPrecioProximo',
+  ]);
+
+  const registro = (await prisma.estudio.findUnique({
+    where: { id: estudioId },
+    select: seleccionEstudio as Prisma.EstudioSelect,
+  })) as Record<string, unknown> | null;
+
+  if (!registro) {
+    return null;
+  }
+
+  const puedeConsultarPrecios = tablas.has('precios_plan');
+  const precioPlanActualId =
+    columnasEstudios.has('precioPlanActualId') && typeof registro['precioPlanActualId'] === 'string'
+      ? registro['precioPlanActualId']
+      : null;
+  const precioPlanProximoId =
+    columnasEstudios.has('precioPlanProximoId') && typeof registro['precioPlanProximoId'] === 'string'
+      ? registro['precioPlanProximoId']
+      : null;
+
+  const [precioPlanActual, precioPlanProximo] = puedeConsultarPrecios
+    ? await Promise.all([
+        precioPlanActualId ? obtenerPrecioPorIdCompat(precioPlanActualId) : Promise.resolve(null),
+        precioPlanProximoId ? obtenerPrecioPorIdCompat(precioPlanProximoId) : Promise.resolve(null),
+      ])
+    : [null, null];
+
+  return {
+    id: typeof registro['id'] === 'string' ? registro['id'] : estudioId,
+    nombre: typeof registro['nombre'] === 'string' ? registro['nombre'] : 'Salón',
+    pais: typeof registro['pais'] === 'string' ? registro['pais'] : 'Mexico',
+    plan: registro['plan'] === 'PRO' ? 'PRO' : 'STANDARD',
+    zonaHoraria: typeof registro['zonaHoraria'] === 'string' ? registro['zonaHoraria'] : null,
+    fechaVencimiento:
+      typeof registro['fechaVencimiento'] === 'string' ? registro['fechaVencimiento'] : null,
+    inicioSuscripcion:
+      typeof registro['inicioSuscripcion'] === 'string' ? registro['inicioSuscripcion'] : null,
+    estado: typeof registro['estado'] === 'string' ? registro['estado'] : 'aprobado',
+    activo: typeof registro['activo'] === 'boolean' ? registro['activo'] : true,
+    emailContacto: typeof registro['emailContacto'] === 'string' ? registro['emailContacto'] : null,
+    propietario: typeof registro['propietario'] === 'string' ? registro['propietario'] : null,
+    precioPlanActualId,
+    precioPlanProximoId,
+    fechaAplicacionPrecioProximo:
+      typeof registro['fechaAplicacionPrecioProximo'] === 'string'
+        ? registro['fechaAplicacionPrecioProximo']
+        : null,
+    precioPlanActual,
+    precioPlanProximo,
+    columnas: {
+      precioPlanActualId: columnasEstudios.has('precioPlanActualId') && puedeConsultarPrecios,
+      precioPlanProximoId: columnasEstudios.has('precioPlanProximoId') && puedeConsultarPrecios,
+      fechaAplicacionPrecioProximo:
+        columnasEstudios.has('fechaAplicacionPrecioProximo') && puedeConsultarPrecios,
+      fechaSuspension: columnasEstudios.has('fechaSuspension'),
+      estado: columnasEstudios.has('estado'),
+      activo: columnasEstudios.has('activo'),
+      fechaVencimiento: columnasEstudios.has('fechaVencimiento'),
+    },
+  };
+}
+
+async function actualizarEstudioCompatParaPago(
+  estudioId: string,
+  cambios: Prisma.EstudioUncheckedUpdateInput,
+): Promise<void> {
+  const entradas = Object.entries(cambios).filter(([, valor]) => valor !== undefined);
+  if (entradas.length === 0) {
+    return;
+  }
+
+  const payload = Object.fromEntries(entradas);
+
+  try {
+    await prisma.estudio.update({
+      where: { id: estudioId },
+      data: payload,
+      select: { id: true },
+    });
+    return;
+  } catch (error) {
+    if (!esErrorCompatibilidadEstudio(error)) {
+      throw error;
+    }
+  }
+
+  const columnasSql = entradas.map(([campo]) => `\`${campo}\` = ?`);
+  const valoresSql = entradas.map(([, valor]) =>
+    typeof valor === 'boolean' ? (valor ? 1 : 0) : valor,
+  );
+
+  await prisma.$executeRawUnsafe(
+    `UPDATE estudios SET ${columnasSql.join(', ')} WHERE id = ?`,
+    ...valoresSql,
+    estudioId,
+  );
 }
 
 function calcularNuevaFechaVencimiento(params: {
@@ -186,10 +475,7 @@ export async function rutasPagos(servidor: FastifyInstance): Promise<void> {
       if (payload.rol !== 'maestro') {
         return respuesta.code(403).send({ error: 'Sin permisos para esta acción' });
       }
-      const pagos = await prisma.pago.findMany({
-        include: { estudio: { select: { nombre: true, pais: true } } },
-        orderBy: { creadoEn: 'desc' },
-      });
+      const pagos = await listarPagosCompat();
       return respuesta.send({ datos: await enriquecerPagos(pagos) });
     },
   );
@@ -204,11 +490,7 @@ export async function rutasPagos(servidor: FastifyInstance): Promise<void> {
       if (!tieneAccesoAdministrativoEstudio(payload, id)) {
         return respuesta.code(403).send({ error: 'Sin permisos para esta acción' });
       }
-      const pagos = await prisma.pago.findMany({
-        where: { estudioId: id },
-        include: { estudio: { select: { nombre: true, pais: true } } },
-        orderBy: { creadoEn: 'desc' },
-      });
+      const pagos = await listarPagosCompat({ estudioId: id });
       return respuesta.send({ datos: await enriquecerPagos(pagos) });
     },
   );
@@ -241,53 +523,13 @@ export async function rutasPagos(servidor: FastifyInstance): Promise<void> {
       resultado.data;
 
 
-    let estudio = await prisma.estudio.findUnique({
-      where: { id: estudioId },
-      select: {
-        id: true,
-        nombre: true,
-        pais: true,
-        plan: true,
-        zonaHoraria: true,
-        fechaVencimiento: true,
-        inicioSuscripcion: true,
-        estado: true,
-        activo: true,
-        emailContacto: true,
-        propietario: true,
-        precioPlanActualId: true,
-        precioPlanProximoId: true,
-        fechaAplicacionPrecioProximo: true,
-        precioPlanActual: {
-          select: {
-            id: true,
-            plan: true,
-            pais: true,
-            moneda: true,
-            monto: true,
-            version: true,
-            vigenteDesde: true,
-          },
-        },
-        precioPlanProximo: {
-          select: {
-            id: true,
-            plan: true,
-            pais: true,
-            moneda: true,
-            monto: true,
-            version: true,
-            vigenteDesde: true,
-          },
-        },
-      },
-    });
+    let estudio = await obtenerEstudioCompatParaPago(estudioId);
 
     if (!estudio) {
       return respuesta.code(404).send({ error: 'Salón no encontrado' });
     }
 
-    if (!estudio.precioPlanActual) {
+    if (!estudio.precioPlanActual && estudio.columnas.precioPlanActualId) {
       const precioAsignado = await asegurarPrecioActualSalon({
         estudioId,
         plan: estudio.plan,
@@ -323,7 +565,15 @@ export async function rutasPagos(servidor: FastifyInstance): Promise<void> {
 
     const fechaBaseCobro = renovacion?.fechaBase ?? estudio.fechaVencimiento ?? estudio.inicioSuscripcion ?? fecha;
     const precioFallback = estudio.precioPlanActual ?? await obtenerPrecioPlanActual(estudio.plan, estudio.pais);
-    const precioResuelto = resolverPrecioRenovacion(estudio, fechaBaseCobro);
+    const precioResuelto = resolverPrecioRenovacion(
+      {
+        fechaVencimiento: estudio.fechaVencimiento ?? fechaBaseCobro,
+        fechaAplicacionPrecioProximo: estudio.fechaAplicacionPrecioProximo,
+        precioPlanActual: estudio.precioPlanActual,
+        precioPlanProximo: estudio.precioPlanProximo,
+      },
+      fechaBaseCobro,
+    );
     const precioAplicado = precioResuelto.precioAplicado ?? precioFallback;
 
     if (!precioAplicado) {
@@ -345,43 +595,66 @@ export async function rutasPagos(servidor: FastifyInstance): Promise<void> {
 
     const actualizacionEstudio: Prisma.EstudioUncheckedUpdateInput = {};
 
-    if (renovacion) {
+    if (renovacion && estudio.columnas.fechaVencimiento) {
       actualizacionEstudio.fechaVencimiento = renovacion.nuevaFechaVencimiento;
     }
 
-    if (precioAplicado.id && (precioResuelto.cambiaEnRenovacion || !estudio.precioPlanActualId)) {
+    if (
+      estudio.columnas.precioPlanActualId &&
+      precioAplicado.id &&
+      (precioResuelto.cambiaEnRenovacion || !estudio.precioPlanActualId)
+    ) {
       actualizacionEstudio.precioPlanActualId = precioAplicado.id;
     }
 
     if (precioResuelto.cambiaEnRenovacion) {
-      actualizacionEstudio.precioPlanProximoId = null;
-      actualizacionEstudio.fechaAplicacionPrecioProximo = null;
+      if (estudio.columnas.precioPlanProximoId) {
+        actualizacionEstudio.precioPlanProximoId = null;
+      }
+      if (estudio.columnas.fechaAplicacionPrecioProximo) {
+        actualizacionEstudio.fechaAplicacionPrecioProximo = null;
+      }
     }
 
     if (renovacion && estudio.estado === 'suspendido') {
-      actualizacionEstudio.estado = 'aprobado';
-      actualizacionEstudio.activo = true;
-      actualizacionEstudio.fechaSuspension = null;
+      if (estudio.columnas.estado) {
+        actualizacionEstudio.estado = 'aprobado';
+      }
+      if (estudio.columnas.activo) {
+        actualizacionEstudio.activo = true;
+      }
+      if (estudio.columnas.fechaSuspension) {
+        actualizacionEstudio.fechaSuspension = null;
+      }
     }
 
     const reactivarDuenoPorPago = renovacion && estudio.estado === 'suspendido';
 
     if (Object.keys(actualizacionEstudio).length > 0 || reactivarDuenoPorPago) {
-      await prisma.$transaction(async (tx) => {
-        if (Object.keys(actualizacionEstudio).length > 0) {
-          await tx.estudio.update({
-            where: { id: estudioId },
-            data: actualizacionEstudio,
-          });
-        }
+      if (Object.keys(actualizacionEstudio).length > 0) {
+        await actualizarEstudioCompatParaPago(estudioId, actualizacionEstudio);
+      }
 
-        if (reactivarDuenoPorPago) {
-          await tx.usuario.updateMany({
-            where: { estudioId, rol: 'dueno' },
-            data: { activo: true },
-          });
+      if (reactivarDuenoPorPago) {
+        const columnasUsuarios = await obtenerColumnasTabla('usuarios');
+        if (columnasUsuarios.has('activo')) {
+          try {
+            await prisma.usuario.updateMany({
+              where: { estudioId, ...(columnasUsuarios.has('rol') ? { rol: 'dueno' } : {}) },
+              data: { activo: true },
+            });
+          } catch (errorActualizarUsuario) {
+            await prisma.$executeRawUnsafe(
+              `UPDATE usuarios SET activo = 1 WHERE estudioId = ?${columnasUsuarios.has('rol') ? " AND rol = 'dueno'" : ''}`,
+              estudioId,
+            );
+            solicitud.log.warn(
+              { err: errorActualizarUsuario, estudioId },
+              'No se pudo reactivar dueño con Prisma; se aplicó SQL directo',
+            );
+          }
         }
-      });
+      }
     }
 
     await registrarAuditoria({

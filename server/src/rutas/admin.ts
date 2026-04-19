@@ -1551,17 +1551,19 @@ export async function rutasAdmin(servidor: FastifyInstance): Promise<void> {
             { err: errorPrisma, estudioId: id, nuevoEstado },
             'Fallo Prisma update en suspender/reactivar; usando SQL directo',
           );
-          if (nuevoActivo) {
-            await prisma.$executeRawUnsafe(
-              `UPDATE estudios SET estado = 'aprobado', activo = 1, fechaSuspension = NULL WHERE id = ?`,
-              id,
-            );
-          } else {
-            await prisma.$executeRawUnsafe(
-              `UPDATE estudios SET estado = 'suspendido', activo = 0, fechaSuspension = NOW() WHERE id = ?`,
-              id,
-            );
-          }
+
+          const asignacionesSql = [
+            `activo = ${nuevoActivo ? 1 : 0}`,
+            ...(columnasEstudios.has('estado') ? [`estado = '${nuevoEstado}'`] : []),
+            ...(columnasEstudios.has('fechaSuspension')
+              ? [`fechaSuspension = ${nuevoActivo ? 'NULL' : 'NOW()'}`]
+              : []),
+          ];
+
+          await prisma.$executeRawUnsafe(
+            `UPDATE estudios SET ${asignacionesSql.join(', ')} WHERE id = ?`,
+            id,
+          );
         }
 
         // Actualizar usuario dueño
@@ -3007,6 +3009,10 @@ export async function rutasAdmin(servidor: FastifyInstance): Promise<void> {
       }
 
       const { id } = solicitud.params;
+      const [columnasEstudios, columnasUsuarios] = await Promise.all([
+        obtenerColumnasTabla('estudios'),
+        obtenerColumnasTabla('usuarios'),
+      ]);
       const estudio = await prisma.estudio.findUnique({
         where: { id },
         select: { id: true, nombre: true, estado: true },
@@ -3022,23 +3028,54 @@ export async function rutasAdmin(servidor: FastifyInstance): Promise<void> {
 
       const estadoAnterior = estudio.estado;
 
-      await prisma.$transaction(async (tx) => {
-        await tx.estudio.update({
-          where: { id },
-          data: {
-            estado: 'aprobado',
-            activo: true,
-            motivoBloqueo: null,
-            fechaSuspension: null,
-            fechaBloqueo: null,
-          },
+      try {
+        await actualizarRegistroCompat('estudios', 'id', id, {
+          ...(columnasEstudios.has('estado') && { estado: 'aprobado' }),
+          ...(columnasEstudios.has('activo') && { activo: true }),
+          ...(columnasEstudios.has('motivoBloqueo') && { motivoBloqueo: null }),
+          ...(columnasEstudios.has('fechaSuspension') && { fechaSuspension: null }),
+          ...(columnasEstudios.has('fechaBloqueo') && { fechaBloqueo: null }),
         });
+      } catch (errorActualizacionEstudio) {
+        solicitud.log.warn(
+          { err: errorActualizacionEstudio, estudioId: id },
+          'Fallo al activar salón con Prisma; usando SQL directo',
+        );
 
-        await tx.usuario.updateMany({
-          where: { estudioId: id, rol: 'dueno' },
-          data: { activo: true },
-        });
-      });
+        const asignacionesSql = [
+          ...(columnasEstudios.has('estado') ? [`estado = 'aprobado'`] : []),
+          ...(columnasEstudios.has('activo') ? ['activo = 1'] : []),
+          ...(columnasEstudios.has('motivoBloqueo') ? ['motivoBloqueo = NULL'] : []),
+          ...(columnasEstudios.has('fechaSuspension') ? ['fechaSuspension = NULL'] : []),
+          ...(columnasEstudios.has('fechaBloqueo') ? ['fechaBloqueo = NULL'] : []),
+        ];
+
+        if (asignacionesSql.length > 0) {
+          await prisma.$executeRawUnsafe(
+            `UPDATE estudios SET ${asignacionesSql.join(', ')} WHERE id = ?`,
+            id,
+          );
+        }
+      }
+
+      if (columnasUsuarios.has('activo')) {
+        try {
+          await prisma.usuario.updateMany({
+            where: { estudioId: id, ...(columnasUsuarios.has('rol') ? { rol: 'dueno' } : {}) },
+            data: { activo: true },
+          });
+        } catch (errorActualizarUsuario) {
+          solicitud.log.warn(
+            { err: errorActualizarUsuario, estudioId: id },
+            'Fallo al activar usuario dueño con Prisma; usando SQL directo',
+          );
+
+          await prisma.$executeRawUnsafe(
+            `UPDATE usuarios SET activo = 1 WHERE estudioId = ?${columnasUsuarios.has('rol') ? " AND rol = 'dueno'" : ''}`,
+            id,
+          );
+        }
+      }
 
       await registrarAuditoria({
         usuarioId: payload.sub,
