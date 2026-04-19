@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { obtenerVentasMetrica } from '../../../servicios/servicioAdmin';
 import type { VentasPais } from '../../../servicios/servicioAdmin';
 import { EsqueletoTarjeta } from '../../../componentes/ui/Esqueleto';
+import { BanderaPais } from '../../../componentes/ui/BanderaPais';
 
 interface PropsModalVentas {
   onCerrar: () => void;
@@ -116,7 +117,7 @@ export function ModalVentas({ onCerrar }: PropsModalVentas) {
                         className="w-full flex items-center justify-between px-4 py-3 hover:bg-slate-50 transition-colors"
                       >
                         <div className="flex items-center gap-3">
-                          <span className="text-lg">{esMexico ? '🇲🇽' : '🇨🇴'}</span>
+                          <BanderaPais pais={esMexico ? 'Mexico' : 'Colombia'} />
                           <span className="font-black text-slate-900">{nombre}</span>
                           <span className="text-xs font-bold text-slate-400">
                             {totalSalones} salones

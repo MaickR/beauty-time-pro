@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   Plus,
@@ -14,6 +14,7 @@ import {
   ChevronRight,
   RefreshCw,
   Trash2,
+  X,
 } from 'lucide-react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -304,6 +305,22 @@ export function GestionAdmins() {
   const cargoWatch = watch('cargo');
   const nombreWatch = watch('nombre');
   const emailWatch = watch('email');
+
+  useEffect(() => {
+    if (!mostrarFormulario && !colaboradorEditando) return;
+
+    const manejarTecla = (evento: KeyboardEvent) => {
+      if (evento.key !== 'Escape') return;
+      if (mostrarFormulario) {
+        cerrarFormulario();
+        return;
+      }
+      setColaboradorEditando(null);
+    };
+
+    window.addEventListener('keydown', manejarTecla);
+    return () => window.removeEventListener('keydown', manejarTecla);
+  }, [colaboradorEditando, mostrarFormulario]);
 
   const crearColaborador = useMutation({
     mutationFn: async (datos: CamposNuevoColaborador) => {
@@ -963,12 +980,26 @@ export function GestionAdmins() {
           aria-modal="true"
           aria-labelledby="titulo-nuevo-colaborador"
           className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
-          onKeyDown={(evento) => {
-            if (evento.key === 'Escape') cerrarFormulario();
+          onClick={(evento) => {
+            if (evento.target === evento.currentTarget) {
+              cerrarFormulario();
+            }
           }}
         >
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg max-h-screen overflow-y-auto p-6">
-            <h3 id="titulo-nuevo-colaborador" className="text-xl font-black text-slate-900 mb-6">
+          <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-lg max-h-[85vh] overflow-y-auto p-6">
+            <button
+              type="button"
+              onClick={cerrarFormulario}
+              className="absolute right-4 top-4 rounded-xl p-2 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-700"
+              aria-label="Cerrar modal"
+            >
+              <X className="w-4 h-4" />
+            </button>
+
+            <h3
+              id="titulo-nuevo-colaborador"
+              className="text-xl font-black text-slate-900 mb-6 pr-10"
+            >
               {colaboradorEdicionGeneral ? 'Actualizar información' : 'Nuevo colaborador'}
             </h3>
             <form
@@ -1253,12 +1284,26 @@ export function GestionAdmins() {
           aria-modal="true"
           aria-labelledby="titulo-actualizar-accesos"
           className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
-          onKeyDown={(evento) => {
-            if (evento.key === 'Escape') setColaboradorEditando(null);
+          onClick={(evento) => {
+            if (evento.target === evento.currentTarget) {
+              setColaboradorEditando(null);
+            }
           }}
         >
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md max-h-screen overflow-y-auto p-6">
-            <h3 id="titulo-actualizar-accesos" className="text-xl font-black text-slate-900 mb-1">
+          <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-md max-h-[85vh] overflow-y-auto p-6">
+            <button
+              type="button"
+              onClick={() => setColaboradorEditando(null)}
+              className="absolute right-4 top-4 rounded-xl p-2 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-700"
+              aria-label="Cerrar modal"
+            >
+              <X className="w-4 h-4" />
+            </button>
+
+            <h3
+              id="titulo-actualizar-accesos"
+              className="text-xl font-black text-slate-900 mb-1 pr-10"
+            >
               Actualizar accesos de {colaboradorEditando.nombre}
             </h3>
             <p className="text-sm text-slate-500 mb-1">{colaboradorEditando.email}</p>

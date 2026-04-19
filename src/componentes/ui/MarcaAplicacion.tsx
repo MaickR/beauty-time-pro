@@ -1,3 +1,5 @@
+import { useState } from 'react';
+
 interface PropsIconoMarcaAplicacion {
   tamano?: 'sm' | 'md' | 'lg' | 'hero';
   className?: string;
@@ -36,17 +38,25 @@ export function IconoMarcaAplicacion({
   className = '',
   alt = 'Beauty Time Pro',
 }: PropsIconoMarcaAplicacion) {
+  const [srcLogo, setSrcLogo] = useState('/Logo-App.svg');
+
   return (
     <span
       className={`relative shrink-0 overflow-hidden border border-white/15 bg-white/90 shadow-[0_16px_40px_rgba(15,23,42,0.12)] ${CLASES_ICONO[tamano]} ${className}`}
       aria-hidden={alt === ''}
     >
       <img
-        src="/Logo-App.svg"
+        src={srcLogo}
         alt={alt}
         className="h-full w-full object-cover object-left"
         decoding="async"
         loading="eager"
+        fetchPriority="high"
+        onError={() => {
+          if (srcLogo !== '/LOGO-BTP.svg') {
+            setSrcLogo('/LOGO-BTP.svg');
+          }
+        }}
       />
     </span>
   );

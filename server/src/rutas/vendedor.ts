@@ -1,5 +1,6 @@
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
+import type { Prisma } from '../generated/prisma/client.js';
 import { prisma } from '../prismaCliente.js';
 import { verificarJWT } from '../middleware/autenticacion.js';
 import {
@@ -16,6 +17,7 @@ import {
   obtenerSalonDemoVendedor,
   reiniciarSalonDemoVendedor,
 } from '../lib/demoVendedor.js';
+import { obtenerColumnasTabla } from '../lib/compatibilidadEsquema.js';
 import { registrarAuditoria } from '../utils/auditoria.js';
 
 // ─── Helpers ─────────────────────────────────────────────────────────────
@@ -177,6 +179,12 @@ export async function rutasVendedor(servidor: FastifyInstance) {
       const limite = Math.min(50, Math.max(1, Number(solicitud.query.limite ?? '10') || 10));
       const busqueda = solicitud.query.busqueda?.trim();
       const estado = solicitud.query.estado?.trim();
+      const columnasPreregistro = await obtenerColumnasTabla('preregistros_salon');
+      const tieneDescripcion = columnasPreregistro.has('descripcion');
+      const tieneCategorias = columnasPreregistro.has('categorias');
+      const tieneMotivoRechazo = columnasPreregistro.has('motivoRechazo');
+      const tieneEstudioCreadoId = columnasPreregistro.has('estudioCreadoId');
+      const tieneNotas = columnasPreregistro.has('notas');
 
       const where = {
         vendedorId: payload.sub,
@@ -186,6 +194,7 @@ export async function rutasVendedor(servidor: FastifyInstance) {
               OR: [
                 { nombreSalon: { contains: busqueda } },
                 { propietario: { contains: busqueda } },
+                { emailPropietario: { contains: busqueda } },
               ],
             }
           : {}),
@@ -205,19 +214,41 @@ export async function rutasVendedor(servidor: FastifyInstance) {
             telefonoPropietario: true,
             pais: true,
             direccion: true,
-            categorias: true,
+            ...(tieneDescripcion ? { descripcion: true } : {}),
+            ...(tieneCategorias ? { categorias: true } : {}),
             plan: true,
             estado: true,
-            motivoRechazo: true,
-            estudioCreadoId: true,
-            notas: true,
+            ...(tieneMotivoRechazo ? { motivoRechazo: true } : {}),
+            ...(tieneEstudioCreadoId ? { estudioCreadoId: true } : {}),
+            ...(tieneNotas ? { notas: true } : {}),
             creadoEn: true,
           },
         }),
         prisma.preregistroSalon.count({ where }),
       ]);
 
-      return respuesta.send({ datos: preregistros, total, pagina, limite });
+      return respuesta.send({
+        datos: preregistros.map((preregistro) => ({
+          ...preregistro,
+          descripcion:
+            tieneDescripcion && 'descripcion' in preregistro ? preregistro.descripcion ?? null : null,
+          categorias:
+            tieneCategorias && 'categorias' in preregistro ? preregistro.categorias ?? null : null,
+          motivoRechazo:
+            tieneMotivoRechazo && 'motivoRechazo' in preregistro
+              ? preregistro.motivoRechazo ?? null
+              : null,
+          estudioCreadoId:
+            tieneEstudioCreadoId && 'estudioCreadoId' in preregistro
+              ? preregistro.estudioCreadoId ?? null
+              : null,
+          notas: tieneNotas && 'notas' in preregistro ? preregistro.notas ?? null : null,
+          creadoEn: preregistro.creadoEn.toISOString(),
+        })),
+        total,
+        pagina,
+        limite,
+      });
     },
   );
 
@@ -252,6 +283,7 @@ export async function rutasVendedor(servidor: FastifyInstance) {
       }
 
       const datos = resultado.data;
+      const columnasPreregistro = await obtenerColumnasTabla('preregistros_salon');
 
       // Verificar que no exista un preregistro pendiente con el mismo email
       const existente = await prisma.preregistroSalon.findFirst({
@@ -266,19 +298,35 @@ export async function rutasVendedor(servidor: FastifyInstance) {
         });
       }
 
+      const datosCreacion: Prisma.PreregistroSalonUncheckedCreateInput = {
+        vendedorId: payload.sub,
+        nombreSalon: datos.nombreSalon,
+        propietario: datos.propietario,
+        emailPropietario: datos.emailPropietario.toLowerCase(),
+        telefonoPropietario: datos.telefonoPropietario,
+        pais: datos.pais,
+        plan: datos.plan,
+      };
+
+      if (columnasPreregistro.has('direccion')) {
+        datosCreacion.direccion = datos.direccion;
+      }
+      if (columnasPreregistro.has('descripcion')) {
+        datosCreacion.descripcion = datos.descripcion;
+      }
+      if (columnasPreregistro.has('categorias')) {
+        datosCreacion.categorias = datos.categorias;
+      }
+      if (columnasPreregistro.has('notas')) {
+        datosCreacion.notas = datos.notas;
+      }
+
       const preregistro = await prisma.preregistroSalon.create({
-        data: {
-          vendedorId: payload.sub,
-          nombreSalon: datos.nombreSalon,
-          propietario: datos.propietario,
-          emailPropietario: datos.emailPropietario.toLowerCase(),
-          telefonoPropietario: datos.telefonoPropietario,
-          pais: datos.pais,
-          direccion: datos.direccion,
-          descripcion: datos.descripcion,
-          categorias: datos.categorias,
-          plan: datos.plan,
-          notas: datos.notas,
+        data: datosCreacion,
+        select: {
+          id: true,
+          nombreSalon: true,
+          estado: true,
         },
       });
 
@@ -291,6 +339,115 @@ export async function rutasVendedor(servidor: FastifyInstance) {
       });
     },
   );
+
+  servidor.get('/vendedor/notificaciones', { preHandler: verificarJWT }, async (solicitud, respuesta) => {
+    const payload = solicitud.user as { sub: string; rol: string };
+    if (!soloVendedor(payload)) {
+      return respuesta.code(403).send({ error: 'Sin permisos para esta acción' });
+    }
+
+    const hoy = new Date().toISOString().slice(0, 10);
+    const haceSieteDias = new Date();
+    haceSieteDias.setDate(haceSieteDias.getDate() - 7);
+    const columnasPreregistro = await obtenerColumnasTabla('preregistros_salon');
+    const tieneMotivoRechazo = columnasPreregistro.has('motivoRechazo');
+
+    const [preregistrosRecientes, salonesConPagoPendiente] = await Promise.all([
+      prisma.preregistroSalon.findMany({
+        where: {
+          vendedorId: payload.sub,
+          OR: [{ estado: 'aprobado' }, { estado: 'rechazado' }, { estado: 'pendiente' }],
+        },
+        orderBy: { actualizadoEn: 'desc' },
+        take: 20,
+        select: {
+          id: true,
+          nombreSalon: true,
+          estado: true,
+          ...(tieneMotivoRechazo ? { motivoRechazo: true } : {}),
+          creadoEn: true,
+          actualizadoEn: true,
+        },
+      }),
+      prisma.estudio.findMany({
+        where: {
+          vendedorId: payload.sub,
+          activo: true,
+          estado: 'aprobado',
+          fechaVencimiento: { lt: hoy },
+        },
+        orderBy: { fechaVencimiento: 'asc' },
+        take: 10,
+        select: {
+          id: true,
+          nombre: true,
+          fechaVencimiento: true,
+          actualizadoEn: true,
+        },
+      }),
+    ]);
+
+    const notificacionesPreregistro = preregistrosRecientes
+      .filter((item) => {
+        if (item.estado === 'aprobado' || item.estado === 'rechazado') {
+          return item.actualizadoEn >= haceSieteDias;
+        }
+        return item.estado === 'pendiente' && item.creadoEn <= haceSieteDias;
+      })
+      .map((item) => {
+        if (item.estado === 'aprobado') {
+          return {
+            id: `preregistro-aprobado-${item.id}`,
+            tipo: 'preregistro_aprobado' as const,
+            titulo: `Pre-registro aprobado: ${item.nombreSalon}`,
+            mensaje: 'El admin ya aprobó este salón. Da seguimiento al onboarding y primer pago.',
+            prioridad: 'media' as const,
+            creadoEn: item.actualizadoEn.toISOString(),
+            referenciaId: item.id,
+          };
+        }
+
+        if (item.estado === 'rechazado') {
+          return {
+            id: `preregistro-rechazado-${item.id}`,
+            tipo: 'preregistro_rechazado' as const,
+            titulo: `Pre-registro rechazado: ${item.nombreSalon}`,
+            mensaje: item.motivoRechazo
+              ? `Motivo: ${item.motivoRechazo}`
+              : 'Revisa la causa con supervisión para recuperar el prospecto.',
+            prioridad: 'alta' as const,
+            creadoEn: item.actualizadoEn.toISOString(),
+            referenciaId: item.id,
+          };
+        }
+
+        return {
+          id: `preregistro-pendiente-${item.id}`,
+          tipo: 'preregistro_pendiente' as const,
+          titulo: `Pre-registro pendiente: ${item.nombreSalon}`,
+          mensaje: 'Lleva más de 7 días pendiente. Conviene escalarlo para no enfriar la venta.',
+          prioridad: 'media' as const,
+          creadoEn: item.creadoEn.toISOString(),
+          referenciaId: item.id,
+        };
+      });
+
+    const notificacionesPago = salonesConPagoPendiente.map((salon) => ({
+      id: `pago-pendiente-${salon.id}`,
+      tipo: 'pago_pendiente' as const,
+      titulo: `Pago pendiente: ${salon.nombre}`,
+      mensaje: `Venció el ${salon.fechaVencimiento}. Requiere seguimiento comercial.`,
+      prioridad: 'alta' as const,
+      creadoEn: salon.actualizadoEn.toISOString(),
+      referenciaId: salon.id,
+    }));
+
+    const notificaciones = [...notificacionesPago, ...notificacionesPreregistro]
+      .sort((a, b) => new Date(b.creadoEn).getTime() - new Date(a.creadoEn).getTime())
+      .slice(0, 30);
+
+    return respuesta.send({ datos: notificaciones });
+  });
 
   /**
    * GET /vendedor/mis-salones — Salones asociados al vendedor (aprobados/activos)
@@ -357,18 +514,14 @@ export async function rutasVendedor(servidor: FastifyInstance) {
         porcentajeComision: false,
         porcentajeComisionPro: false,
       }));
-      const consultaVendedorComision =
-        columnasComision.porcentajeComision || columnasComision.porcentajeComisionPro
-          ? prisma.usuario.findUnique({
-              where: { id: payload.sub },
-              select: {
-                ...(columnasComision.porcentajeComision ? { porcentajeComision: true } : {}),
-                ...(columnasComision.porcentajeComisionPro
-                  ? { porcentajeComisionPro: true }
-                  : {}),
-              },
-            })
-          : Promise.resolve(null);
+      const consultaVendedorComision = columnasComision.porcentajeComision
+        ? prisma.usuario.findUnique({
+            where: { id: payload.sub },
+            select: {
+              porcentajeComision: true,
+            },
+          })
+        : Promise.resolve(null);
       const [
         totalPreregistros,
         pendientes,
@@ -408,13 +561,9 @@ export async function rutasVendedor(servidor: FastifyInstance) {
 
       const porcentajeComisionGuardado =
         vendedor && 'porcentajeComision' in vendedor ? vendedor.porcentajeComision : undefined;
-      const porcentajeComisionProGuardado =
-        vendedor && 'porcentajeComisionPro' in vendedor ? vendedor.porcentajeComisionPro : undefined;
       const porcentajesComision = resolverPorcentajesComisionVendedor({
         porcentajeComision: columnasComision.porcentajeComision ? porcentajeComisionGuardado : undefined,
-        porcentajeComisionPro: columnasComision.porcentajeComisionPro
-          ? porcentajeComisionProGuardado
-          : undefined,
+        porcentajeComisionPro: undefined,
       });
 
       const resumenVentas = ventasComisionables.reduce(
@@ -488,25 +637,20 @@ export async function rutasVendedor(servidor: FastifyInstance) {
       porcentajeComision: false,
       porcentajeComisionPro: false,
     }));
-    const vendedor =
-      columnasComision.porcentajeComision || columnasComision.porcentajeComisionPro
-        ? await prisma.usuario.findUnique({
-            where: { id: payload.sub },
-            select: {
-              ...(columnasComision.porcentajeComision ? { porcentajeComision: true } : {}),
-              ...(columnasComision.porcentajeComisionPro ? { porcentajeComisionPro: true } : {}),
-            },
-          })
-        : null;
+    const vendedor = columnasComision.porcentajeComision
+      ? await prisma.usuario.findUnique({
+          where: { id: payload.sub },
+          select: {
+            porcentajeComision: true,
+          },
+        })
+      : null;
     const porcentajesComision = resolverPorcentajesComisionVendedor({
       porcentajeComision:
         columnasComision.porcentajeComision && vendedor && 'porcentajeComision' in vendedor
           ? vendedor.porcentajeComision
           : undefined,
-      porcentajeComisionPro:
-        columnasComision.porcentajeComisionPro && vendedor && 'porcentajeComisionPro' in vendedor
-          ? vendedor.porcentajeComisionPro
-          : undefined,
+      porcentajeComisionPro: undefined,
     });
 
     const ventas = await prisma.pago.findMany({

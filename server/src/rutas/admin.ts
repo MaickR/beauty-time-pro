@@ -122,6 +122,15 @@ function formatearFechaISO(fecha: Date): string {
   return fecha.toISOString().split('T')[0]!;
 }
 
+function esPrismaErrorConCodigo(error: unknown, codigo: string): boolean {
+  return (
+    typeof error === 'object' &&
+    error !== null &&
+    'code' in error &&
+    (error as { code?: string }).code === codigo
+  );
+}
+
 async function obtenerSujetosAutenticacionEstudio(estudioId: string) {
   const [usuarios, accesosEmpleados] = await Promise.all([
     prisma.usuario.findMany({
@@ -1724,39 +1733,38 @@ export async function rutasAdmin(servidor: FastifyInstance): Promise<void> {
         const partesFecha = estudio.fechaVencimiento.split('-').map(Number);
         const fechaVencimiento = new Date(partesFecha[0]!, partesFecha[1]! - 1, partesFecha[2]!);
         const diasRestantes = Math.ceil((fechaVencimiento.getTime() - hoy.getTime()) / (1000 * 60 * 60 * 24));
-
-        if (diasRestantes > 10) {
-          return respuesta.code(400).send({ error: 'El recordatorio solo se puede enviar cuando faltan 10 días o menos para el corte' });
-        }
+        const dentroVentanaRecordatorio = diasRestantes <= 10;
 
         const dueno = estudio.usuarios[0];
-        if (!dueno?.email) {
+        if (dentroVentanaRecordatorio && !dueno?.email) {
           return respuesta.code(400).send({ error: 'El salón no tiene correo de contacto del dueño' });
         }
 
-        await enviarEmailRecordatorioPagoSalon({
-          email: dueno.email,
-          nombreDueno: dueno.nombre || 'equipo del salón',
-          nombreSalon: estudio.nombre,
-          fechaVencimiento: estudio.fechaVencimiento,
-          diasRestantes: Math.max(0, diasRestantes),
-        });
-
-        // Crear notificación interna para el dashboard del salón.
-        try {
-          await prisma.notificacionEstudio.create({
-            data: {
-              estudioId: estudio.id,
-              tipo: 'recordatorio_pago',
-              titulo: 'Tu suscripción está por vencer',
-              mensaje: `Quedan ${Math.max(0, diasRestantes)} día${diasRestantes !== 1 ? 's' : ''}. Comunícate con nosotros para renovar.`,
-            },
+        if (dentroVentanaRecordatorio) {
+          await enviarEmailRecordatorioPagoSalon({
+            email: dueno!.email,
+            nombreDueno: dueno?.nombre || 'equipo del salón',
+            nombreSalon: estudio.nombre,
+            fechaVencimiento: estudio.fechaVencimiento,
+            diasRestantes: Math.max(0, diasRestantes),
           });
-        } catch (errorNotificacion) {
-          solicitud.log.warn(
-            { err: errorNotificacion, estudioId: estudio.id },
-            'No se pudo crear la notificación interna del recordatorio',
-          );
+
+          // Crear notificación interna para el dashboard del salón.
+          try {
+            await prisma.notificacionEstudio.create({
+              data: {
+                estudioId: estudio.id,
+                tipo: 'recordatorio_pago',
+                titulo: 'Tu suscripción está por vencer',
+                mensaje: `Quedan ${Math.max(0, diasRestantes)} día${diasRestantes !== 1 ? 's' : ''}. Comunícate con nosotros para renovar.`,
+              },
+            });
+          } catch (errorNotificacion) {
+            solicitud.log.warn(
+              { err: errorNotificacion, estudioId: estudio.id },
+              'No se pudo crear la notificación interna del recordatorio',
+            );
+          }
         }
 
         try {
@@ -1769,7 +1777,8 @@ export async function rutasAdmin(servidor: FastifyInstance): Promise<void> {
               nombre: estudio.nombre,
               fechaVencimiento: estudio.fechaVencimiento,
               diasRestantes,
-              emailDestino: dueno.email,
+              emailDestino: dueno?.email ?? null,
+              dentroVentanaRecordatorio,
             },
             ip: solicitud.ip,
           });
@@ -1780,7 +1789,16 @@ export async function rutasAdmin(servidor: FastifyInstance): Promise<void> {
           );
         }
 
-        return respuesta.send({ datos: { mensaje: 'Recordatorio enviado correctamente' } });
+        if (dentroVentanaRecordatorio) {
+          return respuesta.send({ datos: { mensaje: 'Recordatorio enviado correctamente' } });
+        }
+
+        return respuesta.send({
+          datos: {
+            mensaje:
+              'Recordatorio registrado. El sistema enviará notificación y correo automáticamente cuando falten 10 días o menos.',
+          },
+        });
       } catch (error) {
         solicitud.log.error(
           { err: error, estudioId: solicitud.params.id },
@@ -1822,18 +1840,33 @@ export async function rutasAdmin(servidor: FastifyInstance): Promise<void> {
         }
 
         if (estudio.estado === 'suspendido') {
-          return respuesta.code(400).send({ error: 'El salón ya se encuentra suspendido' });
+          return respuesta.send({ datos: { mensaje: `El salón "${estudio.nombre}" ya se encuentra suspendido` } });
         }
 
         // Suspender el salón y su usuario dueño.
-        await prisma.estudio.update({
-          where: { id },
-          data: {
-            estado: 'suspendido',
-            activo: false,
-            fechaSuspension: new Date(),
-          },
-        });
+        try {
+          await prisma.estudio.update({
+            where: { id },
+            data: {
+              estado: 'suspendido',
+              activo: false,
+              fechaSuspension: new Date(),
+            },
+          });
+        } catch (errorActualizacion) {
+          solicitud.log.warn(
+            { err: errorActualizacion, estudioId: id },
+            'Fallo al guardar fecha de suspensión; reintentando sin fechaSuspension',
+          );
+
+          await prisma.estudio.update({
+            where: { id },
+            data: {
+              estado: 'suspendido',
+              activo: false,
+            },
+          });
+        }
 
         const dueno = estudio.usuarios[0];
         if (dueno) {
@@ -3493,42 +3526,69 @@ export async function rutasAdmin(servidor: FastifyInstance): Promise<void> {
         return respuesta.code(400).send({ error: 'No se proporcionaron campos para actualizar' });
       }
 
-      await prisma.$transaction(async (tx) => {
-        if (Object.keys(actualizacion).length > 0) {
-          await tx.estudio.update({
-            where: { id },
-            data: actualizacion as Prisma.EstudioUpdateInput,
-          });
-        }
+      try {
+        await prisma.$transaction(async (tx) => {
+          if (Object.keys(actualizacion).length > 0) {
+            await tx.estudio.update({
+              where: { id },
+              data: actualizacion as Prisma.EstudioUpdateInput,
+            });
+          }
+
+          if (Object.keys(actualizacionDueno).length > 0 && estudio.usuarios[0]?.id) {
+            await tx.usuario.update({
+              where: { id: estudio.usuarios[0].id },
+              data: actualizacionDueno as Prisma.UsuarioUpdateInput,
+            });
+          }
+        });
 
         if (Object.keys(actualizacionDueno).length > 0 && estudio.usuarios[0]?.id) {
-          await tx.usuario.update({
-            where: { id: estudio.usuarios[0].id },
-            data: actualizacionDueno as Prisma.UsuarioUpdateInput,
+          await revocarSesionesPorSujeto('usuario', estudio.usuarios[0].id, 'credenciales_salon_actualizadas');
+        }
+
+        await registrarAuditoria({
+          usuarioId: payload.sub,
+          accion: 'editar_salon_directorio',
+          entidadTipo: 'estudio',
+          entidadId: id,
+          detalles: {
+            nombre: estudio.nombre,
+            campos: Object.keys(actualizacion),
+            credencialesActualizadas: Object.keys(actualizacionDueno),
+            emailDuenoAnterior: estudio.usuarios[0]?.email ?? null,
+            emailContactoAnterior: estudio.emailContacto ?? null,
+          },
+          ip: solicitud.ip,
+        });
+
+        return respuesta.send({ datos: { mensaje: 'Salón actualizado correctamente' } });
+      } catch (error) {
+        solicitud.log.error(
+          {
+            err: error,
+            estudioId: id,
+            camposEstudio: Object.keys(actualizacion),
+            camposDueno: Object.keys(actualizacionDueno),
+          },
+          'Error al actualizar salón en directorio',
+        );
+
+        if (esPrismaErrorConCodigo(error, 'P2002')) {
+          return respuesta.code(409).send({
+            error:
+              'No se pudo guardar porque alguno de los datos ya existe en otro registro (correo o clave única).',
           });
         }
-      });
 
-      if (Object.keys(actualizacionDueno).length > 0 && estudio.usuarios[0]?.id) {
-        await revocarSesionesPorSujeto('usuario', estudio.usuarios[0].id, 'credenciales_salon_actualizadas');
+        if (esPrismaErrorConCodigo(error, 'P2025')) {
+          return respuesta.code(404).send({ error: 'No se encontró el salón o usuario a actualizar' });
+        }
+
+        return respuesta.code(500).send({
+          error: 'Ocurrió un error interno al actualizar el salón. Intenta nuevamente.',
+        });
       }
-
-      await registrarAuditoria({
-        usuarioId: payload.sub,
-        accion: 'editar_salon_directorio',
-        entidadTipo: 'estudio',
-        entidadId: id,
-        detalles: {
-          nombre: estudio.nombre,
-          campos: Object.keys(actualizacion),
-          credencialesActualizadas: Object.keys(actualizacionDueno),
-          emailDuenoAnterior: estudio.usuarios[0]?.email ?? null,
-          emailContactoAnterior: estudio.emailContacto ?? null,
-        },
-        ip: solicitud.ip,
-      });
-
-      return respuesta.send({ datos: { mensaje: 'Salón actualizado correctamente' } });
     },
   );
 

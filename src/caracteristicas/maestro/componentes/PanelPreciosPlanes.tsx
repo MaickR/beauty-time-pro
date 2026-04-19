@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { PencilLine, Tags, WalletCards } from 'lucide-react';
 import { usarToast } from '../../../componentes/ui/ProveedorToast';
 import { EsqueletoTarjeta } from '../../../componentes/ui/Esqueleto';
+import { BanderaPais } from '../../../componentes/ui/BanderaPais';
 import { formatearDinero, formatearPlan } from '../../../utils/formato';
 import {
   actualizarPrecioPlan,
@@ -23,8 +24,6 @@ interface PrecioEditable {
 
 const ORDEN_PAIS: Record<string, number> = { Mexico: 0, Colombia: 1 };
 const ORDEN_PLAN: Record<string, number> = { STANDARD: 0, PRO: 1 };
-
-const INDICADOR_PAIS: Record<string, string> = { Mexico: '🇲🇽', Colombia: '🇨🇴' };
 
 function TarjetaResumen({
   etiqueta,
@@ -185,7 +184,7 @@ export function PanelPreciosPlanes({ onActualizado }: PropsPanelPreciosPlanes) {
                     className={`flex items-center justify-between px-5 py-3 ${esPro ? 'bg-pink-600' : 'bg-slate-950'}`}
                   >
                     <div className="flex items-center gap-2">
-                      <span className="text-lg">{INDICADOR_PAIS[precio.pais] ?? '🌎'}</span>
+                      <BanderaPais pais={precio.pais} />
                       <span className="text-[11px] font-black uppercase tracking-[0.18em] text-white">
                         {formatearPlan(precio.plan)}
                       </span>

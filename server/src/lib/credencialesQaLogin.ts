@@ -1,6 +1,7 @@
 import { prisma } from '../prismaCliente.js';
 import type { RolUsuario } from '../generated/prisma/enums.js';
 import { generarHashContrasena } from '../utils/contrasenas.js';
+import { obtenerColumnasTabla } from './compatibilidadEsquema.js';
 
 const CLAVE_QA = 'QaLogin2026!';
 const EMAIL_EMPLEADO_QA = 'qa.empleado@salonpromaster.com';
@@ -14,6 +15,52 @@ async function asegurarUsuario(params: {
 }) {
   const { email, nombre, rol, estudioId = null } = params;
   const hash = await generarHashContrasena(CLAVE_QA);
+
+  const columnasUsuario = await obtenerColumnasTabla('usuarios');
+  const usaFallbackCompat = !columnasUsuario.has('porcentajeComision');
+
+  if (usaFallbackCompat) {
+    const existentes = await prisma.$queryRawUnsafe<Array<{ id: string }>>(
+      'SELECT id FROM usuarios WHERE email = ? LIMIT 1',
+      email,
+    );
+
+    if (existentes.length > 0) {
+      await prisma.$executeRawUnsafe(
+        'UPDATE usuarios SET nombre = ?, rol = ?, activo = 1, emailVerificado = 1, estudioId = ?, hashContrasena = ?, actualizadoEn = NOW() WHERE email = ?',
+        nombre,
+        rol,
+        estudioId,
+        hash,
+        email,
+      );
+    } else {
+      await prisma.$executeRawUnsafe(
+        'INSERT INTO usuarios (id, email, hashContrasena, nombre, rol, activo, emailVerificado, estudioId, creadoEn, actualizadoEn) VALUES (UUID(), ?, ?, ?, ?, 1, 1, ?, NOW(), NOW())',
+        email,
+        hash,
+        nombre,
+        rol,
+        estudioId,
+      );
+    }
+
+    const filas = await prisma.$queryRawUnsafe<Array<{ id: string; email: string; rol: string }>>(
+      'SELECT id, email, rol FROM usuarios WHERE email = ? LIMIT 1',
+      email,
+    );
+
+    const fila = filas[0];
+    if (!fila) {
+      throw new Error(`No se pudo asegurar usuario QA para ${email}`);
+    }
+
+    return {
+      id: fila.id,
+      email: fila.email,
+      rol: fila.rol as RolUsuario,
+    };
+  }
 
   return prisma.usuario.upsert({
     where: { email },

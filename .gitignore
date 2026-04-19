@@ -32,6 +32,7 @@ backup-*.txt
 
 # Tooling and support files not required by the app runtime
 .agents/
+.augment/
 skills-lock.json
 .github/copilot-instructions.md
 

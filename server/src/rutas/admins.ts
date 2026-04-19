@@ -32,6 +32,15 @@ function esNombreColaboradorValido(valor: string): boolean {
   return /^[\p{L}\p{M}\s'’-]{2,}$/u.test(limpiarNombreColaborador(valor));
 }
 
+function esPrismaErrorConCodigo(error: unknown, codigo: string): boolean {
+  return (
+    typeof error === 'object' &&
+    error !== null &&
+    'code' in error &&
+    (error as { code?: string }).code === codigo
+  );
+}
+
 async function obtenerColaboradorObjetivo(id: string) {
   return prisma.usuario.findUnique({
     where: { id },
@@ -262,89 +271,102 @@ export async function rutasAdmins(servidor: FastifyInstance): Promise<void> {
         return respuesta.code(400).send({ error: 'El cargo debe ser: maestro, supervisor o vendedor' });
       }
 
-      const existente = await prisma.usuario.findUnique({
-        where: { email: email.trim().toLowerCase() },
-        select: { id: true },
-      });
+      try {
+        const existente = await prisma.usuario.findUnique({
+          where: { email: email.trim().toLowerCase() },
+          select: { id: true },
+        });
 
-      if (existente) {
-        return respuesta.code(409).send({ error: 'El correo ya está registrado' });
-      }
+        if (existente) {
+          return respuesta.code(409).send({ error: 'El correo ya está registrado' });
+        }
 
-      const hashContrasena = await generarHashContrasena(contrasena);
-      const columnasComision = await asegurarCamposComisionVendedorUsuario().catch(() => ({
-        porcentajeComision: false,
-        porcentajeComisionPro: false,
-      }));
-      const porcentajesComisionNormalizados =
-        cargo === 'vendedor'
-          ? resolverPorcentajesComisionVendedor({
-              porcentajeComision,
-              porcentajeComisionPro,
-            })
-          : { standard: 0, pro: 0 };
+        const hashContrasena = await generarHashContrasena(contrasena);
+        const columnasComision = await asegurarCamposComisionVendedorUsuario().catch(() => ({
+          porcentajeComision: false,
+          porcentajeComisionPro: false,
+        }));
+        const porcentajesComisionNormalizados =
+          cargo === 'vendedor'
+            ? resolverPorcentajesComisionVendedor({
+                porcentajeComision,
+                porcentajeComisionPro,
+              })
+            : { standard: 0, pro: 0 };
 
-      const nuevoColaborador = await prisma.usuario.create({
-        data: {
-          email: email.trim().toLowerCase(),
-          nombre: limpiarNombreColaborador(nombre),
-          hashContrasena,
-          rol: cargo,
-          ...(columnasComision.porcentajeComision
-            ? { porcentajeComision: porcentajesComisionNormalizados.standard }
-            : {}),
-          ...(columnasComision.porcentajeComisionPro
-            ? { porcentajeComisionPro: porcentajesComisionNormalizados.pro }
-            : {}),
-          activo: true,
-          emailVerificado: true,
-        },
-      });
-
-      // Crear permisos según el cargo
-      if (cargo === 'maestro') {
-        await prisma.permisosMaestro.create({
+        const nuevoColaborador = await prisma.usuario.create({
           data: {
-            usuarioId: nuevoColaborador.id,
-            ...normalizarPermisos(permisos),
+            email: email.trim().toLowerCase(),
+            nombre: limpiarNombreColaborador(nombre),
+            hashContrasena,
+            rol: cargo,
+            ...(columnasComision.porcentajeComision
+              ? { porcentajeComision: porcentajesComisionNormalizados.standard }
+              : {}),
+            ...(columnasComision.porcentajeComisionPro
+              ? { porcentajeComisionPro: porcentajesComisionNormalizados.pro }
+              : {}),
+            activo: true,
+            emailVerificado: true,
           },
         });
-      } else if (cargo === 'supervisor' && permisosSupervisor) {
-        await prisma.permisosSupervisor.create({
-          data: {
+
+        // Crear permisos según el cargo
+        if (cargo === 'maestro') {
+          await prisma.permisosMaestro.create({
+            data: {
+              usuarioId: nuevoColaborador.id,
+              ...normalizarPermisos(permisos),
+            },
+          });
+        } else if (cargo === 'supervisor') {
+          await prisma.permisosSupervisor.create({
+            data: {
+              usuarioId: nuevoColaborador.id,
+              ...normalizarPermisosSupervisor(permisosSupervisor),
+            },
+          });
+        }
+        // Vendedor no tiene permisos granulares
+
+        if (cargo === 'vendedor') {
+          await asegurarSalonDemoVendedor({
             usuarioId: nuevoColaborador.id,
-            ...normalizarPermisosSupervisor(permisosSupervisor),
+            nombre: nuevoColaborador.nombre,
+            email: nuevoColaborador.email,
+          });
+        }
+
+        await registrarAuditoria({
+          usuarioId: payload.sub,
+          accion: 'crear_colaborador',
+          entidadTipo: 'usuario',
+          entidadId: nuevoColaborador.id,
+          detalles: {
+            email: nuevoColaborador.email,
+            nombre: nuevoColaborador.nombre,
+            cargo,
+            porcentajeComision: porcentajesComisionNormalizados.standard,
+            porcentajeComisionPro: porcentajesComisionNormalizados.pro,
           },
+          ip: solicitud.ip,
         });
-      }
-      // Vendedor no tiene permisos granulares
 
-      if (cargo === 'vendedor') {
-        await asegurarSalonDemoVendedor({
-          usuarioId: nuevoColaborador.id,
-          nombre: nuevoColaborador.nombre,
-          email: nuevoColaborador.email,
+        return respuesta.code(201).send({
+          datos: { mensaje: 'Colaborador creado correctamente', id: nuevoColaborador.id },
         });
+      } catch (error) {
+        solicitud.log.error(
+          { err: error, email, cargo },
+          'Error al crear colaborador',
+        );
+
+        if (esPrismaErrorConCodigo(error, 'P2002')) {
+          return respuesta.code(409).send({ error: 'El correo ya está registrado' });
+        }
+
+        return respuesta.code(500).send({ error: 'No se pudo crear el colaborador. Intenta de nuevo.' });
       }
-
-      await registrarAuditoria({
-        usuarioId: payload.sub,
-        accion: 'crear_colaborador',
-        entidadTipo: 'usuario',
-        entidadId: nuevoColaborador.id,
-        detalles: {
-          email: nuevoColaborador.email,
-          nombre: nuevoColaborador.nombre,
-          cargo,
-          porcentajeComision: porcentajesComisionNormalizados.standard,
-          porcentajeComisionPro: porcentajesComisionNormalizados.pro,
-        },
-        ip: solicitud.ip,
-      });
-
-      return respuesta.code(201).send({
-        datos: { mensaje: 'Colaborador creado correctamente', id: nuevoColaborador.id },
-      });
     },
   );
 

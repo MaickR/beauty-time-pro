@@ -17,6 +17,7 @@
     "test:watch": "vitest",
     "semilla": "tsx --env-file server/.env scripts/semilla.ts",
     "limpiar-pruebas": "tsx --env-file server/.env scripts/semilla.ts --limpiar",
+    "qa:vendedor:paridad": "node scripts/qa-vendedor-paridad.mjs",
     "prepare": "husky"
   },
   "lint-staged": {

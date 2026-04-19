@@ -192,49 +192,8 @@ export function ModalEstudio({
             </button>
           </div>
 
-          <div className="grid flex-1 gap-5 overflow-y-auto p-4 sm:p-6 md:grid-cols-[0.85fr_1.15fr] md:gap-8 md:p-8">
-            <aside className="order-1 rounded-4xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6 md:order-2">
-              <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-                <div>
-                  <p className="text-[11px] font-black uppercase tracking-wide text-slate-500">
-                    QR descargable
-                  </p>
-                  <p className="mt-1 text-sm font-medium text-slate-500">
-                    El QR abre la reserva pública del salón.
-                  </p>
-                </div>
-                <button
-                  type="button"
-                  onClick={descargarQr}
-                  disabled={!qrReserva}
-                  className="inline-flex items-center justify-center gap-2 rounded-full bg-slate-950 px-4 py-2 text-xs font-black uppercase text-white disabled:opacity-50"
-                >
-                  <Download className="h-4 w-4" /> Descargar
-                </button>
-              </div>
-
-              <div className="flex min-h-56 items-center justify-center rounded-4xl border border-dashed border-slate-300 bg-slate-50 p-4 sm:min-h-70">
-                {qrReserva ? (
-                  <img
-                    src={qrReserva}
-                    alt="QR de acceso a reservas"
-                    className="w-full max-w-44 sm:max-w-60"
-                  />
-                ) : (
-                  <span className="text-sm font-semibold text-slate-400">Generando QR...</span>
-                )}
-              </div>
-
-              <button
-                type="button"
-                onClick={onCerrar}
-                className="mt-5 w-full rounded-3xl bg-pink-600 px-4 py-4 text-xs font-black uppercase text-white shadow-xl transition-colors hover:bg-pink-700 sm:mt-6"
-              >
-                Cerrar confirmación
-              </button>
-            </aside>
-
-            <div className="order-2 space-y-5 sm:space-y-6 md:order-1">
+          <div className="flex-1 overflow-y-auto p-4 sm:p-6 md:p-8">
+            <div className="mx-auto flex max-w-2xl flex-col gap-5 sm:gap-6">
               <section className="rounded-4xl border border-slate-200 bg-slate-50 p-5 sm:p-6">
                 <div className="mb-4 flex items-center gap-2 text-[11px] font-black uppercase tracking-wide text-pink-600">
                   <Mail className="h-4 w-4" /> Acceso del dueño
@@ -277,6 +236,39 @@ export function ModalEstudio({
                     Esta contraseña queda activa tal como se creó. No se obliga al dueño a cambiarla
                     en su primer acceso.
                   </p>
+                </div>
+              </section>
+
+              <section className="rounded-4xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
+                <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                  <div>
+                    <p className="text-[11px] font-black uppercase tracking-wide text-slate-500">
+                      QR descargable
+                    </p>
+                    <p className="mt-1 text-sm font-medium text-slate-500">
+                      El QR abre la reserva pública del salón.
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={descargarQr}
+                    disabled={!qrReserva}
+                    className="inline-flex items-center justify-center gap-2 rounded-full bg-slate-950 px-4 py-2 text-xs font-black uppercase text-white disabled:opacity-50"
+                  >
+                    <Download className="h-4 w-4" /> Descargar
+                  </button>
+                </div>
+
+                <div className="flex min-h-56 items-center justify-center rounded-4xl border border-dashed border-slate-300 bg-slate-50 p-4 sm:min-h-70">
+                  {qrReserva ? (
+                    <img
+                      src={qrReserva}
+                      alt="QR de acceso a reservas"
+                      className="w-full max-w-44 sm:max-w-60"
+                    />
+                  ) : (
+                    <span className="text-sm font-semibold text-slate-400">Generando QR...</span>
+                  )}
                 </div>
               </section>
 
@@ -326,6 +318,14 @@ export function ModalEstudio({
                   </div>
                 </div>
               </section>
+
+              <button
+                type="button"
+                onClick={onCerrar}
+                className="w-full rounded-3xl bg-pink-600 px-4 py-4 text-xs font-black uppercase text-white shadow-xl transition-colors hover:bg-pink-700"
+              >
+                Cerrar confirmación
+              </button>
             </div>
           </div>
         </div>
@@ -482,12 +482,22 @@ export function ModalEstudio({
                         name="contrasenaDueno"
                         type={mostrarContrasena ? 'text' : 'password'}
                         autoComplete="new-password"
-                        className="w-full p-4 pr-12 bg-slate-50 border border-slate-100 rounded-2xl font-bold outline-none focus:ring-2 focus:ring-pink-500"
+                        className="w-full p-4 pr-22 bg-slate-50 border border-slate-100 rounded-2xl font-bold outline-none focus:ring-2 focus:ring-pink-500"
                         value={formulario.contrasenaDueno}
                         readOnly
                         required
                         minLength={8}
                       />
+                      <button
+                        type="button"
+                        onClick={() =>
+                          void copiarTexto('contrasena-dueno', formulario.contrasenaDueno)
+                        }
+                        className="absolute right-11 top-1/2 -translate-y-1/2 text-slate-400 transition-colors hover:text-slate-700"
+                        aria-label="Copiar contraseña"
+                      >
+                        <Copy className="h-4 w-4" />
+                      </button>
                       <button
                         type="button"
                         onClick={() => setMostrarContrasena((prev) => !prev)}

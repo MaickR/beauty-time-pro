@@ -9,6 +9,23 @@
  */
 import { z } from 'zod';
 
+const entornoCrudo = { ...import.meta.env } as Record<string, unknown>;
+
+const esEntornoLocal =
+  entornoCrudo.MODE === 'development' || entornoCrudo.MODE === 'test' || entornoCrudo.DEV === true;
+
+if (esEntornoLocal) {
+  const valorApi =
+    typeof entornoCrudo.VITE_URL_API === 'string' ? entornoCrudo.VITE_URL_API.trim() : '';
+
+  if (!valorApi) {
+    entornoCrudo.VITE_URL_API = 'http://localhost:3000';
+    console.warn(
+      '⚠️ VITE_URL_API no estaba definida. Se usa http://localhost:3000 para desarrollo local.',
+    );
+  }
+}
+
 const esquemaEntorno = z
   .object({
     // ── API REST (Fastify + MySQL) ─────────────────────────────────────────
@@ -37,7 +54,7 @@ const esquemaEntorno = z
     }
   });
 
-const resultado = esquemaEntorno.safeParse(import.meta.env);
+const resultado = esquemaEntorno.safeParse(entornoCrudo);
 
 if (!resultado.success) {
   console.error('❌ Variables de entorno inválidas:', resultado.error.flatten().fieldErrors);

@@ -20,6 +20,7 @@ export interface PreregistroSalon {
   telefonoPropietario: string;
   pais: string;
   direccion: string | null;
+  descripcion: string | null;
   categorias: string | null;
   plan: 'STANDARD' | 'PRO';
   estado: 'pendiente' | 'aprobado' | 'rechazado';
@@ -135,6 +136,20 @@ export interface DatosPreregistro {
   notas?: string;
 }
 
+export interface NotificacionVendedor {
+  id: string;
+  tipo:
+    | 'preregistro_aprobado'
+    | 'preregistro_rechazado'
+    | 'preregistro_pendiente'
+    | 'pago_pendiente';
+  titulo: string;
+  mensaje: string;
+  prioridad: 'alta' | 'media' | 'baja';
+  creadoEn: string;
+  referenciaId: string;
+}
+
 // ─── Servicios ───────────────────────────────────────────────────────────
 
 export async function obtenerMisPreregistros(
@@ -213,5 +228,10 @@ export async function obtenerVentasVendedor(
   const res = await peticion<{ datos: VentaVendedor[] }>(
     `/vendedor/ventas${construirQuery(params)}`,
   );
+  return res.datos;
+}
+
+export async function obtenerNotificacionesVendedor(): Promise<NotificacionVendedor[]> {
+  const res = await peticion<{ datos: NotificacionVendedor[] }>('/vendedor/notificaciones');
   return res.datos;
 }

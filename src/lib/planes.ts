@@ -66,7 +66,7 @@ const PLANES_ESTUDIO: Record<PlanEstudio, DefinicionPlanEstudio> = {
       'Mensajes masivos (3 por año + extras aprobados).',
       'Automatizaciones y funciones comerciales más completas.',
     ],
-    restricciones: ['Sin restricciones operativas adicionales dentro del alcance actual.'],
+    restricciones: [],
   },
 };
 

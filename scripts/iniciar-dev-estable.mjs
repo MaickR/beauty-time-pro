@@ -9,15 +9,24 @@ function obtenerPidsPuertoWindows(puerto) {
       encoding: 'utf8',
     });
 
-    return [...new Set(
-      salida
-        .split(/\r?\n/)
-        .map((linea) => linea.trim())
-        .filter(Boolean)
-        .map((linea) => linea.split(/\s+/).at(-1))
-        .filter((pid) => pid && /^\d+$/.test(pid))
-        .map((pid) => Number(pid)),
-    )];
+    return [
+      ...new Set(
+        salida
+          .split(/\r?\n/)
+          .map((linea) => linea.trim())
+          .filter(Boolean)
+          .map((linea) => linea.split(/\s+/))
+          .filter((columnas) => columnas.length >= 5)
+          .filter((columnas) => {
+            const direccionLocal = columnas[1] ?? '';
+            const estado = (columnas[3] ?? '').toUpperCase();
+            return direccionLocal.endsWith(`:${puerto}`) && estado === 'LISTENING';
+          })
+          .map((columnas) => columnas.at(-1))
+          .filter((pid) => pid && /^\d+$/.test(pid))
+          .map((pid) => Number(pid)),
+      ),
+    ];
   } catch {
     return [];
   }
@@ -68,7 +77,28 @@ function cerrarProcesosPrevios() {
 
   for (const pid of pids) {
     try {
-      process.kill(pid, 'SIGTERM');
+      if (process.platform === 'win32') {
+        try {
+          process.kill(pid, 'SIGTERM');
+        } catch {
+          // continuar con fallback específico de Windows
+        }
+
+        try {
+          execSync(`taskkill /PID ${pid} /T /F`, {
+            stdio: ['ignore', 'ignore', 'ignore'],
+          });
+        } catch {
+          execSync(
+            `powershell -NoProfile -Command "Stop-Process -Id ${pid} -Force -ErrorAction SilentlyContinue"`,
+            {
+              stdio: ['ignore', 'ignore', 'ignore'],
+            },
+          );
+        }
+      } else {
+        process.kill(pid, 'SIGTERM');
+      }
     } catch {
       // ignorar procesos ya cerrados
     }

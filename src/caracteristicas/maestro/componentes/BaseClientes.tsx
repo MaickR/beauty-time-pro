@@ -189,6 +189,15 @@ export function BaseClientes() {
     estudio.name.toLowerCase().includes(busquedaSalon.trim().toLowerCase()),
   );
 
+  const limpiarFiltros = () => {
+    setBuscar('');
+    setBusquedaSalon('');
+    setSalonId('');
+    setPais('');
+    setServicioFrecuente('');
+    setPagina(1);
+  };
+
   return (
     <div aria-busy={cargando}>
       <div className="flex flex-col md:flex-row md:items-end gap-4 mb-6">
@@ -212,62 +221,84 @@ export function BaseClientes() {
       </div>
 
       {/* Filtros */}
-      <div className="bg-white border border-slate-200 rounded-2xl p-4 mb-6 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-        <div className="relative flex-1">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-          <input
-            type="text"
-            value={buscar}
-            onChange={(e) => setBuscar(e.target.value)}
-            placeholder="Buscar por nombre, teléfono o correo…"
-            className="w-full pl-9 pr-4 py-2 text-sm border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-pink-300"
-          />
-        </div>
-
-        <div className="space-y-2">
-          <input
-            type="text"
-            value={busquedaSalon}
-            onChange={(e) => setBusquedaSalon(e.target.value)}
-            placeholder="Buscar salón para filtrar..."
-            className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-pink-300"
-          />
-          <select
-            value={salonId}
-            onChange={(e) => setSalonId(e.target.value)}
-            aria-label="Filtrar por salón"
-            className="w-full text-sm border border-slate-200 rounded-xl px-3 py-2 focus:outline-none focus:ring-2 focus:ring-pink-300"
+      <div className="mb-6 rounded-2xl border border-slate-200 bg-white p-4 sm:p-5">
+        <div className="mb-4 flex items-center justify-between gap-3">
+          <div>
+            <p className="text-xs font-black uppercase tracking-[0.2em] text-slate-500">
+              Filtros avanzados
+            </p>
+            <p className="mt-1 text-xs font-medium text-slate-400">
+              Combina búsqueda, salón, país y servicio para encontrar clientes rápido.
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={limpiarFiltros}
+            className="rounded-xl border border-slate-200 px-3 py-2 text-xs font-black text-slate-600 transition-colors hover:bg-slate-50"
           >
-            <option value="">Todos los salones</option>
-            {estudiosFiltrados.slice(0, 40).map((e) => (
-              <option key={e.id} value={e.id}>
-                {e.name}
-              </option>
-            ))}
-          </select>
+            Limpiar filtros
+          </button>
         </div>
 
-        <select
-          value={pais}
-          onChange={(e) => setPais(e.target.value)}
-          aria-label="Filtrar por país"
-          className="text-sm border border-slate-200 rounded-xl px-3 py-2 focus:outline-none focus:ring-2 focus:ring-pink-300"
-        >
-          <option value="">Todos los países</option>
-          {PAISES.map((p) => (
-            <option key={p} value={p}>
-              {p}
-            </option>
-          ))}
-        </select>
+        <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
+          <label className="relative block lg:col-span-2">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+            <input
+              type="text"
+              value={buscar}
+              onChange={(e) => setBuscar(e.target.value)}
+              placeholder="Buscar por nombre, teléfono o correo"
+              className="w-full rounded-xl border border-slate-200 py-2.5 pl-9 pr-4 text-sm focus:outline-none focus:ring-2 focus:ring-pink-300"
+            />
+          </label>
 
-        <input
-          type="text"
-          value={servicioFrecuente}
-          onChange={(e) => setServicioFrecuente(e.target.value)}
-          placeholder="Filtrar por servicio frecuente..."
-          className="text-sm border border-slate-200 rounded-xl px-3 py-2 focus:outline-none focus:ring-2 focus:ring-pink-300"
-        />
+          <div className="space-y-2">
+            <input
+              type="text"
+              value={busquedaSalon}
+              onChange={(e) => setBusquedaSalon(e.target.value)}
+              placeholder="Buscar salón"
+              className="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-pink-300"
+            />
+            <select
+              value={salonId}
+              onChange={(e) => setSalonId(e.target.value)}
+              aria-label="Filtrar por salón"
+              className="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-pink-300"
+            >
+              <option value="">Todos los salones</option>
+              {estudiosFiltrados.slice(0, 40).map((e) => (
+                <option key={e.id} value={e.id}>
+                  {e.name}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-1">
+            <select
+              value={pais}
+              onChange={(e) => setPais(e.target.value)}
+              aria-label="Filtrar por país"
+              className="rounded-xl border border-slate-200 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-pink-300"
+            >
+              <option value="">Todos los países</option>
+              {PAISES.map((p) => (
+                <option key={p} value={p}>
+                  {p}
+                </option>
+              ))}
+            </select>
+
+            <input
+              type="text"
+              value={servicioFrecuente}
+              onChange={(e) => setServicioFrecuente(e.target.value)}
+              placeholder="Servicio frecuente"
+              className="rounded-xl border border-slate-200 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-pink-300"
+            />
+          </div>
+        </div>
       </div>
 
       {error && (

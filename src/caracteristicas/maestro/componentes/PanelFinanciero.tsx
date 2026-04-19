@@ -85,6 +85,27 @@ export function PanelFinanciero({ estudios, onAbrirPago, onRecargar }: PropsPane
     onError: (err: Error) => mostrarToast({ mensaje: err.message, variante: 'error' }),
   });
 
+  const mutacionReactivacion = useMutation({
+    mutationFn: (estudioId: string) =>
+      peticion<{ datos: { mensaje: string } }>(`/admin/salones/${estudioId}/suspender`, {
+        method: 'PUT',
+      }),
+    onSuccess: (res) => {
+      mostrarToast({ mensaje: res.datos.mensaje, variante: 'exito' });
+      refrescarDatos();
+    },
+    onError: (err: Error) => mostrarToast({ mensaje: err.message, variante: 'error' }),
+  });
+
+  const accionarSuspension = (estudio: Estudio) => {
+    if (estudio.estado === 'suspendido' || estudio.estado === 'bloqueado') {
+      mutacionReactivacion.mutate(estudio.id);
+      return;
+    }
+
+    mutacionSuspension.mutate(estudio.id);
+  };
+
   const { filtrados, totalPaginas, paginados } = useMemo(() => {
     let resultado = [...estudios];
     if (filtroPais !== 'Todos') resultado = resultado.filter((e) => e.country === filtroPais);
@@ -153,14 +174,16 @@ export function PanelFinanciero({ estudios, onAbrirPago, onRecargar }: PropsPane
         <TarjetasMovil
           estudios={paginados}
           mutacionRecordatorio={mutacionRecordatorio}
-          mutacionSuspension={mutacionSuspension}
           onAbrirPago={onAbrirPago}
+          onAccionSuspension={accionarSuspension}
+          procesandoSuspension={mutacionSuspension.isPending || mutacionReactivacion.isPending}
         />
         <TablaEscritorio
           estudios={paginados}
           mutacionRecordatorio={mutacionRecordatorio}
-          mutacionSuspension={mutacionSuspension}
           onAbrirPago={onAbrirPago}
+          onAccionSuspension={accionarSuspension}
+          procesandoSuspension={mutacionSuspension.isPending || mutacionReactivacion.isPending}
         />
       </div>
 
@@ -198,8 +221,9 @@ type MutacionAccion = ReturnType<typeof useMutation<{ datos: { mensaje: string }
 interface PropsSubTabla {
   estudios: Estudio[];
   mutacionRecordatorio: MutacionAccion;
-  mutacionSuspension: MutacionAccion;
   onAbrirPago: (estudio: Estudio) => void;
+  onAccionSuspension: (estudio: Estudio) => void;
+  procesandoSuspension: boolean;
 }
 
 function obtenerDatosEstudio(estudio: Estudio) {
@@ -248,8 +272,9 @@ function EtiquetaVigencia({ sub }: { sub: EstadoSuscripcion | null }) {
 function TarjetasMovil({
   estudios,
   mutacionRecordatorio,
-  mutacionSuspension,
   onAbrirPago,
+  onAccionSuspension,
+  procesandoSuspension,
 }: PropsSubTabla) {
   return (
     <div className="divide-y divide-slate-100 lg:hidden">
@@ -290,8 +315,12 @@ function TarjetasMovil({
             <div className="grid grid-cols-3 gap-2">
               <button
                 onClick={() => mutacionRecordatorio.mutate(e.id)}
-                disabled={!puedeRecordar || mutacionRecordatorio.isPending}
-                title={puedeRecordar ? 'Recordatorio' : 'Disponible solo 10 días antes del corte'}
+                disabled={mutacionRecordatorio.isPending}
+                title={
+                  puedeRecordar
+                    ? 'Enviar recordatorio de pago'
+                    : 'Se enviará automáticamente cuando falten 10 días o menos'
+                }
                 className="rounded-xl border border-amber-200 bg-amber-50 px-2 py-3 text-[10px] font-black uppercase text-amber-800 hover:bg-amber-100 disabled:opacity-40 disabled:cursor-not-allowed flex flex-col items-center justify-center gap-1 text-center transition-colors"
               >
                 <Bell className="w-3 h-3" />
@@ -306,13 +335,17 @@ function TarjetasMovil({
                 Pagar
               </button>
               <button
-                onClick={() => mutacionSuspension.mutate(e.id)}
-                disabled={estaSuspendido || mutacionSuspension.isPending}
-                title={estaSuspendido ? 'Salón ya suspendido' : 'Suspensión'}
+                onClick={() => onAccionSuspension(e)}
+                disabled={procesandoSuspension}
+                title={estaSuspendido ? 'Reactivar suscripción' : 'Suspender suscripción'}
                 className="rounded-xl border border-red-200 bg-red-50 px-2 py-3 text-[10px] font-black uppercase text-red-700 hover:bg-red-100 disabled:opacity-40 disabled:cursor-not-allowed flex flex-col items-center justify-center gap-1 text-center transition-colors"
               >
                 <ShieldAlert className="w-3 h-3" />
-                {mutacionSuspension.isPending ? 'Procesando' : 'Suspender'}
+                {procesandoSuspension
+                  ? 'Procesando'
+                  : estaSuspendido
+                    ? 'Reactivar suscripción'
+                    : 'Suspender'}
               </button>
             </div>
           </div>
@@ -325,8 +358,9 @@ function TarjetasMovil({
 function TablaEscritorio({
   estudios,
   mutacionRecordatorio,
-  mutacionSuspension,
   onAbrirPago,
+  onAccionSuspension,
+  procesandoSuspension,
 }: PropsSubTabla) {
   return (
     <>
@@ -381,12 +415,12 @@ function TablaEscritorio({
                     <Tooltip texto="Recordar">
                       <button
                         onClick={() => mutacionRecordatorio.mutate(e.id)}
-                        disabled={!puedeRecordar || mutacionRecordatorio.isPending}
+                        disabled={mutacionRecordatorio.isPending}
                         aria-label="Enviar recordatorio"
                         title={
                           puedeRecordar
                             ? 'Enviar recordatorio'
-                            : 'Solo disponible 10 días antes del corte'
+                            : 'Se enviará automáticamente cuando falten 10 días o menos'
                         }
                         className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-amber-800 hover:bg-amber-100 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
                       >
@@ -403,12 +437,12 @@ function TablaEscritorio({
                         <DollarSign className="w-3.5 h-3.5" />
                       </button>
                     </Tooltip>
-                    <Tooltip texto="Suspender">
+                    <Tooltip texto={estaSuspendido ? 'Reactivar suscripción' : 'Suspender'}>
                       <button
-                        onClick={() => mutacionSuspension.mutate(e.id)}
-                        disabled={estaSuspendido || mutacionSuspension.isPending}
-                        aria-label="Suspender salón"
-                        title={estaSuspendido ? 'Salón ya suspendido' : 'Suspender salón'}
+                        onClick={() => onAccionSuspension(e)}
+                        disabled={procesandoSuspension}
+                        aria-label={estaSuspendido ? 'Reactivar suscripción' : 'Suspender salón'}
+                        title={estaSuspendido ? 'Reactivar suscripción' : 'Suspender salón'}
                         className="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-red-700 hover:bg-red-100 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
                       >
                         <ShieldAlert className="w-3.5 h-3.5" />

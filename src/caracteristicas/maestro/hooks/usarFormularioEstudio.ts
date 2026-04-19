@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import { actualizarEstudio, crearSalonAdmin } from '../../../servicios/servicioEstudios';
 import { sincronizarPersonalEstudio } from '../../../servicios/servicioPersonal';
 import { confirmarPago as _confirmarPago } from '../../../servicios/servicioPagos';
@@ -145,6 +146,7 @@ interface OpcionesFormularioEstudio {
 }
 
 export function usarFormularioEstudio(opciones?: OpcionesFormularioEstudio) {
+  const clienteConsulta = useQueryClient();
   const rolUsuario = usarTiendaAuth((estado) => estado.usuario?.rol ?? estado.rol);
   const claveBorrador = opciones?.claveBorrador ?? CLAVE_BORRADOR_ALTA_SALON;
   const [modoModal, setModoModal] = useState<'ADD' | 'EDIT' | 'CONFIRMACION' | null>(null);
@@ -375,11 +377,21 @@ export function usarFormularioEstudio(opciones?: OpcionesFormularioEstudio) {
         }
 
         await alRefrescar();
+        await Promise.all([
+          clienteConsulta.invalidateQueries({ queryKey: ['admin'] }),
+          clienteConsulta.invalidateQueries({ queryKey: ['estudio'] }),
+          clienteConsulta.invalidateQueries({ queryKey: ['perfil-estudio'] }),
+        ]);
         mostrarExito(resultadoAlta.mensajeExito);
       } else if (formulario.id) {
         await actualizarEstudio(formulario.id, datosGuardar);
         await sincronizarPersonalEstudio(formulario.id, formulario.staff);
         await alRefrescar();
+        await Promise.all([
+          clienteConsulta.invalidateQueries({ queryKey: ['admin'] }),
+          clienteConsulta.invalidateQueries({ queryKey: ['estudio'] }),
+          clienteConsulta.invalidateQueries({ queryKey: ['perfil-estudio'] }),
+        ]);
         mostrarExito(`Se actualizaron los datos de "${datosGuardar.name}".`);
         cerrarModal();
       }

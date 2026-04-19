@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { X, Copy, Check, QrCode, Save } from 'lucide-react';
+import { X, Copy, Check, QrCode, Save, Eye, EyeOff, MessageCircle } from 'lucide-react';
 import {
   obtenerDetalleSalonDirectorio,
   actualizarSalonDirectorio,
@@ -61,6 +61,8 @@ export function ModalDetalleSalon({ salonId, onCerrar }: PropsModalDetalleSalon)
       setCamposEditados({});
       setErroresGuardado(null);
       queryClient.invalidateQueries({ queryKey: ['admin', 'directorio', salonId] });
+      queryClient.invalidateQueries({ queryKey: ['admin', 'directorio'] });
+      queryClient.invalidateQueries({ queryKey: ['admin', 'metricas'] });
     },
     onError: () => {
       setErroresGuardado('No se pudieron guardar los cambios. Intenta de nuevo.');
@@ -88,6 +90,10 @@ export function ModalDetalleSalon({ salonId, onCerrar }: PropsModalDetalleSalon)
 
   // Generar URL de reservación
   const urlReserva = salon ? `${window.location.origin}/reservar/${salon.claveCliente}` : '';
+  const enlaceWhatsApp =
+    salon && urlReserva
+      ? `https://wa.me/?text=${encodeURIComponent(`Hola, te comparto el acceso de reservas de ${salon.nombre}: ${urlReserva}`)}`
+      : '';
 
   // Descargar QR
   const descargarQR = () => {
@@ -120,7 +126,7 @@ export function ModalDetalleSalon({ salonId, onCerrar }: PropsModalDetalleSalon)
       role="dialog"
       aria-modal="true"
       aria-labelledby="modal-detalle-titulo"
-      className="fixed inset-0 z-[200] flex items-center justify-center bg-black/70 backdrop-blur-sm p-4"
+      className="fixed inset-0 z-200 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4"
       onKeyDown={(e) => e.key === 'Escape' && onCerrar()}
     >
       <div className="bg-white rounded-3xl w-full max-w-2xl max-h-[90vh] overflow-hidden flex flex-col shadow-2xl">
@@ -210,7 +216,7 @@ export function ModalDetalleSalon({ salonId, onCerrar }: PropsModalDetalleSalon)
               />
 
               <CampoEditable
-                etiqueta="Nueva contraseña del dueño"
+                etiqueta="Contraseña del salón"
                 campo="contrasenaDueno"
                 valor={obtenerValorCampo('contrasenaDueno', '')}
                 tipo="password"
@@ -411,6 +417,15 @@ export function ModalDetalleSalon({ salonId, onCerrar }: PropsModalDetalleSalon)
                   </button>
                 </div>
               </div>
+
+              <button
+                type="button"
+                onClick={() => window.open(enlaceWhatsApp, '_blank', 'noopener,noreferrer')}
+                disabled={!enlaceWhatsApp}
+                className="w-full flex items-center justify-center gap-2 py-3 rounded-xl bg-green-600 text-white text-sm font-black transition-colors hover:bg-green-700 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                <MessageCircle className="w-4 h-4" /> Compartir por WhatsApp
+              </button>
             </div>
           ) : null}
         </div>
@@ -436,16 +451,57 @@ function CampoEditable({
   placeholder?: string;
   onChange: (campo: string, valor: string) => void;
 }) {
+  const [mostrarContrasena, setMostrarContrasena] = useState(false);
+  const [copiado, setCopiado] = useState(false);
+  const esPassword = tipo === 'password';
+
+  const copiarValor = async () => {
+    if (!valor) return;
+    try {
+      await navigator.clipboard.writeText(valor);
+      setCopiado(true);
+      window.setTimeout(() => setCopiado(false), 1500);
+    } catch {
+      // Silenciar fallo de portapapeles
+    }
+  };
+
   return (
     <label className="block">
       <span className="text-xs font-black text-slate-400 uppercase">{etiqueta}</span>
-      <input
-        type={tipo}
-        value={valor}
-        onChange={(e) => onChange(campo, e.target.value)}
-        placeholder={placeholder}
-        className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm font-medium outline-none focus:ring-2 focus:ring-pink-500"
-      />
+      <div className="relative mt-1">
+        <input
+          type={esPassword ? (mostrarContrasena ? 'text' : 'password') : tipo}
+          value={valor}
+          onChange={(e) => onChange(campo, e.target.value)}
+          placeholder={placeholder}
+          className={`w-full rounded-xl border border-slate-200 px-3 py-2 text-sm font-medium outline-none focus:ring-2 focus:ring-pink-500 ${esPassword ? 'pr-21' : ''}`}
+        />
+        {esPassword && (
+          <>
+            <button
+              type="button"
+              onClick={() => void copiarValor()}
+              className="absolute right-10 top-1/2 -translate-y-1/2 rounded-lg p-1 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-700"
+              aria-label="Copiar contraseña"
+            >
+              {copiado ? (
+                <Check className="w-4 h-4 text-emerald-600" />
+              ) : (
+                <Copy className="w-4 h-4" />
+              )}
+            </button>
+            <button
+              type="button"
+              onClick={() => setMostrarContrasena((prev) => !prev)}
+              className="absolute right-2 top-1/2 -translate-y-1/2 rounded-lg p-1 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-700"
+              aria-label={mostrarContrasena ? 'Ocultar contraseña' : 'Mostrar contraseña'}
+            >
+              {mostrarContrasena ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+            </button>
+          </>
+        )}
+      </div>
     </label>
   );
 }

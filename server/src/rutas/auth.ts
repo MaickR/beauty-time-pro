@@ -848,13 +848,20 @@ export async function rutasAuth(servidor: FastifyInstance): Promise<void> {
       let slugEstudioSesion = await asegurarSlugEstudioUsuario(usuario.estudio);
 
       if (usuario.rol === 'vendedor') {
-        const salonDemo = await asegurarSalonDemoVendedor({
-          usuarioId: usuario.id,
-          nombre: usuario.nombre,
-          email: usuario.email,
-        });
-        estudioIdSesion = salonDemo.id;
-        slugEstudioSesion = salonDemo.slug ?? null;
+        try {
+          const salonDemo = await asegurarSalonDemoVendedor({
+            usuarioId: usuario.id,
+            nombre: usuario.nombre,
+            email: usuario.email,
+          });
+          estudioIdSesion = salonDemo.id;
+          slugEstudioSesion = salonDemo.slug ?? null;
+        } catch (errorSalonDemo) {
+          solicitud.log.warn(
+            { err: errorSalonDemo, usuarioId: usuario.id },
+            'No se pudo asegurar el salon demo del vendedor durante login; se continua con la sesion',
+          );
+        }
       }
 
       return emitirTokens(servidor, respuesta, {

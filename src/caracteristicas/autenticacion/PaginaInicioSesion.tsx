@@ -3,7 +3,7 @@ import { Link, useLocation, useNavigate, useSearchParams } from 'react-router-do
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
-import { Eye, EyeOff, KeyRound, Lock, Mail } from 'lucide-react';
+import { Eye, EyeOff, KeyRound, Lock, Mail, Copy, Check } from 'lucide-react';
 import { consumirAvisoInicioSesion, usarTiendaAuth } from '../../tienda/tiendaAuth';
 import { usarTituloPagina } from '../../hooks/usarTituloPagina';
 import { MarcaAplicacion } from '../../componentes/ui/MarcaAplicacion';
@@ -117,6 +117,7 @@ export function PaginaInicioSesion() {
   const [parametros] = useSearchParams();
   const [pestanaActiva, setPestanaActiva] = useState<PestanaAcceso>('cuenta');
   const [mostrarContrasena, setMostrarContrasena] = useState(false);
+  const [contrasenaCopiada, setContrasenaCopiada] = useState(false);
   const [codigoBloqueo, setCodigoBloqueo] = useState<string | null>(null);
   const [motivoRechazo, setMotivoRechazo] = useState<string | null>(null);
   const [avisoTransitorio] = useState(() => consumirAvisoInicioSesion());
@@ -169,6 +170,7 @@ export function PaginaInicioSesion() {
     clearErrors,
     setError,
     setValue,
+    getValues,
     formState: { errors, isSubmitting },
   } = useForm<CamposFormulario>({
     resolver: zodResolver(esquema),
@@ -290,6 +292,19 @@ export function PaginaInicioSesion() {
     setCodigoBloqueo(null);
     setMotivoRechazo(null);
     clearErrors();
+  };
+
+  const copiarContrasena = async () => {
+    const contrasena = getValues('contrasena')?.trim();
+    if (!contrasena) return;
+
+    try {
+      await navigator.clipboard.writeText(contrasena);
+      setContrasenaCopiada(true);
+      window.setTimeout(() => setContrasenaCopiada(false), 1500);
+    } catch {
+      // Silenciar fallo de portapapeles
+    }
   };
 
   return (
@@ -453,10 +468,22 @@ export function PaginaInicioSesion() {
                       id="contrasena"
                       type={mostrarContrasena ? 'text' : 'password'}
                       autoComplete="current-password"
-                      className="w-full rounded-2xl border border-[#d8c4ba] bg-white/92 px-10 py-3.5 pr-12 text-sm text-slate-900 outline-none transition focus:border-[#7d2147] focus:ring-2 focus:ring-[#f2d7c5]"
+                      className="w-full rounded-2xl border border-[#d8c4ba] bg-white/92 px-10 py-3.5 pr-22 text-sm text-slate-900 outline-none transition focus:border-[#7d2147] focus:ring-2 focus:ring-[#f2d7c5]"
                       aria-invalid={Boolean(errors.contrasena)}
                       {...register('contrasena')}
                     />
+                    <button
+                      type="button"
+                      onClick={() => void copiarContrasena()}
+                      className="absolute right-10 top-1/2 -translate-y-1/2 text-slate-400 transition hover:text-slate-700"
+                      aria-label="Copiar contraseña"
+                    >
+                      {contrasenaCopiada ? (
+                        <Check className="h-4 w-4 text-emerald-600" />
+                      ) : (
+                        <Copy className="h-4 w-4" />
+                      )}
+                    </button>
                     <button
                       type="button"
                       onClick={() => setMostrarContrasena((valor) => !valor)}
