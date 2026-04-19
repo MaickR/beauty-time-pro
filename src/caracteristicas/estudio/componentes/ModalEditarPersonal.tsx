@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useCallback, useState } from 'react';
 import { X } from 'lucide-react';
 import { SelectorHora } from '../../../componentes/ui/SelectorHora';
 import { usarToast } from '../../../componentes/ui/ProveedorToast';
@@ -75,6 +75,17 @@ export function ModalEditarPersonal({
     );
   }, [abierto, personal]);
 
+  // Cerrar con ESC
+  const manejarCerrar = useCallback(() => onCerrar(), [onCerrar]);
+  useEffect(() => {
+    if (!abierto) return;
+    const manejarTeclado = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') manejarCerrar();
+    };
+    document.addEventListener('keydown', manejarTeclado);
+    return () => document.removeEventListener('keydown', manejarTeclado);
+  }, [abierto, manejarCerrar]);
+
   if (!abierto || !personal) return null;
 
   const alternarEspecialidad = (servicio: string) => {
@@ -140,39 +151,44 @@ export function ModalEditarPersonal({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center overflow-hidden bg-black/55 p-2 sm:p-4"
+      onClick={(e) => {
+        if (e.target === e.currentTarget) onCerrar();
+      }}
+    >
       <div
         role="dialog"
         aria-modal="true"
         aria-labelledby="titulo-editar-especialista"
-        className="w-full max-w-2xl rounded-4xl bg-white p-6 shadow-2xl"
+        className="mx-auto flex max-h-[calc(100dvh-1rem)] w-full max-w-lg flex-col overflow-hidden rounded-3xl bg-white shadow-2xl sm:max-h-[calc(100dvh-2rem)] sm:max-w-xl"
       >
-        <div className="mb-5 flex items-center justify-between">
-          <h3 id="titulo-editar-especialista" className="text-xl font-black text-slate-900">
-            Editar especialista
-          </h3>
-          <button type="button" onClick={onCerrar} aria-label="Cerrar modal">
-            <X className="h-5 w-5 text-slate-400" />
+        {/* Header fijo */}
+        <div className="flex shrink-0 items-center justify-between border-b border-slate-100 px-3 py-3.5 sm:px-5 sm:py-4">
+          <div className="flex items-center gap-3">
+            <div className="flex h-10 w-10 items-center justify-center rounded-full bg-pink-100 text-sm font-black text-pink-700 shrink-0">
+              {obtenerIniciales(nombre)}
+            </div>
+            <h3 id="titulo-editar-especialista" className="text-lg font-black text-slate-900">
+              Editar especialista
+            </h3>
+          </div>
+          <button
+            type="button"
+            onClick={onCerrar}
+            aria-label="Cerrar modal"
+            className="rounded-xl p-2 text-slate-400 transition hover:bg-slate-100 hover:text-slate-600"
+          >
+            <X className="h-5 w-5" />
           </button>
         </div>
 
-        <div className="grid gap-4 md:grid-cols-2">
-          <div className="md:col-span-2 flex items-center gap-4">
-            <div className="flex h-20 w-20 items-center justify-center rounded-full bg-pink-100 text-xl font-black text-pink-700">
-              {obtenerIniciales(nombre)}
-            </div>
-            <div>
-              <p className="text-sm font-bold text-slate-700">Avatar automático</p>
-              <p className="text-xs text-slate-400">
-                El sistema mantiene un avatar con iniciales para este especialista.
-              </p>
-            </div>
-          </div>
-
-          <div className="md:col-span-2">
+        {/* Contenido con scroll */}
+        <div className="min-h-0 space-y-4 overflow-y-auto overscroll-contain px-3 py-3.5 sm:space-y-5 sm:px-5 sm:py-4">
+          <div>
             <label
               htmlFor="nombre-especialista-modal"
-              className="mb-1 block text-sm font-semibold text-slate-700"
+              className="mb-1 block text-xs font-bold uppercase tracking-wide text-slate-500"
             >
               Nombre completo
             </label>
@@ -180,22 +196,26 @@ export function ModalEditarPersonal({
               id="nombre-especialista-modal"
               value={nombre}
               onChange={(evento) => setNombre(evento.target.value)}
-              className="w-full rounded-xl border border-slate-200 px-3.5 py-3 text-sm outline-none focus:ring-2 focus:ring-pink-500"
+              className="w-full rounded-xl border border-slate-200 px-3.5 py-2.5 text-sm outline-none focus:ring-2 focus:ring-pink-500/30 focus:border-pink-400"
             />
           </div>
 
-          <SelectorHora etiqueta="Entrada" valor={horaInicio} alCambiar={setHoraInicio} />
-          <SelectorHora etiqueta="Salida" valor={horaFin} alCambiar={setHoraFin} />
-          <SelectorHora
-            etiqueta="Inicio de almuerzo"
-            valor={descansoInicio}
-            alCambiar={setDescansoInicio}
-          />
-          <SelectorHora etiqueta="Fin de almuerzo" valor={descansoFin} alCambiar={setDescansoFin} />
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <SelectorHora etiqueta="Entrada" valor={horaInicio} alCambiar={setHoraInicio} />
+            <SelectorHora etiqueta="Salida" valor={horaFin} alCambiar={setHoraFin} />
+            <SelectorHora
+              etiqueta="Inicio descanso"
+              valor={descansoInicio}
+              alCambiar={setDescansoInicio}
+            />
+            <SelectorHora etiqueta="Fin descanso" valor={descansoFin} alCambiar={setDescansoFin} />
+          </div>
 
-          <div className="md:col-span-2">
-            <p className="mb-2 text-sm font-semibold text-slate-700">Servicios que realiza</p>
-            <div className="flex flex-wrap gap-2">
+          <div>
+            <p className="mb-2 text-xs font-bold uppercase tracking-wide text-slate-500">
+              Servicios que realiza
+            </p>
+            <div className="flex flex-wrap gap-1.5">
               {serviciosDisponibles.map((servicio) => {
                 const activo = especialidades.includes(servicio);
                 return (
@@ -203,7 +223,7 @@ export function ModalEditarPersonal({
                     key={servicio}
                     type="button"
                     onClick={() => alternarEspecialidad(servicio)}
-                    className={`rounded-xl px-3 py-1.5 text-xs font-bold transition-colors ${activo ? 'bg-slate-900 text-white' : 'border border-slate-200 bg-white text-slate-600 hover:border-pink-300 hover:text-pink-600'}`}
+                    className={`rounded-lg px-2.5 py-1.5 text-xs font-bold transition-colors ${activo ? 'bg-slate-900 text-white' : 'border border-slate-200 bg-white text-slate-500 hover:border-pink-300 hover:text-pink-600'}`}
                   >
                     {activo ? '✓ ' : ''}
                     {servicio}
@@ -213,13 +233,13 @@ export function ModalEditarPersonal({
             </div>
           </div>
 
-          <div className="md:col-span-2 rounded-2xl border border-emerald-200 bg-emerald-50 p-4">
-            <p className="text-sm font-semibold text-emerald-800">Comisión del especialista</p>
-            <div className="mt-3 grid gap-3 md:grid-cols-[220px_1fr]">
+          <div className="space-y-3 rounded-2xl border border-emerald-200 bg-emerald-50/50 p-3.5 sm:p-4">
+            <p className="text-xs font-bold uppercase tracking-wide text-emerald-800">
+              Comisión del especialista
+            </p>
+            <div className="grid gap-3 sm:grid-cols-2">
               <label className="space-y-1">
-                <span className="text-xs font-semibold uppercase tracking-wide text-emerald-800">
-                  Comisión base (%)
-                </span>
+                <span className="text-xs font-semibold text-emerald-700">Comisión base (%)</span>
                 <input
                   type="number"
                   min={0}
@@ -234,20 +254,14 @@ export function ModalEditarPersonal({
                 />
               </label>
 
-              <div className="space-y-2">
-                <p className="text-xs font-semibold uppercase tracking-wide text-emerald-800">
-                  Comisión por servicio (opcional)
-                </p>
-                {especialidades.length === 0 ? (
-                  <p className="rounded-xl border border-dashed border-emerald-200 bg-white px-3 py-2 text-xs text-emerald-700">
-                    Sin servicios seleccionados para asignar comisión específica.
-                  </p>
-                ) : (
-                  <div className="grid gap-2 sm:grid-cols-2">
+              {especialidades.length > 0 && (
+                <div className="sm:col-span-2 space-y-2">
+                  <p className="text-xs font-semibold text-emerald-700">Por servicio (opcional)</p>
+                  <div className="grid gap-1.5 sm:grid-cols-2">
                     {especialidades.map((servicio) => (
                       <label
                         key={`editar-comision-${servicio}`}
-                        className="flex items-center justify-between gap-2 rounded-xl border border-emerald-200 bg-white px-3 py-2"
+                        className="flex items-center justify-between gap-2 rounded-xl border border-emerald-200 bg-white px-3 py-1.5"
                       >
                         <span className="truncate text-xs font-semibold text-slate-700">
                           {servicio}
@@ -267,21 +281,23 @@ export function ModalEditarPersonal({
                               }));
                             }}
                             placeholder="Base"
-                            className="w-16 rounded-lg border border-emerald-200 px-2 py-1 text-right text-xs font-bold text-slate-800 outline-none focus:ring-2 focus:ring-emerald-300"
+                            className="w-14 rounded-lg border border-emerald-200 px-2 py-1 text-right text-xs font-bold text-slate-800 outline-none focus:ring-2 focus:ring-emerald-300"
                           />
                           <span className="text-xs font-black text-emerald-700">%</span>
                         </div>
                       </label>
                     ))}
                   </div>
-                )}
-              </div>
+                </div>
+              )}
             </div>
           </div>
 
-          <div className="md:col-span-2">
-            <p className="mb-2 text-sm font-semibold text-slate-700">Días laborales</p>
-            <div className="flex flex-wrap gap-2">
+          <div>
+            <p className="mb-2 text-xs font-bold uppercase tracking-wide text-slate-500">
+              Días laborales
+            </p>
+            <div className="flex flex-wrap gap-1.5">
               {[1, 2, 3, 4, 5, 6, 0].map((dia) => {
                 const activo = diasLaborales.includes(dia);
                 return (
@@ -289,7 +305,7 @@ export function ModalEditarPersonal({
                     key={dia}
                     type="button"
                     onClick={() => alternarDia(dia)}
-                    className={`rounded-xl px-3 py-1.5 text-xs font-bold transition-colors ${activo ? 'bg-slate-900 text-white' : 'border border-slate-200 bg-white text-slate-600 hover:border-pink-300 hover:text-pink-600'}`}
+                    className={`rounded-lg px-3 py-1.5 text-xs font-bold transition-colors ${activo ? 'bg-slate-900 text-white' : 'border border-slate-200 bg-white text-slate-500 hover:border-pink-300 hover:text-pink-600'}`}
                   >
                     {NOMBRES_DIAS[dia]}
                   </button>
@@ -299,11 +315,12 @@ export function ModalEditarPersonal({
           </div>
         </div>
 
-        <div className="mt-6 flex justify-end gap-3">
+        {/* Footer fijo */}
+        <div className="flex shrink-0 flex-col-reverse gap-2 border-t border-slate-100 px-3 py-3.5 sm:flex-row sm:justify-end sm:gap-3 sm:px-5 sm:py-4">
           <button
             type="button"
             onClick={onCerrar}
-            className="rounded-2xl bg-slate-100 px-5 py-3 text-sm font-semibold text-slate-700 hover:bg-slate-200"
+            className="rounded-xl bg-slate-100 px-4 py-2.5 text-sm font-semibold text-slate-600 hover:bg-slate-200 transition"
           >
             Cancelar
           </button>
@@ -311,7 +328,7 @@ export function ModalEditarPersonal({
             type="button"
             onClick={() => void guardar()}
             disabled={guardando}
-            className="rounded-2xl bg-slate-900 px-5 py-3 text-sm font-black text-white hover:bg-black disabled:opacity-60"
+            className="rounded-xl bg-slate-900 px-5 py-2.5 text-sm font-black text-white hover:bg-black disabled:opacity-60 transition"
           >
             {guardando ? 'Guardando...' : 'Guardar cambios'}
           </button>

@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import QRCode from 'qrcode';
 import { useParams, useNavigate } from 'react-router-dom';
 import {
@@ -68,8 +68,15 @@ export function PaginaAgenda() {
   const identificadorRutaPrivada =
     estudio?.slug?.trim() || estudio?.clientKey?.trim() || estudio?.id;
 
+  const navegacionAgendaRef = useRef(false);
   useEffect(() => {
-    if (!identificadorRutaPrivada || !slug || slug === identificadorRutaPrivada) return;
+    if (navegacionAgendaRef.current) return;
+    if (!identificadorRutaPrivada || !slug) return;
+    if (slug === identificadorRutaPrivada) {
+      navegacionAgendaRef.current = true;
+      return;
+    }
+    navegacionAgendaRef.current = true;
     navegar(`/estudio/${identificadorRutaPrivada}/agenda`, { replace: true });
   }, [identificadorRutaPrivada, slug, navegar]);
 

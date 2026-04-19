@@ -121,7 +121,11 @@ function BotonOrdenTabla({
     >
       <span>{etiqueta}</span>
       {activo ? (
-        direccion === 'asc' ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />
+        direccion === 'asc' ? (
+          <ChevronUp className="h-3.5 w-3.5" />
+        ) : (
+          <ChevronDown className="h-3.5 w-3.5" />
+        )
       ) : (
         <span className="text-[11px]">↕</span>
       )}
@@ -249,7 +253,11 @@ function StatCard({ title, value, subtitle, color, icon, onClick }: PropsStatCar
   );
 }
 
-function descargarExcel(nombreArchivo: string, nombreHoja: string, filas: Record<string, unknown>[]) {
+function descargarExcel(
+  nombreArchivo: string,
+  nombreHoja: string,
+  filas: Record<string, unknown>[],
+) {
   const hoja = XLSX.utils.json_to_sheet(filas);
   const libro = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(libro, hoja, nombreHoja);
@@ -334,7 +342,9 @@ function ModalCitasHoy({
           />
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          <span className="text-xs font-black text-slate-400 uppercase self-center mr-1">Estado:</span>
+          <span className="text-xs font-black text-slate-400 uppercase self-center mr-1">
+            Estado:
+          </span>
           {ESTADO_CITAS.map((estado) => (
             <button
               key={estado.valor}
@@ -366,22 +376,53 @@ function ModalCitasHoy({
           <thead>
             <tr className="border-b border-slate-200">
               <th className="text-left py-3 px-2 text-xs font-black text-slate-400 uppercase">
-                <BotonOrdenTabla etiqueta="Cliente" activo={campoOrden === 'cliente'} direccion={direccionOrden} onClick={() => alternarOrden('cliente')} />
+                <BotonOrdenTabla
+                  etiqueta="Cliente"
+                  activo={campoOrden === 'cliente'}
+                  direccion={direccionOrden}
+                  onClick={() => alternarOrden('cliente')}
+                />
               </th>
               <th className="text-left py-3 px-2 text-xs font-black text-slate-400 uppercase">
-                <BotonOrdenTabla etiqueta="Servicio" activo={campoOrden === 'servicio'} direccion={direccionOrden} onClick={() => alternarOrden('servicio')} />
+                <BotonOrdenTabla
+                  etiqueta="Servicio"
+                  activo={campoOrden === 'servicio'}
+                  direccion={direccionOrden}
+                  onClick={() => alternarOrden('servicio')}
+                />
               </th>
               <th className="text-left py-3 px-2 text-xs font-black text-slate-400 uppercase">
-                <BotonOrdenTabla etiqueta="Empleado" activo={campoOrden === 'empleado'} direccion={direccionOrden} onClick={() => alternarOrden('empleado')} />
+                <BotonOrdenTabla
+                  etiqueta="Empleado"
+                  activo={campoOrden === 'empleado'}
+                  direccion={direccionOrden}
+                  onClick={() => alternarOrden('empleado')}
+                />
               </th>
               <th className="text-left py-3 px-2 text-xs font-black text-slate-400 uppercase">
-                <BotonOrdenTabla etiqueta="Hora" activo={campoOrden === 'hora'} direccion={direccionOrden} onClick={() => alternarOrden('hora')} />
+                <BotonOrdenTabla
+                  etiqueta="Hora"
+                  activo={campoOrden === 'hora'}
+                  direccion={direccionOrden}
+                  onClick={() => alternarOrden('hora')}
+                />
               </th>
               <th className="text-right py-3 px-2 text-xs font-black text-slate-400 uppercase">
-                <BotonOrdenTabla etiqueta="Precio Est." activo={campoOrden === 'precio'} direccion={direccionOrden} alineacion="right" onClick={() => alternarOrden('precio')} />
+                <BotonOrdenTabla
+                  etiqueta="Precio Est."
+                  activo={campoOrden === 'precio'}
+                  direccion={direccionOrden}
+                  alineacion="right"
+                  onClick={() => alternarOrden('precio')}
+                />
               </th>
               <th className="text-left py-3 px-2 text-xs font-black text-slate-400 uppercase">
-                <BotonOrdenTabla etiqueta="Estado" activo={campoOrden === 'estado'} direccion={direccionOrden} onClick={() => alternarOrden('estado')} />
+                <BotonOrdenTabla
+                  etiqueta="Estado"
+                  activo={campoOrden === 'estado'}
+                  direccion={direccionOrden}
+                  onClick={() => alternarOrden('estado')}
+                />
               </th>
             </tr>
           </thead>
@@ -430,10 +471,15 @@ function ModalCitasHoy({
       {/* Pie con exportar */}
       <div className="flex flex-col gap-3 border-t border-slate-200 px-6 py-3 sm:flex-row sm:items-center sm:justify-between">
         <p className="text-xs font-bold text-slate-500">
-          {filteredCitas.length} citas filtradas de {citas.length} totales - Pagina {paginaActual} de {totalPaginas}
+          {filteredCitas.length} citas filtradas de {citas.length} totales - Pagina {paginaActual}{' '}
+          de {totalPaginas}
         </p>
         <div className="flex items-center gap-2">
-          <PaginadorTabla total={filteredCitas.length} pagina={paginaActual} onCambiarPagina={setPaginaActual} />
+          <PaginadorTabla
+            total={filteredCitas.length}
+            pagina={paginaActual}
+            onCambiarPagina={setPaginaActual}
+          />
           <button
             type="button"
             onClick={() =>
@@ -513,7 +559,11 @@ function ModalGanancias({
           return compararNumero(filaA.total, filaB.total, direccionOrden);
         case 'fecha':
         default:
-          return compararTexto(`${filaA.fecha} ${filaA.hora}`, `${filaB.fecha} ${filaB.hora}`, direccionOrden);
+          return compararTexto(
+            `${filaA.fecha} ${filaA.hora}`,
+            `${filaB.fecha} ${filaB.hora}`,
+            direccionOrden,
+          );
       }
     });
   }, [campoOrden, direccionOrden, filasFiltradas]);
@@ -569,7 +619,9 @@ function ModalGanancias({
       </div>
 
       <div className="px-6 py-5">
-        <div className={`mb-8 grid grid-cols-1 gap-4 ${esPlanPro ? 'md:grid-cols-3' : 'md:grid-cols-2'}`}>
+        <div
+          className={`mb-8 grid grid-cols-1 gap-4 ${esPlanPro ? 'md:grid-cols-3' : 'md:grid-cols-2'}`}
+        >
           <div className="rounded-2xl border border-emerald-100 bg-emerald-50 p-4">
             <p className="mb-1 text-[10px] font-bold uppercase text-emerald-600">Total Servicios</p>
             <h5 className="text-2xl font-black text-emerald-700">
@@ -613,7 +665,9 @@ function ModalGanancias({
           </div>
 
           <div className="flex flex-wrap items-center gap-2">
-            <span className="text-xs font-black text-slate-400 uppercase self-center mr-1">Tipo:</span>
+            <span className="text-xs font-black text-slate-400 uppercase self-center mr-1">
+              Tipo:
+            </span>
             {(['todos', 'servicio', 'producto'] as const).map((tipo) => (
               <button
                 key={tipo}
@@ -632,7 +686,9 @@ function ModalGanancias({
               </button>
             ))}
 
-            <span className="text-xs font-black text-slate-400 uppercase self-center ml-3 mr-1">Responsable:</span>
+            <span className="text-xs font-black text-slate-400 uppercase self-center ml-3 mr-1">
+              Responsable:
+            </span>
             <select
               value={especialistaFiltro}
               onChange={(evento) => {
@@ -662,24 +718,57 @@ function ModalGanancias({
             <thead>
               <tr className="border-b border-slate-200">
                 <th className="text-left py-3 px-2 text-xs font-black text-slate-400 uppercase">
-                  <BotonOrdenTabla etiqueta="Fecha / Hora" activo={campoOrden === 'fecha'} direccion={direccionOrden} onClick={() => alternarOrden('fecha')} />
+                  <BotonOrdenTabla
+                    etiqueta="Fecha / Hora"
+                    activo={campoOrden === 'fecha'}
+                    direccion={direccionOrden}
+                    onClick={() => alternarOrden('fecha')}
+                  />
                 </th>
                 <th className="text-left py-3 px-2 text-xs font-black text-slate-400 uppercase">
-                  <BotonOrdenTabla etiqueta="Concepto" activo={campoOrden === 'concepto'} direccion={direccionOrden} onClick={() => alternarOrden('concepto')} />
+                  <BotonOrdenTabla
+                    etiqueta="Concepto"
+                    activo={campoOrden === 'concepto'}
+                    direccion={direccionOrden}
+                    onClick={() => alternarOrden('concepto')}
+                  />
                 </th>
                 <th className="text-left py-3 px-2 text-xs font-black text-slate-400 uppercase">
-                  <BotonOrdenTabla etiqueta="Tipo" activo={campoOrden === 'tipo'} direccion={direccionOrden} onClick={() => alternarOrden('tipo')} />
+                  <BotonOrdenTabla
+                    etiqueta="Tipo"
+                    activo={campoOrden === 'tipo'}
+                    direccion={direccionOrden}
+                    onClick={() => alternarOrden('tipo')}
+                  />
                 </th>
                 <th className="text-left py-3 px-2 text-xs font-black text-slate-400 uppercase">
-                  <BotonOrdenTabla etiqueta="Responsable" activo={campoOrden === 'responsable'} direccion={direccionOrden} onClick={() => alternarOrden('responsable')} />
+                  <BotonOrdenTabla
+                    etiqueta="Responsable"
+                    activo={campoOrden === 'responsable'}
+                    direccion={direccionOrden}
+                    onClick={() => alternarOrden('responsable')}
+                  />
                 </th>
                 <th className="text-left py-3 px-2 text-xs font-black text-slate-400 uppercase">
-                  <BotonOrdenTabla etiqueta="Cliente" activo={campoOrden === 'cliente'} direccion={direccionOrden} onClick={() => alternarOrden('cliente')} />
+                  <BotonOrdenTabla
+                    etiqueta="Cliente"
+                    activo={campoOrden === 'cliente'}
+                    direccion={direccionOrden}
+                    onClick={() => alternarOrden('cliente')}
+                  />
                 </th>
                 <th className="text-right py-3 px-2 text-xs font-black text-slate-400 uppercase">
-                  <BotonOrdenTabla etiqueta="Monto" activo={campoOrden === 'monto'} direccion={direccionOrden} alineacion="right" onClick={() => alternarOrden('monto')} />
+                  <BotonOrdenTabla
+                    etiqueta="Monto"
+                    activo={campoOrden === 'monto'}
+                    direccion={direccionOrden}
+                    alineacion="right"
+                    onClick={() => alternarOrden('monto')}
+                  />
                 </th>
-                <th className="text-right py-3 px-2 text-xs font-black text-slate-400 uppercase">Acumulado</th>
+                <th className="text-right py-3 px-2 text-xs font-black text-slate-400 uppercase">
+                  Acumulado
+                </th>
               </tr>
             </thead>
             <tbody>
@@ -734,10 +823,15 @@ function ModalGanancias({
 
       <div className="flex flex-col gap-3 border-t border-slate-200 px-6 py-3 sm:flex-row sm:items-center sm:justify-between">
         <p className="text-xs font-bold text-slate-500">
-          {filasConAcumulado.length} registros - {obtenerEtiquetaPeriodoFinanciero(financeTab)} - Pagina {paginaActual} de {totalPaginas}
+          {filasConAcumulado.length} registros - {obtenerEtiquetaPeriodoFinanciero(financeTab)} -
+          Pagina {paginaActual} de {totalPaginas}
         </p>
         <div className="flex items-center gap-2">
-          <PaginadorTabla total={filasConAcumulado.length} pagina={paginaActual} onCambiarPagina={setPaginaActual} />
+          <PaginadorTabla
+            total={filasConAcumulado.length}
+            pagina={paginaActual}
+            onCambiarPagina={setPaginaActual}
+          />
           <button
             type="button"
             onClick={() =>
@@ -835,21 +929,49 @@ function ModalEspecialistas({
           <thead>
             <tr className="border-b border-slate-200">
               <th className="text-left py-3 px-2 text-xs font-black text-slate-400 uppercase">
-                <BotonOrdenTabla etiqueta="Especialista" activo={campoOrden === 'nombre'} direccion={direccionOrden} onClick={() => alternarOrden('nombre')} />
+                <BotonOrdenTabla
+                  etiqueta="Especialista"
+                  activo={campoOrden === 'nombre'}
+                  direccion={direccionOrden}
+                  onClick={() => alternarOrden('nombre')}
+                />
               </th>
               <th className="text-left py-3 px-2 text-xs font-black text-slate-400 uppercase">
-                <BotonOrdenTabla etiqueta="Servicios" activo={campoOrden === 'servicios'} direccion={direccionOrden} onClick={() => alternarOrden('servicios')} />
+                <BotonOrdenTabla
+                  etiqueta="Servicios"
+                  activo={campoOrden === 'servicios'}
+                  direccion={direccionOrden}
+                  onClick={() => alternarOrden('servicios')}
+                />
               </th>
               <th className="text-left py-3 px-2 text-xs font-black text-slate-400 uppercase">
-                <BotonOrdenTabla etiqueta="Jornada" activo={campoOrden === 'jornada'} direccion={direccionOrden} onClick={() => alternarOrden('jornada')} />
+                <BotonOrdenTabla
+                  etiqueta="Jornada"
+                  activo={campoOrden === 'jornada'}
+                  direccion={direccionOrden}
+                  onClick={() => alternarOrden('jornada')}
+                />
               </th>
               <th className="text-left py-3 px-2 text-xs font-black text-slate-400 uppercase">
-                <BotonOrdenTabla etiqueta="Almuerzo" activo={campoOrden === 'descanso'} direccion={direccionOrden} onClick={() => alternarOrden('descanso')} />
+                <BotonOrdenTabla
+                  etiqueta="Almuerzo"
+                  activo={campoOrden === 'descanso'}
+                  direccion={direccionOrden}
+                  onClick={() => alternarOrden('descanso')}
+                />
               </th>
               <th className="text-right py-3 px-2 text-xs font-black text-slate-400 uppercase">
-                <BotonOrdenTabla etiqueta="Citas hoy" activo={campoOrden === 'citasHoy'} direccion={direccionOrden} alineacion="right" onClick={() => alternarOrden('citasHoy')} />
+                <BotonOrdenTabla
+                  etiqueta="Citas hoy"
+                  activo={campoOrden === 'citasHoy'}
+                  direccion={direccionOrden}
+                  alineacion="right"
+                  onClick={() => alternarOrden('citasHoy')}
+                />
               </th>
-              <th className="text-left py-3 px-2 text-xs font-black text-slate-400 uppercase">Estado</th>
+              <th className="text-left py-3 px-2 text-xs font-black text-slate-400 uppercase">
+                Estado
+              </th>
             </tr>
           </thead>
           <tbody>
@@ -858,7 +980,9 @@ function ModalEspecialistas({
                 <td className="py-3 px-2 font-bold text-slate-900">{especialista.nombre}</td>
                 <td className="py-3 px-2 text-slate-600">{especialista.servicios.join(', ')}</td>
                 <td className="py-3 px-2 text-slate-700">{especialista.jornada}</td>
-                <td className="py-3 px-2 text-slate-600">{especialista.descanso || 'Sin pausa definida'}</td>
+                <td className="py-3 px-2 text-slate-600">
+                  {especialista.descanso || 'Sin pausa definida'}
+                </td>
                 <td className="py-3 px-2 text-right font-bold text-indigo-600">
                   {especialista.citasHoy}
                 </td>
@@ -882,9 +1006,7 @@ function ModalEspecialistas({
 
       {/* Pie con exportar */}
       <div className="flex flex-col gap-3 border-t border-slate-200 px-6 py-3 sm:flex-row sm:items-center sm:justify-between">
-        <p className="text-xs font-bold text-slate-500">
-          {filtrados.length} especialistas activos
-        </p>
+        <p className="text-xs font-bold text-slate-500">{filtrados.length} especialistas activos</p>
         <button
           type="button"
           onClick={() =>
@@ -935,11 +1057,15 @@ function ModalPlanActual({
         <div className="mx-auto mb-10 grid max-w-lg grid-cols-1 gap-4 sm:grid-cols-2">
           <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
             <p className="text-xs font-black uppercase text-slate-400">Suscrito el</p>
-            <p className="mt-1 font-bold text-slate-900">{formatearFechaHumana(data.plan.fechaAdquisicion)}</p>
+            <p className="mt-1 font-bold text-slate-900">
+              {formatearFechaHumana(data.plan.fechaAdquisicion)}
+            </p>
           </div>
           <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
             <p className="text-xs font-black uppercase text-slate-400">Proximo cobro</p>
-            <p className="mt-1 font-bold text-slate-900">{formatearFechaHumana(data.plan.proximoCorte)}</p>
+            <p className="mt-1 font-bold text-slate-900">
+              {formatearFechaHumana(data.plan.proximoCorte)}
+            </p>
           </div>
         </div>
 
@@ -949,7 +1075,8 @@ function ModalPlanActual({
           rel="noopener noreferrer"
           className="mx-auto flex w-full items-center justify-center gap-2 rounded-2xl bg-emerald-500 px-8 py-4 font-bold text-white transition-all hover:bg-emerald-600 sm:w-auto"
         >
-          <Smartphone size={20} /> Hablar con Soporte {data.plan.pais === 'Colombia' ? 'Colombia' : 'Mexico'}
+          <Smartphone size={20} /> Hablar con Soporte{' '}
+          {data.plan.pais === 'Colombia' ? 'Colombia' : 'Mexico'}
         </a>
       </div>
     </Modal>
@@ -1011,7 +1138,9 @@ function ModalCuentaRegresiva({
           <span className="text-5xl font-light text-slate-300">:</span>
           <div className="flex flex-col">
             <span className="text-5xl font-black text-slate-900">
-              {tiempoRestante.segundos < 10 ? `0${tiempoRestante.segundos}` : tiempoRestante.segundos}
+              {tiempoRestante.segundos < 10
+                ? `0${tiempoRestante.segundos}`
+                : tiempoRestante.segundos}
             </span>
             <span className="text-[10px] font-bold uppercase text-slate-400">Seg</span>
           </div>
@@ -1040,7 +1169,9 @@ function ModalCuentaRegresiva({
               >
                 Recordatorio del Sistema
               </p>
-              <p className={`text-xs leading-relaxed ${estaCercaCorte ? 'text-amber-700' : 'text-slate-600'}`}>
+              <p
+                className={`text-xs leading-relaxed ${estaCercaCorte ? 'text-amber-700' : 'text-slate-600'}`}
+              >
                 Te avisaremos automaticamente cuando falten 10 dias para el corte.
               </p>
             </div>
@@ -1051,17 +1182,23 @@ function ModalCuentaRegresiva({
   );
 }
 
-export function MetricasSalon({ estudioId, nombreSalon, saludo, nombreSaludo, fechaEtiqueta }: PropsMetricasSalon) {
+export function MetricasSalon({
+  estudioId,
+  nombreSalon,
+  saludo,
+  nombreSaludo,
+  fechaEtiqueta,
+}: PropsMetricasSalon) {
   const [activeModal, setActiveModal] = useState<ModalActiva>(null);
 
   const consultaMetricas = useQuery({
     queryKey: ['estudio', estudioId, 'metricas-dashboard'],
     queryFn: () => obtenerMetricasDashboard(estudioId),
     enabled: Boolean(estudioId),
-    staleTime: 5_000,
-    refetchInterval: 10_000,
-    refetchIntervalInBackground: true,
-    refetchOnWindowFocus: true,
+    staleTime: 30_000,
+    refetchInterval: 60_000,
+    refetchIntervalInBackground: false,
+    refetchOnWindowFocus: false,
   });
 
   const data = consultaMetricas.data;
@@ -1069,14 +1206,20 @@ export function MetricasSalon({ estudioId, nombreSalon, saludo, nombreSaludo, fe
   return (
     <section>
       <div className="mb-6 rounded-2xl border border-slate-200 bg-white px-5 py-4 shadow-sm sm:px-6 sm:py-5">
-        <p className="text-sm font-semibold text-slate-600">{saludo}, {nombreSaludo}</p>
-        <h1 className="mt-1 text-2xl font-black text-slate-900 sm:text-3xl">Panel de metricas del salon</h1>
+        <p className="text-sm font-semibold text-slate-600">
+          {saludo}, {nombreSaludo}
+        </p>
+        <h1 className="mt-1 text-2xl font-black text-slate-900 sm:text-3xl">
+          Panel de metricas del salon
+        </h1>
         <p className="mt-2 text-sm text-slate-500">{fechaEtiqueta}</p>
       </div>
 
       <div className="mb-6 flex items-center gap-2">
         <Zap className="text-amber-500 fill-amber-500" size={20} />
-        <h2 className="text-sm font-bold uppercase tracking-widest text-slate-800">Dashboard Operativo</h2>
+        <h2 className="text-sm font-bold uppercase tracking-widest text-slate-800">
+          Dashboard Operativo
+        </h2>
       </div>
 
       {consultaMetricas.isLoading ? (

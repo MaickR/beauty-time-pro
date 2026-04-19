@@ -21,6 +21,8 @@ export function PanelMiEquipo({ estudio }: PropsPanelMiEquipo) {
   const queryClient = useQueryClient();
   const { mostrarToast } = usarToast();
 
+  const cerrarFormulario = () => setMostrarFormulario(false);
+
   const consultaPersonal = useQuery({
     queryKey: ['personal-estudio', estudio.id],
     queryFn: () => listarPersonal(estudio.id),
@@ -30,8 +32,10 @@ export function PanelMiEquipo({ estudio }: PropsPanelMiEquipo) {
 
   const mutacionEliminar = useMutation({
     mutationFn: (personalId: string) => eliminarPersonal(personalId),
-    onSuccess: async () => {
-      await queryClient.invalidateQueries({ queryKey: ['personal-estudio', estudio.id] });
+    onSuccess: (_resultado, personalId) => {
+      queryClient.setQueryData<Personal[]>(['personal-estudio', estudio.id], (actual) =>
+        (actual ?? []).filter((item) => item.id !== personalId),
+      );
       setPersonalPendienteEliminar(null);
       mostrarToast({ mensaje: 'Especialista eliminado del equipo activo', variante: 'exito' });
     },
@@ -97,13 +101,33 @@ export function PanelMiEquipo({ estudio }: PropsPanelMiEquipo) {
       </div>
 
       {mostrarFormulario && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center overflow-hidden bg-black/55 p-2 sm:p-4"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) cerrarFormulario();
+          }}
+        >
           <FormularioNuevoPersonal
             estudioId={estudio.id}
             serviciosDisponibles={estudio.selectedServices}
-            alCrearExitoso={async () => {
-              setMostrarFormulario(false);
-              await queryClient.invalidateQueries({ queryKey: ['personal-estudio', estudio.id] });
+            modoModal
+            alCerrar={cerrarFormulario}
+            alCrearExitoso={async (personalCreado) => {
+              cerrarFormulario();
+              queryClient.setQueryData<Personal[]>(['personal-estudio', estudio.id], (actual) => {
+                if (!actual) {
+                  return [personalCreado];
+                }
+
+                const indiceExistente = actual.findIndex((item) => item.id === personalCreado.id);
+                if (indiceExistente >= 0) {
+                  return actual.map((item) =>
+                    item.id === personalCreado.id ? { ...item, ...personalCreado } : item,
+                  );
+                }
+
+                return [personalCreado, ...actual];
+              });
             }}
           />
         </div>
@@ -368,9 +392,17 @@ export function PanelMiEquipo({ estudio }: PropsPanelMiEquipo) {
         personal={personalEditando}
         serviciosDisponibles={estudio.selectedServices.map((servicio) => servicio.name)}
         onCerrar={() => setPersonalEditando(null)}
-        onGuardado={async () => {
+        onGuardado={(personalActualizado) => {
           setPersonalEditando(null);
-          await queryClient.invalidateQueries({ queryKey: ['personal-estudio', estudio.id] });
+          queryClient.setQueryData<Personal[]>(['personal-estudio', estudio.id], (actual) => {
+            if (!actual) {
+              return [personalActualizado];
+            }
+
+            return actual.map((item) =>
+              item.id === personalActualizado.id ? { ...item, ...personalActualizado } : item,
+            );
+          });
         }}
       />
 

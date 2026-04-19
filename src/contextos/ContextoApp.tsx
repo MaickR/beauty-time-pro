@@ -37,7 +37,7 @@ export function ProveedorContextoApp({ children }: PropsWithChildren) {
   const recargar = useCallback(() => setContador((c) => c + 1), []);
 
   useEffect(() => {
-    if (!usuario || (rol !== 'maestro' && rol !== 'dueno' && rol !== 'vendedor')) return;
+    if (!usuario || rol !== 'maestro') return;
 
     const refrescarAlEnfocar = () => setContador((valor) => valor + 1);
     const refrescarAlVisibilizar = () => {
@@ -52,22 +52,6 @@ export function ProveedorContextoApp({ children }: PropsWithChildren) {
     return () => {
       window.removeEventListener('focus', refrescarAlEnfocar);
       document.removeEventListener('visibilitychange', refrescarAlVisibilizar);
-    };
-  }, [usuario, rol]);
-
-  useEffect(() => {
-    if (!usuario || (rol !== 'dueno' && rol !== 'vendedor')) {
-      return;
-    }
-
-    const intervalo = window.setInterval(() => {
-      if (document.visibilityState === 'visible') {
-        setContador((valor) => valor + 1);
-      }
-    }, 20_000);
-
-    return () => {
-      window.clearInterval(intervalo);
     };
   }, [usuario, rol]);
 
@@ -88,7 +72,7 @@ export function ProveedorContextoApp({ children }: PropsWithChildren) {
       return;
     }
 
-    // Solo mostrar spinner en la carga inicial; los refetch por foco/intervalo
+    // Solo mostrar spinner en la carga inicial; los refetch de datos
     // no deben causar un flash de spinner que parezca una recarga de página.
     const credencialesActuales = `${usuario?.id ?? ''}-${rol ?? ''}-${estudioActual ?? ''}`;
     const esRefetch = credencialesActuales === credencialesRef.current;

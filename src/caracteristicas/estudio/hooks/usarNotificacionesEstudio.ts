@@ -17,21 +17,22 @@ export function usarNotificacionesEstudio(estudioId: string | undefined) {
   const consulta = useQuery({
     queryKey: ['notificaciones-estudio', estudioId],
     queryFn: () =>
-      peticion<RespuestaNotificaciones>(`/estudios/${estudioId}/notificaciones`).then(
-        (r) => filtrarNotificacionesSalonRelevantes(r.datos),
+      peticion<RespuestaNotificaciones>(`/estudios/${estudioId}/notificaciones`).then((r) =>
+        filtrarNotificacionesSalonRelevantes(r.datos),
       ),
     enabled: !!estudioId,
     staleTime: 60_000,
-    refetchOnWindowFocus: true,
+    refetchOnWindowFocus: false,
   });
 
   const mutacionLeer = useMutation({
     mutationFn: (notifId: string) =>
       peticion(`/estudios/${estudioId}/notificaciones/${notifId}/leer`, { method: 'PUT' }),
-    onSuccess: () => {
-      void clienteConsulta.invalidateQueries({
-        queryKey: ['notificaciones-estudio', estudioId],
-      });
+    onSuccess: (_resultado, notifId) => {
+      clienteConsulta.setQueryData<NotificacionEstudio[]>(
+        ['notificaciones-estudio', estudioId],
+        (actual) => (actual ?? []).filter((notificacion) => notificacion.id !== notifId),
+      );
     },
   });
 
