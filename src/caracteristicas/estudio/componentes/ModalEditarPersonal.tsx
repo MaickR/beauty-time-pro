@@ -52,6 +52,8 @@ export function ModalEditarPersonal({
   const [descansoInicio, setDescansoInicio] = useState('14:00');
   const [descansoFin, setDescansoFin] = useState('15:00');
   const [diasLaborales, setDiasLaborales] = useState<number[]>(DIAS_LABORALES_PREDETERMINADOS);
+  const [porcentajeComisionBase, setPorcentajeComisionBase] = useState(0);
+  const [comisionServicios, setComisionServicios] = useState<Record<string, string>>({});
   const [guardando, setGuardando] = useState(false);
 
   useEffect(() => {
@@ -63,16 +65,31 @@ export function ModalEditarPersonal({
     setDescansoInicio(personal.breakStart ?? '14:00');
     setDescansoFin(personal.breakEnd ?? '15:00');
     setDiasLaborales(personal.workingDays ?? DIAS_LABORALES_PREDETERMINADOS);
+    setPorcentajeComisionBase(personal.commissionBasePercentage ?? 0);
+    setComisionServicios(
+      Object.fromEntries(
+        Object.entries(personal.serviceCommissionPercentages ?? {}).map(
+          ([servicio, porcentaje]) => [servicio, String(porcentaje)],
+        ),
+      ),
+    );
   }, [abierto, personal]);
 
   if (!abierto || !personal) return null;
 
   const alternarEspecialidad = (servicio: string) => {
-    setEspecialidades((actual) =>
-      actual.includes(servicio)
-        ? actual.filter((item) => item !== servicio)
-        : [...actual, servicio],
-    );
+    setEspecialidades((actual) => {
+      if (actual.includes(servicio)) {
+        setComisionServicios((actualComision) => {
+          const siguiente = { ...actualComision };
+          delete siguiente[servicio];
+          return siguiente;
+        });
+        return actual.filter((item) => item !== servicio);
+      }
+
+      return [...actual, servicio];
+    });
   };
 
   const alternarDia = (dia: number) => {
@@ -97,6 +114,16 @@ export function ModalEditarPersonal({
         breakStart: descansoInicio,
         breakEnd: descansoFin,
         workingDays: diasLaborales,
+        commissionBasePercentage: porcentajeComisionBase,
+        serviceCommissionPercentages: Object.fromEntries(
+          Object.entries(comisionServicios)
+            .map(([servicio, porcentaje]) => [
+              servicio,
+              Number.parseInt(porcentaje.replace(/\D/g, ''), 10),
+            ])
+            .filter((entrada): entrada is [string, number] => Number.isFinite(entrada[1]))
+            .map(([servicio, porcentaje]) => [servicio, Math.min(100, Math.max(0, porcentaje))]),
+        ),
       });
 
       onGuardado(actualizado);
@@ -183,6 +210,72 @@ export function ModalEditarPersonal({
                   </button>
                 );
               })}
+            </div>
+          </div>
+
+          <div className="md:col-span-2 rounded-2xl border border-emerald-200 bg-emerald-50 p-4">
+            <p className="text-sm font-semibold text-emerald-800">Comisión del especialista</p>
+            <div className="mt-3 grid gap-3 md:grid-cols-[220px_1fr]">
+              <label className="space-y-1">
+                <span className="text-xs font-semibold uppercase tracking-wide text-emerald-800">
+                  Comisión base (%)
+                </span>
+                <input
+                  type="number"
+                  min={0}
+                  max={100}
+                  step={1}
+                  value={porcentajeComisionBase}
+                  onChange={(evento) => {
+                    const valor = Number.parseInt(evento.target.value.replace(/\D/g, ''), 10);
+                    setPorcentajeComisionBase(Number.isNaN(valor) ? 0 : Math.min(100, valor));
+                  }}
+                  className="w-full rounded-xl border border-emerald-200 bg-white px-3 py-2 text-sm font-semibold text-slate-900 outline-none focus:ring-2 focus:ring-emerald-300"
+                />
+              </label>
+
+              <div className="space-y-2">
+                <p className="text-xs font-semibold uppercase tracking-wide text-emerald-800">
+                  Comisión por servicio (opcional)
+                </p>
+                {especialidades.length === 0 ? (
+                  <p className="rounded-xl border border-dashed border-emerald-200 bg-white px-3 py-2 text-xs text-emerald-700">
+                    Sin servicios seleccionados para asignar comisión específica.
+                  </p>
+                ) : (
+                  <div className="grid gap-2 sm:grid-cols-2">
+                    {especialidades.map((servicio) => (
+                      <label
+                        key={`editar-comision-${servicio}`}
+                        className="flex items-center justify-between gap-2 rounded-xl border border-emerald-200 bg-white px-3 py-2"
+                      >
+                        <span className="truncate text-xs font-semibold text-slate-700">
+                          {servicio}
+                        </span>
+                        <div className="flex items-center gap-1">
+                          <input
+                            type="number"
+                            min={0}
+                            max={100}
+                            step={1}
+                            value={comisionServicios[servicio] ?? ''}
+                            onChange={(evento) => {
+                              const valor = evento.target.value.replace(/\D/g, '');
+                              setComisionServicios((actual) => ({
+                                ...actual,
+                                [servicio]: valor,
+                              }));
+                            }}
+                            placeholder="Base"
+                            className="w-16 rounded-lg border border-emerald-200 px-2 py-1 text-right text-xs font-bold text-slate-800 outline-none focus:ring-2 focus:ring-emerald-300"
+                          />
+                          <span className="text-xs font-black text-emerald-700">%</span>
+                        </div>
+                      </label>
+                    ))}
+                  </div>
+                )}
+              </div>
             </div>
           </div>
 

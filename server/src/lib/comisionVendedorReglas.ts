@@ -2,6 +2,11 @@ export const PORCENTAJE_COMISION_BASE = 10;
 const PORCENTAJE_MINIMO = 0;
 const PORCENTAJE_MAXIMO = 100;
 
+export interface PorcentajesComisionVendedor {
+  standard: number;
+  pro: number;
+}
+
 export function normalizarPorcentajeComision(valor: unknown): number {
   if (valor === null || valor === undefined || valor === '') {
     return PORCENTAJE_COMISION_BASE;
@@ -19,6 +24,26 @@ export function normalizarPorcentajeComision(valor: unknown): number {
 export function resolverPorcentajeComisionVendedor(valor: unknown): number {
   const porcentaje = normalizarPorcentajeComision(valor);
   return porcentaje > 0 ? porcentaje : PORCENTAJE_COMISION_BASE;
+}
+
+export function resolverPorcentajesComisionVendedor(config: {
+  porcentajeComision?: unknown;
+  porcentajeComisionPro?: unknown;
+}): PorcentajesComisionVendedor {
+  const standard = resolverPorcentajeComisionVendedor(config.porcentajeComision);
+  const proNormalizado = normalizarPorcentajeComision(config.porcentajeComisionPro);
+
+  return {
+    standard,
+    pro: proNormalizado > 0 ? proNormalizado : standard,
+  };
+}
+
+export function resolverPorcentajeComisionSegunPlan(
+  plan: string | null | undefined,
+  porcentajes: PorcentajesComisionVendedor,
+): number {
+  return plan === 'PRO' ? porcentajes.pro : porcentajes.standard;
 }
 
 export function calcularComisionVendedor(montoCentavos: number, porcentajeComision: number): number {

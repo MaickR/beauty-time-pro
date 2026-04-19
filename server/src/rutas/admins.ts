@@ -4,9 +4,8 @@ import { prisma } from '../prismaCliente.js';
 import { esEmailAdminProtegido, verificarJWT } from '../middleware/autenticacion.js';
 import { requierePermiso } from '../middleware/verificarPermiso.js';
 import {
-  asegurarCampoPorcentajeComisionUsuario,
-  normalizarPorcentajeComision,
-  resolverPorcentajeComisionVendedor,
+  asegurarCamposComisionVendedorUsuario,
+  resolverPorcentajesComisionVendedor,
 } from '../lib/comisionVendedor.js';
 import { revocarSesionesPorSujeto } from '../lib/sesionesAuth.js';
 import { asegurarSalonDemoVendedor } from '../lib/demoVendedor.js';
@@ -129,6 +128,11 @@ export async function rutasAdmins(servidor: FastifyInstance): Promise<void> {
     '/admin/admins',
     { preHandler: [verificarJWT, requierePermiso('crearAdmins')] },
     async (_solicitud, respuesta) => {
+      const columnasComision = await asegurarCamposComisionVendedorUsuario().catch(() => ({
+        porcentajeComision: false,
+        porcentajeComisionPro: false,
+      }));
+
       const colaboradores = await prisma.usuario.findMany({
         where: { rol: { in: ['maestro', 'supervisor', 'vendedor'] } },
         select: {
@@ -136,9 +140,8 @@ export async function rutasAdmins(servidor: FastifyInstance): Promise<void> {
           email: true,
           nombre: true,
           rol: true,
-          ...(await asegurarCampoPorcentajeComisionUsuario().catch(() => false)
-            ? { porcentajeComision: true }
-            : {}),
+          ...(columnasComision.porcentajeComision ? { porcentajeComision: true } : {}),
+          ...(columnasComision.porcentajeComisionPro ? { porcentajeComisionPro: true } : {}),
           activo: true,
           creadoEn: true,
           ultimoAcceso: true,
@@ -174,14 +177,20 @@ export async function rutasAdmins(servidor: FastifyInstance): Promise<void> {
       });
 
       return respuesta.send({
-        datos: colaboradores.map((col) => ({
-          ...col,
-          porcentajeComision:
-            col.rol === 'vendedor'
-              ? resolverPorcentajeComisionVendedor('porcentajeComision' in col ? col.porcentajeComision : undefined)
-              : ('porcentajeComision' in col ? col.porcentajeComision ?? 0 : 0),
-          protegido: esAdminProtegido(col),
-        })),
+        datos: colaboradores.map((col) => {
+          const porcentajesComision = resolverPorcentajesComisionVendedor({
+            porcentajeComision: 'porcentajeComision' in col ? col.porcentajeComision : undefined,
+            porcentajeComisionPro:
+              'porcentajeComisionPro' in col ? col.porcentajeComisionPro : undefined,
+          });
+
+          return {
+            ...col,
+            porcentajeComision: col.rol === 'vendedor' ? porcentajesComision.standard : 0,
+            porcentajeComisionPro: col.rol === 'vendedor' ? porcentajesComision.pro : 0,
+            protegido: esAdminProtegido(col),
+          };
+        }),
       });
     },
   );
@@ -195,7 +204,8 @@ export async function rutasAdmins(servidor: FastifyInstance): Promise<void> {
       nombre: string;
       contrasena: string;
       cargo: string;
-        porcentajeComision?: number;
+      porcentajeComision?: number;
+      porcentajeComisionPro?: number;
       permisos?: {
         aprobarSalones?: boolean;
         gestionarPagos?: boolean;
@@ -225,7 +235,16 @@ export async function rutasAdmins(servidor: FastifyInstance): Promise<void> {
     { preHandler: [verificarJWT, requierePermiso('crearAdmins')] },
     async (solicitud, respuesta) => {
       const payload = solicitud.user as { sub: string };
-      const { email, nombre, contrasena, cargo, permisos, permisosSupervisor, porcentajeComision } = solicitud.body;
+      const {
+        email,
+        nombre,
+        contrasena,
+        cargo,
+        permisos,
+        permisosSupervisor,
+        porcentajeComision,
+        porcentajeComisionPro,
+      } = solicitud.body;
 
       if (!email || !nombre || !contrasena) {
         return respuesta.code(400).send({ error: 'email, nombre y contrasena son requeridos' });
@@ -253,10 +272,17 @@ export async function rutasAdmins(servidor: FastifyInstance): Promise<void> {
       }
 
       const hashContrasena = await generarHashContrasena(contrasena);
-      const columnaComisionDisponible = await asegurarCampoPorcentajeComisionUsuario().catch(() => false);
-      const porcentajeComisionNormalizado = cargo === 'vendedor'
-        ? normalizarPorcentajeComision(porcentajeComision)
-        : 0;
+      const columnasComision = await asegurarCamposComisionVendedorUsuario().catch(() => ({
+        porcentajeComision: false,
+        porcentajeComisionPro: false,
+      }));
+      const porcentajesComisionNormalizados =
+        cargo === 'vendedor'
+          ? resolverPorcentajesComisionVendedor({
+              porcentajeComision,
+              porcentajeComisionPro,
+            })
+          : { standard: 0, pro: 0 };
 
       const nuevoColaborador = await prisma.usuario.create({
         data: {
@@ -264,7 +290,12 @@ export async function rutasAdmins(servidor: FastifyInstance): Promise<void> {
           nombre: limpiarNombreColaborador(nombre),
           hashContrasena,
           rol: cargo,
-          ...(columnaComisionDisponible ? { porcentajeComision: porcentajeComisionNormalizado } : {}),
+          ...(columnasComision.porcentajeComision
+            ? { porcentajeComision: porcentajesComisionNormalizados.standard }
+            : {}),
+          ...(columnasComision.porcentajeComisionPro
+            ? { porcentajeComisionPro: porcentajesComisionNormalizados.pro }
+            : {}),
           activo: true,
           emailVerificado: true,
         },
@@ -305,7 +336,8 @@ export async function rutasAdmins(servidor: FastifyInstance): Promise<void> {
           email: nuevoColaborador.email,
           nombre: nuevoColaborador.nombre,
           cargo,
-          porcentajeComision: porcentajeComisionNormalizado,
+          porcentajeComision: porcentajesComisionNormalizados.standard,
+          porcentajeComisionPro: porcentajesComisionNormalizados.pro,
         },
         ip: solicitud.ip,
       });
@@ -323,7 +355,8 @@ export async function rutasAdmins(servidor: FastifyInstance): Promise<void> {
       nombre?: string;
       contrasena?: string;
       cargo?: string;
-        porcentajeComision?: number;
+      porcentajeComision?: number;
+      porcentajeComisionPro?: number;
       permisos?: {
         aprobarSalones?: boolean;
         gestionarPagos?: boolean;
@@ -354,7 +387,16 @@ export async function rutasAdmins(servidor: FastifyInstance): Promise<void> {
     async (solicitud, respuesta) => {
       const payload = solicitud.user as { sub: string };
       const { id } = solicitud.params;
-      const { email, nombre, contrasena, cargo, permisos, permisosSupervisor, porcentajeComision } = solicitud.body;
+      const {
+        email,
+        nombre,
+        contrasena,
+        cargo,
+        permisos,
+        permisosSupervisor,
+        porcentajeComision,
+        porcentajeComisionPro,
+      } = solicitud.body;
 
       const colaborador = await prisma.usuario.findUnique({
         where: { id },
@@ -385,9 +427,17 @@ export async function rutasAdmins(servidor: FastifyInstance): Promise<void> {
         cargoNormalizado && esRolColaboradorValido(cargoNormalizado)
           ? cargoNormalizado
           : colaborador.rol;
-      const columnaComisionDisponible = await asegurarCampoPorcentajeComisionUsuario().catch(() => false);
-      const porcentajeComisionNormalizado =
-        siguienteCargo === 'vendedor' ? normalizarPorcentajeComision(porcentajeComision) : 0;
+      const columnasComision = await asegurarCamposComisionVendedorUsuario().catch(() => ({
+        porcentajeComision: false,
+        porcentajeComisionPro: false,
+      }));
+      const porcentajesComisionNormalizados =
+        siguienteCargo === 'vendedor'
+          ? resolverPorcentajesComisionVendedor({
+              porcentajeComision,
+              porcentajeComisionPro,
+            })
+          : { standard: 0, pro: 0 };
 
       if (cargoNormalizado && !esRolColaboradorValido(cargoNormalizado)) {
         return respuesta.code(400).send({ error: 'El cargo debe ser: maestro, supervisor o vendedor' });
@@ -426,8 +476,11 @@ export async function rutasAdmins(servidor: FastifyInstance): Promise<void> {
       if (cargoNormalizado && cargoNormalizado !== colaborador.rol) {
         actualizacionUsuario['rol'] = cargoNormalizado;
       }
-      if (columnaComisionDisponible) {
-        actualizacionUsuario['porcentajeComision'] = porcentajeComisionNormalizado;
+      if (columnasComision.porcentajeComision) {
+        actualizacionUsuario['porcentajeComision'] = porcentajesComisionNormalizados.standard;
+      }
+      if (columnasComision.porcentajeComisionPro) {
+        actualizacionUsuario['porcentajeComisionPro'] = porcentajesComisionNormalizados.pro;
       }
       if (contrasena) {
         actualizacionUsuario['hashContrasena'] = await generarHashContrasena(contrasena);
@@ -490,7 +543,8 @@ export async function rutasAdmins(servidor: FastifyInstance): Promise<void> {
             email: emailNormalizado ?? colaborador.email,
             nombre: typeof nombre === 'string' && nombre.trim() ? nombre.trim() : colaborador.nombre,
             rol: siguienteCargo,
-            porcentajeComision: porcentajeComisionNormalizado,
+            porcentajeComision: porcentajesComisionNormalizados.standard,
+            porcentajeComisionPro: porcentajesComisionNormalizados.pro,
           },
           sesionRevocada: true,
         },

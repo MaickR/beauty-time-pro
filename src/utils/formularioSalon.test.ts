@@ -32,13 +32,22 @@ describe('formularioSalon', () => {
     expect(esEmailColaboradorValido('vendedor@mailinator.com')).toBe(false);
   });
 
-  it('genera una contrasena de 8 caracteres con prefijo del salon', () => {
-    const contrasena = generarContrasenaSalon('Nova Spa', 2);
+  it('genera una contrasena memorizable para salon y dueno', () => {
+    const contrasena = generarContrasenaSalon('Nova Spa', 'Ana María', 2);
 
-    expect(contrasena).toHaveLength(8);
-    expect(contrasena.startsWith('NOV')).toBe(true);
-    expect(/[0-9]/.test(contrasena)).toBe(true);
-    expect(/[!@#$%&*]/.test(contrasena)).toBe(true);
+    expect(contrasena).toHaveLength(9);
+    expect(contrasena.startsWith('novana')).toBe(true);
+    expect(/[0-9]{2}/.test(contrasena.slice(6, 8))).toBe(true);
+    expect(/[!@#$%&*]/.test(contrasena.charAt(contrasena.length - 1))).toBe(true);
+  });
+
+  it('genera contrasena memorizable aun con nombres cortos', () => {
+    const contrasena = generarContrasenaSalon('Li', 'Jo', 0);
+
+    expect(contrasena).toHaveLength(9);
+    expect(contrasena.startsWith('lisjod')).toBe(true);
+    expect(/[0-9]{2}/.test(contrasena.slice(6, 8))).toBe(true);
+    expect(/[!@#$%&*]/.test(contrasena.charAt(contrasena.length - 1))).toBe(true);
   });
 
   it('genera contrasena de colaborador con nombre, correo y sufijo aleatorio', () => {

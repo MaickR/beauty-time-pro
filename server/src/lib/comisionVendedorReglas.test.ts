@@ -2,6 +2,8 @@ import { describe, expect, it } from 'vitest';
 import {
   calcularComisionVendedor,
   resolverPorcentajeComisionVendedor,
+  resolverPorcentajesComisionVendedor,
+  resolverPorcentajeComisionSegunPlan,
   estudioTienePagoPendiente,
   normalizarPorcentajeComision,
 } from './comisionVendedorReglas.js';
@@ -18,6 +20,28 @@ describe('reglas de comision de vendedor', () => {
     expect(resolverPorcentajeComisionVendedor(0)).toBe(10);
     expect(resolverPorcentajeComisionVendedor(undefined)).toBe(10);
     expect(resolverPorcentajeComisionVendedor(15)).toBe(15);
+  });
+
+  it('resuelve porcentajes por plan y aplica fallback correcto en PRO', () => {
+    expect(
+      resolverPorcentajesComisionVendedor({
+        porcentajeComision: 12,
+        porcentajeComisionPro: 18,
+      }),
+    ).toEqual({ standard: 12, pro: 18 });
+
+    expect(
+      resolverPorcentajesComisionVendedor({
+        porcentajeComision: 14,
+        porcentajeComisionPro: 0,
+      }),
+    ).toEqual({ standard: 14, pro: 14 });
+  });
+
+  it('elige el porcentaje según el plan del salón', () => {
+    const porcentajes = { standard: 11, pro: 19 };
+    expect(resolverPorcentajeComisionSegunPlan('STANDARD', porcentajes)).toBe(11);
+    expect(resolverPorcentajeComisionSegunPlan('PRO', porcentajes)).toBe(19);
   });
 
   it('normaliza el porcentaje dentro del rango permitido', () => {

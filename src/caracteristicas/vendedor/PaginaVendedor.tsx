@@ -204,14 +204,14 @@ function SeccionDashboard({ resumen, salonDemo, salones, cargando, alCambiarTab 
   const tarjetasComerciales = [
     {
       etiqueta: 'Salones activos',
-      valor: resumen.salonesActivos,
+      valor: String(resumen.salonesActivos),
       descripcion: 'Operando y aprobados',
       icono: Store,
     },
     {
       etiqueta: 'Comisión proyectada',
-      valor: resumen.porcentajeComision,
-      descripcion: `${formatearDinero(resumen.comisionGenerada, moneda)} acumulados`,
+      valor: formatearDinero(resumen.comisionGenerada, moneda),
+      descripcion: `STD ${resumen.porcentajeComision}% · PRO ${resumen.porcentajeComisionPro}%`,
       icono: TrendingUp,
     },
   ];
@@ -278,7 +278,14 @@ function SeccionDashboard({ resumen, salonDemo, salones, cargando, alCambiarTab 
               <p className="text-xs font-bold uppercase tracking-[0.22em] text-white/60">
                 Comisión configurada
               </p>
-              <p className="mt-3 text-3xl font-black">{resumen.porcentajeComision}%</p>
+              <div className="mt-3 space-y-1">
+                <p className="text-sm font-black text-white/80">
+                  Standard: {resumen.porcentajeComision}%
+                </p>
+                <p className="text-sm font-black text-white/80">
+                  PRO: {resumen.porcentajeComisionPro}%
+                </p>
+              </div>
               <p className="mt-2 text-sm text-white/70">
                 {formatearDinero(resumen.comisionGenerada, moneda)} generados en comisión.
               </p>
@@ -312,9 +319,7 @@ function SeccionDashboard({ resumen, salonDemo, salones, cargando, alCambiarTab 
                 <p className="text-xs font-black uppercase tracking-[0.22em] text-slate-500">
                   {tarjeta.etiqueta}
                 </p>
-                <p className="mt-3 text-4xl font-black text-slate-900">
-                  {tarjeta.etiqueta === 'Comisión proyectada' ? `${tarjeta.valor}%` : tarjeta.valor}
-                </p>
+                <p className="mt-3 text-4xl font-black text-slate-900">{tarjeta.valor}</p>
                 <p className="mt-2 text-sm text-slate-500">{tarjeta.descripcion}</p>
               </div>
               <div className="rounded-3xl bg-rose-50 p-3 text-rose-700">

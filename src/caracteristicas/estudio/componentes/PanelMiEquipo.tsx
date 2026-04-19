@@ -1,10 +1,7 @@
 import { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Plus, Pencil, Trash2 } from 'lucide-react';
-import {
-  listarPersonal,
-  eliminarPersonal,
-} from '../../../servicios/servicioPersonal';
+import { listarPersonal, eliminarPersonal } from '../../../servicios/servicioPersonal';
 import { SeccionAccesoEmpleado } from '../../empleado/componentes/SeccionAccesoEmpleado';
 import { FormularioNuevoPersonal } from './FormularioNuevoPersonal';
 import { ModalEditarPersonal } from './ModalEditarPersonal';
@@ -152,6 +149,19 @@ export function PanelMiEquipo({ estudio }: PropsPanelMiEquipo) {
                       Descanso: {miembro.breakStart ?? '—'} – {miembro.breakEnd ?? '—'}
                     </p>
                   )}
+                  <p className="text-xs font-semibold text-emerald-700">
+                    Comisión base: {miembro.commissionBasePercentage}%
+                  </p>
+                  {Object.keys(miembro.serviceCommissionPercentages).length > 0 && (
+                    <p className="text-xs text-emerald-700">
+                      Por servicio:{' '}
+                      {Object.entries(miembro.serviceCommissionPercentages)
+                        .slice(0, 2)
+                        .map(([servicio, porcentaje]) => `${servicio} ${porcentaje}%`)
+                        .join(' · ')}
+                      {Object.keys(miembro.serviceCommissionPercentages).length > 2 ? '…' : ''}
+                    </p>
+                  )}
                 </div>
               </div>
 
@@ -220,6 +230,12 @@ export function PanelMiEquipo({ estudio }: PropsPanelMiEquipo) {
               </th>
               <th
                 scope="col"
+                className="text-left px-4 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest hidden lg:table-cell"
+              >
+                Comisión
+              </th>
+              <th
+                scope="col"
                 className="text-center px-4 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest"
               >
                 Estado
@@ -285,6 +301,22 @@ export function PanelMiEquipo({ estudio }: PropsPanelMiEquipo) {
                         <span className="text-xs text-slate-400 italic">Sin servicios</span>
                       )}
                     </div>
+                  </td>
+                  <td className="px-4 py-4 hidden lg:table-cell text-xs text-slate-600">
+                    <p className="font-semibold text-emerald-700">
+                      Base: {miembro.commissionBasePercentage}%
+                    </p>
+                    {Object.keys(miembro.serviceCommissionPercentages).length > 0 ? (
+                      <p className="mt-1 text-slate-500">
+                        {Object.entries(miembro.serviceCommissionPercentages)
+                          .slice(0, 2)
+                          .map(([servicio, porcentaje]) => `${servicio} ${porcentaje}%`)
+                          .join(' · ')}
+                        {Object.keys(miembro.serviceCommissionPercentages).length > 2 ? '…' : ''}
+                      </p>
+                    ) : (
+                      <p className="mt-1 text-slate-400">Sin excepciones por servicio</p>
+                    )}
                   </td>
                   <td className="px-4 py-4 text-center">
                     <span

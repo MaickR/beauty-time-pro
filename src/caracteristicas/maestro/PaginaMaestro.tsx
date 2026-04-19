@@ -213,7 +213,7 @@ export function PaginaMaestro() {
                 </h1>
                 <p className="text-slate-500 font-medium">{descripcionSeccionDirectorio}</p>
               </div>
-              {puedeSuspenderSalones && (
+              {puedeAprobarSalones && (
                 <button
                   onClick={hook.abrirModalAlta}
                   className="no-imprimir bg-pink-600 text-white px-8 py-4 rounded-2xl font-black shadow-xl flex items-center justify-center gap-2 hover:bg-pink-700 transition-all"
@@ -265,7 +265,7 @@ export function PaginaMaestro() {
         />
       )}
 
-      {hook.modoModal && puedeSuspenderSalones && (
+      {hook.modoModal && puedeAprobarSalones && (
         <ModalEstudio
           modo={hook.modoModal}
           formulario={hook.formulario}
@@ -278,7 +278,6 @@ export function PaginaMaestro() {
             entradaServicioPersonalizado: hook.entradaServicioPersonalizado,
             setEntradaServicioPersonalizado: hook.setEntradaServicioPersonalizado,
           }}
-          onAgregarPersonal={hook.agregarPersonal}
           onRegenerarContrasenaDueno={hook.regenerarContrasenaDueno}
           onEnviar={(e) => hook.enviarFormulario(e, recargar, mostrarToast, mostrarToast)}
           onCerrar={hook.cerrarModal}

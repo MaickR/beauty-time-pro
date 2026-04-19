@@ -56,6 +56,7 @@ interface ResultadoCrearSalonAdmin {
     emailDueno: string;
     claveDueno: string;
     claveClientes: string;
+    mostrarModalConfirmacion?: boolean;
   };
 }
 
@@ -107,6 +108,10 @@ function mapearEstudioBackend(estudio: EstudioBackend): Estudio {
       breakStart: (persona['descansoInicio'] as string | null | undefined) ?? null,
       breakEnd: (persona['descansoFin'] as string | null | undefined) ?? null,
       workingDays: (persona['diasTrabajo'] as number[] | null | undefined) ?? null,
+      commissionBasePercentage:
+        (persona['porcentajeComisionBase'] as number | null | undefined) ?? 0,
+      serviceCommissionPercentages:
+        (persona['comisionServicios'] as Record<string, number> | null | undefined) ?? {},
     })),
     colorPrimario: (estudio['colorPrimario'] as string | null | undefined) ?? null,
     logoUrl: (estudio['logoUrl'] as string | null | undefined) ?? null,

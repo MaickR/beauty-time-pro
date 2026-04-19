@@ -91,6 +91,16 @@ export interface MetricasEmpleado {
   citasHoy: number;
   citasSemana: number;
   citasMes: number;
+  porcentajeComisionBase: number;
+  comisionHoy: number;
+  comisionSemana: number;
+  comisionMes: number;
+  comisionServiciosMes: Array<{
+    servicio: string;
+    porcentajeComision: number;
+    montoServicio: number;
+    montoComision: number;
+  }>;
 }
 
 export async function obtenerMisMetricas(): Promise<MetricasEmpleado> {

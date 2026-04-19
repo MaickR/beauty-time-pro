@@ -139,7 +139,11 @@ function crearPermisosSupervisorVacios(): PermisosSesionSupervisor {
 }
 
 function esClaveClientePublica(clave: string) {
-  return /^CLI[0-9A-F]{20}$/.test(clave.trim().toUpperCase());
+  const claveNormalizada = clave.trim().toUpperCase();
+  return (
+    /^CLI[0-9A-F]{20}$/.test(claveNormalizada) ||
+    /^[A-Z][A-Z0-9]{1,29}[0-9]{2}$/.test(claveNormalizada)
+  );
 }
 
 export function obtenerRutaPorRol(

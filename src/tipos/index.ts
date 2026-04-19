@@ -91,6 +91,8 @@ export interface Personal {
   breakStart: string | null; // "HH:mm"
   breakEnd: string | null; // "HH:mm"
   workingDays: number[] | null;
+  commissionBasePercentage: number;
+  serviceCommissionPercentages: Record<string, number>;
 }
 
 export interface Estudio {
@@ -435,6 +437,13 @@ export interface ReservaEmpleado {
   notasMenorEdad?: string | null;
   metodoPago?: string | null;
   productosAdicionales?: ProductoAdicionalReserva[];
+  comisionTotal?: number;
+  comisionServicios?: Array<{
+    servicio: string;
+    porcentajeComision: number;
+    montoServicio: number;
+    montoComision: number;
+  }>;
   tokenCancelacion?: string;
   creadoEn?: string;
 }
@@ -452,6 +461,8 @@ export interface PerfilEmpleado {
   descansoInicio: string | null;
   descansoFin: string | null;
   diasTrabajo: number[] | null;
+  porcentajeComisionBase: number;
+  comisionServicios: Record<string, number>;
   estudio: {
     id: string;
     nombre: string;

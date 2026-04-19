@@ -64,6 +64,7 @@ interface Colaborador {
   nombre: string;
   rol: string;
   porcentajeComision: number;
+  porcentajeComisionPro: number;
   activo: boolean;
   protegido?: boolean;
   creadoEn: string;
@@ -89,6 +90,11 @@ const esquemaNuevoColaborador = z.object({
     message: 'El rol es obligatorio',
   }),
   porcentajeComision: z
+    .number()
+    .int('Ingresa un porcentaje entero')
+    .min(0, 'El porcentaje mínimo es 0')
+    .max(100, 'El porcentaje máximo es 100'),
+  porcentajeComisionPro: z
     .number()
     .int('Ingresa un porcentaje entero')
     .min(0, 'El porcentaje mínimo es 0')
@@ -292,7 +298,7 @@ export function GestionAdmins() {
     formState: { errors, isSubmitting },
   } = useForm<CamposNuevoColaborador>({
     resolver: zodResolver(esquemaNuevoColaborador),
-    defaultValues: { cargo: 'maestro', porcentajeComision: 0 },
+    defaultValues: { cargo: 'maestro', porcentajeComision: 0, porcentajeComisionPro: 0 },
   });
 
   const cargoWatch = watch('cargo');
@@ -308,6 +314,7 @@ export function GestionAdmins() {
         cuerpo.permisosSupervisor = permisosSupervisorEditando;
       } else {
         cuerpo.porcentajeComision = datos.porcentajeComision;
+        cuerpo.porcentajeComisionPro = datos.porcentajeComisionPro;
       }
       await peticion('/admin/admins', {
         method: 'POST',
@@ -387,6 +394,7 @@ export function GestionAdmins() {
         cuerpo['permisosSupervisor'] = permisosSupervisorEditando;
       } else {
         cuerpo['porcentajeComision'] = datos.porcentajeComision;
+        cuerpo['porcentajeComisionPro'] = datos.porcentajeComisionPro;
       }
 
       await peticion(`/admin/admins/${datos.id}`, {
@@ -443,6 +451,7 @@ export function GestionAdmins() {
       email: colaborador.email,
       contrasena: '',
       porcentajeComision: colaborador.porcentajeComision,
+      porcentajeComisionPro: colaborador.porcentajeComisionPro,
     });
   };
 
@@ -583,6 +592,7 @@ export function GestionAdmins() {
                 email: '',
                 contrasena: '',
                 porcentajeComision: 0,
+                porcentajeComisionPro: 0,
               });
               setPermisosMaestroEditando(PERMISOS_MAESTRO_VACIOS);
               setPermisosSupervisorEditando(PERMISOS_SUPERVISOR_VACIOS);
@@ -693,7 +703,8 @@ export function GestionAdmins() {
                           </span>
                           {colaborador.rol === 'vendedor' && (
                             <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700">
-                              Comisión {colaborador.porcentajeComision}%
+                              Comisión STD {colaborador.porcentajeComision}% · PRO{' '}
+                              {colaborador.porcentajeComisionPro}%
                             </span>
                           )}
                           {colaborador.rol === 'maestro' &&
@@ -918,7 +929,8 @@ export function GestionAdmins() {
                     </span>
                     {colaborador.rol === 'vendedor' && (
                       <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700">
-                        Comisión {colaborador.porcentajeComision}%
+                        Comisión STD {colaborador.porcentajeComision}% · PRO{' '}
+                        {colaborador.porcentajeComisionPro}%
                       </span>
                     )}
                     <span
@@ -1155,27 +1167,52 @@ export function GestionAdmins() {
                     Los vendedores tienen acceso restringido. Solo pueden gestionar sus
                     pre-registros y los salones asociados a su flujo comercial.
                   </p>
-                  <div>
-                    <label
-                      htmlFor="porcentaje-comision-colaborador"
-                      className="block text-sm font-semibold text-slate-700 mb-1"
-                    >
-                      Comisión del vendedor (%)
-                    </label>
-                    <input
-                      id="porcentaje-comision-colaborador"
-                      type="number"
-                      min={0}
-                      max={100}
-                      step={1}
-                      {...register('porcentajeComision', { valueAsNumber: true })}
-                      className="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-900 outline-none focus:ring-2 focus:ring-pink-400"
-                    />
-                    {errors.porcentajeComision && (
-                      <p className="mt-1 text-xs text-red-500">
-                        {errors.porcentajeComision.message}
-                      </p>
-                    )}
+                  <div className="grid gap-3 md:grid-cols-2">
+                    <div>
+                      <label
+                        htmlFor="porcentaje-comision-colaborador"
+                        className="block text-sm font-semibold text-slate-700 mb-1"
+                      >
+                        Comisión Standard (%)
+                      </label>
+                      <input
+                        id="porcentaje-comision-colaborador"
+                        type="number"
+                        min={0}
+                        max={100}
+                        step={1}
+                        {...register('porcentajeComision', { valueAsNumber: true })}
+                        className="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-900 outline-none focus:ring-2 focus:ring-pink-400"
+                      />
+                      {errors.porcentajeComision && (
+                        <p className="mt-1 text-xs text-red-500">
+                          {errors.porcentajeComision.message}
+                        </p>
+                      )}
+                    </div>
+
+                    <div>
+                      <label
+                        htmlFor="porcentaje-comision-pro-colaborador"
+                        className="block text-sm font-semibold text-slate-700 mb-1"
+                      >
+                        Comisión PRO (%)
+                      </label>
+                      <input
+                        id="porcentaje-comision-pro-colaborador"
+                        type="number"
+                        min={0}
+                        max={100}
+                        step={1}
+                        {...register('porcentajeComisionPro', { valueAsNumber: true })}
+                        className="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-900 outline-none focus:ring-2 focus:ring-pink-400"
+                      />
+                      {errors.porcentajeComisionPro && (
+                        <p className="mt-1 text-xs text-red-500">
+                          {errors.porcentajeComisionPro.message}
+                        </p>
+                      )}
+                    </div>
                   </div>
                 </div>
               )}

@@ -48,6 +48,7 @@ export function TabVentasVendedor() {
       Concepto: venta.concepto,
       ValorSuscripcion: venta.valorSuscripcion / 100,
       Monto: venta.monto / 100,
+      PorcentajeComision: venta.porcentajeComisionAplicado,
       Comision: venta.comision / 100,
       FechaVencimiento: venta.fechaVencimiento,
       PendientePago: venta.pendientePago ? 'Sí' : 'No',
@@ -122,7 +123,7 @@ export function TabVentasVendedor() {
         <TarjetaResumenVenta
           etiqueta="Comisión filtrada"
           valor={formatearDinero(totalComision, moneda)}
-          descripcion="Calculada con tu porcentaje actual"
+          descripcion="Calculada con el porcentaje aplicado por plan"
           icono={CircleDollarSign}
         />
         <TarjetaResumenVenta
@@ -186,6 +187,10 @@ export function TabVentasVendedor() {
                         venta.moneda === 'COP' ? 'COP' : 'MXN',
                       )}
                     />
+                    <DatoVentaMovil
+                      etiqueta="Comisión %"
+                      valor={`${venta.porcentajeComisionAplicado}%`}
+                    />
                     <DatoVentaMovil etiqueta="País" valor={venta.pais} />
                   </div>
                 </article>
@@ -201,7 +206,7 @@ export function TabVentasVendedor() {
             </div>
           ) : (
             <div className="overflow-x-auto">
-              <table className="w-full min-w-[920px] text-sm">
+              <table className="w-full min-w-[980px] text-sm">
                 <thead>
                   <tr className="border-b border-slate-200 text-left text-slate-500">
                     <th className="px-3 py-3 font-bold">Salón</th>
@@ -209,6 +214,7 @@ export function TabVentasVendedor() {
                     <th className="px-3 py-3 font-bold">Suscripción</th>
                     <th className="px-3 py-3 font-bold">Vence</th>
                     <th className="px-3 py-3 font-bold text-right">Valor</th>
+                    <th className="px-3 py-3 font-bold text-right">% Comisión</th>
                     <th className="px-3 py-3 font-bold text-right">Comisión</th>
                   </tr>
                 </thead>
@@ -253,6 +259,9 @@ export function TabVentasVendedor() {
                           venta.valorSuscripcion,
                           venta.moneda === 'COP' ? 'COP' : 'MXN',
                         )}
+                      </td>
+                      <td className="px-3 py-4 text-right font-bold text-slate-700">
+                        {venta.porcentajeComisionAplicado}%
                       </td>
                       <td className="px-3 py-4 text-right font-bold text-slate-900">
                         {formatearDinero(venta.comision, venta.moneda === 'COP' ? 'COP' : 'MXN')}

@@ -78,27 +78,42 @@ export function esEmailColaboradorValido(email: string): boolean {
   return tieneFormatoValido && !esTemporal;
 }
 
-function asegurarSufijoContrasena(sufijoBase: string, intento: number): string {
-  const caracteres = sufijoBase.padEnd(5, '2').slice(0, 5).split('');
+const CARACTERES_ESPECIALES_CONTRASENA_SALON = ['#', '*', '!', '$', '%', '&'] as const;
 
-  if (!caracteres.some((caracter) => /\d/.test(caracter))) {
-    caracteres[4] = String((intento % 8) + 2);
-  }
+function normalizarFragmentoContrasena(valor: string, fallback: string): string {
+  const base = limpiarNombreSalonEntrada(valor)
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^\p{L}\p{N}]/gu, '')
+    .toLowerCase();
 
-  if (!caracteres.some((caracter) => /[!@#$%&*]/.test(caracter))) {
-    caracteres[3] = '!';
-  }
-
-  return caracteres.join('');
+  return `${base || fallback}${fallback}`.slice(0, 3);
 }
 
-export function generarContrasenaSalon(nombreSalon: string, intento: number = 0): string {
-  const baseNombre = limpiarNombreSalonEntrada(nombreSalon).replace(/\s+/g, '').toUpperCase();
-  const prefijo = `${baseNombre || 'SAL'}SAL`.slice(0, 3);
-  const sufijoBase = generarContrasenaSegura(8 + Math.max(0, intento)).slice(0, 5);
-  const sufijo = asegurarSufijoContrasena(sufijoBase, intento);
+function obtenerDosDigitosContrasena(intento: number): string {
+  const soloDigitos = generarContrasenaSegura(12 + Math.max(0, intento)).replace(/\D/g, '');
+  const respaldo = `${(intento + 7) % 10}${(intento + 3) % 10}`;
+  return `${soloDigitos}${respaldo}`.slice(0, 2);
+}
 
-  return `${prefijo}${sufijo}`.slice(0, 8);
+function obtenerCaracterEspecialContrasena(intento: number): string {
+  const semilla = generarContrasenaSegura(6 + Math.max(0, intento));
+  const codigo = semilla.charCodeAt(0) || intento;
+  const indice = codigo % CARACTERES_ESPECIALES_CONTRASENA_SALON.length;
+  return CARACTERES_ESPECIALES_CONTRASENA_SALON[indice]!;
+}
+
+export function generarContrasenaSalon(
+  nombreSalon: string,
+  nombreDueno: string = '',
+  intento: number = 0,
+): string {
+  const fragmentoSalon = normalizarFragmentoContrasena(nombreSalon, 'sal');
+  const fragmentoDueno = normalizarFragmentoContrasena(nombreDueno, 'due');
+  const digitos = obtenerDosDigitosContrasena(intento);
+  const especial = obtenerCaracterEspecialContrasena(intento);
+
+  return `${fragmentoSalon}${fragmentoDueno}${digitos}${especial}`;
 }
 
 function obtenerPrefijoNombreColaborador(nombre: string): string {

@@ -1,6 +1,12 @@
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import {
+  calcularComisionServiciosReserva,
+  type DetalleComisionServicio,
+  obtenerConfiguracionesComisionPersonal,
+  type ServicioComisionable,
+} from '../lib/comisionPersonal.js';
+import {
   incluirServiciosDetalleReserva,
   serializarReservaApi,
 } from '../lib/serializacionReservas.js';
@@ -23,6 +29,56 @@ const REGEX_CONTRASENA_SEGURA = /^(?=.*[A-Z])(?=.*[0-9])(?=.*[^A-Za-z0-9]).{8,}$
 
 function obtenerFechaAltaPersonal(creadoEn: Date): string {
   return creadoEn.toISOString().slice(0, 10);
+}
+
+function obtenerServiciosComisionablesReserva(
+  reserva: ReturnType<typeof serializarReservaApi>,
+): ServicioComisionable[] {
+  return (reserva.serviciosDetalle ?? []).map((servicio) => ({
+    name: servicio.name,
+    price: servicio.price,
+    status: servicio.status,
+  }));
+}
+
+function calcularResumenComisionReservas(
+  reservas: ReturnType<typeof serializarReservaApi>[],
+  configuracionComision: { porcentajeComisionBase: number; comisionServicios: Record<string, number> },
+) {
+  const detallePorServicio = new Map<string, DetalleComisionServicio>();
+
+  const comisionTotal = reservas.reduce((acumulado, reserva) => {
+    const resultadoComision = calcularComisionServiciosReserva(
+      obtenerServiciosComisionablesReserva(reserva),
+      configuracionComision,
+    );
+
+    resultadoComision.detalle.forEach((item) => {
+      const clave = item.servicio.trim().toLowerCase();
+      const acumuladoServicio = detallePorServicio.get(clave);
+
+      if (!acumuladoServicio) {
+        detallePorServicio.set(clave, { ...item });
+        return;
+      }
+
+      detallePorServicio.set(clave, {
+        servicio: acumuladoServicio.servicio,
+        porcentajeComision: item.porcentajeComision,
+        montoServicio: acumuladoServicio.montoServicio + item.montoServicio,
+        montoComision: acumuladoServicio.montoComision + item.montoComision,
+      });
+    });
+
+    return acumulado + resultadoComision.comisionTotal;
+  }, 0);
+
+  return {
+    comisionTotal,
+    detalleServicios: Array.from(detallePorServicio.values()).sort((a, b) =>
+      b.montoComision - a.montoComision,
+    ),
+  };
 }
 
 export async function rutasEmpleados(servidor: FastifyInstance): Promise<void> {
@@ -85,7 +141,28 @@ export async function rutasEmpleados(servidor: FastifyInstance): Promise<void> {
         include: incluirServiciosDetalleReserva,
       });
 
-      return respuesta.send({ datos: reservas.map(serializarReservaApi) });
+      const reservasSerializadas = reservas.map(serializarReservaApi);
+      const configuracionComision = (
+        await obtenerConfiguracionesComisionPersonal([payload.personalId])
+      ).get(payload.personalId) ?? {
+        porcentajeComisionBase: 0,
+        comisionServicios: {},
+      };
+
+      return respuesta.send({
+        datos: reservasSerializadas.map((reserva) => {
+          const resultadoComision = calcularComisionServiciosReserva(
+            obtenerServiciosComisionablesReserva(reserva),
+            configuracionComision,
+          );
+
+          return {
+            ...reserva,
+            comisionTotal: resultadoComision.comisionTotal,
+            comisionServicios: resultadoComision.detalle,
+          };
+        }),
+      });
     },
   );
 
@@ -141,7 +218,28 @@ export async function rutasEmpleados(servidor: FastifyInstance): Promise<void> {
         include: incluirServiciosDetalleReserva,
       });
 
-      return respuesta.send({ datos: reservas.map(serializarReservaApi) });
+      const reservasSerializadas = reservas.map(serializarReservaApi);
+      const configuracionComision = (
+        await obtenerConfiguracionesComisionPersonal([payload.personalId])
+      ).get(payload.personalId) ?? {
+        porcentajeComisionBase: 0,
+        comisionServicios: {},
+      };
+
+      return respuesta.send({
+        datos: reservasSerializadas.map((reserva) => {
+          const resultadoComision = calcularComisionServiciosReserva(
+            obtenerServiciosComisionablesReserva(reserva),
+            configuracionComision,
+          );
+
+          return {
+            ...reserva,
+            comisionTotal: resultadoComision.comisionTotal,
+            comisionServicios: resultadoComision.detalle,
+          };
+        }),
+      });
     },
   );
 
@@ -212,19 +310,57 @@ export async function rutasEmpleados(servidor: FastifyInstance): Promise<void> {
         estado: { not: 'cancelled' as const },
       };
 
-      const [citasHoy, citasSemana, citasMes] = await Promise.all([
-        prisma.reserva.count({
+      const [reservasHoy, reservasSemana, reservasMes] = await Promise.all([
+        prisma.reserva.findMany({
           where: {
             ...condicionBase,
             fecha: hoyISO,
             ...(fechaAlta && hoyISO < fechaAlta ? { id: '__sin_resultados__' } : {}),
           },
+          include: incluirServiciosDetalleReserva,
         }),
-        prisma.reserva.count({ where: { ...condicionBase, fecha: rangoSemana } }),
-        prisma.reserva.count({ where: { ...condicionBase, fecha: rangoMes } }),
+        prisma.reserva.findMany({
+          where: { ...condicionBase, fecha: rangoSemana },
+          include: incluirServiciosDetalleReserva,
+        }),
+        prisma.reserva.findMany({
+          where: { ...condicionBase, fecha: rangoMes },
+          include: incluirServiciosDetalleReserva,
+        }),
       ]);
 
-      return respuesta.send({ datos: { citasHoy, citasSemana, citasMes } });
+      const configuracionComision = (
+        await obtenerConfiguracionesComisionPersonal([payload.personalId])
+      ).get(payload.personalId) ?? {
+        porcentajeComisionBase: 0,
+        comisionServicios: {},
+      };
+
+      const resumenComisionHoy = calcularResumenComisionReservas(
+        reservasHoy.map(serializarReservaApi),
+        configuracionComision,
+      );
+      const resumenComisionSemana = calcularResumenComisionReservas(
+        reservasSemana.map(serializarReservaApi),
+        configuracionComision,
+      );
+      const resumenComisionMes = calcularResumenComisionReservas(
+        reservasMes.map(serializarReservaApi),
+        configuracionComision,
+      );
+
+      return respuesta.send({
+        datos: {
+          citasHoy: reservasHoy.length,
+          citasSemana: reservasSemana.length,
+          citasMes: reservasMes.length,
+          porcentajeComisionBase: configuracionComision.porcentajeComisionBase,
+          comisionHoy: resumenComisionHoy.comisionTotal,
+          comisionSemana: resumenComisionSemana.comisionTotal,
+          comisionMes: resumenComisionMes.comisionTotal,
+          comisionServiciosMes: resumenComisionMes.detalleServicios,
+        },
+      });
     },
   );
 
@@ -392,7 +528,21 @@ export async function rutasEmpleados(servidor: FastifyInstance): Promise<void> {
 
       if (!personal) return respuesta.code(404).send({ error: 'Perfil no encontrado' });
 
-      return respuesta.send({ datos: { ...personal, email: acceso?.email ?? payload.email ?? '' } });
+      const configuracionComision = (
+        await obtenerConfiguracionesComisionPersonal([personal.id])
+      ).get(personal.id) ?? {
+        porcentajeComisionBase: 0,
+        comisionServicios: {},
+      };
+
+      return respuesta.send({
+        datos: {
+          ...personal,
+          email: acceso?.email ?? payload.email ?? '',
+          porcentajeComisionBase: configuracionComision.porcentajeComisionBase,
+          comisionServicios: configuracionComision.comisionServicios,
+        },
+      });
     },
   );
 

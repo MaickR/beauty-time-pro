@@ -314,6 +314,8 @@ function mapearSalonDetalleAEstudio(salon: SalonDetalle, claveSalon: string): Es
       breakStart: miembro.descansoInicio,
       breakEnd: miembro.descansoFin,
       workingDays: (miembro.diasTrabajo as number[] | null | undefined) ?? null,
+      commissionBasePercentage: 0,
+      serviceCommissionPercentages: {},
     })),
     colorPrimario: salon.colorPrimario,
     logoUrl: salon.logoUrl,

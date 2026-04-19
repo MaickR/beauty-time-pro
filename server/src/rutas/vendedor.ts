@@ -3,9 +3,10 @@ import { z } from 'zod';
 import { prisma } from '../prismaCliente.js';
 import { verificarJWT } from '../middleware/autenticacion.js';
 import {
-  asegurarCampoPorcentajeComisionUsuario,
+  asegurarCamposComisionVendedorUsuario,
   calcularComisionVendedor,
-  resolverPorcentajeComisionVendedor,
+  resolverPorcentajesComisionVendedor,
+  resolverPorcentajeComisionSegunPlan,
   estudioTienePagoPendiente,
 } from '../lib/comisionVendedor.js';
 import { obtenerMensajeValidacion, textoSchema, telefonoSchema } from '../lib/validacion.js';
@@ -352,7 +353,22 @@ export async function rutasVendedor(servidor: FastifyInstance) {
       }
 
       const hoy = new Date().toISOString().slice(0, 10);
-      const columnaComisionDisponible = await asegurarCampoPorcentajeComisionUsuario().catch(() => false);
+      const columnasComision = await asegurarCamposComisionVendedorUsuario().catch(() => ({
+        porcentajeComision: false,
+        porcentajeComisionPro: false,
+      }));
+      const consultaVendedorComision =
+        columnasComision.porcentajeComision || columnasComision.porcentajeComisionPro
+          ? prisma.usuario.findUnique({
+              where: { id: payload.sub },
+              select: {
+                ...(columnasComision.porcentajeComision ? { porcentajeComision: true } : {}),
+                ...(columnasComision.porcentajeComisionPro
+                  ? { porcentajeComisionPro: true }
+                  : {}),
+              },
+            })
+          : Promise.resolve(null);
       const [
         totalPreregistros,
         pendientes,
@@ -361,7 +377,7 @@ export async function rutasVendedor(servidor: FastifyInstance) {
         totalSalones,
         salonesActivos,
         salonesPendientesPago,
-        ventasAgregadas,
+        ventasComisionables,
         vendedor,
       ] = await Promise.all([
         prisma.preregistroSalon.count({ where: { vendedorId: payload.sub } }),
@@ -378,23 +394,57 @@ export async function rutasVendedor(servidor: FastifyInstance) {
             fechaVencimiento: { lt: hoy },
           },
         }),
-        prisma.pago.aggregate({
+        prisma.pago.findMany({
           where: { estudio: { vendedorId: payload.sub } },
-          _count: { id: true },
-          _sum: { monto: true },
+          select: {
+            monto: true,
+            estudio: {
+              select: { plan: true },
+            },
+          },
         }),
-        columnaComisionDisponible
-          ? prisma.usuario.findUnique({
-              where: { id: payload.sub },
-              select: { porcentajeComision: true },
-            })
-          : Promise.resolve(null),
+        consultaVendedorComision,
       ]);
 
-      const ingresosGenerados = ventasAgregadas._sum.monto ?? 0;
-      const ventasRegistradas = ventasAgregadas._count.id ?? 0;
-      const porcentajeComision = resolverPorcentajeComisionVendedor(
-        columnaComisionDisponible ? vendedor?.porcentajeComision : undefined,
+      const porcentajeComisionGuardado =
+        vendedor && 'porcentajeComision' in vendedor ? vendedor.porcentajeComision : undefined;
+      const porcentajeComisionProGuardado =
+        vendedor && 'porcentajeComisionPro' in vendedor ? vendedor.porcentajeComisionPro : undefined;
+      const porcentajesComision = resolverPorcentajesComisionVendedor({
+        porcentajeComision: columnasComision.porcentajeComision ? porcentajeComisionGuardado : undefined,
+        porcentajeComisionPro: columnasComision.porcentajeComisionPro
+          ? porcentajeComisionProGuardado
+          : undefined,
+      });
+
+      const resumenVentas = ventasComisionables.reduce(
+        (acumulado, venta) => {
+          const porcentajeAplicado = resolverPorcentajeComisionSegunPlan(
+            venta.estudio.plan,
+            porcentajesComision,
+          );
+          const comisionVenta = calcularComisionVendedor(venta.monto, porcentajeAplicado);
+          const esPro = venta.estudio.plan === 'PRO';
+
+          return {
+            ventasRegistradas: acumulado.ventasRegistradas + 1,
+            ingresosGenerados: acumulado.ingresosGenerados + venta.monto,
+            ingresosStandard: acumulado.ingresosStandard + (esPro ? 0 : venta.monto),
+            ingresosPro: acumulado.ingresosPro + (esPro ? venta.monto : 0),
+            comisionGenerada: acumulado.comisionGenerada + comisionVenta,
+            comisionGeneradaStandard: acumulado.comisionGeneradaStandard + (esPro ? 0 : comisionVenta),
+            comisionGeneradaPro: acumulado.comisionGeneradaPro + (esPro ? comisionVenta : 0),
+          };
+        },
+        {
+          ventasRegistradas: 0,
+          ingresosGenerados: 0,
+          ingresosStandard: 0,
+          ingresosPro: 0,
+          comisionGenerada: 0,
+          comisionGeneradaStandard: 0,
+          comisionGeneradaPro: 0,
+        },
       );
 
       return respuesta.send({
@@ -406,10 +456,15 @@ export async function rutasVendedor(servidor: FastifyInstance) {
           totalSalones,
           salonesActivos,
           salonesPendientesPago,
-          ventasRegistradas,
-          ingresosGenerados,
-          porcentajeComision,
-          comisionGenerada: calcularComisionVendedor(ingresosGenerados, porcentajeComision),
+          ventasRegistradas: resumenVentas.ventasRegistradas,
+          ingresosGenerados: resumenVentas.ingresosGenerados,
+          ingresosStandard: resumenVentas.ingresosStandard,
+          ingresosPro: resumenVentas.ingresosPro,
+          porcentajeComision: porcentajesComision.standard,
+          porcentajeComisionPro: porcentajesComision.pro,
+          comisionGenerada: resumenVentas.comisionGenerada,
+          comisionGeneradaStandard: resumenVentas.comisionGeneradaStandard,
+          comisionGeneradaPro: resumenVentas.comisionGeneradaPro,
         },
       });
     },
@@ -429,16 +484,30 @@ export async function rutasVendedor(servidor: FastifyInstance) {
       solicitud.query.soloPendientesPago?.trim().toLowerCase() ?? '',
     );
     const hoy = new Date().toISOString().slice(0, 10);
-    const columnaComisionDisponible = await asegurarCampoPorcentajeComisionUsuario().catch(() => false);
-    const vendedor = columnaComisionDisponible
-      ? await prisma.usuario.findUnique({
-          where: { id: payload.sub },
-          select: { porcentajeComision: true },
-        })
-      : null;
-    const porcentajeComision = resolverPorcentajeComisionVendedor(
-      columnaComisionDisponible ? vendedor?.porcentajeComision : undefined,
-    );
+    const columnasComision = await asegurarCamposComisionVendedorUsuario().catch(() => ({
+      porcentajeComision: false,
+      porcentajeComisionPro: false,
+    }));
+    const vendedor =
+      columnasComision.porcentajeComision || columnasComision.porcentajeComisionPro
+        ? await prisma.usuario.findUnique({
+            where: { id: payload.sub },
+            select: {
+              ...(columnasComision.porcentajeComision ? { porcentajeComision: true } : {}),
+              ...(columnasComision.porcentajeComisionPro ? { porcentajeComisionPro: true } : {}),
+            },
+          })
+        : null;
+    const porcentajesComision = resolverPorcentajesComisionVendedor({
+      porcentajeComision:
+        columnasComision.porcentajeComision && vendedor && 'porcentajeComision' in vendedor
+          ? vendedor.porcentajeComision
+          : undefined,
+      porcentajeComisionPro:
+        columnasComision.porcentajeComisionPro && vendedor && 'porcentajeComisionPro' in vendedor
+          ? vendedor.porcentajeComisionPro
+          : undefined,
+    });
 
     const ventas = await prisma.pago.findMany({
       where: {
@@ -497,6 +566,10 @@ export async function rutasVendedor(servidor: FastifyInstance) {
           fechaVencimiento: venta.estudio.fechaVencimiento,
           hoy,
         });
+        const porcentajeComisionAplicado = resolverPorcentajeComisionSegunPlan(
+          venta.estudio.plan,
+          porcentajesComision,
+        );
 
         return {
           id: venta.id,
@@ -515,7 +588,8 @@ export async function rutasVendedor(servidor: FastifyInstance) {
           pais: venta.estudio.pais,
           fechaVencimiento: venta.estudio.fechaVencimiento,
           pendientePago,
-          comision: calcularComisionVendedor(venta.monto, porcentajeComision),
+          porcentajeComisionAplicado,
+          comision: calcularComisionVendedor(venta.monto, porcentajeComisionAplicado),
         };
       }),
     });

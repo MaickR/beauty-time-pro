@@ -4,6 +4,10 @@ import {
   XCircle,
   User,
   ListChecks,
+  ChevronDown,
+  ChevronUp,
+  CheckCircle2,
+  Circle,
   Clock,
   DollarSign,
   Mail,
@@ -23,13 +27,12 @@ import {
 } from '../../../lib/constantes';
 import { SelectorFecha } from '../../../componentes/ui/SelectorFecha';
 import { SelectorHora } from '../../../componentes/ui/SelectorHora';
-import { SeccionPersonalFormulario } from './SeccionPersonalFormulario';
-import type { Personal } from '../../../tipos';
 import type { ConfirmacionAltaSalon, FormularioEstudio } from '../hooks/usarFormularioEstudio';
 import { obtenerDefinicionPlan } from '../../../lib/planes';
 import { convertirCentavosAMoneda, formatearDinero } from '../../../utils/formato';
 import {
   esEmailSalonValido,
+  generarContrasenaSalon,
   limpiarNombrePersonaEntrada,
   limpiarNombreSalonEntrada,
   limpiarTelefonoEntrada,
@@ -48,7 +51,6 @@ interface PropsModalEstudio {
   formulario: FormularioEstudio;
   setFormulario: Dispatch<SetStateAction<FormularioEstudio>>;
   catalogoProps: PropsCatalogo;
-  onAgregarPersonal: (personal: Personal) => void;
   onEnviar: (e: React.FormEvent<HTMLFormElement>) => void;
   onCerrar: () => void;
   confirmacionAlta: ConfirmacionAltaSalon | null;
@@ -65,7 +67,7 @@ const TEXTOS_MODO_AGREGAR_POR_DEFECTO = {
   titulo: 'Registro completo',
   tituloInformativo: 'Credenciales automáticas',
   descripcionInformativa:
-    'La clave del dueño y la ClaveClientes se generan automáticamente al guardar. Al finalizar verás la ClaveClientes lista para copiar y descargar en QR.',
+    'La clave del dueño y la clave de acceso clientes se generan automáticamente al guardar. Al finalizar verás la clave lista para copiar y descargar en QR.',
   textoBotonEnviar: 'Crear salón',
 } as const;
 
@@ -74,7 +76,6 @@ export function ModalEstudio({
   formulario,
   setFormulario,
   catalogoProps,
-  onAgregarPersonal,
   onEnviar,
   onCerrar,
   confirmacionAlta,
@@ -86,6 +87,15 @@ export function ModalEstudio({
   const [preciosEnEdicion, setPreciosEnEdicion] = useState<Record<string, boolean>>({});
   const [qrReserva, setQrReserva] = useState<string | null>(null);
   const [copiado, setCopiado] = useState<string | null>(null);
+  const [categoriasAbiertas, setCategoriasAbiertas] = useState<Record<string, boolean>>(() =>
+    Object.keys(CATALOGO_SERVICIOS).reduce<Record<string, boolean>>(
+      (acumulado, categoria) => ({
+        ...acumulado,
+        [categoria]: true,
+      }),
+      {},
+    ),
+  );
   const {
     alternarServicio,
     actualizarCampoServicio,
@@ -173,8 +183,8 @@ export function ModalEstudio({
                 Registro completado
               </h2>
               <p className="mt-2 text-sm font-medium text-slate-500">
-                Comparte estos datos con el dueño y usa la clave de clientes en el material del
-                salón.
+                Comparte estos datos con el dueño y usa la clave de acceso de clientes en el
+                material del salón.
               </p>
             </div>
             <button onClick={onCerrar} aria-label="Cerrar modal">
@@ -186,7 +196,7 @@ export function ModalEstudio({
             <aside className="order-1 rounded-4xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6 md:order-2">
               <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                 <div>
-                  <p className="text-[11px] font-black uppercase tracking-[0.2em] text-slate-500">
+                  <p className="text-[11px] font-black uppercase tracking-wide text-slate-500">
                     QR descargable
                   </p>
                   <p className="mt-1 text-sm font-medium text-slate-500">
@@ -226,7 +236,7 @@ export function ModalEstudio({
 
             <div className="order-2 space-y-5 sm:space-y-6 md:order-1">
               <section className="rounded-4xl border border-slate-200 bg-slate-50 p-5 sm:p-6">
-                <div className="mb-4 flex items-center gap-2 text-[11px] font-black uppercase tracking-[0.22em] text-pink-600">
+                <div className="mb-4 flex items-center gap-2 text-[11px] font-black uppercase tracking-wide text-pink-600">
                   <Mail className="h-4 w-4" /> Acceso del dueño
                 </div>
                 <div className="space-y-3 text-sm text-slate-700">
@@ -246,7 +256,7 @@ export function ModalEstudio({
 
                 <div className="mt-5 rounded-2xl border border-slate-200 bg-white p-4">
                   <div className="mb-2 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                    <span className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-500">
+                    <span className="text-[10px] font-black uppercase tracking-wide text-slate-500">
                       Contraseña inicial
                     </span>
                     <button
@@ -259,7 +269,7 @@ export function ModalEstudio({
                     </button>
                   </div>
                   <div className="rounded-2xl bg-slate-950 px-4 py-3">
-                    <code className="block break-all font-mono text-xs font-black tracking-[0.16em] text-emerald-300 sm:text-sm sm:tracking-[0.25em]">
+                    <code className="block break-all font-mono text-xs font-black tracking-normal text-emerald-300 sm:text-sm">
                       {confirmacionAlta.contrasenaDueno}
                     </code>
                   </div>
@@ -271,14 +281,14 @@ export function ModalEstudio({
               </section>
 
               <section className="rounded-4xl border border-slate-900 bg-slate-950 p-5 text-white sm:p-6">
-                <div className="mb-4 flex items-center gap-2 text-[11px] font-black uppercase tracking-[0.22em] text-pink-400">
+                <div className="mb-4 flex items-center gap-2 text-[11px] font-black uppercase tracking-wide text-pink-400">
                   <KeyRound className="h-4 w-4" /> Acceso público a reservas
                 </div>
                 <div className="space-y-4">
                   <div className="rounded-2xl border border-slate-800 bg-slate-900 px-4 py-4">
                     <div className="mb-2 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                      <span className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">
-                        ClaveClientes
+                      <span className="text-[10px] font-black uppercase tracking-wide text-slate-400">
+                        Clave acceso clientes
                       </span>
                       <button
                         type="button"
@@ -291,14 +301,14 @@ export function ModalEstudio({
                         {copiado === 'clave-clientes' ? 'Copiada' : 'Copiar'}
                       </button>
                     </div>
-                    <code className="block break-all font-mono text-base font-black tracking-[0.14em] text-pink-300 sm:text-xl sm:tracking-[0.25em]">
+                    <code className="block break-all font-mono text-base font-black tracking-normal text-pink-300 sm:text-xl">
                       {confirmacionAlta.claveClientes}
                     </code>
                   </div>
 
                   <div className="rounded-2xl border border-slate-800 bg-slate-900 px-4 py-4">
                     <div className="mb-2 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                      <span className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">
+                      <span className="text-[10px] font-black uppercase tracking-wide text-slate-400">
                         URL para compartir
                       </span>
                       <button
@@ -346,13 +356,13 @@ export function ModalEstudio({
         <form onSubmit={onEnviar} className="flex-1 overflow-y-auto px-4 py-8 sm:p-10 space-y-12">
           {/* SECCIÓN 1: IDENTIDAD */}
           <section className="grid grid-cols-1 sm:grid-cols-2 gap-6">
-            <div className="col-span-full font-black text-xs text-pink-600 uppercase tracking-widest mb-2 flex items-center gap-2">
+            <div className="col-span-full font-black text-xs text-pink-600 uppercase tracking-wide mb-2 flex items-center gap-2">
               <User className="w-4 h-4" /> Identidad del Negocio
             </div>
             <div>
               <label
                 htmlFor="nombre-estudio"
-                className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 ml-1"
+                className="block text-[10px] font-black text-slate-400 uppercase tracking-wide mb-2 ml-1"
               >
                 Nombre del salón
               </label>
@@ -371,10 +381,7 @@ export function ModalEstudio({
                       name,
                       contrasenaDueno:
                         p.reintentosContrasenaDueno === 1
-                          ? p.contrasenaDueno.replace(
-                              /^.{3}/,
-                              `${`${name.replace(/\s+/g, '').toUpperCase() || 'SAL'}SAL`.slice(0, 3)}`,
-                            )
+                          ? generarContrasenaSalon(name, p.owner, 0)
                           : p.contrasenaDueno,
                     };
                   })
@@ -385,7 +392,7 @@ export function ModalEstudio({
             <div>
               <label
                 htmlFor="dueno-estudio"
-                className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 ml-1"
+                className="block text-[10px] font-black text-slate-400 uppercase tracking-wide mb-2 ml-1"
               >
                 Nombre completo del dueño
               </label>
@@ -397,10 +404,17 @@ export function ModalEstudio({
                 placeholder="Nombre completo"
                 value={formulario.owner}
                 onChange={(e) =>
-                  setFormulario((p) => ({
-                    ...p,
-                    owner: limpiarNombrePersonaEntrada(e.target.value),
-                  }))
+                  setFormulario((p) => {
+                    const owner = limpiarNombrePersonaEntrada(e.target.value);
+                    return {
+                      ...p,
+                      owner,
+                      contrasenaDueno:
+                        p.reintentosContrasenaDueno === 1
+                          ? generarContrasenaSalon(p.name, owner, 0)
+                          : p.contrasenaDueno,
+                    };
+                  })
                 }
                 required
               />
@@ -408,7 +422,7 @@ export function ModalEstudio({
             <div className="col-span-full sm:col-span-2">
               <label
                 htmlFor="direccion-estudio"
-                className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 ml-1"
+                className="block text-[10px] font-black text-slate-400 uppercase tracking-wide mb-2 ml-1"
               >
                 Dirección
               </label>
@@ -428,7 +442,7 @@ export function ModalEstudio({
                 <div>
                   <label
                     htmlFor="email-dueno"
-                    className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 ml-1"
+                    className="block text-[10px] font-black text-slate-400 uppercase tracking-wide mb-2 ml-1"
                   >
                     Email del dueño
                   </label>
@@ -457,7 +471,7 @@ export function ModalEstudio({
                 <div>
                   <label
                     htmlFor="contrasena-dueno"
-                    className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 ml-1"
+                    className="block text-[10px] font-black text-slate-400 uppercase tracking-wide mb-2 ml-1"
                   >
                     Contraseña
                   </label>
@@ -508,7 +522,7 @@ export function ModalEstudio({
             <div>
               <label
                 htmlFor="telefono-estudio"
-                className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 ml-1"
+                className="block text-[10px] font-black text-slate-400 uppercase tracking-wide mb-2 ml-1"
               >
                 Teléfono del salón
               </label>
@@ -554,7 +568,7 @@ export function ModalEstudio({
             <div>
               <label
                 htmlFor="pais-estudio"
-                className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 ml-1"
+                className="block text-[10px] font-black text-slate-400 uppercase tracking-wide mb-2 ml-1"
               >
                 País del salón
               </label>
@@ -574,7 +588,7 @@ export function ModalEstudio({
             <div>
               <label
                 htmlFor="plan-estudio"
-                className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 ml-1"
+                className="block text-[10px] font-black text-slate-400 uppercase tracking-wide mb-2 ml-1"
               >
                 Plan del salón
               </label>
@@ -639,17 +653,16 @@ export function ModalEstudio({
                           </ul>
                         </section>
 
-                        <section className="rounded-2xl border border-slate-200 bg-white/90 p-3">
-                          <p className="text-xs font-bold text-amber-700">Restricciones</p>
-                          <ul className="mt-2 space-y-1 text-xs font-medium text-slate-700">
-                            {(definicion.restricciones.length > 0
-                              ? definicion.restricciones
-                              : ['Sin restricciones operativas adicionales.']
-                            ).map((item) => (
-                              <li key={`${formulario.plan}-restriccion-${item}`}>• {item}</li>
-                            ))}
-                          </ul>
-                        </section>
+                        {definicion.restricciones.length > 0 && (
+                          <section className="rounded-2xl border border-slate-200 bg-white/90 p-3">
+                            <p className="text-xs font-bold text-amber-700">Restricciones</p>
+                            <ul className="mt-2 space-y-1 text-xs font-medium text-slate-700">
+                              {definicion.restricciones.map((item) => (
+                                <li key={`${formulario.plan}-restriccion-${item}`}>• {item}</li>
+                              ))}
+                            </ul>
+                          </section>
+                        )}
                       </div>
                     </article>
                   );
@@ -670,7 +683,7 @@ export function ModalEstudio({
 
           {/* SECCIÓN 2: CATÁLOGO */}
           <section className="space-y-6">
-            <div className="font-black text-xs text-pink-600 uppercase tracking-widest flex items-center gap-2">
+            <div className="font-black text-xs text-pink-600 uppercase tracking-wide flex items-center gap-2">
               <ListChecks className="w-4 h-4" /> Servicios del salón
             </div>
             {Object.entries(CATALOGO_SERVICIOS).map(([cat, items]) => {
@@ -678,105 +691,151 @@ export function ModalEstudio({
                 .filter((c) => c.category === cat)
                 .map((c) => c.name);
               const todos = Array.from(new Set([...items, ...custom]));
+              const categoriaAbierta = categoriasAbiertas[cat] ?? true;
+              const cantidadSeleccionados = todos.filter((servicio) =>
+                formulario.selectedServices.some((item) => item.name === servicio),
+              ).length;
               return (
                 <div
                   key={cat}
-                  className="space-y-3 bg-slate-50/50 p-6 rounded-4xl border border-slate-100"
+                  className="space-y-3 bg-slate-50/50 p-4 sm:p-6 rounded-4xl border border-slate-100"
                 >
-                  <h4 className="text-[10px] font-black bg-slate-900 text-white px-3 py-1 rounded-md inline-block uppercase">
-                    {cat}
-                  </h4>
-                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-                    {todos.map((s) => {
-                      const sel = formulario.selectedServices.find((sv) => sv.name === s);
-                      const categoriaNormalizada = cat.toLowerCase().replace(/[^a-z0-9]+/g, '-');
-                      const servicioNormalizado = s.toLowerCase().replace(/[^a-z0-9]+/g, '-');
-                      return (
-                        <div
-                          key={`${cat}-${s}`}
-                          className={`flex flex-col justify-between p-3 rounded-xl border gap-3 transition-all ${sel ? 'bg-pink-50 border-pink-300' : 'bg-white border-slate-100'}`}
-                        >
-                          <button
-                            type="button"
-                            onClick={() => alternarServicio(s)}
-                            className={`text-left text-[10px] font-bold flex items-center gap-2 ${sel ? 'text-pink-700' : 'text-slate-500'}`}
-                          >
-                            <span>{sel ? '✓' : '○'}</span>
-                            <span>{obtenerEtiquetaServicioCatalogo(s)}</span>
-                          </button>
-                          {sel && (
-                            <div className="flex items-center gap-3">
-                              <div className="flex w-full items-center gap-1 bg-white p-1 rounded-lg border border-pink-100 sm:w-auto">
-                                <Clock className="w-3 h-3 text-pink-400" />
-                                <input
-                                  id={`duracion-${categoriaNormalizada}-${servicioNormalizado}`}
-                                  name={`duracion-${categoriaNormalizada}-${servicioNormalizado}`}
-                                  type="number"
-                                  min="1"
-                                  max="480"
-                                  value={sel.duration}
-                                  onChange={(e) =>
-                                    actualizarCampoServicio(s, 'duration', e.target.value)
-                                  }
-                                  onInput={(e) => {
-                                    const entrada = e.currentTarget;
-                                    entrada.value = entrada.value.replace(/^0+/, '') || '';
-                                  }}
-                                  className="w-full min-w-0 text-[10px] font-black outline-none text-center text-slate-700 sm:w-16"
-                                />
-                                <span className="text-[8px] font-black text-slate-400">MIN</span>
-                              </div>
-                              <div className="flex w-full items-center gap-1 bg-green-50 p-1 rounded-lg border border-green-200 sm:w-auto">
-                                <DollarSign className="w-3 h-3 text-green-600" />
-                                <input
-                                  id={`precio-${categoriaNormalizada}-${servicioNormalizado}`}
-                                  name={`precio-${categoriaNormalizada}-${servicioNormalizado}`}
-                                  type="text"
-                                  inputMode="numeric"
-                                  value={formatearPrecioVisual(sel.price ?? 0, s)}
-                                  onFocus={() =>
-                                    setPreciosEnEdicion((prev) => ({ ...prev, [s]: true }))
-                                  }
-                                  onChange={(e) => {
-                                    const valorLimpio = e.target.value.replace(/\D/g, '');
-                                    actualizarCampoServicio(s, 'price', valorLimpio);
-                                  }}
-                                  onInput={(e) => {
-                                    const entrada = e.currentTarget;
-                                    entrada.value =
-                                      entrada.value.replace(/\D/g, '').replace(/^0+/, '') || '';
-                                  }}
-                                  onBlur={() =>
-                                    setPreciosEnEdicion((prev) => ({ ...prev, [s]: false }))
-                                  }
-                                  className="w-full min-w-0 text-[10px] font-black outline-none text-center text-green-800 bg-transparent sm:w-24"
-                                />
-                              </div>
-                            </div>
-                          )}
-                        </div>
-                      );
-                    })}
-                  </div>
-                  <div className="mt-4 flex w-full flex-col gap-2 sm:flex-row md:w-1/2">
-                    <input
-                      name={`servicio-personalizado-${cat.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`}
-                      autoComplete="off"
-                      value={entradaServicioPersonalizado[cat] ?? ''}
-                      onChange={(e) =>
-                        setEntradaServicioPersonalizado((p) => ({ ...p, [cat]: e.target.value }))
-                      }
-                      placeholder={`+ Añadir servicio en ${cat}...`}
-                      className="flex-1 text-[10px] font-bold p-3 rounded-xl border border-slate-200 outline-none focus:border-pink-400 bg-white"
-                    />
-                    <button
-                      type="button"
-                      onClick={() => agregarServicioPersonalizado(cat)}
-                      className="bg-slate-800 text-white px-4 py-2 rounded-xl text-[10px] font-black hover:bg-black"
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setCategoriasAbiertas((prev) => ({
+                        ...prev,
+                        [cat]: !categoriaAbierta,
+                      }))
+                    }
+                    className="flex w-full items-center justify-between gap-3 rounded-2xl bg-white/90 px-4 py-3 text-left"
+                    aria-expanded={categoriaAbierta}
+                    aria-controls={`categoria-servicios-${cat.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`}
+                  >
+                    <div className="flex min-w-0 items-center gap-3">
+                      <h4 className="truncate text-[10px] font-black bg-slate-900 text-white px-3 py-1 rounded-md uppercase">
+                        {cat}
+                      </h4>
+                      <span className="text-[10px] font-bold text-slate-600">
+                        {cantidadSeleccionados} seleccionados
+                      </span>
+                    </div>
+                    {categoriaAbierta ? (
+                      <ChevronUp className="h-4 w-4 text-slate-500" />
+                    ) : (
+                      <ChevronDown className="h-4 w-4 text-slate-500" />
+                    )}
+                  </button>
+
+                  {categoriaAbierta && (
+                    <div
+                      id={`categoria-servicios-${cat.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`}
+                      className="space-y-4"
                     >
-                      AÑADIR
-                    </button>
-                  </div>
+                      <div className="grid grid-cols-1 gap-3 md:grid-cols-2 lg:grid-cols-3">
+                        {todos.map((s) => {
+                          const sel = formulario.selectedServices.find((sv) => sv.name === s);
+                          const categoriaNormalizada = cat
+                            .toLowerCase()
+                            .replace(/[^a-z0-9]+/g, '-');
+                          const servicioNormalizado = s.toLowerCase().replace(/[^a-z0-9]+/g, '-');
+                          return (
+                            <div
+                              key={`${cat}-${s}`}
+                              className={`flex flex-col justify-between p-3 rounded-xl border gap-3 transition-all ${sel ? 'bg-pink-50 border-pink-300' : 'bg-white border-slate-100'}`}
+                            >
+                              <button
+                                type="button"
+                                onClick={() => alternarServicio(s)}
+                                className={`text-left text-[10px] font-bold flex items-center gap-2 ${sel ? 'text-pink-700' : 'text-slate-500'}`}
+                              >
+                                {sel ? (
+                                  <CheckCircle2 className="h-4 w-4 text-pink-600" />
+                                ) : (
+                                  <Circle className="h-4 w-4 text-slate-400" />
+                                )}
+                                <span>{obtenerEtiquetaServicioCatalogo(s)}</span>
+                              </button>
+                              {sel && (
+                                <div className="flex items-center gap-3">
+                                  <div className="flex w-full items-center gap-1 bg-white p-1 rounded-lg border border-pink-100 sm:w-auto">
+                                    <Clock className="w-3 h-3 text-pink-400" />
+                                    <input
+                                      id={`duracion-${categoriaNormalizada}-${servicioNormalizado}`}
+                                      name={`duracion-${categoriaNormalizada}-${servicioNormalizado}`}
+                                      type="number"
+                                      min="1"
+                                      max="480"
+                                      value={sel.duration}
+                                      onChange={(e) =>
+                                        actualizarCampoServicio(s, 'duration', e.target.value)
+                                      }
+                                      onInput={(e) => {
+                                        const entrada = e.currentTarget;
+                                        entrada.value = entrada.value.replace(/^0+/, '') || '';
+                                      }}
+                                      className="w-full min-w-0 text-[10px] font-black outline-none text-center text-slate-700 sm:w-16"
+                                    />
+                                    <span className="text-[8px] font-black text-slate-400">
+                                      MIN
+                                    </span>
+                                  </div>
+                                  <div className="flex w-full items-center gap-1 bg-green-50 p-1 rounded-lg border border-green-200 sm:w-auto">
+                                    <DollarSign className="w-3 h-3 text-green-600" />
+                                    <input
+                                      id={`precio-${categoriaNormalizada}-${servicioNormalizado}`}
+                                      name={`precio-${categoriaNormalizada}-${servicioNormalizado}`}
+                                      type="text"
+                                      inputMode="numeric"
+                                      value={formatearPrecioVisual(sel.price ?? 0, s)}
+                                      onFocus={() =>
+                                        setPreciosEnEdicion((prev) => ({ ...prev, [s]: true }))
+                                      }
+                                      onChange={(e) => {
+                                        const valorLimpio = e.target.value.replace(/\D/g, '');
+                                        actualizarCampoServicio(s, 'price', valorLimpio);
+                                      }}
+                                      onInput={(e) => {
+                                        const entrada = e.currentTarget;
+                                        entrada.value =
+                                          entrada.value.replace(/\D/g, '').replace(/^0+/, '') || '';
+                                      }}
+                                      onBlur={() =>
+                                        setPreciosEnEdicion((prev) => ({ ...prev, [s]: false }))
+                                      }
+                                      className="w-full min-w-0 text-[10px] font-black outline-none text-center text-green-800 bg-transparent sm:w-24"
+                                    />
+                                  </div>
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+                      <div className="mt-4 flex w-full flex-col gap-2 sm:flex-row md:w-1/2">
+                        <input
+                          name={`servicio-personalizado-${cat.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`}
+                          autoComplete="off"
+                          value={entradaServicioPersonalizado[cat] ?? ''}
+                          onChange={(e) =>
+                            setEntradaServicioPersonalizado((p) => ({
+                              ...p,
+                              [cat]: e.target.value,
+                            }))
+                          }
+                          placeholder={`+ Añadir servicio en ${cat}...`}
+                          className="flex-1 text-[10px] font-bold p-3 rounded-xl border border-slate-200 outline-none focus:border-pink-400 bg-white"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => agregarServicioPersonalizado(cat)}
+                          className="bg-slate-800 text-white px-4 py-2 rounded-xl text-[10px] font-black hover:bg-black"
+                        >
+                          AÑADIR
+                        </button>
+                      </div>
+                    </div>
+                  )}
                 </div>
               );
             })}
@@ -784,7 +843,7 @@ export function ModalEstudio({
 
           {formulario.plan === 'PRO' && (
             <section className="space-y-4">
-              <div className="font-black text-xs text-pink-600 uppercase tracking-widest flex items-center gap-2">
+              <div className="font-black text-xs text-pink-600 uppercase tracking-wide flex items-center gap-2">
                 <Package className="w-4 h-4" /> Productos del salón
               </div>
               <div className="space-y-3 rounded-4xl border border-slate-200 bg-slate-50 p-5">
@@ -869,7 +928,7 @@ export function ModalEstudio({
                 {formulario.productos.filter((producto) => producto.nombre.trim()).length > 0 && (
                   <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white">
                     <table className="min-w-full text-left text-sm">
-                      <thead className="bg-slate-50 text-[10px] font-black uppercase tracking-[0.2em] text-slate-500">
+                      <thead className="bg-slate-50 text-[10px] font-black uppercase tracking-wide text-slate-500">
                         <tr>
                           <th className="px-4 py-3">Producto</th>
                           <th className="px-4 py-3">Precio</th>
@@ -899,126 +958,90 @@ export function ModalEstudio({
             </section>
           )}
 
-          {/* SECCIÓN 3: PERSONAL */}
-          <section className="grid grid-cols-1 md:grid-cols-2 gap-8">
-            <div className="space-y-4">
-              <SeccionPersonalFormulario
-                serviciosDisponibles={formulario.selectedServices}
-                onAgregarPersonal={onAgregarPersonal}
-              />
-              {formulario.staff.length > 0 && (
-                <div className="overflow-hidden rounded-4xl border border-slate-200 bg-white shadow-sm">
-                  <table className="min-w-full text-left text-sm">
-                    <thead className="bg-slate-50 text-[10px] font-black uppercase tracking-[0.2em] text-slate-500">
-                      <tr>
-                        <th className="px-4 py-3">Empleado</th>
-                        <th className="px-4 py-3">Turno</th>
-                        <th className="px-4 py-3">Break</th>
-                        <th className="px-4 py-3">Servicios</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {formulario.staff.map((persona) => (
-                        <tr key={persona.id} className="border-t border-slate-100 align-top">
-                          <td className="px-4 py-3 font-semibold text-slate-700">{persona.name}</td>
-                          <td className="px-4 py-3 text-slate-600">
-                            {persona.shiftStart ?? '--'} a {persona.shiftEnd ?? '--'}
-                          </td>
-                          <td className="px-4 py-3 text-slate-600">
-                            {persona.breakStart ?? '--'} a {persona.breakEnd ?? '--'}
-                          </td>
-                          <td className="px-4 py-3 text-slate-600">
-                            {persona.specialties.length > 0
-                              ? persona.specialties.join(', ')
-                              : 'Sin servicios asignados'}
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              )}
+          {/* SECCIÓN 3: HORARIO OPERATIVO */}
+          <section className="space-y-4">
+            <div className="font-black text-xs text-pink-600 uppercase tracking-wide flex items-center gap-2">
+              <Clock className="w-4 h-4" /> Horario Operativo Local
             </div>
-            {/* SECCIÓN 4: HORARIO OPERATIVO */}
-            <div>
-              <div className="font-black text-xs text-pink-600 uppercase tracking-widest mb-4 flex items-center gap-2">
-                <Clock className="w-4 h-4" /> Horario Operativo del Local
-              </div>
-              <div className="space-y-2">
-                {DIAS_SEMANA.map((dia) => (
-                  <div
-                    key={dia}
-                    className="flex flex-col gap-2 p-2 bg-slate-50 rounded-lg text-[10px] font-black sm:flex-row sm:items-center sm:justify-between"
+            <div className="space-y-2 rounded-4xl border border-slate-200 bg-white p-3 sm:p-5">
+              {DIAS_SEMANA.map((dia) => (
+                <div
+                  key={dia}
+                  className="grid gap-2 rounded-2xl border border-slate-100 bg-slate-50 p-3 text-[10px] font-black md:grid-cols-[minmax(150px,1fr)_auto] md:items-center"
+                >
+                  <label
+                    htmlFor={`horario-${dia.toLowerCase()}`}
+                    className="flex items-center gap-2 uppercase text-slate-700"
                   >
-                    <div className="flex items-center gap-2">
-                      <input
-                        id={`horario-${dia.toLowerCase()}`}
-                        name={`horario-${dia.toLowerCase()}`}
-                        type="checkbox"
-                        checked={formulario.schedule[dia]?.isOpen ?? true}
-                        onChange={(e) =>
-                          setFormulario((p) => ({
-                            ...p,
-                            schedule: {
-                              ...p.schedule,
-                              [dia]: { ...p.schedule[dia], isOpen: e.target.checked },
-                            },
-                          }))
-                        }
-                        className="accent-pink-600"
-                      />
-                      <span className="uppercase">{dia}</span>
-                    </div>
-                    <div
-                      className={`flex w-full flex-col gap-1 sm:w-auto sm:flex-row ${formulario.schedule[dia]?.isOpen ? '' : 'opacity-50 pointer-events-none'}`}
-                    >
-                      <SelectorHora
-                        etiqueta="Apertura"
-                        id={`apertura-${dia.toLowerCase()}`}
-                        nombre={`apertura-${dia.toLowerCase()}`}
-                        valor={formulario.schedule[dia]?.openTime ?? '09:00'}
-                        alCambiar={(valor) =>
-                          setFormulario((p) => ({
-                            ...p,
-                            schedule: {
-                              ...p.schedule,
-                              [dia]: { ...p.schedule[dia], openTime: valor },
-                            },
-                          }))
-                        }
-                        ocultarEtiqueta
-                        claseContenedor="w-full sm:w-24"
-                        claseSelect="w-full rounded border border-slate-200 bg-white p-1 text-[10px] font-bold text-slate-700 outline-none focus:ring-2 focus:ring-pink-500"
-                      />
-                      <span className="hidden self-center sm:inline">-</span>
-                      <SelectorHora
-                        etiqueta="Cierre"
-                        id={`cierre-${dia.toLowerCase()}`}
-                        nombre={`cierre-${dia.toLowerCase()}`}
-                        valor={formulario.schedule[dia]?.closeTime ?? '22:00'}
-                        alCambiar={(valor) =>
-                          setFormulario((p) => ({
-                            ...p,
-                            schedule: {
-                              ...p.schedule,
-                              [dia]: { ...p.schedule[dia], closeTime: valor },
-                            },
-                          }))
-                        }
-                        ocultarEtiqueta
-                        claseContenedor="w-full sm:w-24"
-                        claseSelect="w-full rounded border border-slate-200 bg-white p-1 text-[10px] font-bold text-slate-700 outline-none focus:ring-2 focus:ring-pink-500"
-                      />
-                    </div>
+                    <input
+                      id={`horario-${dia.toLowerCase()}`}
+                      name={`horario-${dia.toLowerCase()}`}
+                      type="checkbox"
+                      checked={formulario.schedule[dia]?.isOpen ?? true}
+                      onChange={(e) =>
+                        setFormulario((p) => ({
+                          ...p,
+                          schedule: {
+                            ...p.schedule,
+                            [dia]: { ...p.schedule[dia], isOpen: e.target.checked },
+                          },
+                        }))
+                      }
+                      className="accent-pink-600"
+                    />
+                    <span>{dia}</span>
+                  </label>
+                  <div
+                    className={`grid grid-cols-1 gap-2 sm:grid-cols-[minmax(120px,1fr)_auto_minmax(120px,1fr)] ${formulario.schedule[dia]?.isOpen ? '' : 'opacity-50 pointer-events-none'}`}
+                  >
+                    <SelectorHora
+                      etiqueta="Apertura"
+                      id={`apertura-${dia.toLowerCase()}`}
+                      nombre={`apertura-${dia.toLowerCase()}`}
+                      valor={formulario.schedule[dia]?.openTime ?? '09:00'}
+                      alCambiar={(valor) =>
+                        setFormulario((p) => ({
+                          ...p,
+                          schedule: {
+                            ...p.schedule,
+                            [dia]: { ...p.schedule[dia], openTime: valor },
+                          },
+                        }))
+                      }
+                      ocultarEtiqueta
+                      claseContenedor="w-full"
+                      claseSelect="w-full rounded border border-slate-200 bg-white px-3 py-2 text-[10px] font-bold text-slate-700 outline-none focus:ring-2 focus:ring-pink-500"
+                    />
+                    <span className="hidden self-center text-center text-xs text-slate-400 sm:inline">
+                      a
+                    </span>
+                    <SelectorHora
+                      etiqueta="Cierre"
+                      id={`cierre-${dia.toLowerCase()}`}
+                      nombre={`cierre-${dia.toLowerCase()}`}
+                      valor={formulario.schedule[dia]?.closeTime ?? '22:00'}
+                      alCambiar={(valor) =>
+                        setFormulario((p) => ({
+                          ...p,
+                          schedule: {
+                            ...p.schedule,
+                            [dia]: { ...p.schedule[dia], closeTime: valor },
+                          },
+                        }))
+                      }
+                      ocultarEtiqueta
+                      claseContenedor="w-full"
+                      claseSelect="w-full rounded border border-slate-200 bg-white px-3 py-2 text-[10px] font-bold text-slate-700 outline-none focus:ring-2 focus:ring-pink-500"
+                    />
                   </div>
-                ))}
-              </div>
+                </div>
+              ))}
             </div>
           </section>
 
           {modo === 'ADD' && (
             <section className="bg-slate-900 p-8 rounded-4xl text-white">
-              <div className="font-black text-xs text-pink-400 uppercase tracking-widest mb-3">
+              <div className="font-black text-xs text-pink-400 uppercase tracking-wide mb-3">
                 {textosAgregar.tituloInformativo}
               </div>
               <p className="text-sm font-medium text-slate-300">

@@ -49,9 +49,6 @@ function construirNotasPreregistro(formulario: FormularioEstudio): string | unde
     formulario.selectedServices.length > 0
       ? `Services: ${formulario.selectedServices.map((servicio) => servicio.name).join(', ')}`
       : null,
-    formulario.staff.length > 0
-      ? `Staff: ${formulario.staff.map((persona) => persona.name).join(', ')}`
-      : null,
     formulario.productos.length > 0
       ? `Products: ${formulario.productos.map((producto) => producto.nombre).join(', ')}`
       : null,
@@ -238,7 +235,6 @@ export function TabPreregistros() {
             entradaServicioPersonalizado: hookFormulario.entradaServicioPersonalizado,
             setEntradaServicioPersonalizado: hookFormulario.setEntradaServicioPersonalizado,
           }}
-          onAgregarPersonal={hookFormulario.agregarPersonal}
           onEnviar={(evento) =>
             void hookFormulario.enviarFormulario(
               evento,

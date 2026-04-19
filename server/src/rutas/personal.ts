@@ -6,6 +6,12 @@ import { prisma } from '../prismaCliente.js';
 import { Prisma } from '../generated/prisma/client.js';
 import { verificarJWT } from '../middleware/autenticacion.js';
 import { tieneAccesoAdministrativoEstudio } from '../lib/accesoEstudio.js';
+import {
+  guardarConfiguracionComisionPersonal,
+  normalizarComisionServicios,
+  normalizarPorcentajeComisionPersonal,
+  obtenerConfiguracionesComisionPersonal,
+} from '../lib/comisionPersonal.js';
 import { validarCantidadEmpleadosActivosPlan } from '../lib/planes.js';
 import { horaOpcionalONulaSchema, obtenerMensajeValidacion, textoSchema } from '../lib/validacion.js';
 import { detectarTipoImagen } from '../utils/validarImagen.js';
@@ -20,6 +26,8 @@ const esquemaPersonalBase = {
   descansoInicio: horaOpcionalONulaSchema,
   descansoFin: horaOpcionalONulaSchema,
   diasTrabajo: z.array(z.number().int().min(0).max(6)).max(7, 'diasTrabajo no puede superar 7 elementos').nullable().optional(),
+  porcentajeComisionBase: z.number().int().min(0).max(100).optional(),
+  comisionServicios: z.record(z.string().trim().min(1).max(80), z.number().int().min(0).max(100)).optional(),
 };
 
 const esquemaCrearPersonal = z.object(esquemaPersonalBase).superRefine((datos, contexto) => {
@@ -38,6 +46,16 @@ const esquemaActualizarPersonal = z.object({
 }).strict().refine((datos) => Object.keys(datos).length > 0, {
   message: 'Debes enviar al menos un campo para actualizar',
 });
+
+function construirConfiguracionComisionPersonal(datos: {
+  porcentajeComisionBase?: number;
+  comisionServicios?: Record<string, number>;
+}) {
+  return {
+    porcentajeComisionBase: normalizarPorcentajeComisionPersonal(datos.porcentajeComisionBase, 0),
+    comisionServicios: normalizarComisionServicios(datos.comisionServicios ?? {}),
+  };
+}
 
 async function sincronizarNumeroEspecialistas(estudioId: string) {
   const totalPersonal = await prisma.personal.count({
@@ -96,14 +114,42 @@ export async function rutasPersonal(servidor: FastifyInstance): Promise<void> {
           desactivadoHasta: desactivadoHastaPorId.get(miembro.id) ?? null,
         }));
 
-      return respuesta.send({ datos: personalVisible });
+      const configuracionesComision = await obtenerConfiguracionesComisionPersonal(
+        personalVisible.map((miembro) => miembro.id),
+      );
+
+      return respuesta.send({
+        datos: personalVisible.map((miembro) => {
+          const configuracionComision = configuracionesComision.get(miembro.id) ?? {
+            porcentajeComisionBase: 0,
+            comisionServicios: {},
+          };
+
+          return {
+            ...miembro,
+            porcentajeComisionBase: configuracionComision.porcentajeComisionBase,
+            comisionServicios: configuracionComision.comisionServicios,
+          };
+        }),
+      });
     },
   );
 
   // POST /estudios/:id/personal
   servidor.post<{
     Params: { id: string };
-    Body: { nombre: string; especialidades?: string[]; activo?: boolean; horaInicio?: string | null; horaFin?: string | null; descansoInicio?: string | null; descansoFin?: string | null; diasTrabajo?: number[] | null };
+    Body: {
+      nombre: string;
+      especialidades?: string[];
+      activo?: boolean;
+      horaInicio?: string | null;
+      horaFin?: string | null;
+      descansoInicio?: string | null;
+      descansoFin?: string | null;
+      diasTrabajo?: number[] | null;
+      porcentajeComisionBase?: number;
+      comisionServicios?: Record<string, number>;
+    };
   }>(
     '/estudios/:id/personal',
     { preHandler: verificarJWT },
@@ -161,7 +207,21 @@ export async function rutasPersonal(servidor: FastifyInstance): Promise<void> {
         });
       }
 
-      const { nombre, especialidades, activo, horaInicio, horaFin, descansoInicio, descansoFin, diasTrabajo } = resultado.data;
+      const {
+        nombre,
+        especialidades,
+        activo,
+        horaInicio,
+        horaFin,
+        descansoInicio,
+        descansoFin,
+        diasTrabajo,
+      } = resultado.data;
+
+      const configuracionComision = construirConfiguracionComisionPersonal({
+        porcentajeComisionBase: resultado.data.porcentajeComisionBase,
+        comisionServicios: resultado.data.comisionServicios,
+      });
 
       const empleado = await prisma.personal.create({
         data: {
@@ -177,13 +237,35 @@ export async function rutasPersonal(servidor: FastifyInstance): Promise<void> {
           diasTrabajo: diasTrabajo !== undefined ? (diasTrabajo ?? Prisma.JsonNull) : Prisma.JsonNull,
         },
       });
+
+      await guardarConfiguracionComisionPersonal(empleado.id, configuracionComision);
       await sincronizarNumeroEspecialistas(id);
-      return respuesta.code(201).send({ datos: empleado });
+      return respuesta.code(201).send({
+        datos: {
+          ...empleado,
+          porcentajeComisionBase: configuracionComision.porcentajeComisionBase,
+          comisionServicios: configuracionComision.comisionServicios,
+        },
+      });
     },
   );
 
   // PUT /personal/:id
-  servidor.put<{ Params: { id: string }; Body: { nombre?: string; especialidades?: string[]; activo?: boolean; horaInicio?: string | null; horaFin?: string | null; descansoInicio?: string | null; descansoFin?: string | null; diasTrabajo?: number[] | null } }>(
+  servidor.put<{
+    Params: { id: string };
+    Body: {
+      nombre?: string;
+      especialidades?: string[];
+      activo?: boolean;
+      horaInicio?: string | null;
+      horaFin?: string | null;
+      descansoInicio?: string | null;
+      descansoFin?: string | null;
+      diasTrabajo?: number[] | null;
+      porcentajeComisionBase?: number;
+      comisionServicios?: Record<string, number>;
+    };
+  }>(
     '/personal/:id',
     { preHandler: verificarJWT },
     async (solicitud, respuesta) => {
@@ -265,8 +347,42 @@ export async function rutasPersonal(servidor: FastifyInstance): Promise<void> {
               ...(datos.diasTrabajo !== undefined && { diasTrabajo: datos.diasTrabajo ?? Prisma.JsonNull }),
             },
           });
+
+      const actualizaComision =
+        datos.porcentajeComisionBase !== undefined || datos.comisionServicios !== undefined;
+      if (actualizaComision) {
+        const configuracionActual = (
+          await obtenerConfiguracionesComisionPersonal([solicitud.params.id])
+        ).get(solicitud.params.id) ?? {
+          porcentajeComisionBase: 0,
+          comisionServicios: {},
+        };
+
+        await guardarConfiguracionComisionPersonal(solicitud.params.id, {
+          porcentajeComisionBase:
+            datos.porcentajeComisionBase ?? configuracionActual.porcentajeComisionBase,
+          comisionServicios:
+            datos.comisionServicios !== undefined
+              ? normalizarComisionServicios(datos.comisionServicios)
+              : configuracionActual.comisionServicios,
+        });
+      }
+
+      const configuracionActualizada = (
+        await obtenerConfiguracionesComisionPersonal([actualizado.id])
+      ).get(actualizado.id) ?? {
+        porcentajeComisionBase: 0,
+        comisionServicios: {},
+      };
+
       await sincronizarNumeroEspecialistas(empleadoExistente.estudioId);
-      return respuesta.send({ datos: actualizado });
+      return respuesta.send({
+        datos: {
+          ...actualizado,
+          porcentajeComisionBase: configuracionActualizada.porcentajeComisionBase,
+          comisionServicios: configuracionActualizada.comisionServicios,
+        },
+      });
     },
   );
 

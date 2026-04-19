@@ -31,6 +31,7 @@ describe('TabVentasVendedor', () => {
           pais: 'Mexico',
           fechaVencimiento: '2026-04-10',
           pendientePago: true,
+          porcentajeComisionAplicado: 10,
           comision: 25990,
         },
         {
@@ -50,6 +51,7 @@ describe('TabVentasVendedor', () => {
           pais: 'Mexico',
           fechaVencimiento: '2026-05-16',
           pendientePago: false,
+          porcentajeComisionAplicado: 10,
           comision: 12990,
         },
       ];

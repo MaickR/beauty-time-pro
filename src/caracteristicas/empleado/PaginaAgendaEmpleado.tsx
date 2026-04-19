@@ -166,6 +166,8 @@ function construirEstudioCalendario(perfil: PerfilEmpleado): Estudio {
         breakStart: perfil.descansoInicio,
         breakEnd: perfil.descansoFin,
         workingDays: perfil.diasTrabajo,
+        commissionBasePercentage: perfil.porcentajeComisionBase ?? 0,
+        serviceCommissionPercentages: perfil.comisionServicios ?? {},
       },
     ],
     colorPrimario: perfil.estudio.colorPrimario,
@@ -1255,6 +1257,14 @@ export function PaginaAgendaEmpleado() {
   const horarioInicio = perfil?.horaInicio ?? perfil?.estudio.horarioApertura ?? '—';
   const horarioFin = perfil?.horaFin ?? perfil?.estudio.horarioCierre ?? '—';
   const metricas = consultaMetricas.data;
+  const comisionBaseEmpleado =
+    perfil?.porcentajeComisionBase ?? metricas?.porcentajeComisionBase ?? 0;
+  const comisionHoyFormateada = formatearMontoSinDecimales(metricas?.comisionHoy ?? 0, moneda);
+  const comisionSemanaFormateada = formatearMontoSinDecimales(
+    metricas?.comisionSemana ?? 0,
+    moneda,
+  );
+  const comisionMesFormateada = formatearMontoSinDecimales(metricas?.comisionMes ?? 0, moneda);
   const nombreEmpleado = perfil?.nombre?.trim() || 'Especialista';
   const identificadorReserva = perfil?.estudio?.slug || perfil?.estudio?.claveCliente;
   const linkReservas = identificadorReserva
@@ -1604,6 +1614,7 @@ export function PaginaAgendaEmpleado() {
                     : 'Sin servicio en proceso ahora'}
                 </p>
                 <p>Historial visible desde {formatearFechaHumana(fechaMinimaAgenda)}</p>
+                <p>Comisión base configurada: {comisionBaseEmpleado}%</p>
               </div>
             </div>
           </div>
@@ -1612,21 +1623,21 @@ export function PaginaAgendaEmpleado() {
             <TarjetaIndicadorMetricaEmpleado
               etiqueta="Hoy"
               valor={metricas?.citasHoy ?? 0}
-              descripcion="Abre el detalle del día con tabla, filtros y ordenación útil para operar mejor."
+              descripcion={`Comisión estimada: ${comisionHoyFormateada}. Abre el detalle del día con tabla, filtros y ordenación útil para operar mejor.`}
               icono={CalendarDays}
               onClick={() => setModalMetricaActiva('hoy')}
             />
             <TarjetaIndicadorMetricaEmpleado
               etiqueta="Semana"
               valor={metricas?.citasSemana ?? 0}
-              descripcion="Consulta tu semana en una vista elegante con cliente, servicio, valor y estado."
+              descripcion={`Comisión estimada: ${comisionSemanaFormateada}. Consulta tu semana con cliente, servicio, valor y estado.`}
               icono={CalendarRange}
               onClick={() => setModalMetricaActiva('semana')}
             />
             <TarjetaIndicadorMetricaEmpleado
               etiqueta="Mes"
               valor={metricas?.citasMes ?? 0}
-              descripcion="Revisa tu volumen mensual y ordénalo en ascendente o descendente dentro del modal."
+              descripcion={`Comisión estimada: ${comisionMesFormateada}. Revisa tu volumen mensual y ordénalo dentro del modal.`}
               icono={CalendarCheck}
               onClick={() => setModalMetricaActiva('mes')}
             />

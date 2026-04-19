@@ -184,6 +184,9 @@ function mapearPersonal(datos: Record<string, unknown>[]): Personal[] {
     breakStart: (p['descansoInicio'] as string | null) ?? null,
     breakEnd: (p['descansoFin'] as string | null) ?? null,
     workingDays: (p['diasTrabajo'] as number[] | null | undefined) ?? null,
+    commissionBasePercentage: (p['porcentajeComisionBase'] as number | null | undefined) ?? 0,
+    serviceCommissionPercentages:
+      (p['comisionServicios'] as Record<string, number> | null | undefined) ?? {},
   }));
 }
 

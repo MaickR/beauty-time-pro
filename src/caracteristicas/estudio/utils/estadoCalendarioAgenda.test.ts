@@ -45,6 +45,8 @@ const estudioBase: Estudio = {
       breakStart: '14:00',
       breakEnd: '15:00',
       workingDays: [1, 3, 5],
+      commissionBasePercentage: 0,
+      serviceCommissionPercentages: {},
     },
   ],
   availabilityExceptions: [],

@@ -113,12 +113,14 @@ export function SeccionPersonalFormulario({
       breakStart: form.descansoInicio || null,
       breakEnd: form.descansoFin || null,
       workingDays: null,
+      commissionBasePercentage: 0,
+      serviceCommissionPercentages: {},
     });
   };
 
   return (
     <div className="bg-slate-50 p-6 rounded-4xl border border-slate-100 space-y-4">
-      <div className="font-black text-xs text-pink-600 uppercase tracking-widest flex items-center gap-2">
+      <div className="font-black text-xs text-pink-600 uppercase tracking-wide flex items-center gap-2">
         <UserPlus className="w-4 h-4" /> Personal
       </div>
       <input

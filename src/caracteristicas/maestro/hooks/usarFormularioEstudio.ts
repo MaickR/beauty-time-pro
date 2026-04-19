@@ -14,7 +14,8 @@ import {
   generarContrasenaSalon,
   limpiarTelefonoEntrada,
 } from '../../../utils/formularioSalon';
-import type { Estudio, Servicio, Personal, TurnoTrabajo } from '../../../tipos';
+import { usarTiendaAuth } from '../../../tienda/tiendaAuth';
+import type { Estudio, Servicio, TurnoTrabajo } from '../../../tipos';
 
 const CLAVE_BORRADOR_ALTA_SALON = 'maestro_alta_salon_borrador_v1';
 
@@ -50,7 +51,7 @@ const crearEstadoInicial = (): FormularioEstudio => ({
   name: '',
   owner: '',
   emailDueno: '',
-  contrasenaDueno: generarContrasenaSalon(''),
+  contrasenaDueno: generarContrasenaSalon('', ''),
   phone: '',
   website: '',
   country: 'Mexico',
@@ -99,7 +100,9 @@ function restaurarBorradorAlta(claveBorrador: string): FormularioEstudio | null 
       ...datos,
       subscriptionStart:
         datos.subscriptionStart && datos.subscriptionStart >= hoy ? datos.subscriptionStart : hoy,
-      contrasenaDueno: datos.contrasenaDueno?.trim() || generarContrasenaSalon(datos.name ?? ''),
+      contrasenaDueno:
+        datos.contrasenaDueno?.trim() ||
+        generarContrasenaSalon(datos.name ?? '', datos.owner ?? ''),
       phone: limpiarTelefonoEntrada(datos.phone ?? ''),
       reintentosContrasenaDueno: Math.min(5, Math.max(1, datos.reintentosContrasenaDueno ?? 1)),
     };
@@ -142,6 +145,7 @@ interface OpcionesFormularioEstudio {
 }
 
 export function usarFormularioEstudio(opciones?: OpcionesFormularioEstudio) {
+  const rolUsuario = usarTiendaAuth((estado) => estado.usuario?.rol ?? estado.rol);
   const claveBorrador = opciones?.claveBorrador ?? CLAVE_BORRADOR_ALTA_SALON;
   const [modoModal, setModoModal] = useState<'ADD' | 'EDIT' | 'CONFIRMACION' | null>(null);
   const [formulario, setFormulario] = useState<FormularioEstudio>(crearEstadoInicial());
@@ -195,7 +199,11 @@ export function usarFormularioEstudio(opciones?: OpcionesFormularioEstudio) {
       const reintentosContrasenaDueno = prev.reintentosContrasenaDueno + 1;
       return {
         ...prev,
-        contrasenaDueno: generarContrasenaSalon(prev.name, reintentosContrasenaDueno - 1),
+        contrasenaDueno: generarContrasenaSalon(
+          prev.name,
+          prev.owner,
+          reintentosContrasenaDueno - 1,
+        ),
         reintentosContrasenaDueno,
       };
     });
@@ -249,10 +257,6 @@ export function usarFormularioEstudio(opciones?: OpcionesFormularioEstudio) {
           : (prev.customServices ?? []),
     }));
     setEntradaServicioPersonalizado((prev) => ({ ...prev, [categoria]: '' }));
-  };
-
-  const agregarPersonal = (nuevoPersonal: Personal) => {
-    setFormulario((prev) => ({ ...prev, staff: [...prev.staff, nuevoPersonal] }));
   };
 
   const enviarFormulario = async (
@@ -337,26 +341,27 @@ export function usarFormularioEstudio(opciones?: OpcionesFormularioEstudio) {
                   precio: producto.precio,
                 })),
                 serviciosCustom: datosGuardar.customServices,
-                personal: formulario.staff.map((persona) => ({
-                  nombre: persona.name,
-                  especialidades: persona.specialties,
-                  horaInicio: persona.shiftStart ?? undefined,
-                  horaFin: persona.shiftEnd ?? undefined,
-                  descansoInicio: persona.breakStart ?? undefined,
-                  descansoFin: persona.breakEnd ?? undefined,
-                })),
+                personal: [],
               });
+
+              const puedeMostrarConfirmacion =
+                (rolUsuario === 'maestro' || rolUsuario === 'supervisor') &&
+                Boolean(resultado.acceso.mostrarModalConfirmacion ?? true);
+
               return {
                 mensajeExito: `Salón "${resultado.estudio.name}" creado correctamente.`,
-                confirmacionAlta: {
-                  nombreSalon: resultado.estudio.name,
-                  nombreDueno: resultado.estudio.owner,
-                  emailDueno: resultado.acceso.emailDueno,
-                  contrasenaDueno: datosGuardar.contrasenaDueno,
-                  claveDueno: resultado.acceso.claveDueno,
-                  claveClientes: resultado.acceso.claveClientes,
-                  urlReserva: `${window.location.origin}/reservar/${resultado.acceso.claveClientes}`,
-                },
+                confirmacionAlta: puedeMostrarConfirmacion
+                  ? {
+                      nombreSalon: resultado.estudio.name,
+                      nombreDueno: resultado.estudio.owner,
+                      emailDueno: resultado.acceso.emailDueno,
+                      contrasenaDueno: datosGuardar.contrasenaDueno,
+                      claveDueno: resultado.acceso.claveDueno,
+                      claveClientes: resultado.acceso.claveClientes,
+                      urlReserva: `${window.location.origin}/reservar/${resultado.acceso.claveClientes}`,
+                    }
+                  : null,
+                cerrarModal: !puedeMostrarConfirmacion,
               };
             })();
 
@@ -403,7 +408,6 @@ export function usarFormularioEstudio(opciones?: OpcionesFormularioEstudio) {
     alternarServicio,
     actualizarCampoServicio,
     agregarServicioPersonalizado,
-    agregarPersonal,
     enviarFormulario,
   };
 }

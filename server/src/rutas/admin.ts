@@ -1234,9 +1234,11 @@ export async function rutasAdmin(servidor: FastifyInstance): Promise<void> {
     async (solicitud, respuesta) => {
       try {
         const payload = solicitud.user as { rol: string };
-        if (payload.rol !== 'maestro') {
+        if (!esAdministradorConPermisos(payload.rol)) {
           return respuesta.code(403).send({ error: 'Sin permisos para esta acción' });
         }
+
+        const mostrarModalConfirmacion = payload.rol === 'maestro' || payload.rol === 'supervisor';
 
         const resultado = esquemaCrearSalonAdmin.safeParse(solicitud.body);
         if (!resultado.success) {
@@ -1481,6 +1483,7 @@ export async function rutasAdmin(servidor: FastifyInstance): Promise<void> {
               emailDueno: emailNorm,
               claveDueno,
               claveClientes: claveCliente,
+              mostrarModalConfirmacion,
             },
           },
         });
@@ -2398,6 +2401,8 @@ export async function rutasAdmin(servidor: FastifyInstance): Promise<void> {
               contrasena: contrasenaFinal,
               claveDueno,
               claveClientes: claveCliente,
+              mostrarModalConfirmacion:
+                payload.rol === 'maestro' || payload.rol === 'supervisor',
             },
           },
         });

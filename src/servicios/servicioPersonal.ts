@@ -13,6 +13,8 @@ interface PersonalServidor {
   descansoInicio?: string | null;
   descansoFin?: string | null;
   diasTrabajo?: number[] | null;
+  porcentajeComisionBase?: number | null;
+  comisionServicios?: Record<string, number> | null;
 }
 
 interface RespuestaPersonal {
@@ -36,6 +38,8 @@ function mapearPersonal(personal: PersonalServidor): Personal {
     breakStart: personal.descansoInicio ?? null,
     breakEnd: personal.descansoFin ?? null,
     workingDays: personal.diasTrabajo ?? null,
+    commissionBasePercentage: personal.porcentajeComisionBase ?? 0,
+    serviceCommissionPercentages: personal.comisionServicios ?? {},
   };
 }
 
@@ -49,6 +53,12 @@ function serializarPersonal(personal: Partial<Personal>) {
   if (personal.breakStart !== undefined) cuerpo['descansoInicio'] = personal.breakStart;
   if (personal.breakEnd !== undefined) cuerpo['descansoFin'] = personal.breakEnd;
   if (personal.workingDays !== undefined) cuerpo['diasTrabajo'] = personal.workingDays;
+  if (personal.commissionBasePercentage !== undefined) {
+    cuerpo['porcentajeComisionBase'] = personal.commissionBasePercentage;
+  }
+  if (personal.serviceCommissionPercentages !== undefined) {
+    cuerpo['comisionServicios'] = personal.serviceCommissionPercentages;
+  }
   return cuerpo;
 }
 

@@ -94,7 +94,7 @@ const claveSalonSchema = (campo: 'claveDueno' | 'claveCliente') =>
       esClaveSalonSegura(valor, campo === 'claveDueno' ? 'dueno' : 'cliente'),
     campo === 'claveDueno'
       ? 'La clave de dueño debe usar el formato seguro vigente'
-      : 'La clave de cliente debe usar el formato seguro vigente',
+      : 'La clave de cliente debe ser válida y terminar en dos dígitos',
   );
 
 const esquemaEmailContactoOpcional = emailOpcionalONuloSchema('emailContacto');
@@ -1314,11 +1314,26 @@ export async function rutasEstudios(servidor: FastifyInstance): Promise<void> {
           obtenerColumnasTabla('estudios'),
           obtenerTablasDisponibles(),
         ]);
-        let estudioExistente: { categorias: unknown; servicios: unknown; serviciosCustom: unknown; plan?: string; pais?: string } | null;
+        const columnaPrimeraVezDisponible = columnasEstudios.has('primeraVez');
+        let estudioExistente: {
+          categorias: unknown;
+          servicios: unknown;
+          serviciosCustom: unknown;
+          plan?: string;
+          pais?: string;
+          primeraVez?: boolean | null;
+        } | null;
         try {
           estudioExistente = await prisma.estudio.findUnique({
             where: { id },
-            select: { categorias: true, servicios: true, serviciosCustom: true, plan: true, pais: true },
+            select: {
+              categorias: true,
+              servicios: true,
+              serviciosCustom: true,
+              plan: true,
+              pais: true,
+              ...(columnaPrimeraVezDisponible ? { primeraVez: true } : {}),
+            },
           });
         } catch (error) {
           if (!esErrorCompatibilidadEstudio(error)) {
@@ -1326,7 +1341,13 @@ export async function rutasEstudios(servidor: FastifyInstance): Promise<void> {
           }
           estudioExistente = await prisma.estudio.findUnique({
             where: { id },
-            select: { categorias: true, servicios: true, serviciosCustom: true, pais: true },
+            select: {
+              categorias: true,
+              servicios: true,
+              serviciosCustom: true,
+              pais: true,
+              ...(columnaPrimeraVezDisponible ? { primeraVez: true } : {}),
+            },
           });
         }
 
@@ -1474,6 +1495,10 @@ export async function rutasEstudios(servidor: FastifyInstance): Promise<void> {
           ...(columnasEstudios.has('categorias') && { categorias }),
         };
 
+        const primeraVezAnterior = columnaPrimeraVezDisponible
+          ? (estudioExistente.primeraVez ?? true)
+          : null;
+
         const selectActualizacion = construirSelectDesdeColumnas(columnasEstudios, ['id']);
 
         await prisma.estudio.update({
@@ -1509,6 +1534,29 @@ export async function rutasEstudios(servidor: FastifyInstance): Promise<void> {
               mensaje: `El salón actualizó ${cambiosOperativos.join(', ')}. Revisa tu agenda y datos operativos para trabajar con la información vigente.`,
             },
           });
+        }
+
+        const debeNotificarPrimerEspecialista =
+          columnaPrimeraVezDisponible &&
+          datos.primeraVez === false &&
+          primeraVezAnterior !== false;
+
+        if (debeNotificarPrimerEspecialista) {
+          const totalEspecialistasActivos = await prisma.personal.count({
+            where: { estudioId: id, activo: true },
+          });
+
+          if (totalEspecialistasActivos === 0) {
+            await prisma.notificacionEstudio.create({
+              data: {
+                estudioId: id,
+                tipo: 'actualizacion_salon',
+                titulo: 'Completa la configuración inicial',
+                mensaje:
+                  'Aún no tienes especialistas activos. Crea tu primer especialista para empezar a gestionar reservas sin bloqueos operativos.',
+              },
+            });
+          }
         }
 
         if (datos.plan !== undefined || datos.pais !== undefined) {

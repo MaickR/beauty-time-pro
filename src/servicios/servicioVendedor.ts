@@ -67,8 +67,13 @@ export interface ResumenVendedor {
   salonesPendientesPago: number;
   ventasRegistradas: number;
   ingresosGenerados: number;
+  ingresosStandard: number;
+  ingresosPro: number;
   porcentajeComision: number;
+  porcentajeComisionPro: number;
   comisionGenerada: number;
+  comisionGeneradaStandard: number;
+  comisionGeneradaPro: number;
 }
 
 export interface SalonDemoVendedor {
@@ -113,6 +118,7 @@ export interface VentaVendedor {
   pais: string;
   fechaVencimiento: string;
   pendientePago: boolean;
+  porcentajeComisionAplicado: number;
   comision: number;
 }
 

@@ -93,6 +93,8 @@ function crearPerfilEmpleado(plan: 'STANDARD' | 'PRO' = 'PRO'): PerfilEmpleado {
     descansoInicio: '14:00',
     descansoFin: '15:00',
     diasTrabajo: [1, 2, 3, 4, 5, 6],
+    porcentajeComisionBase: 0,
+    comisionServicios: {},
     estudio: {
       id: 'estudio-1',
       nombre: 'Salón Norte',
@@ -167,6 +169,11 @@ describe('PaginaAgendaEmpleado', () => {
       citasHoy: 1,
       citasSemana: 1,
       citasMes: 1,
+      porcentajeComisionBase: 0,
+      comisionHoy: 0,
+      comisionSemana: 0,
+      comisionMes: 0,
+      comisionServiciosMes: [],
     });
     mocksServicioEmpleados.actualizarEstadoReservaEmpleado.mockResolvedValue(
       crearReservaEmpleado(),

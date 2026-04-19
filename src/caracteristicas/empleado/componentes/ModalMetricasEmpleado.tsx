@@ -5,7 +5,15 @@ import { convertirCentavosAMoneda } from '../../../utils/formato';
 import type { PeriodoMetricaEmpleado } from '../utils/panelEmpleado';
 
 type DireccionOrden = 'asc' | 'desc';
-type CampoOrden = 'fecha' | 'hora' | 'cliente' | 'servicio' | 'duracion' | 'precio' | 'estado';
+type CampoOrden =
+  | 'fecha'
+  | 'hora'
+  | 'cliente'
+  | 'servicio'
+  | 'duracion'
+  | 'precio'
+  | 'comision'
+  | 'estado';
 
 interface PropsModalMetricasEmpleado {
   abierto: boolean;
@@ -69,7 +77,17 @@ function obtenerClaseEstado(estado: ReservaEmpleado['estado']): string {
 }
 
 function obtenerServiciosTexto(reserva: ReservaEmpleado): string {
-  return (reserva.serviciosDetalle ?? reserva.servicios).map((servicio) => servicio.name).join(', ');
+  return (reserva.serviciosDetalle ?? reserva.servicios)
+    .map((servicio) => servicio.name)
+    .join(', ');
+}
+
+function obtenerPorcentajeComisionTexto(reserva: ReservaEmpleado): string {
+  const comisiones = reserva.comisionServicios ?? [];
+  if (comisiones.length === 0) return '—';
+
+  const porcentajes = Array.from(new Set(comisiones.map((item) => `${item.porcentajeComision}%`)));
+  return porcentajes.join(', ');
 }
 
 function BotonOrden({
@@ -93,7 +111,11 @@ function BotonOrden({
     >
       <span>{etiqueta}</span>
       {activo ? (
-        direccion === 'asc' ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />
+        direccion === 'asc' ? (
+          <ChevronUp className="h-3.5 w-3.5" />
+        ) : (
+          <ChevronDown className="h-3.5 w-3.5" />
+        )
       ) : (
         <span className="text-[11px]">↕</span>
       )}
@@ -148,7 +170,10 @@ export function ModalMetricasEmpleado({
           return false;
         }
 
-        if (filtroServicio !== 'todos' && !obtenerServiciosTexto(reserva).includes(filtroServicio)) {
+        if (
+          filtroServicio !== 'todos' &&
+          !obtenerServiciosTexto(reserva).includes(filtroServicio)
+        ) {
           return false;
         }
 
@@ -177,13 +202,24 @@ export function ModalMetricasEmpleado({
           case 'cliente':
             return factor * reservaA.nombreCliente.localeCompare(reservaB.nombreCliente, 'es');
           case 'servicio':
-            return factor * obtenerServiciosTexto(reservaA).localeCompare(obtenerServiciosTexto(reservaB), 'es');
+            return (
+              factor *
+              obtenerServiciosTexto(reservaA).localeCompare(obtenerServiciosTexto(reservaB), 'es')
+            );
           case 'duracion':
             return factor * (reservaA.duracion - reservaB.duracion);
           case 'precio':
             return factor * (reservaA.precioTotal - reservaB.precioTotal);
+          case 'comision':
+            return factor * ((reservaA.comisionTotal ?? 0) - (reservaB.comisionTotal ?? 0));
           case 'estado':
-            return factor * obtenerEtiquetaEstado(reservaA.estado).localeCompare(obtenerEtiquetaEstado(reservaB.estado), 'es');
+            return (
+              factor *
+              obtenerEtiquetaEstado(reservaA.estado).localeCompare(
+                obtenerEtiquetaEstado(reservaB.estado),
+                'es',
+              )
+            );
           case 'fecha':
           default:
             return (
@@ -196,6 +232,11 @@ export function ModalMetricasEmpleado({
 
   const totalEstimado = useMemo(
     () => reservasFiltradas.reduce((acumulado, reserva) => acumulado + reserva.precioTotal, 0),
+    [reservasFiltradas],
+  );
+  const totalComision = useMemo(
+    () =>
+      reservasFiltradas.reduce((acumulado, reserva) => acumulado + (reserva.comisionTotal ?? 0), 0),
     [reservasFiltradas],
   );
 
@@ -230,11 +271,16 @@ export function ModalMetricasEmpleado({
             <p className="text-[10px] font-black uppercase tracking-[0.24em] text-pink-600">
               Métrica dinámica
             </p>
-            <h2 id="titulo-modal-metricas-empleado" className="mt-1 text-xl font-black text-slate-900 md:text-2xl">
+            <h2
+              id="titulo-modal-metricas-empleado"
+              className="mt-1 text-xl font-black text-slate-900 md:text-2xl"
+            >
               {obtenerTituloPeriodo(periodo)}
             </h2>
             <p className="mt-2 text-sm text-slate-500">
-              {reservasFiltradas.length} cita(s) visibles. Valor estimado {formatearMonto(totalEstimado, moneda)}.
+              {reservasFiltradas.length} cita(s) visibles. Valor estimado{' '}
+              {formatearMonto(totalEstimado, moneda)}. Comisión estimada{' '}
+              {formatearMonto(totalComision, moneda)}.
             </p>
           </div>
 
@@ -263,7 +309,9 @@ export function ModalMetricasEmpleado({
 
             <select
               value={filtroEstado}
-              onChange={(evento) => setFiltroEstado(evento.target.value as 'todos' | ReservaEmpleado['estado'])}
+              onChange={(evento) =>
+                setFiltroEstado(evento.target.value as 'todos' | ReservaEmpleado['estado'])
+              }
               className="w-full rounded-2xl border border-slate-200 px-4 py-3 text-sm font-medium text-slate-700 outline-none transition focus:border-pink-300 focus:ring-2 focus:ring-pink-200"
             >
               <option value="todos">Todos los estados</option>
@@ -295,42 +343,103 @@ export function ModalMetricasEmpleado({
               <thead>
                 <tr className="border-b border-slate-200 text-left text-[10px] font-black uppercase tracking-[0.2em] text-slate-500">
                   <th className="px-2 py-3">
-                    <BotonOrden etiqueta="Fecha" activo={campoOrden === 'fecha'} direccion={direccionOrden} onClick={() => alternarOrden('fecha')} />
+                    <BotonOrden
+                      etiqueta="Fecha"
+                      activo={campoOrden === 'fecha'}
+                      direccion={direccionOrden}
+                      onClick={() => alternarOrden('fecha')}
+                    />
                   </th>
                   <th className="px-2 py-3">
-                    <BotonOrden etiqueta="Hora" activo={campoOrden === 'hora'} direccion={direccionOrden} onClick={() => alternarOrden('hora')} />
+                    <BotonOrden
+                      etiqueta="Hora"
+                      activo={campoOrden === 'hora'}
+                      direccion={direccionOrden}
+                      onClick={() => alternarOrden('hora')}
+                    />
                   </th>
                   <th className="px-2 py-3">
-                    <BotonOrden etiqueta="Cliente" activo={campoOrden === 'cliente'} direccion={direccionOrden} onClick={() => alternarOrden('cliente')} />
+                    <BotonOrden
+                      etiqueta="Cliente"
+                      activo={campoOrden === 'cliente'}
+                      direccion={direccionOrden}
+                      onClick={() => alternarOrden('cliente')}
+                    />
                   </th>
                   <th className="px-2 py-3">
-                    <BotonOrden etiqueta="Servicios" activo={campoOrden === 'servicio'} direccion={direccionOrden} onClick={() => alternarOrden('servicio')} />
+                    <BotonOrden
+                      etiqueta="Servicios"
+                      activo={campoOrden === 'servicio'}
+                      direccion={direccionOrden}
+                      onClick={() => alternarOrden('servicio')}
+                    />
                   </th>
                   <th className="px-2 py-3">
-                    <BotonOrden etiqueta="Duración" activo={campoOrden === 'duracion'} direccion={direccionOrden} onClick={() => alternarOrden('duracion')} />
+                    <BotonOrden
+                      etiqueta="Duración"
+                      activo={campoOrden === 'duracion'}
+                      direccion={direccionOrden}
+                      onClick={() => alternarOrden('duracion')}
+                    />
                   </th>
                   <th className="px-2 py-3 text-right">
-                    <BotonOrden etiqueta="Valor" activo={campoOrden === 'precio'} direccion={direccionOrden} onClick={() => alternarOrden('precio')} alinearDerecha />
+                    <BotonOrden
+                      etiqueta="Valor"
+                      activo={campoOrden === 'precio'}
+                      direccion={direccionOrden}
+                      onClick={() => alternarOrden('precio')}
+                      alinearDerecha
+                    />
+                  </th>
+                  <th className="px-2 py-3 text-right">% Comisión</th>
+                  <th className="px-2 py-3 text-right">
+                    <BotonOrden
+                      etiqueta="Comisión"
+                      activo={campoOrden === 'comision'}
+                      direccion={direccionOrden}
+                      onClick={() => alternarOrden('comision')}
+                      alinearDerecha
+                    />
                   </th>
                   <th className="px-2 py-3">
-                    <BotonOrden etiqueta="Estado" activo={campoOrden === 'estado'} direccion={direccionOrden} onClick={() => alternarOrden('estado')} />
+                    <BotonOrden
+                      etiqueta="Estado"
+                      activo={campoOrden === 'estado'}
+                      direccion={direccionOrden}
+                      onClick={() => alternarOrden('estado')}
+                    />
                   </th>
                 </tr>
               </thead>
               <tbody>
                 {reservasFiltradas.map((reserva) => (
-                  <tr key={reserva.id} className="border-b border-slate-100 align-top hover:bg-slate-50">
+                  <tr
+                    key={reserva.id}
+                    className="border-b border-slate-100 align-top hover:bg-slate-50"
+                  >
                     <td className="px-2 py-3 font-semibold text-slate-800">{reserva.fecha}</td>
-                    <td className="px-2 py-3 font-semibold text-indigo-600">{reserva.horaInicio}</td>
+                    <td className="px-2 py-3 font-semibold text-indigo-600">
+                      {reserva.horaInicio}
+                    </td>
                     <td className="px-2 py-3">
                       <p className="font-black text-slate-900">{reserva.nombreCliente}</p>
                       <p className="text-xs text-slate-500">{reserva.telefonoCliente}</p>
                     </td>
                     <td className="px-2 py-3 text-slate-700">{obtenerServiciosTexto(reserva)}</td>
                     <td className="px-2 py-3 text-slate-600">{reserva.duracion} min</td>
-                    <td className="px-2 py-3 text-right font-black text-emerald-600">{formatearMonto(reserva.precioTotal, moneda)}</td>
+                    <td className="px-2 py-3 text-right font-black text-emerald-600">
+                      {formatearMonto(reserva.precioTotal, moneda)}
+                    </td>
+                    <td className="px-2 py-3 text-right text-slate-600">
+                      {obtenerPorcentajeComisionTexto(reserva)}
+                    </td>
+                    <td className="px-2 py-3 text-right font-black text-indigo-600">
+                      {formatearMonto(reserva.comisionTotal ?? 0, moneda)}
+                    </td>
                     <td className="px-2 py-3">
-                      <span className={`inline-flex rounded-full border px-2.5 py-1 text-[10px] font-black uppercase tracking-wide ${obtenerClaseEstado(reserva.estado)}`}>
+                      <span
+                        className={`inline-flex rounded-full border px-2.5 py-1 text-[10px] font-black uppercase tracking-wide ${obtenerClaseEstado(reserva.estado)}`}
+                      >
                         {obtenerEtiquetaEstado(reserva.estado)}
                       </span>
                     </td>
@@ -338,7 +447,10 @@ export function ModalMetricasEmpleado({
                 ))}
                 {reservasFiltradas.length === 0 && (
                   <tr>
-                    <td colSpan={7} className="px-2 py-12 text-center text-sm font-bold text-slate-400">
+                    <td
+                      colSpan={9}
+                      className="px-2 py-12 text-center text-sm font-bold text-slate-400"
+                    >
                       No hay citas que coincidan con los filtros actuales.
                     </td>
                   </tr>
