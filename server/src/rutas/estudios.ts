@@ -812,7 +812,24 @@ export async function rutasEstudios(servidor: FastifyInstance): Promise<void> {
       return respuesta.code(403).send({ error: 'Sin permisos para esta acción' });
     }
     const filtroDemo = obtenerFiltroDemo();
-    const estudios = await listarEstudiosPanel(filtroDemo);
+    let estudios = await listarEstudiosPanel(filtroDemo);
+
+    // Asegurar precio actual para salones que no lo tengan asignado
+    const sinPrecio = estudios.filter((e) => !(e as unknown as Record<string, unknown>).precioPlanActualId);
+    if (sinPrecio.length > 0) {
+      await Promise.allSettled(
+        sinPrecio.map((e) => {
+          const datos = e as unknown as Record<string, unknown>;
+          return asegurarPrecioActualSalon({
+            estudioId: datos.id as string,
+            plan: normalizarPlanEstudio(datos.plan as string),
+            pais: datos.pais as string | null,
+          });
+        }),
+      );
+      estudios = await listarEstudiosPanel(filtroDemo);
+    }
+
     return respuesta.send({
       datos: estudios.map((estudio) =>
         serializarEstudioPanel(estudio as unknown as Record<string, unknown>),

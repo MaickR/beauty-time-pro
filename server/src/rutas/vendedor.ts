@@ -4,7 +4,6 @@ import type { Prisma } from '../generated/prisma/client.js';
 import { prisma } from '../prismaCliente.js';
 import { verificarJWT } from '../middleware/autenticacion.js';
 import {
-  asegurarCamposComisionVendedorUsuario,
   calcularComisionVendedor,
   resolverPorcentajesComisionVendedor,
   resolverPorcentajeComisionSegunPlan,
@@ -510,18 +509,13 @@ export async function rutasVendedor(servidor: FastifyInstance) {
       }
 
       const hoy = new Date().toISOString().slice(0, 10);
-      const columnasComision = await asegurarCamposComisionVendedorUsuario().catch(() => ({
-        porcentajeComision: false,
-        porcentajeComisionPro: false,
-      }));
-      const consultaVendedorComision = columnasComision.porcentajeComision
-        ? prisma.usuario.findUnique({
+      const consultaVendedorComision = prisma.usuario.findUnique({
             where: { id: payload.sub },
             select: {
               porcentajeComision: true,
+              porcentajeComisionPro: true,
             },
-          })
-        : Promise.resolve(null);
+          });
       const [
         totalPreregistros,
         pendientes,
@@ -559,11 +553,9 @@ export async function rutasVendedor(servidor: FastifyInstance) {
         consultaVendedorComision,
       ]);
 
-      const porcentajeComisionGuardado =
-        vendedor && 'porcentajeComision' in vendedor ? vendedor.porcentajeComision : undefined;
       const porcentajesComision = resolverPorcentajesComisionVendedor({
-        porcentajeComision: columnasComision.porcentajeComision ? porcentajeComisionGuardado : undefined,
-        porcentajeComisionPro: undefined,
+        porcentajeComision: vendedor?.porcentajeComision,
+        porcentajeComisionPro: vendedor?.porcentajeComisionPro,
       });
 
       const resumenVentas = ventasComisionables.reduce(
@@ -633,24 +625,16 @@ export async function rutasVendedor(servidor: FastifyInstance) {
       solicitud.query.soloPendientesPago?.trim().toLowerCase() ?? '',
     );
     const hoy = new Date().toISOString().slice(0, 10);
-    const columnasComision = await asegurarCamposComisionVendedorUsuario().catch(() => ({
-      porcentajeComision: false,
-      porcentajeComisionPro: false,
-    }));
-    const vendedor = columnasComision.porcentajeComision
-      ? await prisma.usuario.findUnique({
+    const vendedor = await prisma.usuario.findUnique({
           where: { id: payload.sub },
           select: {
             porcentajeComision: true,
+            porcentajeComisionPro: true,
           },
-        })
-      : null;
+        });
     const porcentajesComision = resolverPorcentajesComisionVendedor({
-      porcentajeComision:
-        columnasComision.porcentajeComision && vendedor && 'porcentajeComision' in vendedor
-          ? vendedor.porcentajeComision
-          : undefined,
-      porcentajeComisionPro: undefined,
+      porcentajeComision: vendedor?.porcentajeComision,
+      porcentajeComisionPro: vendedor?.porcentajeComisionPro,
     });
 
     const ventas = await prisma.pago.findMany({

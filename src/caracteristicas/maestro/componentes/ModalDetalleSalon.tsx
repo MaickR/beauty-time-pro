@@ -57,7 +57,14 @@ export function ModalDetalleSalon({ salonId, onCerrar }: PropsModalDetalleSalon)
 
   // Guardar
   const { mutate: guardar, isPending: guardando } = useMutation({
-    mutationFn: () => actualizarSalonDirectorio(salonId, camposEditados),
+    mutationFn: () => {
+      const datos = { ...camposEditados };
+      // No enviar contraseña vacía
+      if ('contrasenaDueno' in datos && !datos.contrasenaDueno?.trim()) {
+        delete datos.contrasenaDueno;
+      }
+      return actualizarSalonDirectorio(salonId, datos);
+    },
     onSuccess: () => {
       setCamposEditados({});
       setErroresGuardado(null);

@@ -446,6 +446,7 @@ model Usuario {
   nombre          String        @default("")
   rol             RolUsuario    @default(dueno)
   porcentajeComision Int        @default(10)
+  porcentajeComisionPro Int     @default(10)
   activo          Boolean       @default(true)
   emailVerificado Boolean       @default(false)
   estudioId       String?

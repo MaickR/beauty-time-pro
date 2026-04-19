@@ -3544,10 +3544,12 @@ export async function rutasAdmin(servidor: FastifyInstance): Promise<void> {
       }
 
       if (actualizacion.emailContacto !== undefined) {
-        if (typeof actualizacion.emailContacto !== 'string' || !esEmailValido(actualizacion.emailContacto)) {
-          return respuesta.code(400).send({ error: 'Solo se aceptan correos personales permitidos (@gmail, @hotmail, @outlook o @yahoo)' });
+        const emailContactoLimpio = typeof actualizacion.emailContacto === 'string' ? actualizacion.emailContacto.trim().toLowerCase() : '';
+        const regexEmail = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+        if (!regexEmail.test(emailContactoLimpio)) {
+          return respuesta.code(400).send({ error: 'El correo de contacto no tiene un formato válido' });
         }
-        actualizacion.emailContacto = actualizacion.emailContacto.trim().toLowerCase();
+        actualizacion.emailContacto = emailContactoLimpio;
       }
 
       if (emailDueno) {

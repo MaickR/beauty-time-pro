@@ -4,7 +4,6 @@ import { prisma } from '../prismaCliente.js';
 import { esEmailAdminProtegido, verificarJWT } from '../middleware/autenticacion.js';
 import { requierePermiso } from '../middleware/verificarPermiso.js';
 import {
-  asegurarCamposComisionVendedorUsuario,
   resolverPorcentajesComisionVendedor,
 } from '../lib/comisionVendedor.js';
 import { revocarSesionesPorSujeto } from '../lib/sesionesAuth.js';
@@ -137,11 +136,6 @@ export async function rutasAdmins(servidor: FastifyInstance): Promise<void> {
     '/admin/admins',
     { preHandler: [verificarJWT, requierePermiso('crearAdmins')] },
     async (_solicitud, respuesta) => {
-      const columnasComision = await asegurarCamposComisionVendedorUsuario().catch(() => ({
-        porcentajeComision: false,
-        porcentajeComisionPro: false,
-      }));
-
       const colaboradores = await prisma.usuario.findMany({
         where: { rol: { in: ['maestro', 'supervisor', 'vendedor'] } },
         select: {
@@ -149,8 +143,8 @@ export async function rutasAdmins(servidor: FastifyInstance): Promise<void> {
           email: true,
           nombre: true,
           rol: true,
-          ...(columnasComision.porcentajeComision ? { porcentajeComision: true } : {}),
-          ...(columnasComision.porcentajeComisionPro ? { porcentajeComisionPro: true } : {}),
+          porcentajeComision: true,
+          porcentajeComisionPro: true,
           activo: true,
           creadoEn: true,
           ultimoAcceso: true,
@@ -188,9 +182,8 @@ export async function rutasAdmins(servidor: FastifyInstance): Promise<void> {
       return respuesta.send({
         datos: colaboradores.map((col) => {
           const porcentajesComision = resolverPorcentajesComisionVendedor({
-            porcentajeComision: 'porcentajeComision' in col ? col.porcentajeComision : undefined,
-            porcentajeComisionPro:
-              'porcentajeComisionPro' in col ? col.porcentajeComisionPro : undefined,
+            porcentajeComision: col.porcentajeComision,
+            porcentajeComisionPro: col.porcentajeComisionPro,
           });
 
           return {
@@ -282,10 +275,6 @@ export async function rutasAdmins(servidor: FastifyInstance): Promise<void> {
         }
 
         const hashContrasena = await generarHashContrasena(contrasena);
-        const columnasComision = await asegurarCamposComisionVendedorUsuario().catch(() => ({
-          porcentajeComision: false,
-          porcentajeComisionPro: false,
-        }));
         const porcentajesComisionNormalizados =
           cargo === 'vendedor'
             ? resolverPorcentajesComisionVendedor({
@@ -300,12 +289,8 @@ export async function rutasAdmins(servidor: FastifyInstance): Promise<void> {
             nombre: limpiarNombreColaborador(nombre),
             hashContrasena,
             rol: cargo,
-            ...(columnasComision.porcentajeComision
-              ? { porcentajeComision: porcentajesComisionNormalizados.standard }
-              : {}),
-            ...(columnasComision.porcentajeComisionPro
-              ? { porcentajeComisionPro: porcentajesComisionNormalizados.pro }
-              : {}),
+            porcentajeComision: porcentajesComisionNormalizados.standard,
+            porcentajeComisionPro: porcentajesComisionNormalizados.pro,
             activo: true,
             emailVerificado: true,
           },
@@ -449,10 +434,6 @@ export async function rutasAdmins(servidor: FastifyInstance): Promise<void> {
         cargoNormalizado && esRolColaboradorValido(cargoNormalizado)
           ? cargoNormalizado
           : colaborador.rol;
-      const columnasComision = await asegurarCamposComisionVendedorUsuario().catch(() => ({
-        porcentajeComision: false,
-        porcentajeComisionPro: false,
-      }));
       const porcentajesComisionNormalizados =
         siguienteCargo === 'vendedor'
           ? resolverPorcentajesComisionVendedor({
@@ -498,12 +479,8 @@ export async function rutasAdmins(servidor: FastifyInstance): Promise<void> {
       if (cargoNormalizado && cargoNormalizado !== colaborador.rol) {
         actualizacionUsuario['rol'] = cargoNormalizado;
       }
-      if (columnasComision.porcentajeComision) {
-        actualizacionUsuario['porcentajeComision'] = porcentajesComisionNormalizados.standard;
-      }
-      if (columnasComision.porcentajeComisionPro) {
-        actualizacionUsuario['porcentajeComisionPro'] = porcentajesComisionNormalizados.pro;
-      }
+      actualizacionUsuario['porcentajeComision'] = porcentajesComisionNormalizados.standard;
+      actualizacionUsuario['porcentajeComisionPro'] = porcentajesComisionNormalizados.pro;
       if (contrasena) {
         actualizacionUsuario['hashContrasena'] = await generarHashContrasena(contrasena);
       }
