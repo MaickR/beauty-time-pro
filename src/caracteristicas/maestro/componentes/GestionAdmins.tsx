@@ -7,7 +7,6 @@ import {
   Pencil,
   Eye,
   EyeOff,
-  MoreHorizontal,
   Power,
   ShieldCheck,
   ChevronDown,
@@ -271,7 +270,7 @@ export function GestionAdmins() {
     null,
   );
   const [mostrarContrasena, setMostrarContrasena] = useState(false);
-  const [accionesAbiertas, setAccionesAbiertas] = useState<string | null>(null);
+
   const [orden, setOrden] = useState<OrdenColaboradores>('recientes');
   const [direccionOrden, setDireccionOrden] = useState<DireccionOrden>('asc');
   const [filtroNombre, setFiltroNombre] = useState('');
@@ -435,7 +434,6 @@ export function GestionAdmins() {
     },
     onSuccess: () => {
       mostrarToast('Colaborador eliminado definitivamente');
-      setAccionesAbiertas(null);
       void clienteConsulta.invalidateQueries({ queryKey: ['colaboradores'] });
     },
     onError: (error) =>
@@ -782,56 +780,28 @@ export function GestionAdmins() {
                             </button>
                           )}
 
-                          {colaborador.activo && (
-                            <div className="relative">
-                              <Tooltip texto={protegido ? 'Cuenta protegida' : 'Más acciones'}>
-                                <button
-                                  onClick={() => {
-                                    if (protegido) return;
-                                    setAccionesAbiertas((a) =>
-                                      a === colaborador.id ? null : colaborador.id,
-                                    );
-                                  }}
-                                  aria-label={`Más acciones para ${colaborador.nombre}`}
-                                  aria-disabled={protegido}
-                                  className={`p-2 rounded-xl transition-all ${protegido ? 'opacity-40 cursor-not-allowed bg-slate-50' : 'hover:bg-slate-100'}`}
-                                >
-                                  <MoreHorizontal className="w-4 h-4 text-slate-600" />
-                                </button>
-                              </Tooltip>
+                          {colaborador.activo && !protegido && (
+                            <Tooltip texto="Desactivar">
+                              <button
+                                onClick={() => desactivarColaborador.mutate(colaborador.id)}
+                                aria-label={`Desactivar a ${colaborador.nombre}`}
+                                className="p-2 rounded-xl hover:bg-amber-50 transition-all"
+                              >
+                                <Power className="w-4 h-4 text-amber-600" />
+                              </button>
+                            </Tooltip>
+                          )}
 
-                              {accionesAbiertas === colaborador.id && !protegido && (
-                                <div className="absolute right-0 top-10 z-20 w-52 rounded-2xl border border-slate-200 bg-white p-1.5 shadow-xl">
-                                  <button
-                                    onClick={() => {
-                                      setAccionesAbiertas(null);
-                                      desactivarColaborador.mutate(colaborador.id);
-                                    }}
-                                    className="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
-                                  >
-                                    <Power className="w-4 h-4" /> Desactivar
-                                  </button>
-                                  <button
-                                    onClick={() => {
-                                      setAccionesAbiertas(null);
-                                      abrirEdicionGeneral(colaborador);
-                                    }}
-                                    className="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
-                                  >
-                                    <Pencil className="w-4 h-4" /> Actualizar información
-                                  </button>
-                                  <button
-                                    onClick={() => {
-                                      setAccionesAbiertas(null);
-                                      eliminarColaborador.mutate(colaborador.id);
-                                    }}
-                                    className="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-sm font-semibold text-red-600 hover:bg-red-50"
-                                  >
-                                    <Trash2 className="w-4 h-4" /> Eliminar definitivamente
-                                  </button>
-                                </div>
-                              )}
-                            </div>
+                          {!protegido && (
+                            <Tooltip texto="Eliminar">
+                              <button
+                                onClick={() => eliminarColaborador.mutate(colaborador.id)}
+                                aria-label={`Eliminar a ${colaborador.nombre}`}
+                                className="p-2 rounded-xl hover:bg-red-50 transition-all"
+                              >
+                                <Trash2 className="w-4 h-4 text-red-500" />
+                              </button>
+                            </Tooltip>
                           )}
                         </div>
                       </td>
@@ -891,50 +861,23 @@ export function GestionAdmins() {
                       )}
 
                       {colaborador.activo && !protegido && (
-                        <div className="relative">
-                          <button
-                            onClick={() =>
-                              setAccionesAbiertas((a) =>
-                                a === colaborador.id ? null : colaborador.id,
-                              )
-                            }
-                            aria-label={`Más acciones para ${colaborador.nombre}`}
-                            className="p-2 rounded-xl hover:bg-slate-100 transition-all"
-                          >
-                            <MoreHorizontal className="w-4 h-4 text-slate-600" />
-                          </button>
-                          {accionesAbiertas === colaborador.id && (
-                            <div className="absolute right-0 top-10 z-20 w-52 rounded-2xl border border-slate-200 bg-white p-1.5 shadow-xl">
-                              <button
-                                onClick={() => {
-                                  setAccionesAbiertas(null);
-                                  desactivarColaborador.mutate(colaborador.id);
-                                }}
-                                className="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
-                              >
-                                <Power className="w-4 h-4" /> Desactivar
-                              </button>
-                              <button
-                                onClick={() => {
-                                  setAccionesAbiertas(null);
-                                  abrirEdicionGeneral(colaborador);
-                                }}
-                                className="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
-                              >
-                                <Pencil className="w-4 h-4" /> Actualizar información
-                              </button>
-                              <button
-                                onClick={() => {
-                                  setAccionesAbiertas(null);
-                                  eliminarColaborador.mutate(colaborador.id);
-                                }}
-                                className="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-sm font-semibold text-red-600 hover:bg-red-50"
-                              >
-                                <Trash2 className="w-4 h-4" /> Eliminar definitivamente
-                              </button>
-                            </div>
-                          )}
-                        </div>
+                        <button
+                          onClick={() => desactivarColaborador.mutate(colaborador.id)}
+                          aria-label={`Desactivar a ${colaborador.nombre}`}
+                          className="p-2 rounded-xl hover:bg-amber-50 transition-all"
+                        >
+                          <Power className="w-4 h-4 text-amber-600" />
+                        </button>
+                      )}
+
+                      {!protegido && (
+                        <button
+                          onClick={() => eliminarColaborador.mutate(colaborador.id)}
+                          aria-label={`Eliminar a ${colaborador.nombre}`}
+                          className="p-2 rounded-xl hover:bg-red-50 transition-all"
+                        >
+                          <Trash2 className="w-4 h-4 text-red-500" />
+                        </button>
                       )}
                     </div>
                   </div>

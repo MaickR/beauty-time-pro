@@ -1555,7 +1555,14 @@ export async function rutasAdmin(servidor: FastifyInstance): Promise<void> {
         }
 
         if (!nuevoActivo) {
-          await revocarAccesosEstudio(id, 'salon_suspendido_desde_admin');
+          try {
+            await revocarAccesosEstudio(id, 'salon_suspendido_desde_admin');
+          } catch (errorRevocacion) {
+            solicitud.log.warn(
+              { err: errorRevocacion, estudioId: id },
+              'No se pudieron revocar sesiones del estudio al suspender',
+            );
+          }
         }
 
         try {
@@ -1881,13 +1888,27 @@ export async function rutasAdmin(servidor: FastifyInstance): Promise<void> {
 
         const dueno = estudio.usuarios[0];
         if (dueno) {
-          await prisma.usuario.update({
-            where: { id: dueno.id },
-            data: { activo: false },
-          });
+          try {
+            await prisma.usuario.update({
+              where: { id: dueno.id },
+              data: { activo: false },
+            });
+          } catch (errorDesactivarDueno) {
+            solicitud.log.warn(
+              { err: errorDesactivarDueno, estudioId: id, duenoId: dueno.id },
+              'No se pudo desactivar al dueño del salón',
+            );
+          }
         }
 
-        await revocarAccesosEstudio(id, 'salon_suspendido_por_falta_pago');
+        try {
+          await revocarAccesosEstudio(id, 'salon_suspendido_por_falta_pago');
+        } catch (errorRevocacion) {
+          solicitud.log.warn(
+            { err: errorRevocacion, estudioId: id },
+            'No se pudieron revocar sesiones del estudio al suspender',
+          );
+        }
 
         // Crear notificación interna de suspensión (no bloqueante).
         try {

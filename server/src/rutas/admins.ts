@@ -805,28 +805,30 @@ export async function rutasAdmins(servidor: FastifyInstance): Promise<void> {
 
       await registrarAuditoria({
         usuarioId: payload.sub,
-        accion: 'desactivar_colaborador',
+        accion: 'eliminar_colaborador',
         entidadTipo: 'usuario',
         entidadId: id,
         detalles: {
           email: colaborador.email,
           nombre: colaborador.nombre,
           cargo: colaborador.rol,
-          antes: { activo: colaborador.activo },
-          despues: { activo: false },
           requestId: solicitud.id,
         },
         ip: solicitud.ip,
       });
 
-      await prisma.usuario.update({
-        where: { id },
-        data: { activo: false },
+      await revocarSesionesPorSujeto('usuario', id, 'colaborador_eliminado_desde_panel');
+
+      await prisma.$transaction(async (tx) => {
+        await tx.permisosMaestro.deleteMany({ where: { usuarioId: id } });
+        await tx.permisosSupervisor.deleteMany({ where: { usuarioId: id } });
+        await tx.tokenReset.deleteMany({ where: { usuarioId: id } });
+        await tx.suscripcionPush.deleteMany({ where: { usuarioId: id } });
+        await tx.auditLog.updateMany({ where: { usuarioId: id }, data: { usuarioId: null } });
+        await tx.usuario.delete({ where: { id } });
       });
 
-      await revocarSesionesPorSujeto('usuario', id, 'colaborador_desactivado_desde_panel');
-
-      return respuesta.send({ datos: { mensaje: 'Colaborador desactivado correctamente' } });
+      return respuesta.send({ datos: { mensaje: 'Colaborador eliminado definitivamente' } });
     },
   );
 
