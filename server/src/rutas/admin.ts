@@ -3665,10 +3665,89 @@ export async function rutasAdmin(servidor: FastifyInstance): Promise<void> {
         }
 
         if (esPrismaErrorConCodigo(error, 'P2022')) {
-          return respuesta.code(400).send({
-            error:
-              'No se pudo aplicar la actualización por compatibilidad temporal de esquema. Intenta nuevamente en unos segundos.',
-          });
+          const camposAplicadosCompat: string[] = [];
+
+          try {
+            await prisma.$transaction(async (tx) => {
+              for (const [campo, valor] of Object.entries(actualizacion)) {
+                try {
+                  await tx.estudio.update({
+                    where: { id },
+                    data: { [campo]: valor } as Prisma.EstudioUpdateInput,
+                  });
+                  camposAplicadosCompat.push(campo);
+                } catch (errorCampo) {
+                  if (!esPrismaErrorConCodigo(errorCampo, 'P2022')) {
+                    throw errorCampo;
+                  }
+                }
+              }
+
+              if (Object.keys(actualizacionDueno).length > 0 && estudio.usuarios[0]?.id) {
+                await tx.usuario.update({
+                  where: { id: estudio.usuarios[0].id },
+                  data: actualizacionDueno as Prisma.UsuarioUpdateInput,
+                });
+              }
+            });
+
+            if (Object.keys(actualizacionDueno).length > 0 && estudio.usuarios[0]?.id) {
+              await revocarSesionesPorSujeto(
+                'usuario',
+                estudio.usuarios[0].id,
+                'credenciales_salon_actualizadas',
+              );
+            }
+
+            await registrarAuditoria({
+              usuarioId: payload.sub,
+              accion: 'editar_salon_directorio',
+              entidadTipo: 'estudio',
+              entidadId: id,
+              detalles: {
+                nombre: estudio.nombre,
+                campos: camposAplicadosCompat,
+                camposSolicitados: Object.keys(actualizacion),
+                credencialesActualizadas: Object.keys(actualizacionDueno),
+                emailDuenoAnterior: estudio.usuarios[0]?.email ?? null,
+                emailContactoAnterior: estudio.emailContacto ?? null,
+                actualizacionModoCompat: true,
+              },
+              ip: solicitud.ip,
+            });
+
+            if (
+              camposAplicadosCompat.length === 0 &&
+              Object.keys(actualizacionDueno).length === 0
+            ) {
+              return respuesta.code(400).send({
+                error:
+                  'Los cambios enviados no son compatibles con la estructura actual del salón en producción.',
+              });
+            }
+
+            return respuesta.send({
+              datos: {
+                mensaje:
+                  camposAplicadosCompat.length < Object.keys(actualizacion).length
+                    ? 'Salón actualizado parcialmente por compatibilidad de esquema.'
+                    : 'Salón actualizado correctamente',
+              },
+            });
+          } catch (errorCompat) {
+            solicitud.log.error(
+              {
+                err: errorCompat,
+                estudioId: id,
+                camposSolicitados: Object.keys(actualizacion),
+              },
+              'Error al aplicar actualización de compatibilidad en directorio',
+            );
+
+            return respuesta.code(500).send({
+              error: 'No se pudo aplicar la actualización del salón por compatibilidad de esquema.',
+            });
+          }
         }
 
         return respuesta.code(500).send({

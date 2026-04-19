@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { X, Copy, Check, QrCode, Save, Eye, EyeOff, MessageCircle } from 'lucide-react';
+import { ErrorAPI } from '../../../lib/clienteHTTP';
 import {
   obtenerDetalleSalonDirectorio,
   actualizarSalonDirectorio,
@@ -64,8 +65,13 @@ export function ModalDetalleSalon({ salonId, onCerrar }: PropsModalDetalleSalon)
       queryClient.invalidateQueries({ queryKey: ['admin', 'directorio'] });
       queryClient.invalidateQueries({ queryKey: ['admin', 'metricas'] });
     },
-    onError: () => {
-      setErroresGuardado('No se pudieron guardar los cambios. Intenta de nuevo.');
+    onError: (error: Error) => {
+      if (error instanceof ErrorAPI) {
+        setErroresGuardado(error.message);
+        return;
+      }
+
+      setErroresGuardado(error.message || 'No se pudieron guardar los cambios. Intenta de nuevo.');
     },
   });
 

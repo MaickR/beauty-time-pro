@@ -69,7 +69,10 @@ export function PanelFinanciero({ estudios, onAbrirPago, onRecargar }: PropsPane
       peticion<{ datos: { mensaje: string } }>(`/admin/salones/${estudioId}/recordatorio`, {
         method: 'POST',
       }),
-    onSuccess: (res) => mostrarToast({ mensaje: res.datos.mensaje, variante: 'exito' }),
+    onSuccess: (res) => {
+      mostrarToast({ mensaje: res.datos.mensaje, variante: 'exito' });
+      refrescarDatos();
+    },
     onError: (err: Error) => mostrarToast({ mensaje: err.message, variante: 'error' }),
   });
 
