@@ -1538,20 +1538,49 @@ export async function rutasAdmin(servidor: FastifyInstance): Promise<void> {
         const nuevoActivo = !estaActivo;
         const nuevoEstado = nuevoActivo ? 'aprobado' : 'suspendido';
 
-        await actualizarRegistroCompat('estudios', 'id', id, {
-          activo: nuevoActivo,
-          ...(columnasEstudios.has('estado') && { estado: nuevoEstado }),
-          ...(columnasEstudios.has('fechaSuspension') && !nuevoActivo && { fechaSuspension: new Date() }),
-          ...(columnasEstudios.has('fechaSuspension') && nuevoActivo && { fechaSuspension: null }),
-          ...(columnasEstudios.has('actualizadoEn') && { actualizadoEn: formatearFechaHoraSQL(new Date()) }),
-        });
-
-        if (usuario && typeof usuario['id'] === 'string') {
-          await actualizarRegistroCompat('usuarios', 'id', usuario['id'], {
-            ...(columnasUsuarios.has('activo') && { activo: nuevoActivo }),
-            ...(columnasUsuarios.has('estudioId') && { estudioId: id }),
-            ...(columnasUsuarios.has('actualizadoEn') && { actualizadoEn: formatearFechaHoraSQL(new Date()) }),
+        // Actualizar estudio con fallback a SQL directo
+        try {
+          await actualizarRegistroCompat('estudios', 'id', id, {
+            activo: nuevoActivo,
+            ...(columnasEstudios.has('estado') && { estado: nuevoEstado }),
+            ...(columnasEstudios.has('fechaSuspension') && !nuevoActivo && { fechaSuspension: new Date() }),
+            ...(columnasEstudios.has('fechaSuspension') && nuevoActivo && { fechaSuspension: null }),
           });
+        } catch (errorPrisma) {
+          solicitud.log.warn(
+            { err: errorPrisma, estudioId: id, nuevoEstado },
+            'Fallo Prisma update en suspender/reactivar; usando SQL directo',
+          );
+          if (nuevoActivo) {
+            await prisma.$executeRawUnsafe(
+              `UPDATE estudios SET estado = 'aprobado', activo = 1, fechaSuspension = NULL WHERE id = ?`,
+              id,
+            );
+          } else {
+            await prisma.$executeRawUnsafe(
+              `UPDATE estudios SET estado = 'suspendido', activo = 0, fechaSuspension = NOW() WHERE id = ?`,
+              id,
+            );
+          }
+        }
+
+        // Actualizar usuario dueño
+        if (usuario && typeof usuario['id'] === 'string') {
+          try {
+            await actualizarRegistroCompat('usuarios', 'id', usuario['id'], {
+              ...(columnasUsuarios.has('activo') && { activo: nuevoActivo }),
+            });
+          } catch (errorUsuario) {
+            solicitud.log.warn(
+              { err: errorUsuario, usuarioId: usuario['id'] },
+              'Fallo al actualizar usuario dueño; usando SQL directo',
+            );
+            await prisma.$executeRawUnsafe(
+              `UPDATE usuarios SET activo = ? WHERE id = ?`,
+              nuevoActivo ? 1 : 0,
+              usuario['id'],
+            );
+          }
         }
 
         if (!nuevoActivo) {

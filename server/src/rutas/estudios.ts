@@ -466,6 +466,9 @@ const seleccionarEstudioPanelCompat = {
   suscripcion: true,
   inicioSuscripcion: true,
   fechaVencimiento: true,
+  precioPlanActualId: true,
+  precioPlanProximoId: true,
+  fechaAplicacionPrecioProximo: true,
   horario: true,
   servicios: true,
   serviciosCustom: true,
@@ -483,6 +486,28 @@ const seleccionarEstudioPanelCompat = {
   permiteReservasPublicas: true,
   creadoEn: true,
   actualizadoEn: true,
+  precioPlanActual: {
+    select: {
+      id: true,
+      plan: true,
+      pais: true,
+      moneda: true,
+      monto: true,
+      version: true,
+      vigenteDesde: true,
+    },
+  },
+  precioPlanProximo: {
+    select: {
+      id: true,
+      plan: true,
+      pais: true,
+      moneda: true,
+      monto: true,
+      version: true,
+      vigenteDesde: true,
+    },
+  },
   personal: {
     where: { activo: true },
     orderBy: { creadoEn: 'asc' },
@@ -776,6 +801,8 @@ async function listarEstudiosPanel(where: Prisma.EstudioWhereInput = {}) {
       throw error;
     }
 
+    console.warn('[estudios] Fallback a seleccion compat:', error instanceof Error ? error.message : error);
+
     return prisma.estudio.findMany({
       where,
       orderBy: { creadoEn: 'desc' },
@@ -796,6 +823,8 @@ async function obtenerEstudioPanel(where: Prisma.EstudioWhereInput) {
     if (!esErrorCompatibilidadEstudio(error)) {
       throw error;
     }
+
+    console.warn('[estudios] Fallback individual a seleccion compat:', error instanceof Error ? error.message : error);
 
     return prisma.estudio.findFirst({
       where,
