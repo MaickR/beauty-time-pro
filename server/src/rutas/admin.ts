@@ -1714,7 +1714,10 @@ export async function rutasAdmin(servidor: FastifyInstance): Promise<void> {
 
         const estudio = await prisma.estudio.findUnique({
           where: { id: solicitud.params.id },
-          include: {
+          select: {
+            id: true,
+            nombre: true,
+            fechaVencimiento: true,
             usuarios: {
               where: { rol: 'dueno' },
               take: 1,
@@ -1725,6 +1728,10 @@ export async function rutasAdmin(servidor: FastifyInstance): Promise<void> {
 
         if (!estudio) {
           return respuesta.code(404).send({ error: 'Salón no encontrado' });
+        }
+
+        if (!estudio.fechaVencimiento) {
+          return respuesta.code(400).send({ error: 'El salón no tiene fecha de vencimiento configurada' });
         }
 
         // Calcular días restantes
@@ -1826,7 +1833,11 @@ export async function rutasAdmin(servidor: FastifyInstance): Promise<void> {
 
         const estudio = await prisma.estudio.findUnique({
           where: { id },
-          include: {
+          select: {
+            id: true,
+            nombre: true,
+            estado: true,
+            fechaVencimiento: true,
             usuarios: {
               where: { rol: 'dueno' },
               take: 1,
@@ -3345,39 +3356,100 @@ export async function rutasAdmin(servidor: FastifyInstance): Promise<void> {
       }
 
       const { id } = solicitud.params;
-      const estudio = await prisma.estudio.findUnique({
-        where: { id },
-        select: {
-          id: true,
-          nombre: true,
-          propietario: true,
-          telefono: true,
-          pais: true,
-          plan: true,
-          estado: true,
-          activo: true,
-          inicioSuscripcion: true,
-          fechaVencimiento: true,
-          emailContacto: true,
-          direccion: true,
-          descripcion: true,
-          colorPrimario: true,
-          logoUrl: true,
-          claveCliente: true,
-          creadoEn: true,
-          usuarios: {
-            where: { rol: 'dueno' },
-            take: 1,
-            select: { nombre: true, email: true },
+      let estudio:
+        | {
+            id: string;
+            nombre: string;
+            propietario?: string | null;
+            telefono?: string | null;
+            pais?: string | null;
+            plan?: string | null;
+            estado?: string | null;
+            activo?: boolean | null;
+            inicioSuscripcion?: string | null;
+            fechaVencimiento?: string | null;
+            emailContacto?: string | null;
+            direccion?: string | null;
+            descripcion?: string | null;
+            colorPrimario?: string | null;
+            logoUrl?: string | null;
+            claveCliente?: string | null;
+            creadoEn?: Date | null;
+            usuarios: Array<{ nombre: string | null; email: string | null }>;
+          }
+        | null;
+
+      try {
+        estudio = await prisma.estudio.findUnique({
+          where: { id },
+          select: {
+            id: true,
+            nombre: true,
+            propietario: true,
+            telefono: true,
+            pais: true,
+            plan: true,
+            estado: true,
+            activo: true,
+            inicioSuscripcion: true,
+            fechaVencimiento: true,
+            emailContacto: true,
+            direccion: true,
+            descripcion: true,
+            colorPrimario: true,
+            logoUrl: true,
+            claveCliente: true,
+            creadoEn: true,
+            usuarios: {
+              where: { rol: 'dueno' },
+              take: 1,
+              select: { nombre: true, email: true },
+            },
           },
-        },
-      });
+        });
+      } catch (error) {
+        if (!esErrorCompatibilidadAdmin(error)) {
+          throw error;
+        }
+
+        estudio = await prisma.estudio.findUnique({
+          where: { id },
+          select: {
+            id: true,
+            nombre: true,
+            propietario: true,
+            telefono: true,
+            pais: true,
+            activo: true,
+            inicioSuscripcion: true,
+            fechaVencimiento: true,
+            emailContacto: true,
+            usuarios: {
+              where: { rol: 'dueno' },
+              take: 1,
+              select: { nombre: true, email: true },
+            },
+          },
+        });
+      }
 
       if (!estudio) {
         return respuesta.code(404).send({ error: 'Salón no encontrado' });
       }
 
-      return respuesta.send({ datos: estudio });
+      return respuesta.send({
+        datos: {
+          ...estudio,
+          plan: estudio.plan ?? 'STANDARD',
+          estado: estudio.estado ?? null,
+          direccion: estudio.direccion ?? null,
+          descripcion: estudio.descripcion ?? null,
+          colorPrimario: estudio.colorPrimario ?? null,
+          logoUrl: estudio.logoUrl ?? null,
+          claveCliente: estudio.claveCliente ?? null,
+          creadoEn: estudio.creadoEn ?? null,
+        },
+      });
     },
   );
 
