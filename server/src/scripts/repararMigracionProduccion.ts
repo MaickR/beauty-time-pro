@@ -73,6 +73,11 @@ const REPARACIONES_MIGRACION: ReparacionMigracion[] = [
     tablasBase: ['usuarios'],
     reparar: () => asegurarColumnaTabla('usuarios', 'porcentajeComisionPro', 'INT NOT NULL DEFAULT 10'),
   },
+  {
+    nombre: '20260616000000_metodos_pago_reserva',
+    tablasBase: ['estudios'],
+    reparar: () => asegurarColumnaTabla('estudios', 'metodosPagoReserva', 'JSON NULL'),
+  },
 ];
 
 interface EstadoMigracion {
