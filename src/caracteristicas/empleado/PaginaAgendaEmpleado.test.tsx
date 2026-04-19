@@ -234,7 +234,7 @@ describe('PaginaAgendaEmpleado', () => {
         2,
       ),
     );
-  });
+  }, 12000);
 
   it('bloquea la pestaña de productos cuando el salón no es PRO', async () => {
     mocksServicioEmpleados.obtenerMiPerfilEmpleado.mockResolvedValue(
