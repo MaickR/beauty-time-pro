@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect, useMemo } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { Search, Bell, DollarSign, ShieldAlert } from 'lucide-react';
+import { Search, Bell, DollarSign, ShieldAlert, ShieldCheck } from 'lucide-react';
 import { peticion } from '../../../lib/clienteHTTP';
 import { usarToast } from '../../../componentes/ui/ProveedorToast';
 import { Tooltip } from '../../../componentes/ui/Tooltip';
@@ -341,14 +341,18 @@ function TarjetasMovil({
                 onClick={() => onAccionSuspension(e)}
                 disabled={procesandoSuspension}
                 title={estaSuspendido ? 'Reactivar suscripción' : 'Suspender suscripción'}
-                className="rounded-xl border border-red-200 bg-red-50 px-2 py-3 text-[10px] font-black uppercase text-red-700 hover:bg-red-100 disabled:opacity-40 disabled:cursor-not-allowed flex flex-col items-center justify-center gap-1 text-center transition-colors"
+                className={`rounded-xl border px-2 py-3 text-[10px] font-black uppercase disabled:opacity-40 disabled:cursor-not-allowed flex flex-col items-center justify-center gap-1 text-center transition-colors ${
+                  estaSuspendido
+                    ? 'border-green-200 bg-green-50 text-green-700 hover:bg-green-100'
+                    : 'border-red-200 bg-red-50 text-red-700 hover:bg-red-100'
+                }`}
               >
-                <ShieldAlert className="w-3 h-3" />
-                {procesandoSuspension
-                  ? 'Procesando'
-                  : estaSuspendido
-                    ? 'Reactivar suscripción'
-                    : 'Suspender'}
+                {estaSuspendido ? (
+                  <ShieldCheck className="w-3 h-3" />
+                ) : (
+                  <ShieldAlert className="w-3 h-3" />
+                )}
+                {procesandoSuspension ? 'Procesando' : estaSuspendido ? 'Reactivar' : 'Suspender'}
               </button>
             </div>
           </div>
@@ -446,9 +450,17 @@ function TablaEscritorio({
                         disabled={procesandoSuspension}
                         aria-label={estaSuspendido ? 'Reactivar suscripción' : 'Suspender salón'}
                         title={estaSuspendido ? 'Reactivar suscripción' : 'Suspender salón'}
-                        className="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-red-700 hover:bg-red-100 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                        className={`rounded-xl border px-3 py-2 disabled:opacity-40 disabled:cursor-not-allowed transition-colors ${
+                          estaSuspendido
+                            ? 'border-green-200 bg-green-50 text-green-700 hover:bg-green-100'
+                            : 'border-red-200 bg-red-50 text-red-700 hover:bg-red-100'
+                        }`}
                       >
-                        <ShieldAlert className="w-3.5 h-3.5" />
+                        {estaSuspendido ? (
+                          <ShieldCheck className="w-3.5 h-3.5" />
+                        ) : (
+                          <ShieldAlert className="w-3.5 h-3.5" />
+                        )}
                       </button>
                     </Tooltip>
                   </div>
