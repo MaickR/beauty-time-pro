@@ -3407,6 +3407,8 @@ export async function rutasAdmin(servidor: FastifyInstance): Promise<void> {
       const { id } = solicitud.params;
       const body = solicitud.body;
 
+      const columnasEstudios = await obtenerColumnasTabla('estudios').catch(() => null);
+
       const estudio = await prisma.estudio.findUnique({
         where: { id },
         select: {
@@ -3431,6 +3433,11 @@ export async function rutasAdmin(servidor: FastifyInstance): Promise<void> {
 
       const actualizacion: Record<string, unknown> = {};
       for (const campo of camposPermitidos) {
+        const columnaDisponible = columnasEstudios ? columnasEstudios.has(campo) : true;
+        if (!columnaDisponible) {
+          continue;
+        }
+
         if (campo in body && body[campo] !== undefined) {
           actualizacion[campo] = body[campo];
         }
@@ -3583,6 +3590,13 @@ export async function rutasAdmin(servidor: FastifyInstance): Promise<void> {
 
         if (esPrismaErrorConCodigo(error, 'P2025')) {
           return respuesta.code(404).send({ error: 'No se encontró el salón o usuario a actualizar' });
+        }
+
+        if (esPrismaErrorConCodigo(error, 'P2022')) {
+          return respuesta.code(400).send({
+            error:
+              'No se pudo aplicar la actualización por compatibilidad temporal de esquema. Intenta nuevamente en unos segundos.',
+          });
         }
 
         return respuesta.code(500).send({
