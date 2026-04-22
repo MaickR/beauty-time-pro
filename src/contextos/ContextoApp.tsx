@@ -74,7 +74,7 @@ export function ProveedorContextoApp({ children }: PropsWithChildren) {
 
     // Solo mostrar spinner en la carga inicial; los refetch de datos
     // no deben causar un flash de spinner que parezca una recarga de página.
-    const credencialesActuales = `${usuario?.id ?? ''}-${rol ?? ''}-${estudioActual ?? ''}`;
+    const credencialesActuales = `${usuario?.email ?? ''}-${rol ?? ''}-${estudioActual ?? ''}`;
     const esRefetch = credencialesActuales === credencialesRef.current;
     credencialesRef.current = credencialesActuales;
     if (!esRefetch) setCargando(true);

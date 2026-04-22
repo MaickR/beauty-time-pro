@@ -113,7 +113,9 @@ export function PanelIdentificacionReserva({
         'Encontramos tu cuenta. Tus datos ya quedaron listos para completar la reserva.',
       );
     } catch {
-      setMensajeEstado('No pudimos validar ese correo ahora mismo. Intenta de nuevo en unos segundos.');
+      setMensajeEstado(
+        'No pudimos validar ese correo ahora mismo. Intenta de nuevo en unos segundos.',
+      );
     } finally {
       setCargando(false);
     }
@@ -146,7 +148,7 @@ export function PanelIdentificacionReserva({
           pais: datos.pais,
         },
         'nuevo',
-        'Te enviamos un código de verificación a tu correo. Ya puedes continuar con la reserva usando esta cuenta recién creada.',
+        'Tu cuenta quedó activa al momento. Ya puedes continuar con la reserva usando este perfil recién creado.',
       );
       setMensajeEstado(
         'Tu cuenta quedó creada y vinculada a esta reserva. Continúa con el servicio, horario y demás datos.',
@@ -173,8 +175,9 @@ export function PanelIdentificacionReserva({
             Identifica al cliente antes de continuar
           </h2>
           <p className="mt-2 max-w-2xl text-sm text-slate-600">
-            Si el cliente ya tiene cuenta, escribe su correo para completar sus datos automáticamente.
-            Si aún no está registrado, crea su cuenta aquí mismo y la reserva quedará vinculada a su perfil.
+            Si el cliente ya tiene cuenta, escribe su correo para completar sus datos
+            automáticamente. Si aún no está registrado, crea su cuenta aquí mismo y la reserva
+            quedará vinculada a su perfil.
           </p>
         </div>
         {clienteVinculado ? (
@@ -436,7 +439,7 @@ export function PanelIdentificacionReserva({
                 />
                 <span>
                   Confirmo que el cliente acepta crear su cuenta para continuar con la reserva y
-                  recibir el código de verificación por correo.
+                  acceder de inmediato con su correo y contraseña.
                 </span>
               </label>
               {formularioRegistro.formState.errors.aceptaTerminos ? (

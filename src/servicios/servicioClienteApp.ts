@@ -35,6 +35,16 @@ interface RespuestaPerfilReservaPublica {
   datos: PerfilClienteReservaPublica;
 }
 
+interface RespuestaAccesoPrincipalCliente {
+  datos: {
+    encontrado: boolean;
+    estudioId?: string;
+    nombreSalon?: string;
+    slug?: string | null;
+    claveCliente?: string;
+  };
+}
+
 interface RespuestaSlots {
   datos: Array<{
     hora?: string;
@@ -236,6 +246,34 @@ export async function obtenerPerfilClienteReservaPublica(
 export async function obtenerMiPerfil(): Promise<PerfilClienteApp> {
   const res = await peticion<RespuestaPerfil>('/mi-perfil');
   return normalizarPerfilCliente(res.datos);
+}
+
+export async function obtenerAccesoPrincipalCliente(): Promise<{
+  encontrado: boolean;
+  estudioId: string | null;
+  nombreSalon: string | null;
+  slug: string | null;
+  claveCliente: string | null;
+}> {
+  const res = await peticion<RespuestaAccesoPrincipalCliente>('/clientes-app/acceso-principal');
+
+  if (!res.datos.encontrado) {
+    return {
+      encontrado: false,
+      estudioId: null,
+      nombreSalon: null,
+      slug: null,
+      claveCliente: null,
+    };
+  }
+
+  return {
+    encontrado: true,
+    estudioId: res.datos.estudioId ?? null,
+    nombreSalon: res.datos.nombreSalon ?? null,
+    slug: res.datos.slug ?? null,
+    claveCliente: res.datos.claveCliente ?? null,
+  };
 }
 
 export async function obtenerMisReservas(): Promise<ReservaCliente[]> {

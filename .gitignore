@@ -33,8 +33,15 @@ backup-*.txt
 # Tooling and support files not required by the app runtime
 .agents/
 .augment/
+.claude/
+.cortex/
 skills-lock.json
 .github/copilot-instructions.md
+
+# Test artifacts
+coverage/
+playwright-report/
+test-results/
 
 # Top-level planning and audit documents
 /*.md

@@ -58,7 +58,7 @@ describe('PaginaInicioSesion', () => {
 
     renderConProveedores(<PaginaInicioSesion />, { rutaInicial: '/iniciar-sesion' });
 
-    fireEvent.change(screen.getByLabelText('Correo o teléfono'), {
+    fireEvent.change(screen.getByLabelText('Correo, teléfono o clave de salón'), {
       target: { value: 'qa.vendedor@salonpromaster.com' },
     });
     fireEvent.change(screen.getByLabelText('Contraseña'), {
@@ -86,9 +86,7 @@ describe('PaginaInicioSesion', () => {
 
     renderConProveedores(<PaginaInicioSesion />, { rutaInicial: '/iniciar-sesion' });
 
-    fireEvent.click(screen.getByRole('tab', { name: 'Clave del salón' }));
-
-    fireEvent.change(screen.getByRole('textbox', { name: 'Clave del salón' }), {
+    fireEvent.change(screen.getByLabelText('Correo, teléfono o clave de salón'), {
       target: { value: 'cli1234567890abcdef1234' },
     });
 

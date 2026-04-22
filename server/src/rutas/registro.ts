@@ -2,10 +2,7 @@ import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import { resolverCategoriasSalon } from '../lib/categoriasSalon.js';
 import { generarClavesSalonUnicas } from '../lib/clavesSalon.js';
-import { env } from '../lib/env.js';
-import { generarCodigoAlfanumerico, hashValorSesion } from '../lib/sesionesAuth.js';
 import { prisma } from '../prismaCliente.js';
-import { enviarEmailVerificacionCliente } from '../servicios/servicioEmail.js';
 import { generarHashContrasena } from '../utils/contrasenas.js';
 import { esEmailClienteValido, esEmailValido } from '../utils/validarEmail.js';
 import { sanitizarTexto } from '../utils/sanitizar.js';
@@ -26,8 +23,6 @@ import { obtenerFechaISOEnZona, obtenerZonaHorariaPorPais } from '../utils/zonas
 const REGEX_CONTRASENA = /^(?=.*[A-Z])(?=.*[a-z])(?=.*[0-9])(?=.*[^A-Za-z0-9]).{8,}$/;
 const ERROR_DOMINIO = 'Solo se aceptan correos personales válidos de Gmail, Outlook, Hotmail, iCloud o Yahoo';
 const ERROR_CONTRASENA = 'La contraseña debe tener al menos 8 caracteres, una mayúscula, una minúscula, un número y un carácter especial';
-const SEGUNDOS_REENVIO_CODIGO = 60;
-const MINUTOS_EXPIRACION_CODIGO = 15;
 
 const esquemaHorarioRegistro = z.record(
 	z.string(),
@@ -115,33 +110,8 @@ const esquemaRegistroCliente = z.object({
 	}
 });
 
-const esquemaVerificarEmailCliente = z.object({
-	token: z.string().trim().min(1, 'Token requerido').optional(),
-	clienteId: z.string().trim().uuid('Cliente inválido').optional(),
-	codigo: z.string().trim().min(4, 'Código inválido').max(4, 'Código inválido').optional(),
-}).superRefine((datos, contexto) => {
-	const usaToken = Boolean(datos.token);
-	const usaCodigo = Boolean(datos.clienteId || datos.codigo);
-
-	if (!usaToken && !(datos.clienteId && datos.codigo)) {
-		contexto.addIssue({
-			code: z.ZodIssueCode.custom,
-			path: ['codigo'],
-			message: 'Debes enviar un token o un código de verificación',
-		});
-	}
-
-	if (usaToken && usaCodigo) {
-		contexto.addIssue({
-			code: z.ZodIssueCode.custom,
-			path: ['token'],
-			message: 'Envía solo un método de verificación por solicitud',
-		});
-	}
-});
-
-const esquemaReenviarCodigoCliente = z.object({
-	clienteId: z.string().trim().uuid('Cliente inválido'),
+const esquemaVerificarTokenRegistro = z.object({
+	token: z.string().trim().min(1, 'Token requerido'),
 });
 
 const esquemaRegistroSalon = z.object({
@@ -251,60 +221,6 @@ function obtenerNombreClienteRegistro(datos: {
 	};
 }
 
-async function crearCodigoVerificacionCliente(clienteId: string): Promise<{ codigo: string; expiraEn: Date }> {
-	await prisma.tokenVerificacionApp.updateMany({
-		where: { clienteId, tipo: 'verificacion_email', usado: false },
-		data: { usado: true },
-	});
-
-	const codigo = generarCodigoAlfanumerico(4);
-	const expiraEn = new Date(Date.now() + MINUTOS_EXPIRACION_CODIGO * 60 * 1000);
-
-	await prisma.tokenVerificacionApp.create({
-		data: {
-			clienteId,
-			tipo: 'verificacion_email',
-			codigoHash: hashValorSesion(codigo),
-			expiraEn,
-			ultimoEnvioEn: new Date(),
-		},
-	});
-
-	return { codigo, expiraEn };
-}
-
-async function enviarCodigoVerificacionCliente(params: {
-	emailDestino: string;
-	nombreCliente: string;
-	codigo: string;
-}): Promise<void> {
-	await enviarEmailVerificacionCliente({
-		emailDestino: params.emailDestino,
-		nombreCliente: params.nombreCliente,
-		codigoVerificacion: params.codigo,
-		titulo: 'Completa tu registro',
-		mensajePrincipal: `Hola ${params.nombreCliente}, ingresa este código en Beauty Time Pro para terminar de crear tu cuenta de cliente.`,
-		mensajeSecundario: 'El código vence en 15 minutos. Si solicitas uno nuevo, el anterior queda inválido de inmediato.',
-		asunto: 'Tu código de verificación — Beauty Time Pro',
-	});
-}
-
-interface RegistroVerificacionCodigo {
-	id: string;
-	clienteId: string | null;
-	tipo: string;
-	usado: boolean;
-	expiraEn: Date;
-	creadoEn: Date;
-	codigoHash: string | null;
-	intentosFallidos: number;
-	ultimoEnvioEn: Date;
-	clienteApp: {
-		id: string;
-		emailPendiente: string | null;
-	} | null;
-}
-
 export async function rutasRegistro(servidor: FastifyInstance): Promise<void> {
 	servidor.post<{
 		Body: {
@@ -385,7 +301,7 @@ export async function rutasRegistro(servidor: FastifyInstance): Promise<void> {
 		}
 
 		const [clienteExistente, existeUsuario, telefonoDuplicado] = await Promise.all([
-			prisma.clienteApp.findUnique({ where: { email: emailNorm }, select: { id: true, emailVerificado: true } }),
+			prisma.clienteApp.findUnique({ where: { email: emailNorm }, select: { id: true } }),
 			obtenerUsuarioBloqueante(emailNorm),
 			telefonoNormalizado
 				? prisma.clienteApp.findFirst({
@@ -402,338 +318,179 @@ export async function rutasRegistro(servidor: FastifyInstance): Promise<void> {
 			});
 		}
 
-		if (existeUsuario || clienteExistente?.emailVerificado) {
-			return respuesta.send({ datos: { mensaje: 'Si este correo no está registrado, recibirás un email de confirmación.' } });
+		if (existeUsuario || clienteExistente) {
+			return respuesta.send({
+				datos: {
+					mensaje: 'Si este correo no está registrado, tu cuenta quedará lista para iniciar sesión.',
+				},
+			});
 		}
 
 		const hashContrasena = await generarHashContrasena(contrasena);
 
-		const cliente = clienteExistente
-			? await prisma.clienteApp.update({
-				where: { id: clienteExistente.id },
-				data: {
-					hashContrasena,
-					nombre: nombreCliente.nombre,
-					apellido: nombreCliente.apellido,
-					fechaNacimiento: new Date(fechaNacimiento),
-					pais,
-					telefono: telefonoNormalizado,
-					ciudad: ciudad ?? null,
-					emailVerificado: false,
-					activo: true,
-				},
-				select: { id: true, nombre: true, email: true },
-			})
-			: await prisma.clienteApp.create({
-				data: {
-					email: emailNorm,
-					hashContrasena,
-					nombre: nombreCliente.nombre,
-					apellido: nombreCliente.apellido,
-					fechaNacimiento: new Date(fechaNacimiento),
-					pais,
-					telefono: telefonoNormalizado,
-					ciudad: ciudad ?? null,
-					emailVerificado: false,
-				},
-				select: { id: true, nombre: true, email: true },
-			});
-
-		const { codigo, expiraEn } = await crearCodigoVerificacionCliente(cliente.id);
-		void enviarCodigoVerificacionCliente({
-			emailDestino: emailNorm,
-			nombreCliente: cliente.nombre,
-			codigo,
+		const cliente = await prisma.clienteApp.create({
+			data: {
+				email: emailNorm,
+				hashContrasena,
+				nombre: nombreCliente.nombre,
+				apellido: nombreCliente.apellido,
+				fechaNacimiento: new Date(fechaNacimiento),
+				pais,
+				telefono: telefonoNormalizado,
+				ciudad: ciudad ?? null,
+				emailVerificado: true,
+			},
+			select: { id: true, nombre: true, email: true },
 		});
 
 		console.log('[Registro] Cliente creado:', emailNorm.split('@')[0] + '@***');
 
 		return respuesta.code(201).send({
 			datos: {
-				mensaje: 'Enviamos un código de verificación a tu correo.',
+				mensaje: 'Cuenta creada. Ya puedes iniciar sesión y reservar.',
 				clienteId: cliente.id,
 				email: cliente.email,
-				expiraEn,
-				reenviarEnSegundos: SEGUNDOS_REENVIO_CODIGO,
 			},
 		});
 	  },
 	);
 
 	servidor.post<{
-		Body: { token?: string; clienteId?: string; codigo?: string };
+		Body: { token?: string };
 	}>(
-	  '/registro/verificar-email',
-	  {
-	    config: {
-	      rateLimit: {
-	        max: 10,
-	        timeWindow: '15 minutes',
-	        errorResponseBuilder: () => ({
-	          error: 'Demasiados intentos. Espera 15 minutos.',
-	        }),
-	      },
-	    },
-	  },
-	  async (solicitud, respuesta) => {
-		const resultado = esquemaVerificarEmailCliente.safeParse(solicitud.body);
-		if (!resultado.success) {
-			return respuesta.code(400).send({ error: obtenerMensajeValidacion(resultado.error) });
-		}
-
-		if (resultado.data.clienteId && resultado.data.codigo) {
-			const registro = await prisma.tokenVerificacionApp.findFirst({
-				where: {
-					clienteId: resultado.data.clienteId,
-					tipo: 'verificacion_email',
-					usado: false,
-				},
-				include: { clienteApp: true },
-				orderBy: { creadoEn: 'desc' },
-			}) as RegistroVerificacionCodigo | null;
-
-			if (!registro || !registro.clienteId || !registro.clienteApp || !registro.codigoHash) {
-				return respuesta.code(400).send({
-					error: 'El código de verificación es inválido o expiró.',
-					codigo: 'CODIGO_EXPIRADO',
-					campos: { codigo: 'Solicita un nuevo código.' },
-				});
-			}
-
-			if (registro.expiraEn < new Date()) {
-				await prisma.tokenVerificacionApp.update({
-					where: { id: registro.id },
-					data: { usado: true },
-				});
-
-				return respuesta.code(400).send({
-					error: 'Este código expiró. Solicita uno nuevo.',
-					codigo: 'CODIGO_EXPIRADO',
-					campos: { codigo: 'Código expirado.' },
-				});
-			}
-
-			if (hashValorSesion(resultado.data.codigo.toUpperCase()) !== registro.codigoHash) {
-				const intentosFallidos = registro.intentosFallidos + 1;
-				await prisma.tokenVerificacionApp.update({
-					where: { id: registro.id },
-					data: {
-						intentosFallidos,
-						usado: intentosFallidos >= 5,
-					},
-				});
-
-				return respuesta.code(400).send({
-					error: intentosFallidos >= 5
-						? 'Este código expiró. Solicita uno nuevo.'
-						: 'El código de verificación es incorrecto.',
-					codigo: intentosFallidos >= 5 ? 'CODIGO_EXPIRADO' : 'CODIGO_INVALIDO',
-					campos: { codigo: intentosFallidos >= 5 ? 'El código expiró por demasiados intentos.' : 'Código incorrecto.' },
-				});
-			}
-
-			await prisma.$transaction([
-				prisma.clienteApp.update({
-					where: { id: registro.clienteId },
-					data: { emailVerificado: true },
-				}),
-				prisma.tokenVerificacionApp.update({ where: { id: registro.id }, data: { usado: true } }),
-				prisma.tokenVerificacionApp.updateMany({
-					where: {
-						clienteId: registro.clienteId,
-						tipo: 'verificacion_email',
-						usado: false,
-						id: { not: registro.id },
-					},
-					data: { usado: true },
-				}),
-			]);
-
-			return respuesta.send({ datos: { mensaje: 'Correo verificado. Ya puedes iniciar sesión.' } });
-		}
-
-		const token = resultado.data.token;
-		if (!token) {
-			return respuesta.code(400).send({ error: 'No se proporcionó un token de verificación.' });
-		}
-
-		const registro = await prisma.tokenVerificacionApp.findUnique({
-			where: { token },
-			include: { clienteApp: true },
-		});
-
-		if (!registro || registro.usado || registro.expiraEn < new Date() || !registro.clienteId || !registro.clienteApp) {
-			return respuesta.code(400).send({ error: 'El enlace de verificación es inválido o expiró.' });
-		}
-
-		if (registro.tipo === 'verificacion_email') {
-			await prisma.$transaction([
-				prisma.clienteApp.update({ where: { id: registro.clienteId }, data: { emailVerificado: true } }),
-				prisma.tokenVerificacionApp.update({ where: { id: registro.id }, data: { usado: true } }),
-			]);
-
-			return respuesta.send({ datos: { mensaje: 'Correo verificado. Ya puedes iniciar sesión.' } });
-		}
-
-		if (registro.tipo === 'cambio_email_cliente') {
-			if (!registro.clienteApp.emailPendiente) {
-				return respuesta.code(400).send({ error: 'No hay un cambio de correo pendiente para este enlace.' });
-			}
-
-			const emailPendienteNorm = registro.clienteApp.emailPendiente.trim().toLowerCase();
-			const [existeCliente, existeUsuario] = await Promise.all([
-				prisma.clienteApp.findFirst({
-					where: { email: emailPendienteNorm, id: { not: registro.clienteId } },
-					select: { id: true },
-				}),
-				obtenerUsuarioBloqueante(emailPendienteNorm),
-			]);
-
-			if (existeCliente ?? existeUsuario) {
-				return respuesta.code(409).send({ error: 'Ese correo ya fue usado por otra cuenta.' });
-			}
-
-			await prisma.$transaction([
-				prisma.clienteApp.update({
-					where: { id: registro.clienteId },
-					data: { email: emailPendienteNorm, emailPendiente: null, emailVerificado: true },
-				}),
-				prisma.tokenVerificacionApp.update({ where: { id: registro.id }, data: { usado: true } }),
-				prisma.tokenVerificacionApp.updateMany({
-					where: {
-						clienteId: registro.clienteId,
-						tipo: 'cambio_email_cliente',
-						usado: false,
-						id: { not: registro.id },
-					},
-					data: { usado: true },
-				}),
-			]);
-
-			return respuesta.send({ datos: { mensaje: 'Tu nuevo correo fue confirmado correctamente.' } });
-		}
-
-		try {
-			const tokenUsuario = servidor.jwt.verify<{
-				tipo?: string;
-				usuarioId?: string;
-				emailNuevo?: string;
-			}>(token);
-
-			if (
-				tokenUsuario.tipo === 'cambio_email_dueno' &&
-				tokenUsuario.usuarioId &&
-				tokenUsuario.emailNuevo
-			) {
-				const emailNuevo = tokenUsuario.emailNuevo.trim().toLowerCase();
-				const usuario = await prisma.usuario.findUnique({
-					where: { id: tokenUsuario.usuarioId },
-					select: { id: true, email: true },
-				});
-
-				if (!usuario) {
-					return respuesta.code(404).send({ error: 'La cuenta del dueño ya no existe.' });
-				}
-
-				if (usuario.email === emailNuevo) {
-					return respuesta.send({ datos: { mensaje: 'Tu nuevo correo ya estaba confirmado.' } });
-				}
-
-				const [existeCliente, existeUsuario] = await Promise.all([
-					prisma.clienteApp.findFirst({
-						where: { OR: [{ email: emailNuevo }, { emailPendiente: emailNuevo }] },
-						select: { id: true },
-					}),
-					obtenerUsuarioBloqueante(emailNuevo),
-				]);
-
-				if ((existeUsuario && existeUsuario.id !== usuario.id) || existeCliente) {
-					return respuesta.code(409).send({ error: 'Ese correo ya fue usado por otra cuenta.' });
-				}
-
-				await prisma.usuario.update({
-					where: { id: usuario.id },
-					data: { email: emailNuevo, emailVerificado: true },
-				});
-
-				return respuesta.send({ datos: { mensaje: 'Tu nuevo correo fue confirmado correctamente.' } });
-			}
-		} catch {
-			// Si no es un JWT válido, caerá al error genérico de enlace inválido.
-		}
-
-		return respuesta.code(400).send({ error: 'El enlace de verificación es inválido o expiró.' });
-	  },
-	);
-
-	servidor.post<{
-		Body: { clienteId: string };
-	}>(
-		'/registro/reenviar-codigo',
+		'/registro/verificar-email',
 		{
 			config: {
 				rateLimit: {
-					max: 6,
-					timeWindow: '1 hour',
+					max: 10,
+					timeWindow: '15 minutes',
 					errorResponseBuilder: () => ({
-						error: 'Demasiadas solicitudes. Intenta más tarde.',
+						error: 'Demasiados intentos. Espera 15 minutos.',
 					}),
 				},
 			},
 		},
 		async (solicitud, respuesta) => {
-			const resultado = esquemaReenviarCodigoCliente.safeParse(solicitud.body);
+			const resultado = esquemaVerificarTokenRegistro.safeParse(solicitud.body);
 			if (!resultado.success) {
 				return respuesta.code(400).send({ error: obtenerMensajeValidacion(resultado.error) });
 			}
 
-			const cliente = await prisma.clienteApp.findUnique({
-				where: { id: resultado.data.clienteId },
-				select: { id: true, nombre: true, email: true, emailVerificado: true, activo: true },
+			const token = resultado.data.token;
+
+			const registro = await prisma.tokenVerificacionApp.findUnique({
+				where: { token },
+				include: { clienteApp: true },
 			});
 
-			if (!cliente || !cliente.activo || cliente.emailVerificado) {
-				return respuesta.send({ datos: { mensaje: 'Si la solicitud es válida, enviaremos un nuevo código.' } });
-			}
+			if (registro && !registro.usado && registro.expiraEn >= new Date() && registro.clienteId && registro.clienteApp) {
+				if (registro.tipo === 'verificacion_email') {
+					await prisma.$transaction([
+						prisma.clienteApp.update({ where: { id: registro.clienteId }, data: { emailVerificado: true } }),
+						prisma.tokenVerificacionApp.update({ where: { id: registro.id }, data: { usado: true } }),
+					]);
 
-			const ultimoCodigo = await prisma.tokenVerificacionApp.findFirst({
-				where: {
-					clienteId: cliente.id,
-					tipo: 'verificacion_email',
-					usado: false,
-				},
-				orderBy: { creadoEn: 'desc' },
-			}) as RegistroVerificacionCodigo | null;
+					return respuesta.send({ datos: { mensaje: 'Tu cuenta ya está activa. Inicia sesión para continuar.' } });
+				}
 
-			if (ultimoCodigo) {
-				const transcurrido = Date.now() - ultimoCodigo.ultimoEnvioEn.getTime();
-				const restante = SEGUNDOS_REENVIO_CODIGO - Math.ceil(transcurrido / 1000);
-				if (restante > 0) {
-					return respuesta.code(429).send({
-						error: `Espera ${restante} segundos antes de solicitar un nuevo código.`,
-						codigo: 'REENVIO_BLOQUEADO',
-						segundosRestantes: restante,
-					});
+				if (registro.tipo === 'cambio_email_cliente') {
+					if (!registro.clienteApp.emailPendiente) {
+						return respuesta.code(400).send({ error: 'No hay un cambio de correo pendiente para este enlace.' });
+					}
+
+					const emailPendienteNorm = registro.clienteApp.emailPendiente.trim().toLowerCase();
+					const [existeCliente, existeUsuario] = await Promise.all([
+						prisma.clienteApp.findFirst({
+							where: { email: emailPendienteNorm, id: { not: registro.clienteId } },
+							select: { id: true },
+						}),
+						obtenerUsuarioBloqueante(emailPendienteNorm),
+					]);
+
+					if (existeCliente ?? existeUsuario) {
+						return respuesta.code(409).send({ error: 'Ese correo ya fue usado por otra cuenta.' });
+					}
+
+					await prisma.$transaction([
+						prisma.clienteApp.update({
+							where: { id: registro.clienteId },
+							data: { email: emailPendienteNorm, emailPendiente: null, emailVerificado: true },
+						}),
+						prisma.tokenVerificacionApp.update({ where: { id: registro.id }, data: { usado: true } }),
+						prisma.tokenVerificacionApp.updateMany({
+							where: {
+								clienteId: registro.clienteId,
+								tipo: 'cambio_email_cliente',
+								usado: false,
+								id: { not: registro.id },
+							},
+							data: { usado: true },
+						}),
+					]);
+
+					return respuesta.send({ datos: { mensaje: 'Tu nuevo correo fue confirmado correctamente.' } });
 				}
 			}
 
-			const { codigo, expiraEn } = await crearCodigoVerificacionCliente(cliente.id);
-			void enviarCodigoVerificacionCliente({
-				emailDestino: cliente.email,
-				nombreCliente: cliente.nombre,
-				codigo,
-			});
+			try {
+				const tokenUsuario = servidor.jwt.verify<{
+					tipo?: string;
+					usuarioId?: string;
+					emailNuevo?: string;
+				}>(token);
 
-			return respuesta.send({
-				datos: {
-					mensaje: 'Enviamos un nuevo código de verificación a tu correo.',
-					clienteId: cliente.id,
-					expiraEn,
-					reenviarEnSegundos: SEGUNDOS_REENVIO_CODIGO,
-				},
-			});
+				if (
+					tokenUsuario.tipo === 'cambio_email_dueno' &&
+					tokenUsuario.usuarioId &&
+					tokenUsuario.emailNuevo
+				) {
+					const emailNuevo = tokenUsuario.emailNuevo.trim().toLowerCase();
+					const usuario = await prisma.usuario.findUnique({
+						where: { id: tokenUsuario.usuarioId },
+						select: { id: true, email: true },
+					});
+
+					if (!usuario) {
+						return respuesta.code(404).send({ error: 'La cuenta del dueño ya no existe.' });
+					}
+
+					if (usuario.email === emailNuevo) {
+						return respuesta.send({ datos: { mensaje: 'Tu nuevo correo ya estaba confirmado.' } });
+					}
+
+					const [existeCliente, existeUsuario] = await Promise.all([
+						prisma.clienteApp.findFirst({
+							where: { OR: [{ email: emailNuevo }, { emailPendiente: emailNuevo }] },
+							select: { id: true },
+						}),
+						obtenerUsuarioBloqueante(emailNuevo),
+					]);
+
+					if ((existeUsuario && existeUsuario.id !== usuario.id) || existeCliente) {
+						return respuesta.code(409).send({ error: 'Ese correo ya fue usado por otra cuenta.' });
+					}
+
+					await prisma.usuario.update({
+						where: { id: usuario.id },
+						data: { email: emailNuevo, emailVerificado: true },
+					});
+
+					return respuesta.send({ datos: { mensaje: 'Tu nuevo correo fue confirmado correctamente.' } });
+				}
+			} catch {
+				// Si no es un JWT válido, caerá al error genérico de enlace inválido.
+			}
+
+			return respuesta.code(400).send({ error: 'El enlace de verificación es inválido o expiró.' });
 		},
 	);
+
+	servidor.post('/registro/reenviar-codigo', async (_solicitud, respuesta) => {
+		return respuesta.code(410).send({
+			error: 'La verificación por código fue retirada. Registra la cuenta y accede directamente.',
+			codigo: 'FLUJO_DEPRECADO',
+		});
+	});
 
 	/**
 	 * POST /registro/salon

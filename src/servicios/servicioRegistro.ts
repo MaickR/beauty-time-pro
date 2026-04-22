@@ -116,24 +116,13 @@ export async function registrarCliente(datos: DatosRegistroCliente): Promise<Res
 }
 
 export async function verificarEmailCliente(datos: {
-  token?: string;
-  clienteId?: string;
-  codigo?: string;
+  token: string;
 }): Promise<{ mensaje: string }> {
   const resultado = await peticionPublica<RespuestaRegistroCliente>(
     '/registro/verificar-email',
     datos,
   );
   return { mensaje: resultado.datos.mensaje };
-}
-
-export async function reenviarCodigoVerificacionCliente(
-  clienteId: string,
-): Promise<ResultadoRegistro> {
-  const resultado = await peticionPublica<RespuestaRegistroCliente>('/registro/reenviar-codigo', {
-    clienteId,
-  });
-  return resultado.datos;
 }
 
 export async function registrarSalon(datos: DatosRegistroSalon): Promise<ResultadoRegistro> {

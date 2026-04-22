@@ -16,14 +16,24 @@ function esTelefono(valor: string) {
   return /^[+()\-\s\d]{7,20}$/.test(valor.trim());
 }
 
+function esPosibleClaveSalon(valor: string) {
+  const normalizado = valor.trim().toUpperCase();
+  return (
+    /^CLI[0-9A-F]{20}$/.test(normalizado) ||
+    /^ADM[0-9A-F]{20}$/.test(normalizado) ||
+    /^DUE[0-9A-F]{20}$/.test(normalizado) ||
+    /^[A-Z][A-Z0-9]{1,29}[0-9]{2}$/.test(normalizado)
+  );
+}
+
 const esquema = z
   .object({
-    identificador: z.string().trim(),
-    contrasena: z.string().trim().min(1, 'Ingresa tu contraseña'),
+    identificador: z.string().trim().min(1, 'Ingresa tu correo, teléfono o clave de salón'),
+    contrasena: z.string().trim().optional(),
   })
   .superRefine((datos, contexto) => {
     const valor = datos.identificador.trim();
-    if (valor.length === 0) {
+    if (valor.length === 0 || esPosibleClaveSalon(valor)) {
       return;
     }
 
@@ -34,10 +44,17 @@ const esquema = z
         message: 'Ingresa un correo o teléfono válido',
       });
     }
+
+    if (!datos.contrasena?.trim()) {
+      contexto.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['contrasena'],
+        message: 'Ingresa tu contraseña',
+      });
+    }
   });
 
 type CamposFormulario = z.infer<typeof esquema>;
-type PestanaAcceso = 'cuenta' | 'claveSalon';
 
 interface EstadoRutaInicioSesion {
   desde?: string;
@@ -55,15 +72,6 @@ function obtenerMensajeCodigo(
   mensajeBloqueo: string,
   motivo: string | null,
 ) {
-  if (codigo === 'EMAIL_NO_VERIFICADO') {
-    return {
-      titulo: 'Verificación de correo requerida',
-      descripcion:
-        'Completa la verificación con el último código enviado a tu correo antes de iniciar sesión.',
-      tono: 'amber' as const,
-    };
-  }
-
   if (codigo === 'PENDIENTE_APROBACION') {
     return {
       titulo: 'Solicitud en revisión',
@@ -115,7 +123,6 @@ function clasesAviso(tono: 'amber' | 'red' | 'blue') {
 export function PaginaInicioSesion() {
   usarTituloPagina('Iniciar sesión');
   const [parametros] = useSearchParams();
-  const [pestanaActiva, setPestanaActiva] = useState<PestanaAcceso>('cuenta');
   const [mostrarContrasena, setMostrarContrasena] = useState(false);
   const [contrasenaCopiada, setContrasenaCopiada] = useState(false);
   const [codigoBloqueo, setCodigoBloqueo] = useState<string | null>(null);
@@ -123,9 +130,6 @@ export function PaginaInicioSesion() {
   const [avisoTransitorio] = useState(() => consumirAvisoInicioSesion());
   const [requiereIdentificador, setRequiereIdentificador] = useState(false);
   const [mostrarRegistroCliente, setMostrarRegistroCliente] = useState(false);
-  const [claveAcceso, setClaveAcceso] = useState('');
-  const [errorClaveAcceso, setErrorClaveAcceso] = useState<string | null>(null);
-  const [procesandoClaveAcceso, setProcesandoClaveAcceso] = useState(false);
   const navegar = useNavigate();
   const ubicacion = useLocation();
   const { iniciarSesion, iniciarSesionConClave } = usarTiendaAuth();
@@ -171,6 +175,7 @@ export function PaginaInicioSesion() {
     setError,
     setValue,
     getValues,
+    watch,
     formState: { errors, isSubmitting },
   } = useForm<CamposFormulario>({
     resolver: zodResolver(esquema),
@@ -180,13 +185,35 @@ export function PaginaInicioSesion() {
     },
   });
 
+  const identificadorActual = watch('identificador') ?? '';
+  const accesoPorClave = esPosibleClaveSalon(identificadorActual);
+
   const alEnviar = async (datos: CamposFormulario) => {
     setCodigoBloqueo(null);
     setMotivoRechazo(null);
     setMostrarRegistroCliente(false);
-    setErrorClaveAcceso(null);
 
     const identificador = datos.identificador.trim();
+    const contrasena = datos.contrasena?.trim() ?? '';
+
+    if (esPosibleClaveSalon(identificador)) {
+      const resultadoClave = await iniciarSesionConClave(identificador.toUpperCase());
+
+      if (!resultadoClave.exito) {
+        if (resultadoClave.codigo) {
+          setCodigoBloqueo(resultadoClave.codigo);
+          setMotivoRechazo(resultadoClave.motivo ?? null);
+        }
+
+        setError('root', {
+          message: resultadoClave.mensaje ?? 'No pudimos resolver esa clave de acceso.',
+        });
+        return;
+      }
+
+      navegar(resultadoClave.ruta ?? '/');
+      return;
+    }
 
     if (requiereIdentificador) {
       if (!identificador) {
@@ -204,7 +231,7 @@ export function PaginaInicioSesion() {
       }
     }
 
-    const resultado = await iniciarSesion(identificador || null, datos.contrasena.trim());
+    const resultado = await iniciarSesion(identificador || null, contrasena);
 
     if (!resultado.exito) {
       if (resultado.codigo === 'IDENTIFICADOR_REQUERIDO') {
@@ -245,7 +272,6 @@ export function PaginaInicioSesion() {
   useEffect(() => {
     if (!accesoDemo) return;
 
-    setPestanaActiva('cuenta');
     setRequiereIdentificador(false);
     setMostrarRegistroCliente(false);
     clearErrors();
@@ -261,38 +287,6 @@ export function PaginaInicioSesion() {
       });
     }
   }, [accesoDemo, clearErrors, setValue]);
-
-  const alEnviarClaveAcceso = async (evento: React.FormEvent<HTMLFormElement>) => {
-    evento.preventDefault();
-    setErrorClaveAcceso(null);
-    setCodigoBloqueo(null);
-    setMotivoRechazo(null);
-
-    const claveNormalizada = claveAcceso.trim().toUpperCase();
-    if (!claveNormalizada) {
-      setErrorClaveAcceso('Ingresa la clave de acceso del salón');
-      return;
-    }
-
-    setProcesandoClaveAcceso(true);
-    const resultado = await iniciarSesionConClave(claveNormalizada);
-    setProcesandoClaveAcceso(false);
-
-    if (!resultado.exito) {
-      setErrorClaveAcceso(resultado.mensaje ?? 'No pudimos resolver esa clave de acceso');
-      return;
-    }
-
-    navegar(resultado.ruta ?? '/');
-  };
-
-  const cambiarPestana = (pestana: PestanaAcceso) => {
-    setPestanaActiva(pestana);
-    setErrorClaveAcceso(null);
-    setCodigoBloqueo(null);
-    setMotivoRechazo(null);
-    clearErrors();
-  };
 
   const copiarContrasena = async () => {
     const contrasena = getValues('contrasena')?.trim();
@@ -328,49 +322,8 @@ export function PaginaInicioSesion() {
               Iniciar sesión
             </h1>
             <p className="mt-2 text-sm leading-6 text-slate-600">
-              Elige cómo quieres entrar y continúa con tu acceso.
+              Escribe un solo dato de acceso y nosotros detectamos el tipo de cuenta.
             </p>
-          </div>
-
-          <div className="mb-6 rounded-[1.75rem] border border-[#e9d3c5] bg-white/75 p-2 shadow-[0_16px_40px_rgba(93,22,55,0.08)] backdrop-blur-sm">
-            <div
-              className="grid grid-cols-2 gap-2 rounded-[1.35rem] bg-[#f7ece5] p-1.5"
-              role="tablist"
-              aria-label="Opciones de acceso"
-            >
-              <button
-                type="button"
-                role="tab"
-                id="tab-acceso-cuenta"
-                aria-selected={pestanaActiva === 'cuenta'}
-                aria-controls="panel-acceso-cuenta"
-                onClick={() => cambiarPestana('cuenta')}
-                className={`inline-flex items-center justify-center gap-2 rounded-[1.1rem] px-4 py-3 text-sm font-semibold transition ${
-                  pestanaActiva === 'cuenta'
-                    ? 'bg-white text-[#5d1637] shadow-sm'
-                    : 'text-slate-600 hover:text-[#5d1637]'
-                }`}
-              >
-                <Lock className="h-4 w-4" aria-hidden="true" />
-                Cuenta
-              </button>
-              <button
-                type="button"
-                role="tab"
-                id="tab-acceso-clave"
-                aria-selected={pestanaActiva === 'claveSalon'}
-                aria-controls="panel-acceso-clave"
-                onClick={() => cambiarPestana('claveSalon')}
-                className={`inline-flex items-center justify-center gap-2 rounded-[1.1rem] px-4 py-3 text-sm font-semibold transition ${
-                  pestanaActiva === 'claveSalon'
-                    ? 'bg-white text-[#5d1637] shadow-sm'
-                    : 'text-slate-600 hover:text-[#5d1637]'
-                }`}
-              >
-                <KeyRound className="h-4 w-4" aria-hidden="true" />
-                Clave del salón
-              </button>
-            </div>
           </div>
 
           {mensajeRegistro ? (
@@ -401,49 +354,72 @@ export function PaginaInicioSesion() {
             </div>
           ) : null}
 
-          {pestanaActiva === 'cuenta' ? (
-            <section
-              id="panel-acceso-cuenta"
-              role="tabpanel"
-              aria-labelledby="tab-acceso-cuenta"
-              className="rounded-[1.75rem] border border-white/70 bg-white/55 p-5 shadow-[inset_0_1px_0_rgba(255,255,255,0.7)] backdrop-blur-sm"
-            >
-              <form onSubmit={handleSubmit(alEnviar)} noValidate className="space-y-5">
-                <div>
-                  <label
-                    htmlFor="identificador"
-                    className="mb-1.5 block text-sm font-medium text-slate-700"
-                  >
-                    {requiereIdentificador ? 'Correo electrónico' : 'Correo o teléfono'}
-                  </label>
-                  <div className="relative">
-                    <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400">
-                      <Mail className="h-4 w-4" />
-                    </span>
-                    <input
-                      id="identificador"
-                      type="text"
-                      autoComplete="username"
-                      placeholder={
-                        requiereIdentificador
-                          ? 'usuario@salon.com'
-                          : 'usuario@salon.com o 5512345678'
-                      }
-                      className="w-full rounded-2xl border border-[#d8c4ba] bg-white/92 px-10 py-3.5 text-sm text-slate-900 outline-none transition focus:border-[#7d2147] focus:ring-2 focus:ring-[#f2d7c5]"
-                      aria-invalid={Boolean(errors.identificador)}
-                      {...register('identificador')}
-                    />
-                  </div>
-                  <p className="mt-1.5 text-xs text-slate-500">
-                    {requiereIdentificador
-                      ? 'Usa el correo exacto de la cuenta que quieres abrir.'
-                      : 'Este campo es opcional solo cuando tu contraseña identifica una única cuenta.'}
-                  </p>
-                  {errors.identificador ? (
-                    <p className="mt-1.5 text-xs text-red-600">{errors.identificador.message}</p>
-                  ) : null}
-                </div>
+          <section className="rounded-[1.75rem] border border-white/70 bg-white/55 p-5 shadow-[inset_0_1px_0_rgba(255,255,255,0.7)] backdrop-blur-sm">
+            <div className="mb-5 flex items-start gap-3">
+              <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-[#f6e5dc] text-[#7d2147] shadow-sm">
+                {accesoPorClave ? (
+                  <KeyRound className="h-4.5 w-4.5" aria-hidden="true" />
+                ) : (
+                  <Mail className="h-4.5 w-4.5" aria-hidden="true" />
+                )}
+              </div>
+              <div>
+                <h2 className="text-base font-semibold text-[#24111f]">Acceso inteligente</h2>
+                <p className="mt-1 text-sm leading-6 text-slate-600">
+                  Escribe correo, teléfono o clave del salón. Detectamos el tipo de acceso en
+                  automático.
+                </p>
+              </div>
+            </div>
 
+            <form onSubmit={handleSubmit(alEnviar)} noValidate className="space-y-5">
+              <div>
+                <label
+                  htmlFor="identificador"
+                  className="mb-1.5 block text-sm font-medium text-slate-700"
+                >
+                  {requiereIdentificador
+                    ? 'Correo electrónico'
+                    : 'Correo, teléfono o clave de salón'}
+                </label>
+                <div className="relative">
+                  <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400">
+                    {accesoPorClave ? (
+                      <KeyRound className="h-4 w-4" />
+                    ) : (
+                      <Mail className="h-4 w-4" />
+                    )}
+                  </span>
+                  <input
+                    id="identificador"
+                    type="text"
+                    autoComplete="username"
+                    placeholder={
+                      requiereIdentificador
+                        ? 'usuario@salon.com'
+                        : 'usuario@salon.com, 5512345678 o CLI123...'
+                    }
+                    autoCapitalize={accesoPorClave ? 'characters' : 'off'}
+                    autoCorrect="off"
+                    spellCheck={false}
+                    className="w-full rounded-2xl border border-[#d8c4ba] bg-white/92 px-10 py-3.5 text-sm text-slate-900 outline-none transition focus:border-[#7d2147] focus:ring-2 focus:ring-[#f2d7c5]"
+                    aria-invalid={Boolean(errors.identificador)}
+                    {...register('identificador')}
+                  />
+                </div>
+                <p className="mt-1.5 text-xs text-slate-500">
+                  {requiereIdentificador
+                    ? 'Usa el correo exacto de la cuenta que quieres abrir.'
+                    : accesoPorClave
+                      ? 'Detectamos una clave de salón. Entrarás sin contraseña.'
+                      : 'Con correo o teléfono, te pediremos contraseña para validar tu cuenta.'}
+                </p>
+                {errors.identificador ? (
+                  <p className="mt-1.5 text-xs text-red-600">{errors.identificador.message}</p>
+                ) : null}
+              </div>
+
+              {!accesoPorClave ? (
                 <div>
                   <div className="mb-1.5 flex items-center justify-between">
                     <label
@@ -501,79 +477,24 @@ export function PaginaInicioSesion() {
                     <p className="mt-1.5 text-xs text-red-600">{errors.contrasena.message}</p>
                   ) : null}
                 </div>
+              ) : null}
 
-                <button
-                  type="submit"
-                  disabled={isSubmitting}
-                  aria-busy={isSubmitting}
-                  className="w-full rounded-2xl bg-[linear-gradient(135deg,#6d1d43_0%,#c74674_100%)] px-4 py-3.5 text-sm font-semibold text-white shadow-lg shadow-[#6d1d43]/25 transition hover:brightness-105 disabled:cursor-not-allowed disabled:opacity-60"
-                >
-                  {isSubmitting
-                    ? 'Validando acceso...'
+              <button
+                type="submit"
+                disabled={isSubmitting}
+                aria-busy={isSubmitting}
+                className="w-full rounded-2xl bg-[linear-gradient(135deg,#6d1d43_0%,#c74674_100%)] px-4 py-3.5 text-sm font-semibold text-white shadow-lg shadow-[#6d1d43]/25 transition hover:brightness-105 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                {isSubmitting
+                  ? 'Validando acceso...'
+                  : accesoPorClave
+                    ? 'Entrar con clave'
                     : requiereIdentificador
                       ? 'Continuar con correo'
                       : 'Entrar al sistema'}
-                </button>
-              </form>
-            </section>
-          ) : (
-            <section
-              id="panel-acceso-clave"
-              role="tabpanel"
-              aria-labelledby="tab-acceso-clave"
-              className="rounded-[1.75rem] border border-white/70 bg-white/55 p-5 shadow-[inset_0_1px_0_rgba(255,255,255,0.7)] backdrop-blur-sm"
-            >
-              <div className="mb-5 flex items-start gap-3">
-                <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-[#f6e5dc] text-[#7d2147] shadow-sm">
-                  <KeyRound className="h-4.5 w-4.5" aria-hidden="true" />
-                </div>
-                <div>
-                  <h2 className="text-base font-semibold text-[#24111f]">
-                    Ingresa con clave del salón
-                  </h2>
-                  <p className="mt-1 text-sm leading-6 text-slate-600">
-                    Escribe la clave para continuar.
-                  </p>
-                </div>
-              </div>
-
-              <form onSubmit={alEnviarClaveAcceso} className="space-y-4" noValidate>
-                <div>
-                  <label
-                    htmlFor="clave-acceso"
-                    className="mb-1.5 block text-sm font-medium text-slate-700"
-                  >
-                    Clave del salón
-                  </label>
-                  <input
-                    id="clave-acceso"
-                    name="claveAccesoSalon"
-                    type="text"
-                    value={claveAcceso}
-                    onChange={(evento) => setClaveAcceso(evento.target.value.toUpperCase())}
-                    placeholder="CLI1234567890ABCDEF1234"
-                    autoCapitalize="characters"
-                    autoCorrect="off"
-                    spellCheck={false}
-                    className="w-full rounded-2xl border border-[#d8c4ba] bg-white/92 px-4 py-3.5 text-sm uppercase tracking-[0.14em] text-slate-900 outline-none transition focus:border-[#7d2147] focus:ring-2 focus:ring-[#f2d7c5]"
-                  />
-                </div>
-
-                {errorClaveAcceso ? (
-                  <p className="text-xs text-red-600">{errorClaveAcceso}</p>
-                ) : null}
-
-                <button
-                  type="submit"
-                  disabled={procesandoClaveAcceso}
-                  aria-busy={procesandoClaveAcceso}
-                  className="w-full rounded-2xl bg-[linear-gradient(135deg,#6d1d43_0%,#c74674_100%)] px-4 py-3.5 text-sm font-semibold text-white shadow-lg shadow-[#6d1d43]/25 transition hover:brightness-105 disabled:cursor-not-allowed disabled:opacity-60"
-                >
-                  {procesandoClaveAcceso ? 'Validando clave...' : 'Entrar con clave'}
-                </button>
-              </form>
-            </section>
-          )}
+              </button>
+            </form>
+          </section>
 
           {mostrarRegistroCliente ? (
             <div className="mt-4 rounded-2xl border border-amber-200 bg-amber-50/95 px-4 py-3 text-sm text-amber-900">

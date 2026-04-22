@@ -8,6 +8,7 @@ import {
   type PermisosSesionMaestro,
   type PermisosSesionSupervisor,
 } from '../servicios/servicioAuth';
+import { obtenerAccesoPrincipalCliente } from '../servicios/servicioClienteApp';
 import { ErrorAPI, limpiarToken, registrarCallbackSesionExpirada } from '../lib/clienteHTTP';
 
 export type RolUsuario = 'maestro' | 'supervisor' | 'vendedor' | 'dueno' | 'cliente' | 'empleado';
@@ -146,6 +147,25 @@ function esClaveClientePublica(clave: string) {
   );
 }
 
+async function resolverAccesoPrincipalCliente() {
+  try {
+    const acceso = await obtenerAccesoPrincipalCliente();
+
+    if (!acceso.encontrado || !acceso.estudioId) {
+      return null;
+    }
+
+    return {
+      estudioId: acceso.estudioId,
+      slugEstudio: acceso.slug ?? null,
+      nombreSalon: acceso.nombreSalon ?? 'Salon',
+      claveCliente: acceso.claveCliente?.trim() || acceso.estudioId,
+    };
+  } catch {
+    return null;
+  }
+}
+
 export function obtenerRutaPorRol(
   rol: RolUsuario | null,
   estudioActual: string | null,
@@ -192,13 +212,34 @@ export const usarTiendaAuth = create<EstadoAuth>((set) => ({
         set({ iniciando: false });
         return () => {};
       }
-      void refrescarSesion().then((datos) => {
+      void refrescarSesion().then(async (datos) => {
         if (datos) {
           const rol = datos.rol as RolUsuario;
+
+          let estudioActual = datos.estudioId;
+          let slugEstudioActual = datos.slugEstudio ?? null;
+          let claveClienteActual: string | null = null;
+
+          if (rol === 'cliente') {
+            const accesoPrincipal = await resolverAccesoPrincipalCliente();
+            if (accesoPrincipal) {
+              estudioActual = accesoPrincipal.estudioId;
+              slugEstudioActual = accesoPrincipal.slugEstudio;
+              claveClienteActual = accesoPrincipal.claveCliente;
+              guardarSesionReserva({
+                estudioId: accesoPrincipal.estudioId,
+                nombreSalon: accesoPrincipal.nombreSalon,
+                claveSalon: accesoPrincipal.claveCliente,
+              });
+            } else {
+              limpiarSesionReserva();
+            }
+          }
+
           set({
             usuario: {
               rol,
-              estudioId: datos.estudioId,
+              estudioId: rol === 'cliente' ? estudioActual : datos.estudioId,
               nombre: datos.nombre ?? '',
               email: datos.email ?? '',
               esMaestroTotal: datos.esMaestroTotal ?? false,
@@ -208,9 +249,9 @@ export const usarTiendaAuth = create<EstadoAuth>((set) => ({
               forzarCambioContrasena: datos.forzarCambioContrasena ?? false,
             },
             rol,
-            estudioActual: datos.estudioId,
-            slugEstudioActual: datos.slugEstudio ?? null,
-            claveClienteActual: rol === 'cliente' ? datos.estudioId : null,
+            estudioActual,
+            slugEstudioActual,
+            claveClienteActual,
             iniciando: false,
           });
         } else {
@@ -236,12 +277,35 @@ export const usarTiendaAuth = create<EstadoAuth>((set) => ({
     try {
       const datos = await iniciarSesionInteligenteAPI(identificador, contrasena);
       const rol = datos.rol as RolUsuario;
+
+      let estudioActual = datos.estudioId;
+      let slugEstudioActual = datos.slugEstudio ?? null;
+      let claveClienteActual: string | null = null;
+
+      if (rol === 'cliente') {
+        const accesoPrincipal = await resolverAccesoPrincipalCliente();
+        if (accesoPrincipal) {
+          estudioActual = accesoPrincipal.estudioId;
+          slugEstudioActual = accesoPrincipal.slugEstudio;
+          claveClienteActual = accesoPrincipal.claveCliente;
+          guardarSesionReserva({
+            estudioId: accesoPrincipal.estudioId,
+            nombreSalon: accesoPrincipal.nombreSalon,
+            claveSalon: accesoPrincipal.claveCliente,
+          });
+        } else {
+          limpiarSesionReserva();
+        }
+      }
+
       localStorage.setItem(CLAVE_SESION, '1');
-      limpiarSesionReserva();
+      if (rol !== 'cliente') {
+        limpiarSesionReserva();
+      }
       set({
         usuario: {
           rol,
-          estudioId: datos.estudioId,
+          estudioId: rol === 'cliente' ? estudioActual : datos.estudioId,
           nombre: datos.nombre ?? '',
           email: datos.email ?? '',
           esMaestroTotal: datos.esMaestroTotal ?? false,
@@ -251,18 +315,18 @@ export const usarTiendaAuth = create<EstadoAuth>((set) => ({
           forzarCambioContrasena: datos.forzarCambioContrasena ?? false,
         },
         rol,
-        estudioActual: datos.estudioId,
-        slugEstudioActual: datos.slugEstudio ?? null,
-        claveClienteActual: null,
+        estudioActual,
+        slugEstudioActual,
+        claveClienteActual,
       });
       const ruta = obtenerRutaPorRol(
         rol,
-        datos.estudioId,
-        datos.slugEstudio ?? null,
-        null,
+        estudioActual,
+        slugEstudioActual,
+        claveClienteActual,
         datos.forzarCambioContrasena ?? false,
       );
-      return { exito: true, ruta, estudioId: datos.estudioId };
+      return { exito: true, ruta, estudioId: estudioActual };
     } catch (error) {
       const mensajeError =
         error instanceof TypeError ||

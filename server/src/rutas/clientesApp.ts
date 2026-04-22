@@ -906,6 +906,188 @@ export async function rutasClientesApp(servidor: FastifyInstance): Promise<void>
   );
 
   // ─── PUT /mi-perfil ───────────────────────────────────────────────────────
+  servidor.get(
+    '/clientes-app/acceso-principal',
+    { preHandler: verificarJWT },
+    async (solicitud, respuesta) => {
+      const payload = solicitud.user as { sub: string; rol: string; estudioId: string | null };
+      if (!soloClienteApp(payload)) {
+        return respuesta.code(403).send({ error: 'Sin permisos para esta acción' });
+      }
+
+      const clienteApp = await prisma.clienteApp.findUnique({
+        where: { id: payload.sub },
+        select: { id: true, email: true, activo: true },
+      });
+
+      if (!clienteApp || !clienteApp.activo) {
+        return respuesta.code(404).send({ error: 'Cuenta de cliente no encontrada.' });
+      }
+
+      const seleccionarSalonPrincipal = (
+        reservas: Array<{
+          fecha: string;
+          horaInicio: string;
+          creadoEn: Date;
+          estudio: {
+            id: string;
+            nombre: string;
+            slug: string | null;
+            claveCliente: string;
+            fechaVencimiento: string;
+            zonaHoraria: string | null;
+            pais: string | null;
+          };
+        }>,
+      ) => {
+        const acumulado = new Map<
+          string,
+          {
+            total: number;
+            ultimaActividad: number;
+            estudio: {
+              id: string;
+              nombre: string;
+              slug: string | null;
+              claveCliente: string;
+            };
+          }
+        >();
+
+        for (const reserva of reservas) {
+          if (!salonTieneSuscripcionActiva(reserva.estudio)) {
+            continue;
+          }
+
+          const marcaCalendario = construirFechaReserva(reserva.fecha, reserva.horaInicio).getTime();
+          const marcaReserva = Number.isFinite(marcaCalendario)
+            ? marcaCalendario
+            : reserva.creadoEn.getTime();
+          const previo = acumulado.get(reserva.estudio.id);
+
+          if (!previo) {
+            acumulado.set(reserva.estudio.id, {
+              total: 1,
+              ultimaActividad: marcaReserva,
+              estudio: {
+                id: reserva.estudio.id,
+                nombre: reserva.estudio.nombre,
+                slug: reserva.estudio.slug,
+                claveCliente: reserva.estudio.claveCliente,
+              },
+            });
+            continue;
+          }
+
+          previo.total += 1;
+          previo.ultimaActividad = Math.max(previo.ultimaActividad, marcaReserva);
+        }
+
+        let mejor:
+          | {
+              total: number;
+              ultimaActividad: number;
+              estudio: {
+                id: string;
+                nombre: string;
+                slug: string | null;
+                claveCliente: string;
+              };
+            }
+          | null = null;
+
+        for (const item of acumulado.values()) {
+          if (!mejor) {
+            mejor = item;
+            continue;
+          }
+
+          if (item.total > mejor.total) {
+            mejor = item;
+            continue;
+          }
+
+          if (item.total === mejor.total && item.ultimaActividad > mejor.ultimaActividad) {
+            mejor = item;
+          }
+        }
+
+        return mejor?.estudio ?? null;
+      };
+
+      const reservasVinculadas = await prisma.reserva.findMany({
+        where: {
+          clienteAppId: clienteApp.id,
+          estudio: { activo: true, estado: 'aprobado' },
+        },
+        orderBy: [{ fecha: 'desc' }, { horaInicio: 'desc' }, { creadoEn: 'desc' }],
+        take: 80,
+        select: {
+          fecha: true,
+          horaInicio: true,
+          creadoEn: true,
+          estudio: {
+            select: {
+              id: true,
+              nombre: true,
+              slug: true,
+              claveCliente: true,
+              fechaVencimiento: true,
+              zonaHoraria: true,
+              pais: true,
+            },
+          },
+        },
+      });
+
+      let salonPrincipal = seleccionarSalonPrincipal(reservasVinculadas);
+
+      if (!salonPrincipal && clienteApp.email) {
+        const reservasPorEmail = await prisma.reserva.findMany({
+          where: {
+            cliente: { email: clienteApp.email },
+            estudio: { activo: true, estado: 'aprobado' },
+          },
+          orderBy: [{ fecha: 'desc' }, { horaInicio: 'desc' }, { creadoEn: 'desc' }],
+          take: 40,
+          select: {
+            fecha: true,
+            horaInicio: true,
+            creadoEn: true,
+            estudio: {
+              select: {
+                id: true,
+                nombre: true,
+                slug: true,
+                claveCliente: true,
+                fechaVencimiento: true,
+                zonaHoraria: true,
+                pais: true,
+              },
+            },
+          },
+        });
+
+        salonPrincipal = seleccionarSalonPrincipal(reservasPorEmail);
+      }
+
+      if (!salonPrincipal) {
+        return respuesta.send({ datos: { encontrado: false } });
+      }
+
+      return respuesta.send({
+        datos: {
+          encontrado: true,
+          estudioId: salonPrincipal.id,
+          nombreSalon: salonPrincipal.nombre,
+          slug: salonPrincipal.slug,
+          claveCliente: salonPrincipal.claveCliente,
+        },
+      });
+    },
+  );
+
+  // ─── PUT /mi-perfil ───────────────────────────────────────────────────────
   servidor.put<{
     Body: {
       nombre?: string;

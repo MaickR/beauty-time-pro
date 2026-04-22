@@ -16,6 +16,7 @@ import {
   type CamposRegistroCliente,
 } from '../../lib/registroCliente';
 import { ErrorServicioRegistro, registrarCliente } from '../../servicios/servicioRegistro';
+import { usarTiendaAuth } from '../../tienda/tiendaAuth';
 import type { Pais } from '../../tipos';
 import { ModalPrivacidad } from './componentes/ModalPrivacidad';
 import { ModalTerminos } from './componentes/ModalTerminos';
@@ -23,6 +24,7 @@ import { ModalTerminos } from './componentes/ModalTerminos';
 export function PaginaRegistroCliente() {
   usarTituloPagina('Crear cuenta de cliente');
   const navegar = useNavigate();
+  const { iniciarSesion } = usarTiendaAuth();
   const [mostrarContrasena, setMostrarContrasena] = useState(false);
   const [mostrarConfirmacion, setMostrarConfirmacion] = useState(false);
   const [mostrarTerminos, setMostrarTerminos] = useState(false);
@@ -55,9 +57,10 @@ export function PaginaRegistroCliente() {
   const alEnviar = async (datos: CamposRegistroCliente) => {
     setErrorServidor('');
     try {
+      const emailNormalizado = limpiarCorreoCliente(datos.email);
       const resultado = await registrarCliente({
         nombreCompleto: datos.nombreCompleto,
-        email: limpiarCorreoCliente(datos.email),
+        email: emailNormalizado,
         telefono: datos.telefono || undefined,
         ciudad: datos.ciudad || undefined,
         pais: datos.pais,
@@ -65,17 +68,19 @@ export function PaginaRegistroCliente() {
         contrasena: datos.contrasena,
       });
 
-      if (!resultado.clienteId) {
-        setErrorServidor(resultado.mensaje);
+      const acceso = await iniciarSesion(emailNormalizado, datos.contrasena);
+      if (acceso.exito) {
+        navegar(acceso.ruta ?? '/cliente/inicio', { replace: true });
         return;
       }
 
       const parametros = new URLSearchParams({
-        clienteId: resultado.clienteId,
-        email: resultado.email ?? datos.email,
-        mensaje: resultado.mensaje,
+        registro: 'ok',
+        mensaje:
+          resultado.mensaje ||
+          'Tu cuenta está lista. Inicia sesión con tu correo y contraseña para continuar.',
       });
-      navegar(`/verificar-email?${parametros.toString()}`);
+      navegar(`/iniciar-sesion?${parametros.toString()}`, { replace: true });
     } catch (error) {
       if (error instanceof ErrorServicioRegistro) {
         setErrorServidor(error.message);
@@ -104,19 +109,19 @@ export function PaginaRegistroCliente() {
           <div className="mt-10 max-w-md">
             <p className="text-sm uppercase tracking-[0.3em] text-[#f5cea7]">Registro rápido</p>
             <h1 className="mt-4 text-4xl font-semibold leading-tight">
-              Crea tu cuenta y verifícala con un código corto por correo.
+              Crea tu cuenta y accede al instante.
             </h1>
             <p className="mt-5 text-base leading-7 text-white/70">
-              La cuenta solo se crea con correos personales permitidos. Cada nueva solicitud de
-              verificación invalida automáticamente el código anterior.
+              La cuenta se activa inmediatamente con correos personales permitidos, sin códigos
+              intermedios ni pasos extra.
             </p>
           </div>
 
           <div className="mt-10 space-y-4">
             {[
               MENSAJE_DOMINIO_CLIENTE,
-              'El código vence y puede reenviarse después de 60 segundos.',
-              'La misma cuenta funciona en los salones compatibles una vez verificada.',
+              'Ingresas con el mismo correo y contraseña apenas terminas el registro.',
+              'La misma cuenta funciona en los salones compatibles desde el primer acceso.',
             ].map((texto) => (
               <div
                 key={texto}
@@ -135,8 +140,7 @@ export function PaginaRegistroCliente() {
                 Crear cuenta de cliente
               </h2>
               <p className="mt-2 text-sm leading-6 text-slate-600">
-                Después de este paso, te enviaremos un código de 4 caracteres para confirmar tu
-                correo.
+                Completa tus datos y entra de inmediato. No necesitas verificar con código.
               </p>
             </div>
             <div className="hidden h-12 w-12 items-center justify-center rounded-2xl bg-[#f3eadf] text-slate-700 sm:flex">
