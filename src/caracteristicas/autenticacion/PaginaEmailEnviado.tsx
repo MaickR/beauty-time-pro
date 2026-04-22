@@ -1,22 +1,22 @@
-import { Link, useSearchParams } from 'react-router-dom';
+﻿import { Link, useSearchParams } from 'react-router-dom';
 import { usarTituloPagina } from '../../hooks/usarTituloPagina';
 
 const MOTIVOS: Record<string, { titulo: string; mensaje: string; submensaje: string }> = {
   verificacion: {
-    titulo: '¡Listo!',
+    titulo: 'Â¡Listo!',
     mensaje: 'Tu cuenta fue creada correctamente.',
-    submensaje: 'Ya puedes iniciar sesión con tu correo y contraseña.',
+    submensaje: 'Ya puedes iniciar sesiÃ³n con tu correo y contraseÃ±a.',
   },
 };
 
 const MOTIVO_POR_DEFECTO = {
-  titulo: '¡Correo enviado!',
-  mensaje: 'Te hemos enviado un correo electrónico.',
+  titulo: 'Â¡Correo enviado!',
+  mensaje: 'Te hemos enviado un correo electrÃ³nico.',
   submensaje: 'Revisa tu bandeja de entrada y sigue las instrucciones.',
 };
 
 export function PaginaEmailEnviado() {
-  usarTituloPagina('Correo enviado — Beauty Time Pro');
+  usarTituloPagina('Correo enviado â€” Beauty Time Pro');
   const [params] = useSearchParams();
   const motivo = params.get('motivo') ?? '';
   const mensaje = params.get('mensaje');
@@ -33,7 +33,7 @@ export function PaginaEmailEnviado() {
             role="img"
             aria-label="Sobre de correo"
           >
-            ✉️
+            âœ‰ï¸
           </span>
         </div>
         <style>{`
@@ -52,15 +52,15 @@ export function PaginaEmailEnviado() {
             href={enlace}
             className="mb-4 inline-block text-sm font-bold text-blue-600 underline hover:text-blue-700"
           >
-            Abrir enlace de verificación
+            Abrir enlace de verificaciÃ³n
           </a>
         )}
 
         <Link
           to="/iniciar-sesion"
-          className="inline-block w-full bg-linear-to-r from-[#C2185B] to-[#E91E8C] text-white font-bold py-3.5 rounded-2xl hover:shadow-lg hover:scale-[1.01] transition-all"
+          className="inline-block w-full bg-linear-to-r from-[#C6968C] to-[#78736E] text-white font-bold py-3.5 rounded-2xl hover:shadow-lg hover:scale-[1.01] transition-all"
         >
-          Ir a iniciar sesión
+          Ir a iniciar sesiÃ³n
         </Link>
       </div>
     </div>

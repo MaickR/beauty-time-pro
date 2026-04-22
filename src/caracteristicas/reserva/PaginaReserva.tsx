@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+﻿import { useEffect, useMemo, useState } from 'react';
 import { Building2, LogOut, MapPin } from 'lucide-react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { usarTiendaAuth } from '../../tienda/tiendaAuth';
@@ -78,7 +78,7 @@ export function PaginaReserva() {
   usarTemaSalon(estudio?.colorPrimario);
 
   useEffect(() => {
-    if (estudio?.name) document.title = `${estudio.name} — Reservar cita`;
+    if (estudio?.name) document.title = `${estudio.name} â€” Reservar cita`;
     return () => {
       document.title = 'Beauty Time Pro';
     };
@@ -98,7 +98,7 @@ export function PaginaReserva() {
   if (!estudio || !estudioActivo)
     return (
       <div className="h-screen bg-white flex items-center justify-center">
-        <p className="text-slate-400 font-bold">Salón no encontrado o enlace inválido.</p>
+        <p className="text-slate-400 font-bold">SalÃ³n no encontrado o enlace invÃ¡lido.</p>
       </div>
     );
 
@@ -157,8 +157,8 @@ export function PaginaReserva() {
           ) : (
             <div
               className="w-12 h-12 rounded-2xl flex items-center justify-center text-white font-black text-sm"
-              style={{ backgroundColor: estudio.colorPrimario ?? '#C2185B' }}
-              aria-label="Ícono predeterminado del salón"
+              style={{ backgroundColor: estudio.colorPrimario ?? '#C6968C' }}
+              aria-label="Ãcono predeterminado del salÃ³n"
             >
               <Building2 className="h-6 w-6" aria-hidden="true" />
             </div>
@@ -178,7 +178,7 @@ export function PaginaReserva() {
               await cerrarSesion();
               navegar('/iniciar-sesion');
             }}
-            aria-label="Cerrar sesión"
+            aria-label="Cerrar sesiÃ³n"
             className="rounded-full bg-slate-50 p-3 text-slate-400 hover:bg-slate-100"
           >
             <LogOut />
@@ -192,7 +192,7 @@ export function PaginaReserva() {
             {estudio.descripcion && <p className="text-sm text-slate-600">{estudio.descripcion}</p>}
             <p className="text-xs font-semibold text-slate-500">
               {sucursalActiva}
-              {estudioActivo.direccion ? ` · ${estudioActivo.direccion}` : ''}
+              {estudioActivo.direccion ? ` Â· ${estudioActivo.direccion}` : ''}
             </p>
           </div>
         </div>
@@ -203,9 +203,9 @@ export function PaginaReserva() {
           <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
             <div>
               <p className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-500">
-                Reserva pública
+                Reserva pÃºblica
               </p>
-              <h2 className="mt-2 text-lg font-black text-slate-900">Reserva en este salón</h2>
+              <h2 className="mt-2 text-lg font-black text-slate-900">Reserva en este salÃ³n</h2>
             </div>
             <div className="inline-flex items-center gap-2 rounded-2xl bg-slate-50 px-4 py-3 text-sm font-bold text-slate-700">
               <MapPin className="h-4 w-4 text-pink-500" /> {sucursalActiva}

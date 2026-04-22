@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from 'react';
+﻿import { useState, useRef, useEffect } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Link, useNavigate } from 'react-router-dom';
 import { Home, User, LogOut, ChevronDown, Star } from 'lucide-react';
@@ -39,12 +39,12 @@ export function NavegacionCliente() {
   const inics = nombre ? inicialesDesdeNombre(nombre) : 'U';
   const etiquetaNombre = [nombre, apellido].filter(Boolean).join(' ') || 'Mi cuenta';
   const colorCliente = consultaPerfil.data?.id
-    ? (localStorage.getItem(`color_cliente_${consultaPerfil.data.id}`) ?? '#F48FB1')
-    : '#F48FB1';
+    ? (localStorage.getItem(`color_cliente_${consultaPerfil.data.id}`) ?? '#C6968C')
+    : '#C6968C';
 
   usarTemaSalon(colorCliente, { restaurarAlDesmontar: true });
 
-  // Cerrar menú al clic exterior
+  // Cerrar menÃº al clic exterior
   useEffect(() => {
     function manejarClicExterior(e: MouseEvent) {
       if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
@@ -88,7 +88,7 @@ export function NavegacionCliente() {
           <div className="relative" ref={menuRef}>
             <button
               onClick={() => setMenuAbierto((a) => !a)}
-              aria-label="Abrir menú de usuario"
+              aria-label="Abrir menÃº de usuario"
               aria-expanded={menuAbierto}
               aria-haspopup="true"
               className="flex items-center gap-2 px-3 py-2 rounded-xl hover:bg-slate-50 transition-colors"
@@ -141,7 +141,7 @@ export function NavegacionCliente() {
                   onClick={handleCerrarSesion}
                   className="flex items-center gap-3 px-4 py-3 text-sm text-red-600 hover:bg-red-50 font-medium w-full text-left transition-colors"
                 >
-                  <LogOut className="w-4 h-4" aria-hidden="true" /> Cerrar sesión
+                  <LogOut className="w-4 h-4" aria-hidden="true" /> Cerrar sesiÃ³n
                 </button>
               </div>
             )}
@@ -149,7 +149,7 @@ export function NavegacionCliente() {
         </div>
       </header>
 
-      {/* Header móvil */}
+      {/* Header mÃ³vil */}
       <header className="bg-white border-b border-slate-100 sticky top-0 z-50 md:hidden">
         <div className="px-4 h-14 flex items-center justify-between">
           <Link to="/cliente/inicio">
@@ -171,10 +171,10 @@ export function NavegacionCliente() {
         </div>
       </header>
 
-      {/* Barra de navegación inferior (móvil) */}
+      {/* Barra de navegaciÃ³n inferior (mÃ³vil) */}
       <nav
         className="fixed bottom-0 left-0 right-0 bg-white border-t border-slate-100 z-40 md:hidden"
-        aria-label="Navegación principal"
+        aria-label="NavegaciÃ³n principal"
       >
         <div className="flex">
           <Link

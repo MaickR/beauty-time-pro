@@ -1,4 +1,4 @@
-import '@testing-library/jest-dom/vitest';
+﻿import '@testing-library/jest-dom/vitest';
 import { fireEvent, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { renderConProveedores } from '../../test/renderConProveedores';
@@ -64,20 +64,20 @@ function crearReservaCliente(overrides: Partial<ReservaCliente> = {}): ReservaCl
     servicios: [{ name: 'Color premium', duration: 90, price: 180000, category: 'Color' }],
     precioTotal: 180000,
     metodoPago: 'card',
-    observaciones: 'Usar fórmula suave.',
+    observaciones: 'Usar fÃ³rmula suave.',
     tokenCancelacion: 'token-1',
     reagendada: false,
     reservaOriginalId: null,
     salon: {
       id: 'salon-1',
-      nombre: 'Salón Norte',
-      colorPrimario: '#db2777',
+      nombre: 'SalÃ³n Norte',
+      colorPrimario: '#C6968C',
       logoUrl: null,
       direccion: 'Calle 10',
       pais: 'Mexico',
       slug: 'salon-norte',
     },
-    especialista: { id: 'esp-1', nombre: 'Andrea López', eliminado: false },
+    especialista: { id: 'esp-1', nombre: 'Andrea LÃ³pez', eliminado: false },
     ...overrides,
   };
 }
@@ -104,17 +104,17 @@ function crearPerfilCliente(reservas: ReservaCliente[] = []): PerfilClienteApp {
 function crearSalonDetalle(): SalonDetalle {
   return {
     id: 'salon-1',
-    nombre: 'Salón Norte',
+    nombre: 'SalÃ³n Norte',
     descripcion: null,
     direccion: 'Calle 10',
     pais: 'Mexico',
     telefono: '5511223344',
     emailContacto: 'salon@cliente.com',
     logoUrl: null,
-    colorPrimario: '#db2777',
+    colorPrimario: '#C6968C',
     horarioApertura: '09:00',
     horarioCierre: '18:00',
-    diasAtencion: 'Lunes,Martes,Miércoles,Jueves,Viernes,Sábado',
+    diasAtencion: 'Lunes,Martes,MiÃ©rcoles,Jueves,Viernes,SÃ¡bado',
     slug: 'salon-norte',
     plan: 'PRO',
     estudioPrincipalId: null,
@@ -148,7 +148,7 @@ describe('cliente perfil y reservas', () => {
     mocksServicioClienteApp.obtenerReservasProximas.mockResolvedValue(reservas);
     mocksServicioClienteApp.actualizarMiPerfil.mockResolvedValue(crearPerfilCliente(reservas));
     mocksServicioClienteApp.actualizarMiEmail.mockResolvedValue({
-      mensaje: 'Verificación enviada',
+      mensaje: 'VerificaciÃ³n enviada',
       emailPendiente: 'nuevo@cliente.com',
     });
     mocksServicioClienteApp.cambiarContrasena.mockResolvedValue(undefined);
@@ -195,7 +195,7 @@ describe('cliente perfil y reservas', () => {
         id: 'reserva-pasada',
         fecha: fechaPasada,
         estado: 'completed',
-        servicios: [{ name: 'Corte clásico', duration: 60, price: 90000, category: 'Corte' }],
+        servicios: [{ name: 'Corte clÃ¡sico', duration: 60, price: 90000, category: 'Corte' }],
         precioTotal: 90000,
       }),
       crearReservaCliente({
@@ -210,11 +210,11 @@ describe('cliente perfil y reservas', () => {
     renderConProveedores(<PanelReservasCliente reservas={reservas} paisCliente="Mexico" />);
 
     expect((await screen.findAllByText('Color premium')).length).toBeGreaterThan(0);
-    expect(screen.queryAllByText('Corte clásico')).toHaveLength(0);
+    expect(screen.queryAllByText('Corte clÃ¡sico')).toHaveLength(0);
 
     fireEvent.click(await screen.findByRole('button', { name: fechaPasada }));
 
-    await waitFor(() => expect(screen.getAllByText('Corte clásico').length).toBeGreaterThan(0));
+    await waitFor(() => expect(screen.getAllByText('Corte clÃ¡sico').length).toBeGreaterThan(0));
     expect(screen.queryAllByText('Color premium')).toHaveLength(0);
   });
 
@@ -227,15 +227,15 @@ describe('cliente perfil y reservas', () => {
         duracion: 120,
         sucursal: 'Av. Presidente Masaryk 123, Polanco, CDMX',
         metodoPago: 'digital_transfer',
-        observaciones: 'Cliente prefiere atención silenciosa.',
+        observaciones: 'Cliente prefiere atenciÃ³n silenciosa.',
       }),
     ];
 
     renderConProveedores(<PanelReservasCliente reservas={reservas} paisCliente="Mexico" />);
 
-    expect(await screen.findByText('Agendamientos del día')).toBeInTheDocument();
+    expect(await screen.findByText('Agendamientos del dÃ­a')).toBeInTheDocument();
     expect(screen.getByText('Transferencia digital')).toBeInTheDocument();
-    expect(screen.getByText('Cliente prefiere atención silenciosa.')).toBeInTheDocument();
+    expect(screen.getByText('Cliente prefiere atenciÃ³n silenciosa.')).toBeInTheDocument();
     expect(screen.queryByText('Detalle del agendamiento')).not.toBeInTheDocument();
     expect(screen.queryByRole('table')).not.toBeInTheDocument();
   });
@@ -299,7 +299,7 @@ describe('cliente perfil y reservas', () => {
 
     fireEvent.click(screen.getByRole('button', { name: /Zen House/i }));
 
-    await waitFor(() => expect(screen.getByText('Salón activo')).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByText('SalÃ³n activo')).toBeInTheDocument());
     await waitFor(() => expect(screen.getAllByText('Zen House').length).toBeGreaterThan(0));
     await waitFor(() => expect(screen.getAllByText('Ritual facial').length).toBeGreaterThan(0));
     expect(screen.queryAllByText('Corte editorial')).toHaveLength(0);

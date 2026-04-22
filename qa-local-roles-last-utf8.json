@@ -1,0 +1,144 @@
+﻿QA_LOCAL_ROLES_RESULTADO_INICIO
+{
+  "inicio": "2026-04-22T20:40:28.166Z",
+  "baseUrl": "http://localhost:5173",
+  "headless": true,
+  "escenarios": [
+    {
+      "escenario": "maestro_principal",
+      "rolEsperado": "maestro",
+      "acceso": "miguel@salonpromaster.com",
+      "loginOk": true,
+      "rutaFinal": "/maestro",
+      "acciones": [
+        "abrio_control_cobros",
+        "abrio_colaboradores",
+        "abrio_preregistros",
+        "abrio_base_datos"
+      ],
+      "consolaErrores": [],
+      "erroresPagina": [],
+      "respuestasError": [],
+      "requestsFallidos": [],
+      "errores": [],
+      "estado": "OK",
+      "erroresHttpCriticos": []
+    },
+    {
+      "escenario": "maestro_qa",
+      "rolEsperado": "maestro",
+      "acceso": "qa.maestro@salonpromaster.com",
+      "loginOk": true,
+      "rutaFinal": "/maestro",
+      "acciones": [
+        "abrio_control_cobros",
+        "abrio_colaboradores",
+        "abrio_preregistros",
+        "abrio_base_datos"
+      ],
+      "consolaErrores": [],
+      "erroresPagina": [],
+      "respuestasError": [],
+      "requestsFallidos": [],
+      "errores": [],
+      "estado": "OK",
+      "erroresHttpCriticos": []
+    },
+    {
+      "escenario": "supervisor_qa",
+      "rolEsperado": "supervisor",
+      "acceso": "qa.supervisor@salonpromaster.com",
+      "loginOk": true,
+      "rutaFinal": "/supervisor",
+      "acciones": [
+        "abrio_control_cobros_supervisor",
+        "abrio_preregistros_supervisor",
+        "abrio_panel_supervisor"
+      ],
+      "consolaErrores": [],
+      "erroresPagina": [],
+      "respuestasError": [],
+      "requestsFallidos": [],
+      "errores": [],
+      "estado": "OK",
+      "erroresHttpCriticos": []
+    },
+    {
+      "escenario": "vendedor_qa",
+      "rolEsperado": "vendedor",
+      "acceso": "qa.vendedor@salonpromaster.com",
+      "loginOk": true,
+      "rutaFinal": "/vendedor",
+      "acciones": [
+        "abrio_resumen",
+        "abrio_preregistros",
+        "abrio_ventas",
+        "abrio_notificaciones"
+      ],
+      "consolaErrores": [],
+      "erroresPagina": [],
+      "respuestasError": [],
+      "requestsFallidos": [],
+      "errores": [],
+      "estado": "OK",
+      "erroresHttpCriticos": []
+    },
+    {
+      "escenario": "dueno_qa",
+      "rolEsperado": "dueno",
+      "acceso": "qa.dueno@salonpromaster.com",
+      "loginOk": true,
+      "rutaFinal": "/estudio/mikelov-studio/agenda",
+      "acciones": [],
+      "consolaErrores": [],
+      "erroresPagina": [],
+      "respuestasError": [],
+      "requestsFallidos": [],
+      "errores": [],
+      "estado": "OK",
+      "erroresHttpCriticos": []
+    },
+    {
+      "escenario": "empleado_qa",
+      "rolEsperado": "empleado",
+      "acceso": "qa.empleado@salonpromaster.com",
+      "loginOk": true,
+      "rutaFinal": "/empleado/agenda",
+      "acciones": [
+        "abrio_detalle_reserva"
+      ],
+      "consolaErrores": [],
+      "erroresPagina": [],
+      "respuestasError": [],
+      "requestsFallidos": [],
+      "errores": [],
+      "estado": "OK",
+      "erroresHttpCriticos": []
+    },
+    {
+      "escenario": "cliente_qa",
+      "rolEsperado": "cliente",
+      "acceso": "qa.cliente@salonpromaster.com",
+      "loginOk": true,
+      "rutaFinal": "/cliente/inicio",
+      "acciones": [
+        "consulta_vista_cliente"
+      ],
+      "consolaErrores": [],
+      "erroresPagina": [],
+      "respuestasError": [],
+      "requestsFallidos": [],
+      "errores": [],
+      "estado": "OK",
+      "erroresHttpCriticos": []
+    }
+  ],
+  "erroresGlobales": [],
+  "fin": "2026-04-22T20:44:48.617Z",
+  "totales": {
+    "escenarios": 7,
+    "ok": 7,
+    "error": 0
+  }
+}
+QA_LOCAL_ROLES_RESULTADO_FIN

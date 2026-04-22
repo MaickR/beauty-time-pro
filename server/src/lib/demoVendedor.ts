@@ -130,12 +130,20 @@ function construirResumenServiciosDemo(nombresServicios: readonly string[]) {
   }));
 }
 
-export function obtenerCorreosDemoVendedor(params: { emailBase: string; nombreBase?: string }) {
+export function obtenerCorreosDemoVendedor(params: {
+  emailBase: string;
+  nombreBase?: string;
+  usuarioId?: string;
+}) {
   const primerNombre = obtenerPrimerNombreDemo(params.nombreBase, params.emailBase);
+  const sufijoUsuario = params.usuarioId
+    ? params.usuarioId.replace(/[^a-zA-Z0-9]/g, '').toLowerCase().slice(-6)
+    : '';
+  const segmentoUnico = sufijoUsuario ? `${primerNombre}-${sufijoUsuario}` : primerNombre;
 
   return {
-    admin: `${primerNombre}-salon@salonpromaster.com`,
-    empleado: `${primerNombre}-emp@salonpromaster.com`,
+    admin: `${segmentoUnico}-salon@salonpromaster.com`,
+    empleado: `${segmentoUnico}-emp@salonpromaster.com`,
   };
 }
 
@@ -155,6 +163,7 @@ export function obtenerCredencialesDemoVendedor(params: {
   nombreBase?: string;
 }) {
   const correos = obtenerCorreosDemoVendedor({
+    usuarioId: params.usuarioId,
     emailBase: params.emailBase,
     nombreBase: params.nombreBase,
   });

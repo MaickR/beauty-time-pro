@@ -105,20 +105,12 @@ const PaginaVendedor = lazy(() =>
   })),
 );
 
-function PantallaCargaRuta() {
-  return (
-    <div className="flex min-h-screen items-center justify-center bg-slate-50">
-      <div className="h-12 w-12 animate-spin rounded-full border-b-2 border-pink-600" />
-    </div>
-  );
-}
-
 function RedireccionRaiz() {
   const { iniciando, rol, estudioActual, slugEstudioActual, claveClienteActual, usuario } =
     usarTiendaAuth();
 
   if (iniciando) {
-    return <PantallaCargaRuta />;
+    return null;
   }
 
   if (!rol) {
@@ -144,7 +136,7 @@ function RedireccionRaiz() {
 
 export function Enrutador() {
   return (
-    <Suspense fallback={<PantallaCargaRuta />}>
+    <Suspense fallback={null}>
       <Routes>
         <Route path="/" element={<RedireccionRaiz />} />
         <Route path="/iniciar-sesion" element={<PaginaInicioSesion />} />

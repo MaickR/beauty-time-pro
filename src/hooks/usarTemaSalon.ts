@@ -1,7 +1,7 @@
 import { useEffect } from 'react';
 import { calcularOscuro } from '../utils/color';
 
-const COLOR_DEFAULT = '#C2185B';
+const COLOR_DEFAULT = '#C6968C';
 
 interface OpcionesTemaSalon {
   restaurarAlDesmontar?: boolean;

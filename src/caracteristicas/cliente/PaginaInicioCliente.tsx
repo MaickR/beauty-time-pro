@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo } from 'react';
+﻿import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Search, MapPin, Clock, ChevronRight, Star, Sparkles, History } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
@@ -9,7 +9,7 @@ import { construirRutaSalonCliente } from './utils/rutasSalonCliente';
 import type { Pais, ReservaCliente } from '../../tipos';
 
 function etiquetaPais(pais: Pais): string {
-  return pais === 'Mexico' ? 'México' : 'Colombia';
+  return pais === 'Mexico' ? 'MÃ©xico' : 'Colombia';
 }
 
 function iniciales(nombre: string): string {
@@ -108,13 +108,13 @@ interface PropsTarjetaSalon {
 
 function TarjetaSalon({ salon }: PropsTarjetaSalon) {
   const navegar = useNavigate();
-  const color = salon.colorPrimario ?? '#C2185B';
+  const color = salon.colorPrimario ?? '#C6968C';
   return (
     <article
       className="bg-white rounded-3xl border border-slate-100 overflow-hidden shadow-sm hover:shadow-lg hover:-translate-y-1 transition-all duration-200 flex flex-col"
-      aria-label={`Salón ${salon.nombre}`}
+      aria-label={`SalÃ³n ${salon.nombre}`}
     >
-      {/* Avatar del salón */}
+      {/* Avatar del salÃ³n */}
       <div
         className="h-28 flex items-center justify-center"
         style={{ backgroundColor: color + '18' }}
@@ -169,7 +169,7 @@ function TarjetaSalon({ salon }: PropsTarjetaSalon) {
           )}
           <p className="flex items-center gap-1.5 text-xs text-slate-400">
             <Clock className="w-3 h-3 shrink-0" aria-hidden="true" />
-            Última visita: {formatearFechaCorta(salon.ultimaVisita)}
+            Ãšltima visita: {formatearFechaCorta(salon.ultimaVisita)}
           </p>
           {salon.sedes.length > 0 && (
             <p className="text-xs text-slate-500">
@@ -178,7 +178,7 @@ function TarjetaSalon({ salon }: PropsTarjetaSalon) {
           )}
         </div>
 
-        {/* Botón */}
+        {/* BotÃ³n */}
         <button
           onClick={() => navegar(construirRutaSalonCliente(salon))}
           className="mt-auto w-full py-3 rounded-2xl font-black text-xs text-white flex items-center justify-center gap-1.5 hover:brightness-110 transition-all"
@@ -244,7 +244,7 @@ export function PaginaInicioCliente() {
     );
   }, []);
 
-  const nombreCliente = usuario?.nombre?.split(' ')[0] ?? 'tú';
+  const nombreCliente = usuario?.nombre?.split(' ')[0] ?? 'tÃº';
   const inicialesCliente = iniciales(usuario?.nombre?.trim() || nombreCliente);
   const totalCitasHistoricas = useMemo(
     () => salonesPrivados.reduce((acumulado, salon) => acumulado + salon.totalVisitas, 0),
@@ -278,8 +278,8 @@ export function PaginaInicioCliente() {
                     Bienvenida de vuelta, <span className="text-rose-700">{nombreCliente}</span>
                   </h1>
                   <p className="max-w-2xl text-sm font-medium leading-6 text-slate-600 sm:text-base">
-                    Un espacio más limpio para revisar solo los salones que ya forman parte de tu
-                    recorrido, con sedes y categorías respaldadas por tu historial real.
+                    Un espacio mÃ¡s limpio para revisar solo los salones que ya forman parte de tu
+                    recorrido, con sedes y categorÃ­as respaldadas por tu historial real.
                   </p>
                 </div>
               </div>
@@ -287,13 +287,13 @@ export function PaginaInicioCliente() {
               <div className="grid gap-3 sm:grid-cols-3">
                 <div className="rounded-3xl border border-stone-200/80 bg-white/80 px-4 py-4 backdrop-blur">
                   <p className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-500">
-                    País activo
+                    PaÃ­s activo
                   </p>
                   <p className="mt-2 text-lg font-black text-slate-900">
                     {etiquetaPais(paisCliente)}
                   </p>
                   <p className="mt-1 text-xs leading-5 text-slate-500">
-                    La visibilidad se mantiene restringida a tu país.
+                    La visibilidad se mantiene restringida a tu paÃ­s.
                   </p>
                 </div>
                 <div className="rounded-3xl border border-stone-200/80 bg-white/80 px-4 py-4 backdrop-blur">
@@ -309,7 +309,7 @@ export function PaginaInicioCliente() {
                 </div>
                 <div className="rounded-3xl border border-stone-200/80 bg-white/80 px-4 py-4 backdrop-blur">
                   <p className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-500">
-                    Último movimiento
+                    Ãšltimo movimiento
                   </p>
                   <p className="mt-2 text-lg font-black text-slate-900">
                     {ultimaVisitaRegistrada
@@ -317,7 +317,7 @@ export function PaginaInicioCliente() {
                       : 'Sin citas'}
                   </p>
                   <p className="mt-1 text-xs leading-5 text-slate-500">
-                    Referencia útil para retomar tu próxima reserva.
+                    Referencia Ãºtil para retomar tu prÃ³xima reserva.
                   </p>
                 </div>
               </div>
@@ -348,12 +348,12 @@ export function PaginaInicioCliente() {
                   <span className="font-black text-white">{salonesPrivados.length}</span>
                 </div>
                 <div className="flex items-start justify-between gap-3 text-sm">
-                  <span className="text-slate-300">Categorías consumidas registradas</span>
+                  <span className="text-slate-300">CategorÃ­as consumidas registradas</span>
                   <span className="font-black text-white">{categoriasDisponibles.length}</span>
                 </div>
                 <p className="rounded-3xl border border-white/10 bg-white/5 px-4 py-3 text-sm leading-6 text-slate-200">
-                  Explora tu historial con filtros más precisos y accede de nuevo a cada salón con
-                  una vista más clara, sobria y enfocada en continuidad.
+                  Explora tu historial con filtros mÃ¡s precisos y accede de nuevo a cada salÃ³n con
+                  una vista mÃ¡s clara, sobria y enfocada en continuidad.
                 </p>
               </div>
             </div>
@@ -372,7 +372,7 @@ export function PaginaInicioCliente() {
             type="search"
             value={busqueda}
             onChange={(e) => setBusqueda(e.target.value)}
-            placeholder="Buscar por salón, sede o categoría consumida"
+            placeholder="Buscar por salÃ³n, sede o categorÃ­a consumida"
             autoComplete="off"
             className="w-full pl-12 pr-4 py-4 bg-white border border-slate-200 rounded-2xl text-base font-medium placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-pink-400 shadow-sm"
             aria-label="Buscar salones"
@@ -380,7 +380,7 @@ export function PaginaInicioCliente() {
         </div>
 
         <div className="mb-3 flex items-center justify-between gap-3 flex-wrap">
-          <p className="text-sm font-bold text-slate-600">Filtra por categorías consumidas</p>
+          <p className="text-sm font-bold text-slate-600">Filtra por categorÃ­as consumidas</p>
           {categoriasActivas.length > 0 && (
             <button
               type="button"
@@ -392,7 +392,7 @@ export function PaginaInicioCliente() {
           )}
         </div>
 
-        <div className="flex gap-2 flex-wrap mb-8" role="group" aria-label="Filtrar por categoría">
+        <div className="flex gap-2 flex-wrap mb-8" role="group" aria-label="Filtrar por categorÃ­a">
           {categoriasDisponibles.map((cat) => (
             <button
               key={cat}
@@ -413,10 +413,10 @@ export function PaginaInicioCliente() {
         {perfilCliente && salonesPrivados.length === 0 && (
           <div className="flex flex-col items-center py-20 text-center">
             <History className="w-16 h-16 text-slate-200 mb-4" aria-hidden="true" />
-            <p className="font-black text-slate-900 text-lg">Aún no tienes historial atendido</p>
+            <p className="font-black text-slate-900 text-lg">AÃºn no tienes historial atendido</p>
             <p className="text-slate-500 mt-1 text-sm max-w-md">
-              Cuando completes tu primera cita, aquí aparecerán el salón, las sedes y las categorías
-              que ya forman parte de tu historial.
+              Cuando completes tu primera cita, aquÃ­ aparecerÃ¡n el salÃ³n, las sedes y las
+              categorÃ­as que ya forman parte de tu historial.
             </p>
           </div>
         )}
@@ -426,7 +426,7 @@ export function PaginaInicioCliente() {
             <Star className="w-16 h-16 text-slate-200 mb-4" aria-hidden="true" />
             <p className="font-black text-slate-900 text-lg">No encontramos coincidencias</p>
             <p className="text-slate-500 mt-1 text-sm">
-              Ajusta la búsqueda o limpia los filtros activos para ver más resultados.
+              Ajusta la bÃºsqueda o limpia los filtros activos para ver mÃ¡s resultados.
             </p>
           </div>
         )}
@@ -434,7 +434,7 @@ export function PaginaInicioCliente() {
         {salonesFiltrados.length > 0 && (
           <section aria-label="Salones disponibles">
             <p className="text-sm text-slate-400 font-medium mb-4">
-              {salonesFiltrados.length} salón{salonesFiltrados.length !== 1 ? 'es' : ''}
+              {salonesFiltrados.length} salÃ³n{salonesFiltrados.length !== 1 ? 'es' : ''}
             </p>
             <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
               {salonesFiltrados.map((salon) => (

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+﻿import { useEffect, useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Ban, Calendar, RefreshCw, X } from 'lucide-react';
 import {
@@ -27,7 +27,7 @@ const ESTADOS_RESERVA: Record<string, { etiqueta: string; color: string }> = {
   working: { etiqueta: 'Trabajando', color: 'bg-sky-100 text-sky-700' },
   completed: { etiqueta: 'Completada', color: 'bg-slate-100 text-slate-700' },
   cancelled: { etiqueta: 'Cancelada', color: 'bg-red-100 text-red-700' },
-  no_show: { etiqueta: 'No asistió', color: 'bg-slate-200 text-slate-700' },
+  no_show: { etiqueta: 'No asistiÃ³', color: 'bg-slate-200 text-slate-700' },
 };
 
 function formatearFechaReservaNatural(fecha: string, horaInicio: string): string {
@@ -42,7 +42,7 @@ function formatearFechaReservaNatural(fecha: string, horaInicio: string): string
     hour12: true,
   })
     .format(fechaHora)
-    .replace(',', ' ·')
+    .replace(',', ' Â·')
     .replace(/^./, (texto) => texto.toUpperCase());
 }
 
@@ -207,7 +207,7 @@ export function PanelReservasCliente({ reservas, paisCliente }: PropsPanelReserv
             {
               id: reserva.salon.id,
               nombre: reserva.salon.nombre,
-              colorPrimario: reserva.salon.colorPrimario ?? '#db2777',
+              colorPrimario: reserva.salon.colorPrimario ?? '#C6968C',
               cantidad: reservas.filter((item) => item.salon.id === reserva.salon.id).length,
               ultimaFecha:
                 reservas
@@ -370,8 +370,8 @@ export function PanelReservasCliente({ reservas, paisCliente }: PropsPanelReserv
             <Calendar className="h-5 w-5 text-pink-600" aria-hidden="true" /> Mis reservas
           </h2>
           <p className="mt-1 text-sm text-slate-500">
-            Navega por el calendario de cada salón para ver las citas que ya tuviste, tienes o
-            tendrás, con todo el detalle del día seleccionado.
+            Navega por el calendario de cada salÃ³n para ver las citas que ya tuviste, tienes o
+            tendrÃ¡s, con todo el detalle del dÃ­a seleccionado.
           </p>
         </div>
         <span className="rounded-full border border-pink-200 bg-pink-50 px-3 py-1 text-xs font-black uppercase tracking-[0.18em] text-pink-700">
@@ -382,7 +382,7 @@ export function PanelReservasCliente({ reservas, paisCliente }: PropsPanelReserv
       {salonesDisponibles.length === 0 ? (
         <div className="rounded-3xl border border-dashed border-slate-200 bg-white px-6 py-12 text-center shadow-sm">
           <p className="text-sm font-bold text-slate-500">
-            Aún no tienes reservas asociadas a tu cuenta.
+            AÃºn no tienes reservas asociadas a tu cuenta.
           </p>
         </div>
       ) : (
@@ -391,12 +391,12 @@ export function PanelReservasCliente({ reservas, paisCliente }: PropsPanelReserv
             <div className="space-y-4 rounded-3xl border border-slate-100 bg-white p-5 shadow-sm">
               <div className="mx-auto max-w-3xl text-center">
                 <p className="text-[10px] font-black uppercase tracking-[0.2em] text-pink-600">
-                  Calendario por salón
+                  Calendario por salÃ³n
                 </p>
                 <h3 className="mt-2 text-base font-black text-slate-900">Calendario</h3>
                 <p className="mt-1 text-sm text-slate-500">
-                  Los puntos rosas marcan los días en que tuviste, tienes o tendrás una cita en el
-                  salón seleccionado.
+                  Los puntos rosas marcan los dÃ­as en que tuviste, tienes o tendrÃ¡s una cita en el
+                  salÃ³n seleccionado.
                 </p>
               </div>
 
@@ -455,8 +455,8 @@ export function PanelReservasCliente({ reservas, paisCliente }: PropsPanelReserv
                           }`}
                         >
                           {salon.ultimaFecha
-                            ? `Última fecha con reserva: ${formatearFechaCabecera(salon.ultimaFecha)}`
-                            : 'Sin fechas registradas todavía.'}
+                            ? `Ãšltima fecha con reserva: ${formatearFechaCabecera(salon.ultimaFecha)}`
+                            : 'Sin fechas registradas todavÃ­a.'}
                         </p>
                       </button>
                     ))}
@@ -468,7 +468,7 @@ export function PanelReservasCliente({ reservas, paisCliente }: PropsPanelReserv
                 <div className="mx-auto flex w-full max-w-3xl flex-col gap-3 rounded-3xl border border-slate-100 bg-gradient-to-r from-slate-50 via-white to-pink-50 px-4 py-4 text-left sm:flex-row sm:items-center sm:justify-between">
                   <div>
                     <p className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">
-                      Salón activo
+                      SalÃ³n activo
                     </p>
                     <p className="mt-1 text-lg font-black text-slate-900">{salonActivo.nombre}</p>
                   </div>
@@ -483,7 +483,7 @@ export function PanelReservasCliente({ reservas, paisCliente }: PropsPanelReserv
                     </div>
                     <div className="rounded-2xl border border-white bg-white/80 px-3 py-2 shadow-sm">
                       <p className="text-[10px] font-black uppercase tracking-[0.16em] text-slate-400">
-                        Última fecha
+                        Ãšltima fecha
                       </p>
                       <p className="mt-1 text-sm font-black text-slate-900">
                         {salonActivo.ultimaFecha
@@ -504,7 +504,7 @@ export function PanelReservasCliente({ reservas, paisCliente }: PropsPanelReserv
 
               {consultaSalonCalendario.isError && (
                 <div className="mx-auto max-w-3xl rounded-3xl border border-red-200 bg-red-50 p-4 text-sm font-bold text-red-700">
-                  No se pudo cargar el calendario del salón.
+                  No se pudo cargar el calendario del salÃ³n.
                 </div>
               )}
 
@@ -530,7 +530,7 @@ export function PanelReservasCliente({ reservas, paisCliente }: PropsPanelReserv
                 <h3 className="mt-2 text-xl font-black text-slate-900">
                   {formatearFechaCabecera(fechaSeleccionadaIso)}
                 </h3>
-                <p className="mt-2 text-sm text-slate-500">{salonActivo?.nombre ?? 'Salón'}</p>
+                <p className="mt-2 text-sm text-slate-500">{salonActivo?.nombre ?? 'SalÃ³n'}</p>
               </div>
 
               {resumenDiaSeleccionado ? (
@@ -573,7 +573,7 @@ export function PanelReservasCliente({ reservas, paisCliente }: PropsPanelReserv
                   {resumenDiaSeleccionado.servicios.length > 0 && (
                     <div>
                       <p className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">
-                        Servicios del día
+                        Servicios del dÃ­a
                       </p>
                       <div className="mt-2 flex flex-wrap gap-2">
                         {resumenDiaSeleccionado.servicios.map((servicio) => (
@@ -590,7 +590,7 @@ export function PanelReservasCliente({ reservas, paisCliente }: PropsPanelReserv
 
                   <div className="space-y-2">
                     <p className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">
-                      Agendamientos del día
+                      Agendamientos del dÃ­a
                     </p>
                     {resumenDiaSeleccionado.citas.map((reserva) => (
                       <article
@@ -647,7 +647,7 @@ export function PanelReservasCliente({ reservas, paisCliente }: PropsPanelReserv
                                 </div>
                                 <div className="rounded-2xl border border-white bg-white px-3 py-3">
                                   <p className="text-[10px] font-black uppercase tracking-wide text-slate-400">
-                                    Duración aproximada
+                                    DuraciÃ³n aproximada
                                   </p>
                                   <p className="mt-1 text-sm font-black text-slate-900">
                                     {formatearDuracionReserva(reserva.duracion)}
@@ -655,7 +655,7 @@ export function PanelReservasCliente({ reservas, paisCliente }: PropsPanelReserv
                                 </div>
                                 <div className="rounded-2xl border border-white bg-white px-3 py-3">
                                   <p className="text-[10px] font-black uppercase tracking-wide text-slate-400">
-                                    Método de pago
+                                    MÃ©todo de pago
                                   </p>
                                   <p className="mt-1 text-sm font-black text-slate-900">
                                     {formatearMetodoPagoReserva(reserva.metodoPago)}
@@ -713,7 +713,7 @@ export function PanelReservasCliente({ reservas, paisCliente }: PropsPanelReserv
                                           {producto.nombre}
                                         </p>
                                         <p className="mt-1 text-xs text-slate-500">
-                                          {producto.cantidad} ×{' '}
+                                          {producto.cantidad} Ã—{' '}
                                           {formatearDinero(producto.precioUnitario, moneda)}
                                         </p>
                                       </div>
@@ -789,7 +789,7 @@ export function PanelReservasCliente({ reservas, paisCliente }: PropsPanelReserv
                     No tienes citas registradas en esta fecha.
                   </p>
                   <p className="mt-2 text-xs text-slate-500">
-                    Cambia de día en el calendario para revisar tu historial o próximas visitas.
+                    Cambia de dÃ­a en el calendario para revisar tu historial o prÃ³ximas visitas.
                   </p>
                 </div>
               )}
@@ -815,14 +815,14 @@ export function PanelReservasCliente({ reservas, paisCliente }: PropsPanelReserv
                   Cancelar reserva
                 </h3>
                 <p className="mt-1 text-sm text-slate-500">
-                  Esta acción solo aplica cuando faltan más de 2 horas para la cita.
+                  Esta acciÃ³n solo aplica cuando faltan mÃ¡s de 2 horas para la cita.
                 </p>
               </div>
               <button
                 type="button"
                 onClick={() => setReservaCancelar(null)}
                 className="rounded-xl p-2 text-slate-400 hover:bg-slate-100"
-                aria-label="Cerrar diálogo"
+                aria-label="Cerrar diÃ¡logo"
               >
                 <X className="h-5 w-5" aria-hidden="true" />
               </button>
@@ -848,7 +848,7 @@ export function PanelReservasCliente({ reservas, paisCliente }: PropsPanelReserv
                 disabled={mutacionCancelar.isPending}
                 className="rounded-xl bg-red-600 px-4 py-2 text-sm font-black text-white transition-colors hover:bg-red-700 disabled:opacity-60"
               >
-                {mutacionCancelar.isPending ? 'Cancelando...' : 'Confirmar cancelación'}
+                {mutacionCancelar.isPending ? 'Cancelando...' : 'Confirmar cancelaciÃ³n'}
               </button>
             </div>
           </div>
@@ -879,7 +879,7 @@ export function PanelReservasCliente({ reservas, paisCliente }: PropsPanelReserv
                 type="button"
                 onClick={() => setReservaReagendar(null)}
                 className="rounded-xl p-2 text-slate-400 hover:bg-slate-100"
-                aria-label="Cerrar diálogo"
+                aria-label="Cerrar diÃ¡logo"
               >
                 <X className="h-5 w-5" aria-hidden="true" />
               </button>

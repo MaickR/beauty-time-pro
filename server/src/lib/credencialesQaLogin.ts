@@ -2,6 +2,7 @@ import { prisma } from '../prismaCliente.js';
 import type { RolUsuario } from '../generated/prisma/enums.js';
 import { generarHashContrasena } from '../utils/contrasenas.js';
 import { obtenerColumnasTabla } from './compatibilidadEsquema.js';
+import { generarSlugUnico } from '../utils/generarSlug.js';
 
 const CLAVE_QA = 'QaLogin2026!';
 const EMAIL_EMPLEADO_QA = 'qa.empleado@salonpromaster.com';
@@ -149,14 +150,24 @@ export async function asegurarCredencialesQaLogin(): Promise<{
     contrasenaComun: string;
   };
 }> {
-  const estudio = await prisma.estudio.findFirst({
+  const estudioBase = await prisma.estudio.findFirst({
     where: { activo: true, estado: 'aprobado' },
     orderBy: { creadoEn: 'asc' },
-    select: { id: true, nombre: true },
+    select: { id: true, nombre: true, slug: true },
   });
 
-  if (!estudio) {
+  if (!estudioBase) {
     throw new Error('No hay estudio aprobado para QA');
+  }
+
+  let estudio = estudioBase;
+  if (!estudio.slug?.trim()) {
+    const slug = await generarSlugUnico(estudio.nombre, estudio.id);
+    estudio = await prisma.estudio.update({
+      where: { id: estudio.id },
+      data: { slug },
+      select: { id: true, nombre: true, slug: true },
+    });
   }
 
   const maestro = await asegurarUsuario({

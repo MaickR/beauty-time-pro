@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+﻿import { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -57,7 +57,7 @@ const DOMINIOS = [
   'pm.me',
 ];
 const DOMINIOS_MSG = 'Solo aceptamos correos de Gmail, Hotmail, Outlook, Yahoo o iCloud';
-const COLOR_PRIMARIO_PREDETERMINADO = '#C2185B';
+const COLOR_PRIMARIO_PREDETERMINADO = '#C6968C';
 
 function esDomPermitido(email: string) {
   const dom = email.split('@')[1]?.toLowerCase();
@@ -66,28 +66,28 @@ function esDomPermitido(email: string) {
 
 const esquemaPaso1 = z
   .object({
-    nombre: z.string().min(2, 'Mínimo 2 caracteres'),
-    apellido: z.string().min(2, 'Mínimo 2 caracteres'),
-    email: z.string().email('Correo inválido').refine(esDomPermitido, DOMINIOS_MSG),
+    nombre: z.string().min(2, 'MÃ­nimo 2 caracteres'),
+    apellido: z.string().min(2, 'MÃ­nimo 2 caracteres'),
+    email: z.string().email('Correo invÃ¡lido').refine(esDomPermitido, DOMINIOS_MSG),
     contrasena: z
       .string()
-      .min(8, 'Mínimo 8 caracteres')
-      .regex(/[A-Z]/, 'Necesita una mayúscula')
-      .regex(/[0-9]/, 'Necesita un número')
-      .regex(/[^A-Za-z0-9]/, 'Necesita un carácter especial'),
+      .min(8, 'MÃ­nimo 8 caracteres')
+      .regex(/[A-Z]/, 'Necesita una mayÃºscula')
+      .regex(/[0-9]/, 'Necesita un nÃºmero')
+      .regex(/[^A-Za-z0-9]/, 'Necesita un carÃ¡cter especial'),
     confirmarContrasena: z.string(),
   })
   .refine((datos) => datos.contrasena === datos.confirmarContrasena, {
-    message: 'Las contraseñas no coinciden',
+    message: 'Las contraseÃ±as no coinciden',
     path: ['confirmarContrasena'],
   });
 
 const esquemaPaso2 = z.object({
-  nombreSalon: z.string().min(2, 'Mínimo 2 caracteres'),
-  direccion: z.string().min(5, 'Ingresa una dirección válida'),
-  telefono: z.string().regex(/^[0-9+\s\-()]{7,15}$/, 'Teléfono inválido'),
+  nombreSalon: z.string().min(2, 'MÃ­nimo 2 caracteres'),
+  direccion: z.string().min(5, 'Ingresa una direcciÃ³n vÃ¡lida'),
+  telefono: z.string().regex(/^[0-9+\s\-()]{7,15}$/, 'TelÃ©fono invÃ¡lido'),
   pais: z.enum(['Mexico', 'Colombia']),
-  numeroEspecialistas: z.string().regex(/^[1-9]\d*$/, 'Mínimo 1 especialista'),
+  numeroEspecialistas: z.string().regex(/^[1-9]\d*$/, 'MÃ­nimo 1 especialista'),
 });
 
 type Paso1 = z.infer<typeof esquemaPaso1>;
@@ -155,10 +155,10 @@ function calcularFortaleza(contrasena: string) {
   ].filter(Boolean).length;
 
   const colores = ['bg-red-400', 'bg-orange-400', 'bg-yellow-400', 'bg-green-500'];
-  const etiquetas = ['Débil', 'Regular', 'Buena', 'Fuerte'];
+  const etiquetas = ['DÃ©bil', 'Regular', 'Buena', 'Fuerte'];
   return {
     nivel,
-    etiqueta: etiquetas[nivel - 1] ?? 'Débil',
+    etiqueta: etiquetas[nivel - 1] ?? 'DÃ©bil',
     color: colores[nivel - 1] ?? 'bg-red-400',
   };
 }
@@ -219,9 +219,9 @@ function validarInformacionBaseSalon(
   numeroEspecialistas: string,
   sucursales: string[],
 ) {
-  if (nombreSalon.trim().length < 2) return 'Escribe un nombre válido para el salón.';
-  if (direccion.trim().length < 5) return 'Ingresa una dirección principal válida.';
-  if (!/^[0-9+\s\-()]{7,15}$/.test(telefono.trim())) return 'Ingresa un teléfono válido.';
+  if (nombreSalon.trim().length < 2) return 'Escribe un nombre vÃ¡lido para el salÃ³n.';
+  if (direccion.trim().length < 5) return 'Ingresa una direcciÃ³n principal vÃ¡lida.';
+  if (!/^[0-9+\s\-()]{7,15}$/.test(telefono.trim())) return 'Ingresa un telÃ©fono vÃ¡lido.';
   if (!/^\d+$/.test(numeroEspecialistas.trim()) || Number(numeroEspecialistas) < 1)
     return 'Debes registrar al menos un especialista.';
 
@@ -233,22 +233,22 @@ function validarInformacionBaseSalon(
 
 function validarHorarioSalon(horario: HorarioLocal) {
   const diasAbiertos = Object.values(horario).filter((dia) => dia.isOpen);
-  if (diasAbiertos.length === 0) return 'Debes abrir al menos un día de atención.';
+  if (diasAbiertos.length === 0) return 'Debes abrir al menos un dÃ­a de atenciÃ³n.';
 
   const horarioInvalido = Object.entries(horario).find(
     ([, turno]) => turno.isOpen && turno.closeTime <= turno.openTime,
   );
-  if (horarioInvalido) return `El horario de ${horarioInvalido[0]} es inválido.`;
+  if (horarioInvalido) return `El horario de ${horarioInvalido[0]} es invÃ¡lido.`;
 
   return null;
 }
 
 function validarServiciosSalon(servicios: Servicio[]) {
-  if (servicios.length === 0) return 'Debes registrar al menos un servicio del salón.';
+  if (servicios.length === 0) return 'Debes registrar al menos un servicio del salÃ³n.';
 
   const servicioSinDuracion = servicios.find((servicio) => servicio.duration <= 0);
   if (servicioSinDuracion)
-    return `El servicio ${servicioSinDuracion.name} debe tener una duración mayor a 0.`;
+    return `El servicio ${servicioSinDuracion.name} debe tener una duraciÃ³n mayor a 0.`;
 
   const servicioSinPrecioValido = servicios.find((servicio) => servicio.price < 100);
   if (servicioSinPrecioValido)
@@ -268,14 +268,14 @@ function validarEquipoSalon(personal: PersonalRegistro[]) {
   const personalConTurnoInvalido = personal.find(
     (persona) => (persona.shiftEnd ?? '00:00') <= (persona.shiftStart ?? '00:00'),
   );
-  if (personalConTurnoInvalido) return `El turno de ${personalConTurnoInvalido.name} es inválido.`;
+  if (personalConTurnoInvalido) return `El turno de ${personalConTurnoInvalido.name} es invÃ¡lido.`;
 
   const personalConAlmuerzoInvalido = personal.find((persona) => {
     if (!persona.breakStart || !persona.breakEnd) return false;
     return persona.breakEnd <= persona.breakStart;
   });
   if (personalConAlmuerzoInvalido)
-    return `El horario de almuerzo de ${personalConAlmuerzoInvalido.name} es inválido.`;
+    return `El horario de almuerzo de ${personalConAlmuerzoInvalido.name} es invÃ¡lido.`;
 
   return null;
 }
@@ -323,7 +323,7 @@ function TarjetaEtapaOperacion({
         <span
           className={`rounded-full px-3 py-1 text-[11px] font-black uppercase tracking-[0.24em] ${completada ? 'bg-emerald-50 text-emerald-700' : activa ? 'bg-pink-50 text-pink-700' : 'bg-slate-100 text-slate-500'}`}
         >
-          {bloqueada ? 'Bloqueado' : activa ? 'En edición' : completada ? 'Listo' : 'Pendiente'}
+          {bloqueada ? 'Bloqueado' : activa ? 'En ediciÃ³n' : completada ? 'Listo' : 'Pendiente'}
         </span>
       </button>
 
@@ -333,7 +333,7 @@ function TarjetaEtapaOperacion({
 }
 
 export function PaginaRegistroSalon() {
-  usarTituloPagina('Registrar salón — Beauty Time Pro');
+  usarTituloPagina('Registrar salÃ³n â€” Beauty Time Pro');
   const navegar = useNavigate();
   const [paso, setPaso] = useState<1 | 2>(1);
   const [datosPaso1, setDatosPaso1] = useState<Paso1 | null>(null);
@@ -572,7 +572,7 @@ export function PaginaRegistroSalon() {
       if (error instanceof ErrorServicioRegistro && error.codigo === 'EMAIL_DUPLICADO') {
         formPaso1.setError('email', {
           type: 'manual',
-          message: 'Este correo ya está registrado. ¿Quieres iniciar sesión?',
+          message: 'Este correo ya estÃ¡ registrado. Â¿Quieres iniciar sesiÃ³n?',
         });
       } else {
         setErrorServidor(
@@ -743,7 +743,7 @@ export function PaginaRegistroSalon() {
   const alEnviarPaso2 = async (datos: Paso2) => {
     if (!datosPaso1) {
       setErrorServidor(
-        'La sesión del formulario se ha perdido. Por favor completa los datos de la cuenta nuevamente.',
+        'La sesiÃ³n del formulario se ha perdido. Por favor completa los datos de la cuenta nuevamente.',
       );
       setPaso(1);
       return;
@@ -781,7 +781,7 @@ export function PaginaRegistroSalon() {
       navegar('/espera-aprobacion');
     } catch (error) {
       setErrorServidor(
-        error instanceof Error ? error.message : 'Ocurrió un error. Intenta de nuevo.',
+        error instanceof Error ? error.message : 'OcurriÃ³ un error. Intenta de nuevo.',
       );
     }
   };
@@ -789,7 +789,7 @@ export function PaginaRegistroSalon() {
   return (
     <div className="min-h-screen overflow-x-hidden bg-[#fffafc] lg:grid lg:grid-cols-[minmax(320px,420px)_1fr]">
       <div className="hidden lg:block lg:p-6">
-        <div className="flex min-h-[calc(100vh-3rem)] flex-col justify-between overflow-hidden rounded-[36px] bg-linear-to-br from-[#880E4F] via-[#C2185B] to-[#F06292] p-10 shadow-2xl shadow-pink-900/20">
+        <div className="flex min-h-[calc(100vh-3rem)] flex-col justify-between overflow-hidden rounded-[36px] bg-linear-to-br from-[#143C32] via-[#C6968C] to-[#78736E] p-10 shadow-2xl shadow-pink-900/20">
           <MarcaAplicacion variante="oscura" tamano="lg" />
 
           <div className="space-y-8 text-white">
@@ -800,11 +800,11 @@ export function PaginaRegistroSalon() {
                 className="mb-4 border-white/10 bg-white/10 opacity-85 shadow-[0_24px_60px_rgba(15,23,42,0.18)]"
               />
               <h2 className="max-w-sm text-4xl font-black leading-tight">
-                Registra tu salón con una experiencia más clara y guiada
+                Registra tu salÃ³n con una experiencia mÃ¡s clara y guiada
               </h2>
               <p className="mt-4 max-w-sm text-base leading-7 text-white/75">
                 Avanza por bloques cortos. Solo pedimos lo indispensable para dejar listo el perfil
-                operativo del salón.
+                operativo del salÃ³n.
               </p>
             </div>
 
@@ -813,9 +813,9 @@ export function PaginaRegistroSalon() {
                 Lo que vas a completar
               </p>
               {[
-                'Datos del salón y sucursales',
-                'Horario local por día',
-                'Servicios con duración y precio',
+                'Datos del salÃ³n y sucursales',
+                'Horario local por dÃ­a',
+                'Servicios con duraciÃ³n y precio',
                 'Especialistas con turnos y almuerzo',
               ].map((item) => (
                 <div key={item} className="flex items-start gap-3 text-sm text-white/85">
@@ -826,7 +826,7 @@ export function PaginaRegistroSalon() {
             </div>
           </div>
 
-          <p className="text-sm text-white/55">© {new Date().getFullYear()} Beauty Time Pro</p>
+          <p className="text-sm text-white/55">Â© {new Date().getFullYear()} Beauty Time Pro</p>
         </div>
       </div>
 
@@ -847,7 +847,7 @@ export function PaginaRegistroSalon() {
                     <span
                       className={`text-xs font-medium whitespace-nowrap ${numero <= paso ? 'text-pink-700' : 'text-slate-400'}`}
                     >
-                      {numero === 1 ? 'Cuenta dueña' : 'Operación del salón'}
+                      {numero === 1 ? 'Cuenta dueÃ±a' : 'OperaciÃ³n del salÃ³n'}
                     </span>
                   </div>
                   {numero < 2 && (
@@ -871,9 +871,11 @@ export function PaginaRegistroSalon() {
 
           {paso === 1 && (
             <div className="mx-auto max-w-lg">
-              <h1 className="text-3xl font-black text-slate-900 mb-1">Datos de la persona dueña</h1>
+              <h1 className="text-3xl font-black text-slate-900 mb-1">
+                Datos de la persona dueÃ±a
+              </h1>
               <p className="text-slate-500 text-sm mb-7">
-                Esta cuenta administrará la solicitud del salón
+                Esta cuenta administrarÃ¡ la solicitud del salÃ³n
               </p>
               <form
                 onSubmit={(evento) => {
@@ -933,7 +935,7 @@ export function PaginaRegistroSalon() {
                     htmlFor="email"
                     className="block text-sm font-semibold text-slate-700 mb-1"
                   >
-                    Correo electrónico
+                    Correo electrÃ³nico
                   </label>
                   <input
                     id="email"
@@ -955,7 +957,7 @@ export function PaginaRegistroSalon() {
                     htmlFor="contrasena"
                     className="block text-sm font-semibold text-slate-700 mb-1"
                   >
-                    Contraseña
+                    ContraseÃ±a
                   </label>
                   <div className="relative">
                     <input
@@ -969,7 +971,7 @@ export function PaginaRegistroSalon() {
                       type="button"
                       onClick={() => setMostrarPass((valor) => !valor)}
                       className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
-                      aria-label={mostrarPass ? 'Ocultar contraseña' : 'Mostrar contraseña'}
+                      aria-label={mostrarPass ? 'Ocultar contraseÃ±a' : 'Mostrar contraseÃ±a'}
                     >
                       {mostrarPass ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                     </button>
@@ -978,10 +980,10 @@ export function PaginaRegistroSalon() {
                     (() => {
                       const req = calcularRequisitosContrasena(contrasena);
                       const requisitos = [
-                        { cumple: req.longitudMinima, texto: 'Mínimo 8 caracteres' },
-                        { cumple: req.tieneMayuscula, texto: 'Una letra mayúscula' },
-                        { cumple: req.tieneNumero, texto: 'Un número' },
-                        { cumple: req.tieneEspecial, texto: 'Un carácter especial (!@#$...)' },
+                        { cumple: req.longitudMinima, texto: 'MÃ­nimo 8 caracteres' },
+                        { cumple: req.tieneMayuscula, texto: 'Una letra mayÃºscula' },
+                        { cumple: req.tieneNumero, texto: 'Un nÃºmero' },
+                        { cumple: req.tieneEspecial, texto: 'Un carÃ¡cter especial (!@#$...)' },
                       ];
                       return (
                         <div className="mt-2 space-y-2">
@@ -1002,7 +1004,7 @@ export function PaginaRegistroSalon() {
                                 key={r.texto}
                                 className={`flex items-center gap-1.5 text-xs ${r.cumple ? 'text-green-600' : 'text-slate-400'}`}
                               >
-                                <span>{r.cumple ? '✓' : '○'}</span>
+                                <span>{r.cumple ? 'âœ“' : 'â—‹'}</span>
                                 <span>{r.texto}</span>
                               </li>
                             ))}
@@ -1022,7 +1024,7 @@ export function PaginaRegistroSalon() {
                     htmlFor="confirmarContrasena"
                     className="block text-sm font-semibold text-slate-700 mb-1"
                   >
-                    Confirmar contraseña
+                    Confirmar contraseÃ±a
                   </label>
                   <div className="relative">
                     <input
@@ -1036,7 +1038,7 @@ export function PaginaRegistroSalon() {
                       type="button"
                       onClick={() => setMostrarConfirm((valor) => !valor)}
                       className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
-                      aria-label={mostrarConfirm ? 'Ocultar contraseña' : 'Mostrar contraseña'}
+                      aria-label={mostrarConfirm ? 'Ocultar contraseÃ±a' : 'Mostrar contraseÃ±a'}
                     >
                       {mostrarConfirm ? (
                         <EyeOff className="w-4 h-4" />
@@ -1055,7 +1057,7 @@ export function PaginaRegistroSalon() {
                 <button
                   type="submit"
                   disabled={verificandoDisponibilidad}
-                  className="w-full flex items-center justify-center gap-2 bg-linear-to-r from-[#C2185B] to-[#E91E8C] text-white font-bold py-3.5 rounded-2xl hover:shadow-lg hover:scale-[1.01] disabled:cursor-not-allowed disabled:opacity-70 transition-all"
+                  className="w-full flex items-center justify-center gap-2 bg-linear-to-r from-[#C6968C] to-[#78736E] text-white font-bold py-3.5 rounded-2xl hover:shadow-lg hover:scale-[1.01] disabled:cursor-not-allowed disabled:opacity-70 transition-all"
                 >
                   {verificandoDisponibilidad ? (
                     <>
@@ -1077,11 +1079,11 @@ export function PaginaRegistroSalon() {
                 <div className="flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
                   <div>
                     <h1 className="text-3xl font-black text-slate-900 mb-1">
-                      Cuéntanos sobre tu negocio
+                      CuÃ©ntanos sobre tu negocio
                     </h1>
                     <p className="max-w-2xl text-sm leading-6 text-slate-500">
-                      Esta información es la que verán tus clientes al reservar. Entre más completa
-                      sea, más confianza genera.
+                      Esta informaciÃ³n es la que verÃ¡n tus clientes al reservar. Entre mÃ¡s
+                      completa sea, mÃ¡s confianza genera.
                     </p>
                   </div>
                 </div>
@@ -1109,7 +1111,7 @@ export function PaginaRegistroSalon() {
                     descripcion="Nombre, ubicación, contacto, país, sucursales y tamaño del equipo."
                     detalle={
                       informacionBaseLista
-                        ? `${nombreSalon || 'Salón sin nombre'} • ${sucursales.map((item) => item.trim()).filter(Boolean).length} sucursal(es)`
+                        ? `${nombreSalon || 'SalÃ³n sin nombre'} â€¢ ${sucursales.map((item) => item.trim()).filter(Boolean).length} sucursal(es)`
                         : 'Completa lo esencial para desbloquear el resto del flujo.'
                     }
                     onActivar={() => setEtapaOperacionActiva('basico')}
@@ -1117,7 +1119,7 @@ export function PaginaRegistroSalon() {
                   >
                     <div className="mb-5 flex items-center gap-2 text-pink-600">
                       <Store className="w-5 h-5" aria-hidden="true" />
-                      <h3 className="text-lg font-black text-slate-900">Información del salón</h3>
+                      <h3 className="text-lg font-black text-slate-900">InformaciÃ³n del salÃ³n</h3>
                     </div>
 
                     <div className="grid gap-4 md:grid-cols-2">
@@ -1126,7 +1128,7 @@ export function PaginaRegistroSalon() {
                           htmlFor="nombreSalon"
                           className="block text-sm font-semibold text-slate-700 mb-1"
                         >
-                          Nombre del salón
+                          Nombre del salÃ³n
                         </label>
                         <input
                           id="nombreSalon"
@@ -1147,14 +1149,14 @@ export function PaginaRegistroSalon() {
                           htmlFor="pais"
                           className="block text-sm font-semibold text-slate-700 mb-1"
                         >
-                          País
+                          PaÃ­s
                         </label>
                         <select
                           id="pais"
                           className="w-full px-3.5 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none focus:ring-2 focus:ring-pink-500 focus:border-transparent"
                           {...formPaso2.register('pais')}
                         >
-                          <option value="Mexico">México</option>
+                          <option value="Mexico">MÃ©xico</option>
                           <option value="Colombia">Colombia</option>
                         </select>
                       </div>
@@ -1164,7 +1166,7 @@ export function PaginaRegistroSalon() {
                           htmlFor="direccion"
                           className="block text-sm font-semibold text-slate-700 mb-1"
                         >
-                          Dirección principal
+                          DirecciÃ³n principal
                         </label>
                         <input
                           id="direccion"
@@ -1185,7 +1187,7 @@ export function PaginaRegistroSalon() {
                           htmlFor="telefono"
                           className="block text-sm font-semibold text-slate-700 mb-1"
                         >
-                          Teléfono de contacto
+                          TelÃ©fono de contacto
                         </label>
                         <input
                           id="telefono"
@@ -1210,11 +1212,11 @@ export function PaginaRegistroSalon() {
                           onClick={agregarSucursal}
                           className="inline-flex items-center gap-2 rounded-xl bg-pink-50 px-3 py-2 text-xs font-black text-pink-700 hover:bg-pink-100"
                         >
-                          <Plus className="w-4 h-4" aria-hidden="true" /> Añadir sucursal
+                          <Plus className="w-4 h-4" aria-hidden="true" /> AÃ±adir sucursal
                         </button>
                       </div>
                       <p className="text-xs text-slate-400">
-                        Escribe el nombre de cada sucursal. Si solo tienes una ubicación, deja solo
+                        Escribe el nombre de cada sucursal. Si solo tienes una ubicaciÃ³n, deja solo
                         este campo.
                       </p>
                       <div className="space-y-2">
@@ -1266,11 +1268,11 @@ export function PaginaRegistroSalon() {
                       activa={etapaOperacionActiva === 'horario'}
                       bloqueada={!informacionBaseLista}
                       completada={horarioListo}
-                      descripcion="Define los días abiertos y el rango real de atención por jornada."
+                      descripcion="Define los dÃ­as abiertos y el rango real de atenciÃ³n por jornada."
                       detalle={
                         horarioListo
-                          ? `${resumenHorario.horarioApertura} a ${resumenHorario.horarioCierre} • ${Object.values(horarioLocal).filter((dia) => dia.isOpen).length} día(s) abiertos`
-                          : 'Se habilita cuando la base del negocio está completa.'
+                          ? `${resumenHorario.horarioApertura} a ${resumenHorario.horarioCierre} â€¢ ${Object.values(horarioLocal).filter((dia) => dia.isOpen).length} dÃ­a(s) abiertos`
+                          : 'Se habilita cuando la base del negocio estÃ¡ completa.'
                       }
                       onActivar={
                         informacionBaseLista ? () => setEtapaOperacionActiva('horario') : undefined
@@ -1355,11 +1357,11 @@ export function PaginaRegistroSalon() {
                       activa={etapaOperacionActiva === 'servicios'}
                       bloqueada={!informacionBaseLista || !horarioListo}
                       completada={serviciosListos}
-                      descripcion="Selecciona lo que ofreces y ajusta duración y precio. Los filtros públicos se derivan automáticamente."
+                      descripcion="Selecciona lo que ofreces y ajusta duraciÃ³n y precio. Los filtros pÃºblicos se derivan automÃ¡ticamente."
                       detalle={
                         serviciosListos
                           ? `${serviciosSeleccionados.length} servicio(s) configurado(s)`
-                          : 'Primero define la base y el horario del salón.'
+                          : 'Primero define la base y el horario del salÃ³n.'
                       }
                       onActivar={
                         informacionBaseLista && horarioListo
@@ -1370,7 +1372,7 @@ export function PaginaRegistroSalon() {
                     >
                       <div className="mb-5 flex items-center gap-2 text-pink-600">
                         <ListChecks className="w-5 h-5" aria-hidden="true" />
-                        <h3 className="text-lg font-black text-slate-900">Servicios del salón</h3>
+                        <h3 className="text-lg font-black text-slate-900">Servicios del salÃ³n</h3>
                       </div>
 
                       <div className="space-y-5">
@@ -1402,7 +1404,7 @@ export function PaginaRegistroSalon() {
                                         onClick={() => alternarServicio(categoria, nombreServicio)}
                                         className={`w-full text-left text-sm font-bold ${servicio ? 'text-pink-700' : 'text-slate-700'}`}
                                       >
-                                        {servicio ? '✓ ' : ''}
+                                        {servicio ? 'âœ“ ' : ''}
                                         {obtenerEtiquetaServicioCatalogo(nombreServicio)}
                                       </button>
                                       {servicio && (
@@ -1412,7 +1414,7 @@ export function PaginaRegistroSalon() {
                                               htmlFor={`dur-${nombreServicio}`}
                                               className="mb-1 block text-[10px] font-black uppercase text-slate-400"
                                             >
-                                              Duración (minutos)
+                                              DuraciÃ³n (minutos)
                                             </label>
                                             <input
                                               id={`dur-${nombreServicio}`}
@@ -1486,7 +1488,7 @@ export function PaginaRegistroSalon() {
                                   htmlFor={`servicio-personalizado-${categoria}`}
                                   className="sr-only"
                                 >
-                                  Añadir servicio personalizado en {categoria}
+                                  AÃ±adir servicio personalizado en {categoria}
                                 </label>
                                 <input
                                   id={`servicio-personalizado-${categoria}`}
@@ -1497,7 +1499,7 @@ export function PaginaRegistroSalon() {
                                       [categoria]: evento.target.value,
                                     }))
                                   }
-                                  placeholder={`Añadir servicio personalizado en ${categoria}`}
+                                  placeholder={`AÃ±adir servicio personalizado en ${categoria}`}
                                   className="flex-1 rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-medium text-slate-700 outline-none focus:ring-2 focus:ring-pink-500"
                                 />
                                 <button
@@ -1505,7 +1507,7 @@ export function PaginaRegistroSalon() {
                                   onClick={() => agregarServicioPersonalizado(categoria)}
                                   className="rounded-2xl bg-slate-900 px-4 py-3 text-xs font-black uppercase text-white hover:bg-black"
                                 >
-                                  Añadir servicio
+                                  AÃ±adir servicio
                                 </button>
                               </div>
                             </div>
@@ -1542,7 +1544,7 @@ export function PaginaRegistroSalon() {
                       detalle={
                         personalListo
                           ? `${personal.length} especialista(s) listo(s) para operar`
-                          : 'Primero define los servicios del salón.'
+                          : 'Primero define los servicios del salÃ³n.'
                       }
                       onActivar={
                         informacionBaseLista && horarioListo && serviciosListos
@@ -1564,7 +1566,7 @@ export function PaginaRegistroSalon() {
                             htmlFor="numeroEspecialistas"
                             className="block text-sm font-semibold text-slate-700 mb-1"
                           >
-                            Número de especialistas
+                            NÃºmero de especialistas
                           </label>
                           <input
                             id="numeroEspecialistas"
@@ -1575,7 +1577,7 @@ export function PaginaRegistroSalon() {
                             {...formPaso2.register('numeroEspecialistas')}
                           />
                           <p className="mt-1 text-xs text-slate-400">
-                            Si tu equipo supera 20 personas, escribe el número exacto manualmente.
+                            Si tu equipo supera 20 personas, escribe el nÃºmero exacto manualmente.
                           </p>
                           {formPaso2.formState.errors.numeroEspecialistas && (
                             <p role="alert" className="mt-1 text-xs text-red-500">
@@ -1655,7 +1657,7 @@ export function PaginaRegistroSalon() {
                               </p>
                               {serviciosDisponibles.length === 0 ? (
                                 <p className="rounded-2xl border border-dashed border-slate-200 bg-white px-4 py-4 text-sm text-slate-400">
-                                  Primero selecciona servicios en el catálogo del salón.
+                                  Primero selecciona servicios en el catÃ¡logo del salÃ³n.
                                 </p>
                               ) : (
                                 <div className="flex flex-wrap gap-2">
@@ -1666,7 +1668,7 @@ export function PaginaRegistroSalon() {
                                       onClick={() => alternarEspecialidadPersonal(indice, servicio)}
                                       className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-colors ${persona.specialties.includes(servicio) ? 'bg-slate-900 text-white' : 'bg-white border border-slate-200 text-slate-600 hover:border-pink-300 hover:text-pink-600'}`}
                                     >
-                                      {persona.specialties.includes(servicio) ? '✓ ' : ''}
+                                      {persona.specialties.includes(servicio) ? 'âœ“ ' : ''}
                                       {servicio}
                                     </button>
                                   ))}
@@ -1696,7 +1698,7 @@ export function PaginaRegistroSalon() {
                         <button
                           type="submit"
                           disabled={formPaso2.formState.isSubmitting}
-                          className="flex-1 rounded-2xl bg-linear-to-r from-[#C2185B] to-[#E91E8C] py-3.5 font-bold text-white transition-all hover:scale-[1.01] hover:shadow-lg disabled:cursor-not-allowed disabled:opacity-60"
+                          className="flex-1 rounded-2xl bg-linear-to-r from-[#C6968C] to-[#78736E] py-3.5 font-bold text-white transition-all hover:scale-[1.01] hover:shadow-lg disabled:cursor-not-allowed disabled:opacity-60"
                         >
                           {formPaso2.formState.isSubmitting ? 'Enviando...' : 'Enviar'}
                         </button>
@@ -1719,9 +1721,9 @@ export function PaginaRegistroSalon() {
           )}
 
           <p className="text-center text-sm text-slate-500 mt-6">
-            ¿Ya tienes cuenta?{' '}
+            Â¿Ya tienes cuenta?{' '}
             <Link to="/iniciar-sesion" className="text-pink-700 font-semibold hover:underline">
-              Inicia sesión
+              Inicia sesiÃ³n
             </Link>
           </p>
           <div className="mt-3 text-center">

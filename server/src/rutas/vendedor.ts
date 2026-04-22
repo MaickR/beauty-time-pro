@@ -1,6 +1,6 @@
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
-import type { Prisma } from '../generated/prisma/client.js';
+import { Prisma } from '../generated/prisma/client.js';
 import { prisma } from '../prismaCliente.js';
 import { verificarJWT } from '../middleware/autenticacion.js';
 import {
@@ -23,6 +23,9 @@ import { registrarAuditoria } from '../utils/auditoria.js';
 function soloVendedor(payload: { rol: string }): boolean {
   return payload.rol === 'vendedor';
 }
+
+const SOPORTA_PORCENTAJE_COMISION_PRO =
+  'porcentajeComisionPro' in (Prisma.UsuarioScalarFieldEnum as Record<string, string>);
 
 // ─── Schemas ─────────────────────────────────────────────────────────────
 const esquemaPreregistro = z.object({
@@ -513,7 +516,7 @@ export async function rutasVendedor(servidor: FastifyInstance) {
             where: { id: payload.sub },
             select: {
               porcentajeComision: true,
-              porcentajeComisionPro: true,
+              ...(SOPORTA_PORCENTAJE_COMISION_PRO ? { porcentajeComisionPro: true } : {}),
             },
           });
       const [
@@ -555,7 +558,9 @@ export async function rutasVendedor(servidor: FastifyInstance) {
 
       const porcentajesComision = resolverPorcentajesComisionVendedor({
         porcentajeComision: vendedor?.porcentajeComision,
-        porcentajeComisionPro: vendedor?.porcentajeComisionPro,
+        porcentajeComisionPro: SOPORTA_PORCENTAJE_COMISION_PRO
+          ? ((vendedor as { porcentajeComisionPro?: number | null } | null)?.porcentajeComisionPro ?? null)
+          : undefined,
       });
 
       const resumenVentas = ventasComisionables.reduce(
@@ -629,12 +634,14 @@ export async function rutasVendedor(servidor: FastifyInstance) {
           where: { id: payload.sub },
           select: {
             porcentajeComision: true,
-            porcentajeComisionPro: true,
+            ...(SOPORTA_PORCENTAJE_COMISION_PRO ? { porcentajeComisionPro: true } : {}),
           },
         });
     const porcentajesComision = resolverPorcentajesComisionVendedor({
       porcentajeComision: vendedor?.porcentajeComision,
-      porcentajeComisionPro: vendedor?.porcentajeComisionPro,
+      porcentajeComisionPro: SOPORTA_PORCENTAJE_COMISION_PRO
+        ? ((vendedor as { porcentajeComisionPro?: number | null } | null)?.porcentajeComisionPro ?? null)
+        : undefined,
     });
 
     const ventas = await prisma.pago.findMany({

@@ -1,4 +1,4 @@
-import { useState } from 'react';
+﻿import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -20,7 +20,7 @@ import { Tooltip } from '../../../componentes/ui/Tooltip';
 import { usarToast } from '../../../componentes/ui/ProveedorToast';
 import { generarContrasenaSegura } from '../../../utils/seguridad';
 
-// ─── Tipos ────────────────────────────────────────────────────────────────────
+// â”€â”€â”€ Tipos â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 interface UsuarioDueno {
   id: string;
@@ -55,34 +55,34 @@ interface ResultadoRenovarSuscripcion {
   datos: { fechaVencimiento: string; mensaje: string };
 }
 
-// ─── Esquema del formulario nuevo salón ──────────────────────────────────────
+// â”€â”€â”€ Esquema del formulario nuevo salÃ³n â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 const esquemaCrear = z.object({
-  nombreSalon: z.string().min(2, 'Mínimo 2 caracteres'),
-  nombreAdmin: z.string().min(2, 'Mínimo 2 caracteres'),
-  email: z.string().email('Correo electrónico inválido'),
+  nombreSalon: z.string().min(2, 'MÃ­nimo 2 caracteres'),
+  nombreAdmin: z.string().min(2, 'MÃ­nimo 2 caracteres'),
+  email: z.string().email('Correo electrÃ³nico invÃ¡lido'),
   contrasena: z
     .string()
-    .min(8, 'Mínimo 8 caracteres')
-    .regex(/[A-Z]/, 'Debe incluir una mayúscula')
-    .regex(/[0-9]/, 'Debe incluir un número'),
+    .min(8, 'MÃ­nimo 8 caracteres')
+    .regex(/[A-Z]/, 'Debe incluir una mayÃºscula')
+    .regex(/[0-9]/, 'Debe incluir un nÃºmero'),
   telefono: z
     .string()
     .trim()
-    .regex(/^[0-9()+\-\s]{7,20}$/, 'Ingresa un teléfono válido de 7 a 20 caracteres'),
+    .regex(/^[0-9()+\-\s]{7,20}$/, 'Ingresa un telÃ©fono vÃ¡lido de 7 a 20 caracteres'),
   pais: z.enum(['Mexico', 'Colombia']),
 });
 
 type CamposCrear = z.infer<typeof esquemaCrear>;
 
-// ─── Utilidades ──────────────────────────────────────────────────────────────
+// â”€â”€â”€ Utilidades â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 function generarContrasena(): string {
   return generarContrasenaSegura();
 }
 
 function formatearFecha(fechaISO: string | null): string {
-  if (!fechaISO) return '—';
+  if (!fechaISO) return 'â€”';
   return new Date(fechaISO).toLocaleDateString('es-MX', {
     day: '2-digit',
     month: 'short',
@@ -90,7 +90,7 @@ function formatearFecha(fechaISO: string | null): string {
   });
 }
 
-// ─── Sub-componentes ─────────────────────────────────────────────────────────
+// â”€â”€â”€ Sub-componentes â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 interface PropsBadgeEstado {
   activo: boolean;
@@ -218,40 +218,40 @@ function FilaEstudio({
         </div>
       </td>
       <td className="px-4 py-3 text-sm text-slate-400">
-        {admin ? formatearFecha(admin.ultimoAcceso) : '—'}
+        {admin ? formatearFecha(admin.ultimoAcceso) : 'â€”'}
       </td>
       <td className="px-4 py-3">{admin ? <BadgeEstado activo={admin.activo} /> : null}</td>
       <td className="px-4 py-3">
         <div className="flex items-center gap-2">
-          <Tooltip texto="Resetear contraseña">
+          <Tooltip texto="Resetear contraseÃ±a">
             <button
               onClick={() => alResetear(estudio.id)}
               disabled={!admin || reseteando}
               className="no-imprimir p-1.5 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-all disabled:opacity-40 disabled:cursor-not-allowed"
-              aria-label={`Resetear contraseña del salón ${estudio.nombre}`}
-              title="Resetear contraseña"
+              aria-label={`Resetear contraseÃ±a del salÃ³n ${estudio.nombre}`}
+              title="Resetear contraseÃ±a"
             >
               <RefreshCw className="w-4 h-4" />
             </button>
           </Tooltip>
-          <Tooltip texto="Renovar suscripción">
+          <Tooltip texto="Renovar suscripciÃ³n">
             <button
               onClick={() => alRenovar(estudio)}
               disabled={renovando}
               className="no-imprimir p-1.5 text-slate-400 hover:text-emerald-600 hover:bg-emerald-50 rounded-lg transition-all disabled:opacity-40 disabled:cursor-not-allowed"
-              aria-label={`Renovar suscripción del salón ${estudio.nombre}`}
-              title="Renovar suscripción"
+              aria-label={`Renovar suscripciÃ³n del salÃ³n ${estudio.nombre}`}
+              title="Renovar suscripciÃ³n"
             >
               <CalendarDays className="w-4 h-4" />
             </button>
           </Tooltip>
-          <Tooltip texto={admin?.activo ? 'Suspender salón' : 'Activar salón'}>
+          <Tooltip texto={admin?.activo ? 'Suspender salÃ³n' : 'Activar salÃ³n'}>
             <button
               onClick={() => alSuspender(estudio.id)}
               disabled={!admin || suspendiendo}
               className="no-imprimir p-1.5 text-slate-400 hover:text-amber-600 hover:bg-amber-50 rounded-lg transition-all disabled:opacity-40 disabled:cursor-not-allowed"
-              aria-label={`${admin?.activo ? 'Suspender' : 'Activar'} acceso del salón ${estudio.nombre}`}
-              title={admin?.activo ? 'Suspender salón' : 'Activar salón'}
+              aria-label={`${admin?.activo ? 'Suspender' : 'Activar'} acceso del salÃ³n ${estudio.nombre}`}
+              title={admin?.activo ? 'Suspender salÃ³n' : 'Activar salÃ³n'}
             >
               {admin?.activo ? (
                 <ToggleRight className="w-4 h-4" />
@@ -291,10 +291,10 @@ function ModalRenovarSuscripcion({
       <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={alCerrar} />
       <div className="relative w-full max-w-lg rounded-4xl bg-white p-6 shadow-2xl">
         <h2 id="titulo-modal-renovar" className="text-xl font-black text-slate-900">
-          Renovar suscripción
+          Renovar suscripciÃ³n
         </h2>
         <p className="mt-2 text-sm text-slate-500">
-          Salón: <span className="font-bold text-slate-900">{estudio.nombre}</span>
+          SalÃ³n: <span className="font-bold text-slate-900">{estudio.nombre}</span>
         </p>
 
         <div className="mt-5 rounded-2xl border border-slate-200 bg-slate-50 p-4">
@@ -327,9 +327,9 @@ function ModalRenovarSuscripcion({
             type="button"
             onClick={() => alConfirmar(estudio.id, nuevaFecha)}
             disabled={renovando}
-            className="flex-1 rounded-xl bg-linear-to-r from-[#880E4F] to-[#C2185B] py-3 text-sm font-bold text-white transition-all disabled:opacity-60"
+            className="flex-1 rounded-xl bg-linear-to-r from-[#143C32] to-[#C6968C] py-3 text-sm font-bold text-white transition-all disabled:opacity-60"
           >
-            {renovando ? 'Guardando...' : 'Confirmar renovación'}
+            {renovando ? 'Guardando...' : 'Confirmar renovaciÃ³n'}
           </button>
         </div>
       </div>
@@ -337,7 +337,7 @@ function ModalRenovarSuscripcion({
   );
 }
 
-// ─── Modal crear salón ────────────────────────────────────────────────────────
+// â”€â”€â”€ Modal crear salÃ³n â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 interface PropsModalCrear {
   alCerrar: () => void;
@@ -367,12 +367,12 @@ function ModalCrearSalon({ alCerrar }: PropsModalCrear) {
       });
       await queryClient.invalidateQueries({ queryKey: ['admin-salones'] });
       await queryClient.invalidateQueries({ queryKey: ['admin', 'metricas'] });
-      mostrarToast(`Salón "${datos.nombreSalon}" creado correctamente`);
+      mostrarToast(`SalÃ³n "${datos.nombreSalon}" creado correctamente`);
       alCerrar();
     } catch (error) {
       setError('root', {
         message:
-          error instanceof Error ? error.message : 'Error al crear el salón. Intenta nuevamente.',
+          error instanceof Error ? error.message : 'Error al crear el salÃ³n. Intenta nuevamente.',
       });
     }
   };
@@ -388,14 +388,14 @@ function ModalCrearSalon({ alCerrar }: PropsModalCrear) {
       <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-md max-h-[90vh] overflow-y-auto">
         <div className="p-6">
           <h2 id="titulo-modal-crear" className="text-xl font-black text-slate-900 mb-5">
-            Crear nuevo salón
+            Crear nuevo salÃ³n
           </h2>
 
           <form onSubmit={handleSubmit(alEnviar)} noValidate className="space-y-4">
             {[
               {
                 id: 'nombreSalon',
-                label: 'Nombre del salón',
+                label: 'Nombre del salÃ³n',
                 type: 'text',
                 autoComplete: 'organization',
               },
@@ -411,7 +411,7 @@ function ModalCrearSalon({ alCerrar }: PropsModalCrear) {
                 type: 'email',
                 autoComplete: 'email',
               },
-              { id: 'telefono', label: 'Teléfono del salón', type: 'tel', autoComplete: 'tel' },
+              { id: 'telefono', label: 'TelÃ©fono del salÃ³n', type: 'tel', autoComplete: 'tel' },
             ].map(({ id, label, type, autoComplete }) => (
               <div key={id}>
                 <label
@@ -437,13 +437,13 @@ function ModalCrearSalon({ alCerrar }: PropsModalCrear) {
               </div>
             ))}
 
-            {/* Contraseña con generador */}
+            {/* ContraseÃ±a con generador */}
             <div>
               <label
                 htmlFor="crear-contrasena"
                 className="block text-sm font-semibold text-slate-700 mb-1"
               >
-                Contraseña inicial
+                ContraseÃ±a inicial
               </label>
               <div className="flex gap-2">
                 <div className="relative flex-1">
@@ -459,7 +459,7 @@ function ModalCrearSalon({ alCerrar }: PropsModalCrear) {
                     type="button"
                     onClick={() => setMostrarContrasena((v) => !v)}
                     className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 transition-colors"
-                    aria-label={mostrarContrasena ? 'Ocultar contraseña' : 'Mostrar contraseña'}
+                    aria-label={mostrarContrasena ? 'Ocultar contraseÃ±a' : 'Mostrar contraseÃ±a'}
                   >
                     {mostrarContrasena ? (
                       <EyeOff className="w-4 h-4" />
@@ -474,7 +474,7 @@ function ModalCrearSalon({ alCerrar }: PropsModalCrear) {
                     setValue('contrasena', generarContrasena(), { shouldValidate: true })
                   }
                   className="px-3 py-2.5 bg-slate-100 hover:bg-slate-200 rounded-xl text-xs font-semibold text-slate-600 transition-all"
-                  aria-label="Generar contraseña automática"
+                  aria-label="Generar contraseÃ±a automÃ¡tica"
                 >
                   Auto
                 </button>
@@ -486,20 +486,20 @@ function ModalCrearSalon({ alCerrar }: PropsModalCrear) {
               )}
             </div>
 
-            {/* País */}
+            {/* PaÃ­s */}
             <div>
               <label
                 htmlFor="crear-pais"
                 className="block text-sm font-semibold text-slate-700 mb-1"
               >
-                País
+                PaÃ­s
               </label>
               <select
                 id="crear-pais"
                 className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-slate-900 text-sm outline-none focus:ring-2 focus:ring-pink-500 focus:border-transparent transition-all"
                 {...register('pais')}
               >
-                <option value="Mexico">México</option>
+                <option value="Mexico">MÃ©xico</option>
                 <option value="Colombia">Colombia</option>
               </select>
             </div>
@@ -526,9 +526,9 @@ function ModalCrearSalon({ alCerrar }: PropsModalCrear) {
                 type="submit"
                 disabled={isSubmitting}
                 aria-busy={isSubmitting}
-                className="flex-1 py-2.5 bg-linear-to-r from-[#880E4F] to-[#C2185B] text-white rounded-xl text-sm font-bold transition-all disabled:opacity-60 disabled:cursor-not-allowed"
+                className="flex-1 py-2.5 bg-linear-to-r from-[#143C32] to-[#C6968C] text-white rounded-xl text-sm font-bold transition-all disabled:opacity-60 disabled:cursor-not-allowed"
               >
-                {isSubmitting ? 'Creando...' : 'Crear salón'}
+                {isSubmitting ? 'Creando...' : 'Crear salÃ³n'}
               </button>
             </div>
           </form>
@@ -538,7 +538,7 @@ function ModalCrearSalon({ alCerrar }: PropsModalCrear) {
   );
 }
 
-// ─── Modal contraseña temporal ────────────────────────────────────────────────
+// â”€â”€â”€ Modal contraseÃ±a temporal â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 interface PropsModalContrasena {
   email: string;
@@ -565,10 +565,10 @@ function ModalContrasena({ email, contrasena, alCerrar }: PropsModalContrasena) 
       <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={alCerrar} />
       <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-sm p-6">
         <h2 id="titulo-modal-contrasena" className="text-xl font-black text-slate-900 mb-1">
-          Contraseña temporal
+          ContraseÃ±a temporal
         </h2>
         <p className="text-sm text-slate-500 mb-4">
-          Comparte esta contraseña con <strong>{email}</strong>. Solo se muestra una vez.
+          Comparte esta contraseÃ±a con <strong>{email}</strong>. Solo se muestra una vez.
         </p>
 
         <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 flex items-center justify-between gap-3 mb-4">
@@ -578,14 +578,14 @@ function ModalContrasena({ email, contrasena, alCerrar }: PropsModalContrasena) 
           <button
             onClick={copiar}
             className="p-2 bg-amber-100 hover:bg-amber-200 rounded-lg transition-colors shrink-0"
-            aria-label="Copiar contraseña al portapapeles"
+            aria-label="Copiar contraseÃ±a al portapapeles"
           >
             <Copy className={`w-4 h-4 ${copiado ? 'text-green-600' : 'text-amber-600'}`} />
           </button>
         </div>
 
         <p className="text-xs text-slate-400 mb-5">
-          El administrador deberá cambiar esta contraseña en su primer inicio de sesión.
+          El administrador deberÃ¡ cambiar esta contraseÃ±a en su primer inicio de sesiÃ³n.
         </p>
 
         <button
@@ -599,7 +599,7 @@ function ModalContrasena({ email, contrasena, alCerrar }: PropsModalContrasena) 
   );
 }
 
-// ─── Componente principal ─────────────────────────────────────────────────────
+// â”€â”€â”€ Componente principal â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 export function GestionCuentas() {
   const [modalCrear, setModalCrear] = useState(false);
@@ -634,7 +634,7 @@ export function GestionCuentas() {
     onSuccess: (res) => {
       setContrasenaTemporal({ email: res.datos.email, contrasena: res.datos.contrasenaTemporal });
     },
-    onError: () => mostrarToast('Error al resetear la contraseña. Intenta nuevamente.'),
+    onError: () => mostrarToast('Error al resetear la contraseÃ±a. Intenta nuevamente.'),
   });
 
   const mutacionRenovar = useMutation({
@@ -649,16 +649,16 @@ export function GestionCuentas() {
       mostrarToast({
         mensaje: resultado.datos.mensaje,
         variante: 'exito',
-        icono: '✓',
+        icono: 'âœ“',
         duracionMs: 4000,
       });
       setEstudioRenovar(null);
     },
     onError: () =>
       mostrarToast({
-        mensaje: 'No fue posible renovar la suscripción. Intenta nuevamente.',
+        mensaje: 'No fue posible renovar la suscripciÃ³n. Intenta nuevamente.',
         variante: 'error',
-        icono: '✗',
+        icono: 'âœ—',
         duracionMs: 4000,
       }),
   });
@@ -670,21 +670,21 @@ export function GestionCuentas() {
       <div className="flex items-center justify-between mb-6">
         <div>
           <h2 id="titulo-gestion-cuentas" className="text-2xl font-black text-slate-900">
-            Gestión de cuentas
+            GestiÃ³n de cuentas
           </h2>
           <p className="text-sm text-slate-500">
-            {salones.length} {salones.length === 1 ? 'salón registrado' : 'salones registrados'}
+            {salones.length} {salones.length === 1 ? 'salÃ³n registrado' : 'salones registrados'}
           </p>
         </div>
-        <Tooltip texto="Crear nuevo salón">
+        <Tooltip texto="Crear nuevo salÃ³n">
           <button
             onClick={() => setModalCrear(true)}
-            className="no-imprimir inline-flex items-center gap-2 bg-linear-to-r from-[#880E4F] to-[#C2185B] text-white font-bold px-4 py-2.5 rounded-xl text-sm shadow-lg shadow-pink-500/25 hover:from-[#6D0B3F] hover:to-[#A3153F] transition-all"
-            aria-label="Crear nuevo salón"
-            title="Crear nuevo salón"
+            className="no-imprimir inline-flex items-center gap-2 bg-linear-to-r from-[#143C32] to-[#C6968C] text-white font-bold px-4 py-2.5 rounded-xl text-sm shadow-lg shadow-pink-500/25 hover:from-[#0A2823] hover:to-[#143C32] transition-all"
+            aria-label="Crear nuevo salÃ³n"
+            title="Crear nuevo salÃ³n"
           >
             <PlusCircle className="w-4 h-4" aria-hidden="true" />
-            Crear nuevo salón
+            Crear nuevo salÃ³n
           </button>
         </Tooltip>
       </div>
@@ -699,14 +699,14 @@ export function GestionCuentas() {
         <div className="flex items-center gap-3 bg-red-50 border border-red-200 rounded-xl p-4">
           <AlertCircle className="w-5 h-5 text-red-500 shrink-0" aria-hidden="true" />
           <p className="text-sm text-red-600">
-            Error al cargar los salones. Recarga la página e intenta nuevamente.
+            Error al cargar los salones. Recarga la pÃ¡gina e intenta nuevamente.
           </p>
         </div>
       )}
 
       {!isLoading && !isError && salones.length === 0 && (
         <div className="text-center py-16 bg-slate-50 rounded-2xl border border-slate-200">
-          <p className="text-slate-500 font-medium">No hay salones registrados aún.</p>
+          <p className="text-slate-500 font-medium">No hay salones registrados aÃºn.</p>
           <button
             onClick={() => setModalCrear(true)}
             className="mt-3 text-sm font-semibold text-pink-600 hover:text-pink-700 transition-colors"
@@ -718,16 +718,16 @@ export function GestionCuentas() {
 
       {!isLoading && !isError && salones.length > 0 && (
         <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden">
-          {/* Vista de tabla — solo en pantallas medianas en adelante */}
+          {/* Vista de tabla â€” solo en pantallas medianas en adelante */}
           <div className="hidden md:block overflow-x-auto">
             <table className="w-full text-left">
               <thead>
                 <tr className="bg-slate-50 border-b border-slate-200">
                   {[
-                    'Salón',
+                    'SalÃ³n',
                     'Administrador',
                     'Vencimiento',
-                    'Último acceso',
+                    'Ãšltimo acceso',
                     'Estado',
                     'Acciones',
                   ].map((col) => (
@@ -758,7 +758,7 @@ export function GestionCuentas() {
             </table>
           </div>
 
-          {/* Vista de tarjetas — solo en móvil */}
+          {/* Vista de tarjetas â€” solo en mÃ³vil */}
           <div className="md:hidden divide-y divide-slate-100">
             {salones.map((estudio) => {
               const admin = estudio.usuarios[0];
@@ -786,7 +786,7 @@ export function GestionCuentas() {
                       onClick={() => mutacionReset.mutate(estudio.id)}
                       disabled={!admin || mutacionReset.isPending}
                       className="flex-1 py-2 rounded-xl border border-slate-200 text-xs font-semibold text-slate-600 hover:bg-slate-50 disabled:opacity-40"
-                      aria-label={`Resetear contraseña de ${estudio.nombre}`}
+                      aria-label={`Resetear contraseÃ±a de ${estudio.nombre}`}
                     >
                       Resetear
                     </button>
@@ -794,7 +794,7 @@ export function GestionCuentas() {
                       onClick={() => setEstudioRenovar(estudio)}
                       disabled={mutacionRenovar.isPending}
                       className="flex-1 py-2 rounded-xl border border-slate-200 text-xs font-semibold text-slate-600 hover:bg-slate-50 disabled:opacity-40"
-                      aria-label={`Renovar suscripción de ${estudio.nombre}`}
+                      aria-label={`Renovar suscripciÃ³n de ${estudio.nombre}`}
                     >
                       Renovar
                     </button>

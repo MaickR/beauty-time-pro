@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+﻿import { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { ChevronLeft, ChevronRight, Check, Calendar, User, Tag, Loader2 } from 'lucide-react';
@@ -53,7 +53,7 @@ function iniciales(nombre: string) {
     .toUpperCase();
 }
 
-// ── Selector de Especialista ─────────────────────────────────────────────────
+// â”€â”€ Selector de Especialista â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 function PasoEspecialista({
   salon,
   onSeleccionar,
@@ -67,8 +67,8 @@ function PasoEspecialista({
         Elige tu especialista
       </h2>
       <p className="mb-4 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600">
-        Elige a tu especialista de preferencia. Antes de confirmar, el sistema volverá a validar la
-        disponibilidad real para la fecha, duración y servicios seleccionados.
+        Elige a tu especialista de preferencia. Antes de confirmar, el sistema volverÃ¡ a validar la
+        disponibilidad real para la fecha, duraciÃ³n y servicios seleccionados.
       </p>
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 md:grid-cols-3">
         {salon.personal.map((p) => (
@@ -79,7 +79,7 @@ function PasoEspecialista({
           >
             <div
               className="w-10 h-10 rounded-full text-white font-black text-sm flex items-center justify-center mb-2"
-              style={{ backgroundColor: salon.colorPrimario ?? '#C2185B' }}
+              style={{ backgroundColor: salon.colorPrimario ?? '#C6968C' }}
               aria-hidden="true"
             >
               {iniciales(p.nombre)}
@@ -95,7 +95,7 @@ function PasoEspecialista({
   );
 }
 
-// ── Selector de Servicios ────────────────────────────────────────────────────
+// â”€â”€ Selector de Servicios â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 function PasoServicios({
   salon,
   personalId,
@@ -122,7 +122,7 @@ function PasoServicios({
   const totalDuracion = seleccionados.reduce((a, s) => a + s.duration, 0);
   const totalPrecio = seleccionados.reduce((a, s) => a + s.price, 0);
   const totalProductos = productosSeleccionados.reduce((a, producto) => a + producto.total, 0);
-  const color = salon.colorPrimario ?? '#C2185B';
+  const color = salon.colorPrimario ?? '#C6968C';
   const moneda = salon.pais === 'Colombia' ? 'COP' : 'MXN';
   const serviciosDisponibles = obtenerServiciosPorEspecialista(salon, personalId);
   const especialista = salon.personal.find((persona) => persona.id === personalId);
@@ -134,7 +134,7 @@ function PasoServicios({
       </h2>
       {especialista && (
         <p className="mb-4 rounded-2xl border border-pink-100 bg-pink-50 px-4 py-3 text-sm font-medium text-pink-700">
-          Estás viendo solo los servicios habilitados para {especialista.nombre}.
+          EstÃ¡s viendo solo los servicios habilitados para {especialista.nombre}.
         </p>
       )}
       <ul className="space-y-2 mb-6">
@@ -198,7 +198,7 @@ function PasoServicios({
           <h3 className="mt-2 text-lg font-black text-slate-900">Detalles para tu servicio</h3>
           <p className="mt-2 text-sm text-slate-600">
             Si necesitas indicar una preferencia, sensibilidad o detalle especial, puedes escribirlo
-            aquí.
+            aquÃ­.
           </p>
         </div>
         <textarea
@@ -207,7 +207,7 @@ function PasoServicios({
           rows={4}
           maxLength={240}
           className="mt-4 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-800 outline-none transition focus:border-pink-300 focus:bg-white"
-          placeholder="Ej: prefiero atención silenciosa, piel sensible o cualquier detalle que el salón deba tener en cuenta."
+          placeholder="Ej: prefiero atenciÃ³n silenciosa, piel sensible o cualquier detalle que el salÃ³n deba tener en cuenta."
         />
         <p className="mt-2 text-right text-xs font-semibold text-slate-400">
           {observaciones.length}/240
@@ -218,7 +218,7 @@ function PasoServicios({
         <div className="bg-slate-50 rounded-2xl p-4 flex items-center justify-between mb-4">
           <div className="text-sm text-slate-600">
             <span className="font-bold text-slate-900">{seleccionados.length}</span> servicio
-            {seleccionados.length > 1 ? 's' : ''} · {totalDuracion} min
+            {seleccionados.length > 1 ? 's' : ''} Â· {totalDuracion} min
           </div>
           {(totalPrecio > 0 || totalProductos > 0) && (
             <span className="font-black text-slate-900">
@@ -239,7 +239,7 @@ function PasoServicios({
   );
 }
 
-// ── Selector de Fecha ────────────────────────────────────────────────────────
+// â”€â”€ Selector de Fecha â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 function PasoFecha({
   salon,
   fechaSeleccionada,
@@ -307,7 +307,7 @@ function PasoFecha({
           </button>
         </div>
         <div className="grid grid-cols-7 gap-1 text-center mb-2">
-          {['Do', 'Lu', 'Ma', 'Mi', 'Ju', 'Vi', 'Sá'].map((d) => (
+          {['Do', 'Lu', 'Ma', 'Mi', 'Ju', 'Vi', 'SÃ¡'].map((d) => (
             <div key={d} className="text-xs font-bold text-slate-400 py-1">
               {d}
             </div>
@@ -379,7 +379,7 @@ function PasoFecha({
   );
 }
 
-// ── Confirmación ─────────────────────────────────────────────────────────────
+// â”€â”€ ConfirmaciÃ³n â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 function PasoConfirmar({
   salon,
   personalId,
@@ -414,7 +414,7 @@ function PasoConfirmar({
   onConfirmar: () => void;
 }) {
   const especialista = salon.personal.find((p) => p.id === personalId);
-  const color = salon.colorPrimario ?? '#C2185B';
+  const color = salon.colorPrimario ?? '#C6968C';
   const moneda = salon.pais === 'Colombia' ? 'COP' : 'MXN';
   const fechaFormateada = fecha.toLocaleDateString('es-MX', {
     weekday: 'long',
@@ -432,7 +432,7 @@ function PasoConfirmar({
           <User className="w-5 h-5 text-slate-400" aria-hidden="true" />
           <div>
             <p className="text-xs text-slate-400 font-bold uppercase tracking-wide">Especialista</p>
-            <p className="font-bold text-slate-900">{especialista?.nombre ?? '—'}</p>
+            <p className="font-bold text-slate-900">{especialista?.nombre ?? 'â€”'}</p>
           </div>
         </div>
         <div className="flex items-center gap-3 pb-3 border-b border-slate-50">
@@ -440,17 +440,17 @@ function PasoConfirmar({
           <div>
             <p className="text-xs text-slate-400 font-bold uppercase tracking-wide">Fecha y hora</p>
             <p className="font-bold text-slate-900 capitalize">
-              {fechaFormateada} · {hora}
+              {fechaFormateada} Â· {hora}
             </p>
             <p className="text-xs font-semibold text-slate-500">
-              Dirección: {salon.direccion ?? salon.nombre}
+              DirecciÃ³n: {salon.direccion ?? salon.nombre}
             </p>
           </div>
         </div>
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
             <p className="text-[10px] font-black uppercase tracking-[0.16em] text-slate-400">
-              Duración aproximada
+              DuraciÃ³n aproximada
             </p>
             <p className="mt-1 text-sm font-black text-slate-900">
               {formatearDuracionAproximada(duracionTotal)}
@@ -458,7 +458,7 @@ function PasoConfirmar({
           </div>
           <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
             <p className="text-[10px] font-black uppercase tracking-[0.16em] text-slate-400">
-              Método de pago
+              MÃ©todo de pago
             </p>
             <p className="mt-1 text-sm font-black text-slate-900">
               {formatearMetodoPagoReserva(metodoPago)}
@@ -468,16 +468,16 @@ function PasoConfirmar({
         <div className="space-y-3 rounded-2xl border border-slate-100 bg-slate-50 p-4">
           <div>
             <p className="text-xs font-black uppercase tracking-[0.16em] text-slate-400">
-              Selecciona cómo pagarás en el salón
+              Selecciona cÃ³mo pagarÃ¡s en el salÃ³n
             </p>
             <p className="mt-1 text-sm text-slate-500">
-              Este método queda registrado en tu reserva para que puedas consultarlo después.
+              Este mÃ©todo queda registrado en tu reserva para que puedas consultarlo despuÃ©s.
             </p>
           </div>
           <div
             className="grid grid-cols-1 gap-2 sm:grid-cols-2"
             role="radiogroup"
-            aria-label="Método de pago"
+            aria-label="MÃ©todo de pago"
           >
             {metodosPagoDisponibles.map((opcion) => {
               const activo = opcion.valor === metodoPago;
@@ -560,7 +560,7 @@ function PasoConfirmar({
       >
         {enviando ? (
           <>
-            <Loader2 className="w-5 h-5 animate-spin" aria-hidden="true" /> Reservando…
+            <Loader2 className="w-5 h-5 animate-spin" aria-hidden="true" /> Reservandoâ€¦
           </>
         ) : (
           'Confirmar reserva'
@@ -570,7 +570,7 @@ function PasoConfirmar({
   );
 }
 
-// ── Reserva Exitosa ──────────────────────────────────────────────────────────
+// â”€â”€ Reserva Exitosa â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 function PasoExitosa({
   salon,
   fecha,
@@ -583,7 +583,7 @@ function PasoExitosa({
   onNuevaReserva: () => void;
 }) {
   const navegar = useNavigate();
-  const color = salon.colorPrimario ?? '#C2185B';
+  const color = salon.colorPrimario ?? '#C6968C';
   return (
     <div className="text-center py-8">
       <div
@@ -593,12 +593,12 @@ function PasoExitosa({
       >
         <Check className="w-10 h-10" />
       </div>
-      <h2 className="text-2xl font-black text-slate-900 mb-2">¡Reserva confirmada!</h2>
+      <h2 className="text-2xl font-black text-slate-900 mb-2">Â¡Reserva confirmada!</h2>
       <p className="text-slate-500 mb-1 capitalize">
         {fecha.toLocaleDateString('es-MX', { weekday: 'long', day: 'numeric', month: 'long' })}
       </p>
       <p className="text-slate-500 mb-8">
-        {hora} · {salon.nombre}
+        {hora} Â· {salon.nombre}
       </p>
       <div className="flex flex-col gap-3 max-w-xs mx-auto">
         <button
@@ -619,7 +619,7 @@ function PasoExitosa({
   );
 }
 
-// ── Página principal ─────────────────────────────────────────────────────────
+// â”€â”€ PÃ¡gina principal â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 export function PaginaReservaCliente() {
   const { identificador } = useParams<{ identificador: string }>();
   const navegar = useNavigate();
@@ -664,7 +664,7 @@ function ContenidoReserva({
 }) {
   const navegar = useNavigate();
   const flujo = usarFlujoReservaCliente(salon);
-  const color = salon.colorPrimario ?? '#C2185B';
+  const color = salon.colorPrimario ?? '#C6968C';
   const metodosPagoDisponibles = obtenerOpcionesMetodosPagoReserva(salon.metodosPagoReserva);
 
   useEffect(() => {
@@ -689,7 +689,7 @@ function ContenidoReserva({
     <div className="min-h-screen bg-slate-50 pb-10">
       <NavegacionCliente />
 
-      {/* Cabecera del salón */}
+      {/* Cabecera del salÃ³n */}
       <div className="bg-white border-b border-slate-100 px-4 py-4">
         <div className="max-w-2xl mx-auto flex items-center gap-3">
           <button

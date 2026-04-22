@@ -1,5 +1,6 @@
 import type { FastifyInstance } from 'fastify';
 import crypto from 'node:crypto';
+import { Prisma } from '../generated/prisma/client.js';
 import { prisma } from '../prismaCliente.js';
 import { esEmailAdminProtegido, verificarJWT } from '../middleware/autenticacion.js';
 import { requierePermiso } from '../middleware/verificarPermiso.js';
@@ -39,6 +40,9 @@ function esPrismaErrorConCodigo(error: unknown, codigo: string): boolean {
     (error as { code?: string }).code === codigo
   );
 }
+
+const SOPORTA_PORCENTAJE_COMISION_PRO =
+  'porcentajeComisionPro' in (Prisma.UsuarioScalarFieldEnum as Record<string, string>);
 
 async function obtenerColaboradorObjetivo(id: string) {
   return prisma.usuario.findUnique({
@@ -144,7 +148,7 @@ export async function rutasAdmins(servidor: FastifyInstance): Promise<void> {
           nombre: true,
           rol: true,
           porcentajeComision: true,
-          porcentajeComisionPro: true,
+          ...(SOPORTA_PORCENTAJE_COMISION_PRO ? { porcentajeComisionPro: true } : {}),
           activo: true,
           creadoEn: true,
           ultimoAcceso: true,
@@ -181,9 +185,12 @@ export async function rutasAdmins(servidor: FastifyInstance): Promise<void> {
 
       return respuesta.send({
         datos: colaboradores.map((col) => {
+          const porcentajeComisionPro = SOPORTA_PORCENTAJE_COMISION_PRO
+            ? ((col as { porcentajeComisionPro?: number | null }).porcentajeComisionPro ?? null)
+            : undefined;
           const porcentajesComision = resolverPorcentajesComisionVendedor({
             porcentajeComision: col.porcentajeComision,
-            porcentajeComisionPro: col.porcentajeComisionPro,
+            porcentajeComisionPro,
           });
 
           return {
@@ -290,7 +297,9 @@ export async function rutasAdmins(servidor: FastifyInstance): Promise<void> {
             hashContrasena,
             rol: cargo,
             porcentajeComision: porcentajesComisionNormalizados.standard,
-            porcentajeComisionPro: porcentajesComisionNormalizados.pro,
+            ...(SOPORTA_PORCENTAJE_COMISION_PRO
+              ? { porcentajeComisionPro: porcentajesComisionNormalizados.pro }
+              : {}),
             activo: true,
             emailVerificado: true,
           },
@@ -480,7 +489,9 @@ export async function rutasAdmins(servidor: FastifyInstance): Promise<void> {
         actualizacionUsuario['rol'] = cargoNormalizado;
       }
       actualizacionUsuario['porcentajeComision'] = porcentajesComisionNormalizados.standard;
-      actualizacionUsuario['porcentajeComisionPro'] = porcentajesComisionNormalizados.pro;
+      if (SOPORTA_PORCENTAJE_COMISION_PRO) {
+        actualizacionUsuario['porcentajeComisionPro'] = porcentajesComisionNormalizados.pro;
+      }
       if (contrasena) {
         actualizacionUsuario['hashContrasena'] = await generarHashContrasena(contrasena);
       }

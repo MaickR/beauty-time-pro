@@ -3,6 +3,7 @@ import { BrowserRouter, useLocation } from 'react-router-dom';
 import type { PropsWithChildren } from 'react';
 import { LimiteError } from '../componentes/ui/LimiteError';
 import { ProveedorToast } from '../componentes/ui/ProveedorToast';
+import { CapaPreloaderGlobal } from '../componentes/ui/PreloaderGlobal';
 import { ProveedorContextoApp, usarContextoApp } from '../contextos/ContextoApp';
 import { clienteConsulta } from '../lib/clienteConsulta';
 import { usarTiendaAuth } from '../tienda/tiendaAuth';
@@ -28,9 +29,11 @@ export function Proveedores({ children }: PropsWithChildren) {
       <BrowserRouter>
         <ProveedorContextoApp>
           <AplicadorTema />
-          <ArbolProtegido>
-            <ProveedorToast>{children}</ProveedorToast>
-          </ArbolProtegido>
+          <CapaPreloaderGlobal>
+            <ArbolProtegido>
+              <ProveedorToast>{children}</ProveedorToast>
+            </ArbolProtegido>
+          </CapaPreloaderGlobal>
         </ProveedorContextoApp>
       </BrowserRouter>
     </QueryClientProvider>

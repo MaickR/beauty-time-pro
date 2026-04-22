@@ -58,14 +58,14 @@ describe('PaginaInicioSesion', () => {
 
     renderConProveedores(<PaginaInicioSesion />, { rutaInicial: '/iniciar-sesion' });
 
-    fireEvent.change(screen.getByLabelText('Correo, teléfono o clave de salón'), {
+    fireEvent.change(screen.getByLabelText('Clave de acceso'), {
       target: { value: 'qa.vendedor@salonpromaster.com' },
     });
     fireEvent.change(screen.getByLabelText('Contraseña'), {
       target: { value: 'QaLogin2026!' },
     });
 
-    fireEvent.click(screen.getByRole('button', { name: 'Entrar al sistema' }));
+    fireEvent.click(screen.getByRole('button', { name: 'LOGIN' }));
 
     await waitFor(() => {
       expect(navegar).toHaveBeenCalledWith('/vendedor');
@@ -86,11 +86,11 @@ describe('PaginaInicioSesion', () => {
 
     renderConProveedores(<PaginaInicioSesion />, { rutaInicial: '/iniciar-sesion' });
 
-    fireEvent.change(screen.getByLabelText('Correo, teléfono o clave de salón'), {
+    fireEvent.change(screen.getByLabelText('Clave de acceso'), {
       target: { value: 'cli1234567890abcdef1234' },
     });
 
-    fireEvent.click(screen.getByRole('button', { name: 'Entrar con clave' }));
+    fireEvent.click(screen.getByRole('button', { name: 'LOGIN' }));
 
     await waitFor(() => {
       expect(iniciarSesionConClave).toHaveBeenCalledWith('CLI1234567890ABCDEF1234');

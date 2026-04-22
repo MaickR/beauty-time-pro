@@ -48,10 +48,8 @@ const TABS: { valor: TabVendedor; etiqueta: string; icono: typeof BarChart3 }[] 
 export function PaginaVendedor() {
   usarTituloPagina('Panel de Vendedor - Beauty Time Pro');
 
-  const { usuario, cerrarSesion } = usarTiendaAuth((estado) => ({
-    usuario: estado.usuario,
-    cerrarSesion: estado.cerrarSesion,
-  }));
+  const usuario = usarTiendaAuth((estado) => estado.usuario);
+  const cerrarSesion = usarTiendaAuth((estado) => estado.cerrarSesion);
   const [tabActivo, setTabActivo] = useState<TabVendedor>('dashboard');
   const [detalleActivo, setDetalleActivo] = useState<DetalleDashboard>(null);
 

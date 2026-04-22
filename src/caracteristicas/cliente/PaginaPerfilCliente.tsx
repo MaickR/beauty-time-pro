@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+﻿import { useEffect, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { Lock, Star, ChevronRight, Loader2, Mail, Palette } from 'lucide-react';
 import { NavegacionCliente } from '../../componentes/diseno/NavegacionCliente';
@@ -9,13 +9,13 @@ import { usarPerfilCliente } from './hooks/usarPerfilCliente';
 import { PanelReservasCliente } from './componentes/PanelReservasCliente';
 import type { Pais, FidelidadSalon } from '../../tipos';
 
-// ── Helpers ──────────────────────────────────────────────────────────────────
+// â”€â”€ Helpers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 function inicialesDesdeNombre(n: string, a: string) {
   return (n[0] ?? '') + (a[0] ?? '');
 }
 
 const COLORES_CLIENTE = [
-  '#F48FB1',
+  '#C6968C',
   '#CE93D8',
   '#80DEEA',
   '#A5D6A7',
@@ -28,13 +28,13 @@ const COLORES_CLIENTE = [
 ];
 
 function formatearPais(pais: Pais): string {
-  return pais === 'Mexico' ? 'México' : 'Colombia';
+  return pais === 'Mexico' ? 'MÃ©xico' : 'Colombia';
 }
 
 function normalizarTextoPersona(valor: string): string {
   return valor
     .normalize('NFC')
-    .replace(/[^\p{L}\p{M}\s'’-]/gu, '')
+    .replace(/[^\p{L}\p{M}\s'â€™-]/gu, '')
     .replace(/\s{2,}/g, ' ')
     .trimStart();
 }
@@ -43,7 +43,7 @@ function normalizarTelefono(valor: string): string {
   return valor.replace(/\D/g, '').slice(0, 10);
 }
 
-// ── Sección identidad ───────────────────────────────────────────────────────
+// â”€â”€ SecciÃ³n identidad â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 function SeccionIdentidadCliente({
   avatarUrl,
   nombre,
@@ -91,7 +91,7 @@ function SeccionIdentidadCliente({
   );
 }
 
-// ── Sección Fidelidad ────────────────────────────────────────────────────────
+// â”€â”€ SecciÃ³n Fidelidad â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 function SeccionFidelidad({
   fidelidad,
   mensajeVacio,
@@ -116,7 +116,7 @@ function SeccionFidelidad({
           </div>
           <p className="font-bold text-slate-900">
             {mensajeVacio ??
-              'Aún no tienes puntos de fidelidad. ¡Reserva tu primera cita para empezar a acumular!'}
+              'AÃºn no tienes puntos de fidelidad. Â¡Reserva tu primera cita para empezar a acumular!'}
           </p>
         </div>
       </section>
@@ -144,19 +144,19 @@ function SeccionFidelidad({
               className="bg-white border border-slate-100 rounded-2xl p-4 shadow-sm"
             >
               <div className="flex items-center justify-between mb-2">
-                <p className="font-bold text-sm" style={{ color: f.colorPrimario ?? '#C2185B' }}>
+                <p className="font-bold text-sm" style={{ color: f.colorPrimario ?? '#C6968C' }}>
                   {f.nombreSalon}
                 </p>
                 {tieneRecompensa && (
                   <span className="text-xs font-bold px-2 py-1 bg-green-50 text-green-700 rounded-full border border-green-200">
-                    🎁 ¡Recompensa disponible!
+                    ðŸŽ Â¡Recompensa disponible!
                   </span>
                 )}
               </div>
               <div className="w-full bg-slate-100 rounded-full h-2 mb-1.5">
                 <div
                   className="h-2 rounded-full transition-all"
-                  style={{ width: `${porcentaje}%`, backgroundColor: f.colorPrimario ?? '#C2185B' }}
+                  style={{ width: `${porcentaje}%`, backgroundColor: f.colorPrimario ?? '#C6968C' }}
                   role="progressbar"
                   aria-valuenow={f.visitasAcumuladas}
                   aria-valuemin={0}
@@ -165,7 +165,7 @@ function SeccionFidelidad({
                 />
               </div>
               <p className="text-xs text-slate-500">
-                {f.visitasAcumuladas} / {f.visitasRequeridas} visitas · {f.descripcionRecompensa}
+                {f.visitasAcumuladas} / {f.visitasRequeridas} visitas Â· {f.descripcionRecompensa}
               </p>
             </div>
           );
@@ -223,7 +223,7 @@ function SeccionApariencia({
   );
 }
 
-// ── Sección Contraseña ───────────────────────────────────────────────────────
+// â”€â”€ SecciÃ³n ContraseÃ±a â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 function SeccionContrasena({
   form,
   onGuardar,
@@ -243,7 +243,7 @@ function SeccionContrasena({
         aria-expanded={abierto}
       >
         <span className="flex items-center gap-2">
-          <Lock className="w-4 h-4 text-slate-400" aria-hidden="true" /> Cambiar contraseña
+          <Lock className="w-4 h-4 text-slate-400" aria-hidden="true" /> Cambiar contraseÃ±a
         </span>
         <ChevronRight
           className={`w-4 h-4 text-slate-400 transition-transform ${abierto ? 'rotate-90' : ''}`}
@@ -254,16 +254,16 @@ function SeccionContrasena({
         <div
           className="bg-white border border-slate-100 rounded-2xl mt-1 p-5 shadow-sm space-y-3"
           role="form"
-          aria-label="Formulario cambiar contraseña"
+          aria-label="Formulario cambiar contraseÃ±a"
         >
           <p className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-xs font-medium text-slate-600">
-            Usa al menos 10 caracteres, con mayúscula, minúscula, número y símbolo. Al confirmarla
-            se cerrarán otras sesiones abiertas.
+            Usa al menos 10 caracteres, con mayÃºscula, minÃºscula, nÃºmero y sÃ­mbolo. Al
+            confirmarla se cerrarÃ¡n otras sesiones abiertas.
           </p>
           {[
-            { campo: 'contrasenaActual' as const, label: 'Contraseña actual' },
-            { campo: 'contrasenaNueva' as const, label: 'Nueva contraseña' },
-            { campo: 'confirmar' as const, label: 'Confirmar contraseña' },
+            { campo: 'contrasenaActual' as const, label: 'ContraseÃ±a actual' },
+            { campo: 'contrasenaNueva' as const, label: 'Nueva contraseÃ±a' },
+            { campo: 'confirmar' as const, label: 'Confirmar contraseÃ±a' },
           ].map(({ campo, label }) => (
             <div key={campo}>
               <label htmlFor={campo} className="block text-xs font-bold text-slate-600 mb-1">
@@ -290,10 +290,10 @@ function SeccionContrasena({
           >
             {guardando ? (
               <>
-                <Loader2 className="w-4 h-4 animate-spin" aria-hidden="true" /> Guardando…
+                <Loader2 className="w-4 h-4 animate-spin" aria-hidden="true" /> Guardandoâ€¦
               </>
             ) : (
-              'Actualizar contraseña'
+              'Actualizar contraseÃ±a'
             )}
           </button>
         </div>
@@ -349,7 +349,7 @@ function SeccionNotificaciones() {
   );
 }
 
-// ── Página principal ─────────────────────────────────────────────────────────
+// â”€â”€ PÃ¡gina principal â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 export function PaginaPerfilCliente() {
   const navegar = useNavigate();
   const ubicacion = useLocation();
@@ -369,7 +369,7 @@ export function PaginaPerfilCliente() {
   const [dialogoSalidaAbierto, setDialogoSalidaAbierto] = useState(false);
   const [confirmacionGuardadoVisible, setConfirmacionGuardadoVisible] = useState(false);
   const [emailNuevo, setEmailNuevo] = useState('');
-  const [colorCliente, setColorCliente] = useState('#F48FB1');
+  const [colorCliente, setColorCliente] = useState('#C6968C');
   const emailNuevoNormalizado = emailNuevo.trim().toLowerCase();
   const vistaSolicitada = new URLSearchParams(ubicacion.search).get('vista');
   const vistaActiva =
@@ -382,7 +382,7 @@ export function PaginaPerfilCliente() {
 
     setEmailNuevo(perfil.emailPendiente ?? perfil.email);
     const colorGuardado = localStorage.getItem(`color_cliente_${perfil.id}`);
-    setColorCliente(colorGuardado ?? '#F48FB1');
+    setColorCliente(colorGuardado ?? '#C6968C');
   }, [perfil]);
 
   useEffect(() => {
@@ -454,7 +454,7 @@ export function PaginaPerfilCliente() {
           onClick={volverAlInicio}
           className="text-sm font-black text-slate-600 hover:text-pink-600 transition-colors"
         >
-          ← Volver al inicio
+          â† Volver al inicio
         </button>
 
         <section className="bg-white border border-slate-100 rounded-3xl p-2 shadow-sm">
@@ -504,7 +504,7 @@ export function PaginaPerfilCliente() {
               {[
                 { campo: 'nombre' as const, label: 'Nombre', type: 'text' },
                 { campo: 'apellido' as const, label: 'Apellido', type: 'text' },
-                { campo: 'telefono' as const, label: 'Teléfono', type: 'tel' },
+                { campo: 'telefono' as const, label: 'TelÃ©fono', type: 'tel' },
               ].map(({ campo, label, type }) => (
                 <div key={campo}>
                   {(() => {
@@ -585,7 +585,7 @@ export function PaginaPerfilCliente() {
                   htmlFor="email-actualizacion"
                   className="block text-xs font-bold text-slate-600"
                 >
-                  Nuevo correo electrónico
+                  Nuevo correo electrÃ³nico
                 </label>
                 <input
                   id="email-actualizacion"
@@ -597,7 +597,7 @@ export function PaginaPerfilCliente() {
                   className="w-full border border-slate-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-pink-400"
                 />
                 <p className="text-xs text-slate-500">
-                  Tu correo actual seguirá funcionando hasta que confirmes el nuevo enlace enviado.
+                  Tu correo actual seguirÃ¡ funcionando hasta que confirmes el nuevo enlace enviado.
                 </p>
                 {perfil.emailPendiente && (
                   <p className="text-xs font-bold text-amber-700 bg-amber-50 border border-amber-200 rounded-xl px-3 py-2">
@@ -615,7 +615,7 @@ export function PaginaPerfilCliente() {
                   }
                   className="w-full rounded-xl border border-pink-200 bg-pink-50 px-4 py-3 text-sm font-black text-pink-700 transition-colors hover:bg-pink-100 disabled:opacity-60"
                 >
-                  {mutarEmail.isPending ? 'Enviando verificación...' : 'Actualizar email'}
+                  {mutarEmail.isPending ? 'Enviando verificaciÃ³n...' : 'Actualizar email'}
                 </button>
               </div>
               <button
@@ -625,7 +625,7 @@ export function PaginaPerfilCliente() {
               >
                 {mutarPerfil.isPending ? (
                   <>
-                    <Loader2 className="w-4 h-4 animate-spin" aria-hidden="true" /> Guardando…
+                    <Loader2 className="w-4 h-4 animate-spin" aria-hidden="true" /> Guardandoâ€¦
                   </>
                 ) : (
                   'Guardar cambios'
@@ -660,7 +660,7 @@ export function PaginaPerfilCliente() {
 
       <DialogoConfirmacion
         abierto={dialogoSalidaAbierto}
-        mensaje="Tienes cambios sin guardar. ¿Salir de todas formas?"
+        mensaje="Tienes cambios sin guardar. Â¿Salir de todas formas?"
         textoCancelar="Seguir editando"
         textoConfirmar="Salir"
         onCancelar={() => setDialogoSalidaAbierto(false)}

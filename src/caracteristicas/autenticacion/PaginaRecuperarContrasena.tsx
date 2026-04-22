@@ -1,4 +1,4 @@
-import { useState } from 'react';
+﻿import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -9,13 +9,13 @@ import { usarTituloPagina } from '../../hooks/usarTituloPagina';
 import { MarcaAplicacion } from '../../componentes/ui/MarcaAplicacion';
 
 const esquema = z.object({
-  email: z.string().email('Ingresa un correo electrónico válido'),
+  email: z.string().email('Ingresa un correo electrÃ³nico vÃ¡lido'),
 });
 
 type CamposFormulario = z.infer<typeof esquema>;
 
 export function PaginaRecuperarContrasena() {
-  usarTituloPagina('Recuperar contraseña');
+  usarTituloPagina('Recuperar contraseÃ±a');
   const [enviado, setEnviado] = useState(false);
 
   const {
@@ -30,7 +30,7 @@ export function PaginaRecuperarContrasena() {
       await solicitarResetAPI(datos.email);
       setEnviado(true);
     } catch {
-      setError('root', { message: 'Ocurrió un error. Intenta nuevamente en unos minutos.' });
+      setError('root', { message: 'OcurriÃ³ un error. Intenta nuevamente en unos minutos.' });
     }
   };
 
@@ -45,15 +45,15 @@ export function PaginaRecuperarContrasena() {
               <CheckCircle className="w-14 h-14 text-green-500 mx-auto mb-4" aria-hidden="true" />
               <h1 className="text-2xl font-black text-slate-900 mb-2">Revisa tu correo</h1>
               <p className="text-slate-500 text-sm mb-6">
-                Si el correo existe en nuestra plataforma, recibirás instrucciones para restablecer
-                tu contraseña en breve.
+                Si el correo existe en nuestra plataforma, recibirÃ¡s instrucciones para restablecer
+                tu contraseÃ±a en breve.
               </p>
               <Link
                 to="/iniciar-sesion"
                 className="inline-flex items-center gap-2 text-sm font-semibold text-pink-600 hover:text-pink-700 transition-colors"
               >
                 <ArrowLeft className="w-4 h-4" aria-hidden="true" />
-                Volver al inicio de sesión
+                Volver al inicio de sesiÃ³n
               </Link>
             </div>
           ) : (
@@ -61,13 +61,15 @@ export function PaginaRecuperarContrasena() {
               <Link
                 to="/iniciar-sesion"
                 className="inline-flex items-center gap-1 text-sm text-slate-400 hover:text-slate-600 transition-colors mb-6"
-                aria-label="Regresar al inicio de sesión"
+                aria-label="Regresar al inicio de sesiÃ³n"
               >
                 <ArrowLeft className="w-4 h-4" aria-hidden="true" />
                 Regresar
               </Link>
 
-              <h1 className="text-2xl font-black text-slate-900 mb-1">¿Olvidaste tu contraseña?</h1>
+              <h1 className="text-2xl font-black text-slate-900 mb-1">
+                Â¿Olvidaste tu contraseÃ±a?
+              </h1>
               <p className="text-slate-500 text-sm mb-6">
                 Ingresa tu correo y te enviaremos instrucciones para restablecerla.
               </p>
@@ -78,7 +80,7 @@ export function PaginaRecuperarContrasena() {
                     htmlFor="email-recuperar"
                     className="block text-sm font-semibold text-slate-700 mb-1.5"
                   >
-                    Correo electrónico
+                    Correo electrÃ³nico
                   </label>
                   <div className="relative">
                     <Mail
@@ -116,7 +118,7 @@ export function PaginaRecuperarContrasena() {
                   type="submit"
                   disabled={isSubmitting}
                   aria-busy={isSubmitting}
-                  className="w-full bg-linear-to-r from-[#880E4F] to-[#C2185B] text-white font-bold py-3.5 rounded-xl transition-all shadow-lg shadow-pink-500/25 active:scale-95 disabled:opacity-60 disabled:cursor-not-allowed"
+                  className="w-full bg-linear-to-r from-[#143C32] to-[#C6968C] text-white font-bold py-3.5 rounded-xl transition-all shadow-lg shadow-pink-500/25 active:scale-95 disabled:opacity-60 disabled:cursor-not-allowed"
                 >
                   {isSubmitting ? (
                     <span className="flex items-center justify-center gap-2">
