@@ -399,6 +399,35 @@ function obtenerFechaSolicitudRegistro(estudio: Record<string, unknown>): Date {
   return convertirFecha(estudio['fechaSolicitud']) ?? convertirFecha(estudio['creadoEn']) ?? new Date();
 }
 
+function construirWhereSalonesAdminModerno(
+  estado: 'pendiente' | 'aprobado' | 'rechazado' | 'suspendido' | 'bloqueado' | null,
+): Prisma.EstudioWhereInput {
+  switch (estado) {
+    case 'pendiente':
+      return { estado: 'pendiente' };
+    case 'rechazado':
+      return { estado: 'rechazado' };
+    case 'bloqueado':
+      return { estado: 'bloqueado' };
+    case 'suspendido':
+      return {
+        OR: [
+          { estado: 'suspendido' },
+          { activo: false },
+          { usuarios: { some: { rol: 'dueno', activo: false } } },
+        ],
+      };
+    case 'aprobado':
+      return {
+        estado: 'aprobado',
+        activo: true,
+        usuarios: { none: { rol: 'dueno', activo: false } },
+      };
+    default:
+      return {};
+  }
+}
+
 async function validarEstudioPrincipalParaAlta(estudioPrincipalId: string): Promise<string | null> {
   const estudioPrincipal = await prisma.estudio.findUnique({
     where: { id: estudioPrincipalId },
@@ -885,44 +914,54 @@ export async function rutasAdmin(servidor: FastifyInstance): Promise<void> {
           ? (estado as 'pendiente' | 'aprobado' | 'rechazado' | 'suspendido' | 'bloqueado')
           : null;
 
-      const estudios = await listarSalonesAdmin();
+      try {
+        const where = construirWhereSalonesAdminModerno(estadoSolicitado);
+        const [total, estudios] = await Promise.all([
+          prisma.estudio.count({ where }),
+          prisma.estudio.findMany({
+            where,
+            select: seleccionarSalonAdminModerno,
+            orderBy: { creadoEn: 'asc' },
+            skip: saltar,
+            take: limite,
+          }),
+        ]);
 
-      const auditorias = await prisma.auditLog.findMany({
-        where: {
-          entidadTipo: 'estudio',
-          entidadId: { in: estudios.map((estudio) => estudio.id) },
-          accion: { in: ['aprobar_salon', 'renovar_suscripcion'] },
-        },
-        include: {
-          usuario: { select: { nombre: true, email: true } },
-        },
-        orderBy: { creadoEn: 'desc' },
-      });
+        const auditorias = estudios.length === 0
+          ? []
+          : await prisma.auditLog.findMany({
+              where: {
+                entidadTipo: 'estudio',
+                entidadId: { in: estudios.map((estudio) => estudio.id) },
+                accion: { in: ['aprobar_salon', 'renovar_suscripcion'] },
+              },
+              include: {
+                usuario: { select: { nombre: true, email: true } },
+              },
+              orderBy: { creadoEn: 'desc' },
+            });
 
-      const aprobacionesPorEstudio = new Map<string, (typeof auditorias)[number]>();
-      const renovacionesPorEstudio = new Map<string, (typeof auditorias)[number]>();
+        const aprobacionesPorEstudio = new Map<string, (typeof auditorias)[number]>();
+        const renovacionesPorEstudio = new Map<string, (typeof auditorias)[number]>();
 
-      auditorias.forEach((auditoria) => {
-        if (auditoria.accion === 'aprobar_salon' && !aprobacionesPorEstudio.has(auditoria.entidadId)) {
-          aprobacionesPorEstudio.set(auditoria.entidadId, auditoria);
-        }
+        auditorias.forEach((auditoria) => {
+          if (auditoria.accion === 'aprobar_salon' && !aprobacionesPorEstudio.has(auditoria.entidadId)) {
+            aprobacionesPorEstudio.set(auditoria.entidadId, auditoria);
+          }
 
-        if (auditoria.accion === 'renovar_suscripcion' && !renovacionesPorEstudio.has(auditoria.entidadId)) {
-          renovacionesPorEstudio.set(auditoria.entidadId, auditoria);
-        }
-      });
+          if (auditoria.accion === 'renovar_suscripcion' && !renovacionesPorEstudio.has(auditoria.entidadId)) {
+            renovacionesPorEstudio.set(auditoria.entidadId, auditoria);
+          }
+        });
 
-      const estudiosNormalizados = estudios
-        .map((estudio) => {
+        const datos = estudios.map((estudio) => {
           const estudioNormalizado = estudio as unknown as Record<string, unknown>;
-          const dueno = obtenerDuenoSalon(estudioNormalizado);
-          const estadoNormalizado = normalizarEstadoSalonDesdeRegistro(estudioNormalizado);
           const aprobacion = aprobacionesPorEstudio.get(estudio.id);
           const renovacion = renovacionesPorEstudio.get(estudio.id);
 
           return {
             ...estudio,
-            estado: estadoNormalizado,
+            estado: normalizarEstadoSalonDesdeRegistro(estudioNormalizado),
             plan: (estudioNormalizado['plan'] as string | undefined) ?? 'STANDARD',
             fechaSolicitud: convertirFecha(estudioNormalizado['fechaSolicitud'])?.toISOString() ?? null,
             fechaAprobacion: convertirFecha(estudioNormalizado['fechaAprobacion'])?.toISOString() ?? null,
@@ -932,12 +971,67 @@ export async function rutasAdmin(servidor: FastifyInstance): Promise<void> {
             renovadoPorNombre: renovacion?.usuario?.nombre ?? null,
             renovadoPorEmail: renovacion?.usuario?.email ?? null,
           };
-        })
-        .filter((estudio) => (estadoSolicitado ? estudio.estado === estadoSolicitado : true));
+        });
 
-      const total = estudiosNormalizados.length;
-      const items = estudiosNormalizados.slice(saltar, saltar + limite);
-      return respuesta.send({ datos: items, total, pagina, totalPaginas: Math.ceil(total / limite) });
+        return respuesta.send({ datos, total, pagina, totalPaginas: Math.ceil(total / limite) });
+      } catch (error) {
+        if (!esErrorCompatibilidadAdmin(error)) {
+          throw error;
+        }
+
+        const estudios = await listarSalonesAdmin();
+
+        const auditorias = await prisma.auditLog.findMany({
+          where: {
+            entidadTipo: 'estudio',
+            entidadId: { in: estudios.map((estudio) => estudio.id) },
+            accion: { in: ['aprobar_salon', 'renovar_suscripcion'] },
+          },
+          include: {
+            usuario: { select: { nombre: true, email: true } },
+          },
+          orderBy: { creadoEn: 'desc' },
+        });
+
+        const aprobacionesPorEstudio = new Map<string, (typeof auditorias)[number]>();
+        const renovacionesPorEstudio = new Map<string, (typeof auditorias)[number]>();
+
+        auditorias.forEach((auditoria) => {
+          if (auditoria.accion === 'aprobar_salon' && !aprobacionesPorEstudio.has(auditoria.entidadId)) {
+            aprobacionesPorEstudio.set(auditoria.entidadId, auditoria);
+          }
+
+          if (auditoria.accion === 'renovar_suscripcion' && !renovacionesPorEstudio.has(auditoria.entidadId)) {
+            renovacionesPorEstudio.set(auditoria.entidadId, auditoria);
+          }
+        });
+
+        const estudiosNormalizados = estudios
+          .map((estudio) => {
+            const estudioNormalizado = estudio as unknown as Record<string, unknown>;
+            const estadoNormalizado = normalizarEstadoSalonDesdeRegistro(estudioNormalizado);
+            const aprobacion = aprobacionesPorEstudio.get(estudio.id);
+            const renovacion = renovacionesPorEstudio.get(estudio.id);
+
+            return {
+              ...estudio,
+              estado: estadoNormalizado,
+              plan: (estudioNormalizado['plan'] as string | undefined) ?? 'STANDARD',
+              fechaSolicitud: convertirFecha(estudioNormalizado['fechaSolicitud'])?.toISOString() ?? null,
+              fechaAprobacion: convertirFecha(estudioNormalizado['fechaAprobacion'])?.toISOString() ?? null,
+              motivoRechazo: (estudioNormalizado['motivoRechazo'] as string | null | undefined) ?? null,
+              aprobadoPorNombre: aprobacion?.usuario?.nombre ?? null,
+              aprobadoPorEmail: aprobacion?.usuario?.email ?? null,
+              renovadoPorNombre: renovacion?.usuario?.nombre ?? null,
+              renovadoPorEmail: renovacion?.usuario?.email ?? null,
+            };
+          })
+          .filter((estudio) => (estadoSolicitado ? estudio.estado === estadoSolicitado : true));
+
+        const total = estudiosNormalizados.length;
+        const items = estudiosNormalizados.slice(saltar, saltar + limite);
+        return respuesta.send({ datos: items, total, pagina, totalPaginas: Math.ceil(total / limite) });
+      }
     },
   );
 
@@ -958,33 +1052,67 @@ export async function rutasAdmin(servidor: FastifyInstance): Promise<void> {
       const limite = Math.min(100, Math.max(1, parseInt(solicitud.query.limite ?? '50', 10)));
       const saltar = (pagina - 1) * limite;
 
-      const solicitudesCompatibles = (await listarSalonesAdmin())
-        .map((estudio) => {
+      try {
+        const [total, solicitudes] = await Promise.all([
+          prisma.estudio.count({ where: { estado: 'pendiente' } }),
+          prisma.estudio.findMany({
+            where: { estado: 'pendiente' },
+            select: seleccionarSalonAdminModerno,
+            orderBy: [{ fechaSolicitud: 'asc' }, { creadoEn: 'asc' }],
+            skip: saltar,
+            take: limite,
+          }),
+        ]);
+
+        const datos = solicitudes.map((estudio) => {
           const estudioNormalizado = estudio as unknown as Record<string, unknown>;
-          const estadoNormalizado = normalizarEstadoSalonDesdeRegistro(estudioNormalizado);
+          const fechaSolicitudCompat = obtenerFechaSolicitudRegistro(estudioNormalizado);
 
           return {
             ...estudio,
-            estado: estadoNormalizado,
-            fechaSolicitudCompat: obtenerFechaSolicitudRegistro(estudioNormalizado),
+            estado: normalizarEstadoSalonDesdeRegistro(estudioNormalizado),
+            fechaSolicitud: fechaSolicitudCompat.toISOString(),
+            diasDesdeRegistro: diasDesde(fechaSolicitudCompat),
             dueno: obtenerDuenoSalon(estudioNormalizado),
             motivoRechazo: (estudioNormalizado['motivoRechazo'] as string | null | undefined) ?? null,
             plan: (estudioNormalizado['plan'] as string | undefined) ?? 'STANDARD',
           };
-        })
-        .filter((estudio) => estudio.estado === 'pendiente')
-        .sort((a, b) => a.fechaSolicitudCompat.getTime() - b.fechaSolicitudCompat.getTime());
+        });
 
-      const total = solicitudesCompatibles.length;
-      const solicitudes = solicitudesCompatibles.slice(saltar, saltar + limite);
+        return respuesta.send({ datos, total, pagina, totalPaginas: Math.ceil(total / limite) });
+      } catch (error) {
+        if (!esErrorCompatibilidadAdmin(error)) {
+          throw error;
+        }
 
-      const datos = solicitudes.map((s) => ({
-        ...s,
-        fechaSolicitud: s.fechaSolicitudCompat.toISOString(),
-        diasDesdeRegistro: diasDesde(s.fechaSolicitudCompat),
-      }));
+        const solicitudesCompatibles = (await listarSalonesAdmin())
+          .map((estudio) => {
+            const estudioNormalizado = estudio as unknown as Record<string, unknown>;
+            const estadoNormalizado = normalizarEstadoSalonDesdeRegistro(estudioNormalizado);
 
-      return respuesta.send({ datos, total, pagina, totalPaginas: Math.ceil(total / limite) });
+            return {
+              ...estudio,
+              estado: estadoNormalizado,
+              fechaSolicitudCompat: obtenerFechaSolicitudRegistro(estudioNormalizado),
+              dueno: obtenerDuenoSalon(estudioNormalizado),
+              motivoRechazo: (estudioNormalizado['motivoRechazo'] as string | null | undefined) ?? null,
+              plan: (estudioNormalizado['plan'] as string | undefined) ?? 'STANDARD',
+            };
+          })
+          .filter((estudio) => estudio.estado === 'pendiente')
+          .sort((a, b) => a.fechaSolicitudCompat.getTime() - b.fechaSolicitudCompat.getTime());
+
+        const total = solicitudesCompatibles.length;
+        const solicitudes = solicitudesCompatibles.slice(saltar, saltar + limite);
+
+        const datos = solicitudes.map((s) => ({
+          ...s,
+          fechaSolicitud: s.fechaSolicitudCompat.toISOString(),
+          diasDesdeRegistro: diasDesde(s.fechaSolicitudCompat),
+        }));
+
+        return respuesta.send({ datos, total, pagina, totalPaginas: Math.ceil(total / limite) });
+      }
     },
   );
 
@@ -3920,14 +4048,39 @@ export async function rutasAdmin(servidor: FastifyInstance): Promise<void> {
   );
 }
 
+type RegistroBaseCliente = {
+  nombre: string;
+  telefono: string;
+  correo: string | null;
+  estudioId: string;
+  nombreEstudio: string;
+  paisEstudio: string;
+  serviciosRealizados: string[];
+  servicioMasFrecuente: string;
+  ultimaVisita: string | null;
+  totalVisitas: number;
+  totalGastado: number;
+};
+
+type EntradaCacheBaseClientes = {
+  datos: RegistroBaseCliente[];
+  expiraEn: number;
+};
+
 // ─── Helper: construye la lista de clientes con estadísticas ──────────────────
 async function construirBaseClientes(filtros: {
   salonId?: string;
   pais?: string;
   servicioFrecuente?: string;
   buscar?: string;
-}) {
+}): Promise<RegistroBaseCliente[]> {
   const { salonId, pais, servicioFrecuente, buscar } = filtros;
+
+  const llaveCache = JSON.stringify({ salonId, pais, servicioFrecuente, buscar });
+  const entradaCache = cacheBaseClientes.get(llaveCache);
+  if (entradaCache && entradaCache.expiraEn > Date.now()) {
+    return entradaCache.datos;
+  }
 
   const clientes = await prisma.cliente.findMany({
     where: {
@@ -3942,7 +4095,7 @@ async function construirBaseClientes(filtros: {
       estudioId: true,
     },
     orderBy: { creadoEn: 'desc' },
-    take: 15_000,
+    take: 10_000,
   });
 
   const estudiosIds = Array.from(new Set(clientes.map((cliente) => cliente.estudioId)));
@@ -4056,5 +4209,13 @@ async function construirBaseClientes(filtros: {
     ? filtrado.filter((c) => c.servicioMasFrecuente.toLowerCase().includes(servicioFrecuente.toLowerCase()))
     : filtrado;
 
+  cacheBaseClientes.set(llaveCache, {
+    datos: filtradoFinal,
+    expiraEn: Date.now() + TTL_CACHE_BASE_CLIENTES_MS,
+  });
+
   return filtradoFinal;
 }
+
+const TTL_CACHE_BASE_CLIENTES_MS = 30_000;
+const cacheBaseClientes = new Map<string, EntradaCacheBaseClientes>();

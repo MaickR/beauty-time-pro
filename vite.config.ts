@@ -66,6 +66,17 @@ export default defineConfig(({ mode }) => {
               return 'vendor-ui';
             }
 
+            if (id.includes('/node_modules/xlsx/')) {
+              return 'vendor-export-excel';
+            }
+
+            if (
+              id.includes('/node_modules/jspdf/') ||
+              id.includes('/node_modules/jspdf-autotable/')
+            ) {
+              return 'vendor-export-pdf';
+            }
+
             return 'vendor';
           },
         },

@@ -1,7 +1,6 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useRef } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { X, Download, Search } from 'lucide-react';
-import * as XLSX from 'xlsx';
 import { obtenerTotalSalones } from '../../../servicios/servicioAdmin';
 import type { SalonTotalMetrica } from '../../../servicios/servicioAdmin';
 import { construirNombreArchivoExportacion } from '../../../utils/archivos';
@@ -17,6 +16,10 @@ const LIMITE = 10;
 type CampoOrden = 'nombre' | 'fechaCreacion' | 'plan' | 'pais' | 'vendedor';
 type DireccionOrden = 'asc' | 'desc';
 
+async function cargarModuloExcel() {
+  return import('xlsx');
+}
+
 export function ModalTotalSalones({ onCerrar }: PropsModalTotalSalones) {
   const [buscar, setBuscar] = useState('');
   const [buscarDebounced, setBuscarDebounced] = useState('');
@@ -25,35 +28,29 @@ export function ModalTotalSalones({ onCerrar }: PropsModalTotalSalones) {
   const [filtrosPais, setFiltrosPais] = useState<string[]>([]);
   const [vendedor, setVendedor] = useState('');
   const [vendedorDebounced, setVendedorDebounced] = useState('');
-  const [temporizadorVendedor, setTemporizadorVendedor] = useState<ReturnType<
-    typeof setTimeout
-  > | null>(null);
+  const timerVendedor = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [campoOrden, setCampoOrden] = useState<CampoOrden>('fechaCreacion');
   const [direccionOrden, setDireccionOrden] = useState<DireccionOrden>('desc');
   const [exportando, setExportando] = useState(false);
 
-  // Debounce manual
-  const [temporizador, setTemporizador] = useState<ReturnType<typeof setTimeout> | null>(null);
+  // Debounce manual con refs para evitar renders extra
+  const timerBuscar = useRef<ReturnType<typeof setTimeout> | null>(null);
   const manejarBuscar = (valor: string) => {
     setBuscar(valor);
-    if (temporizador) clearTimeout(temporizador);
-    setTemporizador(
-      setTimeout(() => {
-        setBuscarDebounced(valor);
-        setPagina(1);
-      }, 300),
-    );
+    if (timerBuscar.current) clearTimeout(timerBuscar.current);
+    timerBuscar.current = setTimeout(() => {
+      setBuscarDebounced(valor);
+      setPagina(1);
+    }, 300);
   };
 
   const manejarVendedor = (valor: string) => {
     setVendedor(valor);
-    if (temporizadorVendedor) clearTimeout(temporizadorVendedor);
-    setTemporizadorVendedor(
-      setTimeout(() => {
-        setVendedorDebounced(valor);
-        setPagina(1);
-      }, 300),
-    );
+    if (timerVendedor.current) clearTimeout(timerVendedor.current);
+    timerVendedor.current = setTimeout(() => {
+      setVendedorDebounced(valor);
+      setPagina(1);
+    }, 300);
   };
 
   const planStr = filtrosplan.length > 0 ? filtrosplan.join(',') : undefined;
@@ -178,6 +175,7 @@ export function ModalTotalSalones({ onCerrar }: PropsModalTotalSalones) {
         Vendedor: s.vendedor ?? 'N/A',
       }));
 
+      const XLSX = await cargarModuloExcel();
       const hoja = XLSX.utils.json_to_sheet(filas);
       const libro = XLSX.utils.book_new();
       XLSX.utils.book_append_sheet(libro, hoja, 'Total Salones');

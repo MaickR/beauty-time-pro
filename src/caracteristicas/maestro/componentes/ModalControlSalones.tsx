@@ -11,7 +11,6 @@ import {
   EyeOff,
   RefreshCw,
 } from 'lucide-react';
-import * as XLSX from 'xlsx';
 import {
   obtenerSalonesActivos,
   obtenerSalonesSuspendidos,
@@ -40,6 +39,10 @@ interface PropsModalControlSalones {
 }
 
 type TabControl = 'activos' | 'suspendidos' | 'bloqueados';
+
+async function cargarModuloExcel() {
+  return import('xlsx');
+}
 
 const MOTIVOS_BLOQUEO = [
   'Se cierra el salón',
@@ -182,11 +185,12 @@ export function ModalControlSalones({ onCerrar }: PropsModalControlSalones) {
     mutEditar.mutate({ id: modalEditar.id, datos });
   };
 
-  const exportarExcel = (
+  const exportarExcel = async (
     nombreArchivo: string,
     tituloHoja: string,
     filas: Record<string, string>[],
   ) => {
+    const XLSX = await cargarModuloExcel();
     const hoja = XLSX.utils.json_to_sheet(filas);
     const libro = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(libro, hoja, tituloHoja);
@@ -199,7 +203,7 @@ export function ModalControlSalones({ onCerrar }: PropsModalControlSalones) {
     try {
       if (tabObjetivo === 'activos') {
         const salones = await obtenerTodosLosSalonesActivos();
-        exportarExcel(
+        await exportarExcel(
           'salones activos',
           'Salones Activos',
           salones.map((salon) => ({
@@ -215,7 +219,7 @@ export function ModalControlSalones({ onCerrar }: PropsModalControlSalones) {
 
       if (tabObjetivo === 'suspendidos') {
         const salones = await obtenerTodosLosSalonesSuspendidos();
-        exportarExcel(
+        await exportarExcel(
           'salones suspendidos',
           'Salones Suspendidos',
           salones.map((salon) => ({
@@ -229,7 +233,7 @@ export function ModalControlSalones({ onCerrar }: PropsModalControlSalones) {
 
       if (tabObjetivo === 'bloqueados') {
         const salones = await obtenerTodosLosSalonesBloqueados();
-        exportarExcel(
+        await exportarExcel(
           'salones bloqueados',
           'Salones Bloqueados',
           salones.map((salon) => ({

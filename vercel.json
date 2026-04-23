@@ -5,6 +5,13 @@
   "outputDirectory": "dist",
   "headers": [
     {
+      "source": "/health",
+      "headers": [
+        { "key": "Cache-Control", "value": "no-store, max-age=0" },
+        { "key": "Content-Type", "value": "application/json; charset=utf-8" }
+      ]
+    },
+    {
       "source": "/(.*)",
       "headers": [
         { "key": "X-Frame-Options", "value": "DENY" },
@@ -14,7 +21,7 @@
         { "key": "Strict-Transport-Security", "value": "max-age=63072000; includeSubDomains" },
         {
           "key": "Content-Security-Policy",
-          "value": "default-src 'self'; base-uri 'self'; object-src 'none'; frame-ancestors 'none'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https:; connect-src 'self' https://salonpromaster.com https://*.salonpromaster.com https://*.railway.app https://*.up.railway.app https://*.vercel.app; font-src 'self' data:; worker-src 'self' blob:; manifest-src 'self';"
+          "value": "default-src 'self'; base-uri 'self'; object-src 'none'; frame-ancestors 'none'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https:; connect-src 'self' https://salonpromaster.com https://*.salonpromaster.com https://*.railway.app https://*.up.railway.app https://*.vercel.app; font-src 'self' data:; worker-src 'self' blob:; manifest-src 'self';"
         }
       ]
     }

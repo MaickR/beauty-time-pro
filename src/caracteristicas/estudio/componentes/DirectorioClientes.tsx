@@ -13,7 +13,6 @@ import {
   Save,
   FileSpreadsheet,
 } from 'lucide-react';
-import * as XLSX from 'xlsx';
 import { Spinner } from '../../../componentes/ui/Spinner';
 import { formatearDinero } from '../../../utils/formato';
 import {
@@ -23,6 +22,10 @@ import {
   actualizarNotasCliente,
   type ClienteDetalle,
 } from '../../../servicios/servicioClientes';
+
+async function cargarModuloExcel() {
+  return import('xlsx');
+}
 
 interface PropsDirectorioClientes {
   estudioId: string;
@@ -56,7 +59,8 @@ interface PropsPanelCliente {
 
 const HISTORIAL_POR_PAGINA = 3;
 
-function descargarArchivoExcel(filas: Array<Record<string, string | number>>) {
+async function descargarArchivoExcel(filas: Array<Record<string, string | number>>) {
+  const XLSX = await cargarModuloExcel();
   const hoja = XLSX.utils.json_to_sheet(filas);
   const libro = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(libro, hoja, 'Clientes');
@@ -296,7 +300,7 @@ export function DirectorioClientes({ estudioId }: PropsDirectorioClientes) {
         Visitas: cliente.totalReservas,
         'Última visita': cliente.ultimaVisita ?? '',
       }));
-      descargarArchivoExcel(filas);
+      void descargarArchivoExcel(filas);
     } finally {
       setExportando(false);
     }

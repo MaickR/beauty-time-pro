@@ -1,6 +1,7 @@
 import './lib/env.js'; // validar entorno al arrancar
 import Fastify from 'fastify';
 import type { FastifyError } from 'fastify';
+import type { FastifyInstance } from 'fastify';
 import cors from '@fastify/cors';
 import jwt from '@fastify/jwt';
 import cookie from '@fastify/cookie';
@@ -35,6 +36,32 @@ import { rutasMensajesMasivos } from './rutas/mensajesMasivos.js';
 import { rutasProductos } from './rutas/productos.js';
 import { rutasVendedor } from './rutas/vendedor.js';
 import { rutasPreciosPlanes } from './rutas/preciosPlanes.js';
+
+const INTERVALO_MINIMO_SINCRONIZACION_MS = 60_000;
+let sincronizacionReactivacionEnCurso = false;
+let ultimaSincronizacionReactivacionMs = 0;
+
+function intentarSincronizarReactivacionesNoBloqueante(servidor: FastifyInstance): void {
+  const ahora = Date.now();
+  if (sincronizacionReactivacionEnCurso) {
+    return;
+  }
+
+  if (ahora - ultimaSincronizacionReactivacionMs < INTERVALO_MINIMO_SINCRONIZACION_MS) {
+    return;
+  }
+
+  sincronizacionReactivacionEnCurso = true;
+  ultimaSincronizacionReactivacionMs = ahora;
+
+  void sincronizarReactivacionesProgramadasPersonal()
+    .catch((error) => {
+      servidor.log.warn({ err: error }, 'No se pudo sincronizar la reactivación programada de personal');
+    })
+    .finally(() => {
+      sincronizacionReactivacionEnCurso = false;
+    });
+}
 
 function obtenerContentTypeEstatico(rutaArchivo: string): string {
   const extension = path.extname(rutaArchivo).toLowerCase();
@@ -103,7 +130,12 @@ function obtenerMensajePublicoError(codigoEstado: number): string {
 }
 
 void (async () => {
-  const servidor = Fastify({ logger: true, bodyLimit: 1_048_576 /* 1 MB */ });
+  const servidor = Fastify({
+    logger: true,
+    bodyLimit: 1_048_576 /* 1 MB */,
+    // Mantener desactivada la confianza en proxies evita spoofing por X-Forwarded-*.
+    trustProxy: false,
+  });
 
   await servidor.register(helmet, {
     contentSecurityPolicy: {
@@ -135,11 +167,7 @@ void (async () => {
   });
 
   servidor.addHook('onRequest', async (solicitud, respuesta) => {
-    try {
-      await sincronizarReactivacionesProgramadasPersonal();
-    } catch (error) {
-      servidor.log.warn({ err: error }, 'No se pudo sincronizar la reactivación programada de personal');
-    }
+    intentarSincronizarReactivacionesNoBloqueante(servidor);
 
     respuesta.header('X-Request-ID', solicitud.id);
   });
@@ -246,18 +274,36 @@ void (async () => {
   await servidor.register(rutasVendedor);
   await servidor.register(rutasPreciosPlanes);
 
-  servidor.get('/salud', async () => ({
-    estado: 'ok',
-    timestamp: new Date().toISOString(),
-    entorno: env.ENTORNO,
-  }));
+  servidor.get(
+    '/salud',
+    {
+      logLevel: 'warn',
+    },
+    async (_solicitud, respuesta) => {
+      respuesta.header('Cache-Control', 'no-store, max-age=0');
+      return {
+        estado: 'ok',
+        timestamp: new Date().toISOString(),
+        entorno: env.ENTORNO,
+      };
+    },
+  );
 
   // /health — Railway usará este endpoint para verificar que el deploy fue exitoso
-  servidor.get('/health', async () => ({
-    status: 'ok',
-    timestamp: new Date().toISOString(),
-    version: '1.0.0',
-  }));
+  servidor.get(
+    '/health',
+    {
+      logLevel: 'warn',
+    },
+    async (_solicitud, respuesta) => {
+      respuesta.header('Cache-Control', 'no-store, max-age=0');
+      return {
+        status: 'ok',
+        timestamp: new Date().toISOString(),
+        version: '1.0.0',
+      };
+    },
+  );
 
   const gracefulShutdown = async (signal: string) => {
     servidor.log.info(`Recibida señal ${signal}, cerrando servidor...`);

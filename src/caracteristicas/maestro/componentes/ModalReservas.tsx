@@ -1,7 +1,6 @@
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { X, CalendarDays, Download } from 'lucide-react';
-import * as XLSX from 'xlsx';
 import {
   obtenerReservasMetrica,
   obtenerTodasLasReservasMetrica,
@@ -36,6 +35,10 @@ const ESTADOS_FILTRO = [
 ] as const;
 
 const PAISES_FILTRO = ['Mexico', 'Colombia'] as const;
+
+async function cargarModuloExcel() {
+  return import('xlsx');
+}
 
 export function ModalReservas({ onCerrar }: PropsModalReservas) {
   const [fechaInicio, setFechaInicio] = useState(obtenerFechaHace30Dias);
@@ -128,6 +131,7 @@ export function ModalReservas({ onCerrar }: PropsModalReservas) {
         Estado: etiquetaEstado(r.estado),
         País: r.pais,
       }));
+      const XLSX = await cargarModuloExcel();
       const hoja = XLSX.utils.json_to_sheet(filas);
       const libro = XLSX.utils.book_new();
       XLSX.utils.book_append_sheet(libro, hoja, 'Reservas');

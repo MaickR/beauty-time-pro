@@ -16,7 +16,6 @@ import {
   X,
   Zap,
 } from 'lucide-react';
-import * as XLSX from 'xlsx';
 import {
   obtenerMetricasDashboard,
   type CitaDashboardSalon,
@@ -65,7 +64,7 @@ interface PropsModal {
 
 const ESTADO_CITAS = [
   { valor: 'todos', etiqueta: 'Todos' },
-  { valor: 'pending', etiqueta: 'Confirmada' },
+  { valor: 'pending', etiqueta: 'Pendiente' },
   { valor: 'confirmed', etiqueta: 'Confirmada' },
   { valor: 'working', etiqueta: 'Trabajando' },
   { valor: 'completed', etiqueta: 'Completada' },
@@ -78,6 +77,10 @@ type DireccionOrden = 'asc' | 'desc';
 type CampoOrdenCitas = 'cliente' | 'servicio' | 'empleado' | 'hora' | 'precio' | 'estado';
 type CampoOrdenIngresos = 'fecha' | 'concepto' | 'tipo' | 'responsable' | 'cliente' | 'monto';
 type CampoOrdenEspecialistas = 'nombre' | 'servicios' | 'jornada' | 'descanso' | 'citasHoy';
+
+async function cargarModuloExcel() {
+  return import('xlsx');
+}
 
 function normalizarNombreArchivo(valor: string) {
   return (
@@ -253,11 +256,12 @@ function StatCard({ title, value, subtitle, color, icon, onClick }: PropsStatCar
   );
 }
 
-function descargarExcel(
+async function descargarExcel(
   nombreArchivo: string,
   nombreHoja: string,
   filas: Record<string, unknown>[],
 ) {
+  const XLSX = await cargarModuloExcel();
   const hoja = XLSX.utils.json_to_sheet(filas);
   const libro = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(libro, hoja, nombreHoja);
@@ -483,7 +487,7 @@ function ModalCitasHoy({
           <button
             type="button"
             onClick={() =>
-              descargarExcel(
+              void descargarExcel(
                 `citas_de_hoy_${normalizarNombreArchivo(nombreSalon)}.xlsx`,
                 'Citas hoy',
                 filteredCitas.map((cita) => ({
@@ -835,7 +839,7 @@ function ModalGanancias({
           <button
             type="button"
             onClick={() =>
-              descargarExcel(
+              void descargarExcel(
                 `balance_${obtenerSegmentoPeriodoFinancieroArchivo(financeTab)}_${normalizarNombreArchivo(nombreSalon)}.xlsx`,
                 `Balance ${obtenerEtiquetaPeriodoFinanciero(financeTab)}`,
                 filasConAcumulado.map((fila) => ({
@@ -1010,7 +1014,7 @@ function ModalEspecialistas({
         <button
           type="button"
           onClick={() =>
-            descargarExcel(
+            void descargarExcel(
               'especialistas-activos.xlsx',
               'Especialistas',
               filtrados.map((especialista) => ({

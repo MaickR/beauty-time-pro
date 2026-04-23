@@ -1,9 +1,12 @@
 import { useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import * as XLSX from 'xlsx';
 import { CircleDollarSign, Download, SearchX, ShieldAlert, Wallet } from 'lucide-react';
 import { obtenerVentasVendedor } from '../../../servicios/servicioVendedor';
 import { formatearDinero } from '../../../utils/formato';
+
+async function cargarModuloExcel() {
+  return import('xlsx');
+}
 
 export function TabVentasVendedor() {
   const [fechaDesde, setFechaDesde] = useState('');
@@ -36,7 +39,7 @@ export function TabVentasVendedor() {
 
   const moneda = ventas?.[0]?.moneda === 'COP' ? 'COP' : 'MXN';
 
-  const exportarExcel = () => {
+  const exportarExcel = async () => {
     if (!ventas || ventas.length === 0) return;
     const filas = ventas.map((venta) => ({
       Salon: venta.salonNombre,
@@ -56,6 +59,7 @@ export function TabVentasVendedor() {
       Referencia: venta.referencia ?? '',
     }));
 
+    const XLSX = await cargarModuloExcel();
     const hoja = XLSX.utils.json_to_sheet(filas);
     const libro = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(libro, hoja, 'Ventas');
@@ -102,7 +106,9 @@ export function TabVentasVendedor() {
           </button>
           <button
             type="button"
-            onClick={exportarExcel}
+            onClick={() => {
+              void exportarExcel();
+            }}
             disabled={!ventas || ventas.length === 0}
             className="inline-flex items-center gap-2 self-end rounded-full bg-slate-900 px-5 py-3 text-sm font-bold text-white transition hover:bg-slate-800 disabled:opacity-50"
           >
