@@ -11,6 +11,8 @@ import {
 } from '../../../utils/formato';
 import { DIAS_SEMANA, CATALOGO_SERVICIOS } from '../../../lib/constantes';
 import {
+  DESCRIPCION_FORMATO_CONTRASENA_SALON,
+  esContrasenaFormatoSalonValida,
   esEmailSalonValido,
   generarContrasenaSalon,
   limpiarTelefonoEntrada,
@@ -315,8 +317,10 @@ export function usarFormularioEstudio(opciones?: OpcionesFormularioEstudio) {
           return;
         }
 
-        if (datosGuardar.contrasenaDueno.trim().length < 8) {
-          mostrarError('La contraseña automática del dueño debe tener 8 caracteres.');
+        if (!esContrasenaFormatoSalonValida(datosGuardar.contrasenaDueno)) {
+          mostrarError(
+            `La contraseña del dueño no cumple el patrón. ${DESCRIPCION_FORMATO_CONTRASENA_SALON}.`,
+          );
           return;
         }
 

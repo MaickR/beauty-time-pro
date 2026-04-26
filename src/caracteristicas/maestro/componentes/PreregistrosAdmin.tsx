@@ -145,7 +145,7 @@ export function PreregistrosAdmin() {
           <div
             className="animate-spin w-8 h-8 border-4 border-pink-500 border-t-transparent rounded-full mx-auto"
             role="status"
-            aria-label="Loading"
+            aria-label="Cargando"
           />
         </div>
       )}

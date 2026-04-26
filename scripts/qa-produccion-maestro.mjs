@@ -270,14 +270,56 @@ async function obtenerPersonalEstudio(pagina, estudioId) {
 }
 
 async function completarFormularioLogin(pagina, email, contrasena) {
-  const campoIdentificador = pagina.locator('#identificador');
-  if (await campoIdentificador.count()) {
-    await campoIdentificador.fill(email);
-  } else {
-    await pagina.getByLabel(/Correo de acceso|Correo o teléfono/i).fill(email);
+  await pagina.waitForSelector('#acceso, #identificador, input[autocomplete="username"], input[type="text"]', {
+    timeout: 30000,
+  });
+
+  const candidatosAcceso = [
+    pagina.locator('#acceso'),
+    pagina.locator('#identificador'),
+    pagina.getByLabel(/Clave de acceso|Correo de acceso|Correo electronico|Correo o teléfono|Correo/i),
+    pagina.locator('input[autocomplete="username"]'),
+    pagina.locator('input[type="text"]').first(),
+  ];
+
+  let accesoCompletado = false;
+  for (const candidato of candidatosAcceso) {
+    const existe = await candidato.count().catch(() => 0);
+    if (!existe) continue;
+    const visible = await candidato.first().isVisible().catch(() => false);
+    if (!visible) continue;
+    await candidato.first().fill(email);
+    accesoCompletado = true;
+    break;
   }
 
-  await pagina.locator('#contrasena').fill(contrasena);
+  if (!accesoCompletado) {
+    throw new Error('No se encontró input de acceso en login de producción');
+  }
+
+  const botonEntrar = pagina.getByRole('button', {
+    name: /LOGIN|Entrar al sistema|Entrar/i,
+  }).first();
+  await botonEntrar.waitFor({ state: 'visible', timeout: 30000 });
+
+  const campoContrasena = pagina.locator('#contrasena');
+  const contrasenaHabilitadaInicial = await campoContrasena.isEnabled().catch(() => false);
+
+  if (!contrasenaHabilitadaInicial) {
+    await botonEntrar.click();
+    await pagina
+      .waitForFunction(
+        () => {
+          const input = document.querySelector('#contrasena');
+          return Boolean(input) && !input.disabled && input.offsetParent !== null;
+        },
+        { timeout: 30000 },
+      )
+      .catch(() => null);
+  }
+
+  await campoContrasena.waitFor({ state: 'visible', timeout: 30000 });
+  await campoContrasena.fill(contrasena);
 }
 
 const navegador = await chromium.launch({ headless: true });
@@ -301,15 +343,20 @@ try {
       await pagina.goto(urlLogin, { waitUntil: 'networkidle', timeout: 40000 });
       await completarFormularioLogin(pagina, credenciales.email, credenciales.contrasena);
 
-      const respuestaLoginPromise = pagina.waitForResponse(
-        (respuesta) =>
-          respuesta.url().includes('/auth/iniciar-sesion') &&
-          respuesta.request().method() === 'POST',
-        { timeout: 20000 },
-      );
+      const botonSubmitLogin = pagina.getByRole('button', {
+        name: /Entrar al sistema|LOGIN|Entrar/i,
+      }).first();
+      await botonSubmitLogin.waitFor({ state: 'visible', timeout: 20000 });
 
-      await pagina.getByRole('button', { name: /Entrar al sistema/i }).click();
-      const respuestaLogin = await respuestaLoginPromise;
+      const [respuestaLogin] = await Promise.all([
+        pagina.waitForResponse(
+          (respuesta) =>
+            respuesta.url().includes('/auth/iniciar-sesion') &&
+            respuesta.request().method() === 'POST',
+          { timeout: 20000 },
+        ),
+        botonSubmitLogin.click(),
+      ]);
       const cuerpoLogin = await leerCuerpoRespuesta(respuestaLogin);
 
       modulo.detalles.push(`HTTP login: ${respuestaLogin.status()}`);

@@ -489,8 +489,8 @@ registrarCallbackSesionExpirada(({ mensaje, codigo }) => {
   });
   if (typeof window !== 'undefined') {
     guardarAvisoInicioSesion({
-      titulo: 'Session ended',
-      mensaje: mensaje || 'Your session is no longer active. Sign in again to continue.',
+      titulo: 'Sesion finalizada',
+      mensaje: mensaje || 'Tu sesion ya no esta activa. Inicia sesion nuevamente para continuar.',
       codigo,
       tono: codigo ? 'amber' : 'blue',
     });

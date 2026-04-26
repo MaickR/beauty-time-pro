@@ -199,7 +199,7 @@ export async function reiniciarSalonDemoVendedor(): Promise<{
 }> {
   const res = await peticion<{ datos: { mensaje: string; id: string; slug: string | null } }>(
     '/vendedor/demo/reset',
-    { method: 'POST' },
+    { method: 'POST', body: '{}' },
   );
   return res.datos;
 }

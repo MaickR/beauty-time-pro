@@ -1,6 +1,7 @@
 export type TipoNotificacionSalonRelevante =
   | 'recordatorio_pago'
   | 'pago_confirmado'
+  | 'reactivacion'
   | 'suspension'
   | 'cambio_precio_plan'
   | 'nueva_reserva'
@@ -22,6 +23,7 @@ export interface NotificacionSalonRelevante {
 const TIPOS_RELEVANTES = new Set<TipoNotificacionSalonRelevante>([
   'recordatorio_pago',
   'pago_confirmado',
+  'reactivacion',
   'suspension',
   'cambio_precio_plan',
   'nueva_reserva',

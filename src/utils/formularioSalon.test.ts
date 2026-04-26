@@ -36,7 +36,7 @@ describe('formularioSalon', () => {
     const contrasena = generarContrasenaSalon('Nova Spa', 'Ana María', 2);
 
     expect(contrasena).toHaveLength(9);
-    expect(contrasena.startsWith('novana')).toBe(true);
+    expect(contrasena.startsWith('NOVana')).toBe(true);
     expect(/[0-9]{2}/.test(contrasena.slice(6, 8))).toBe(true);
     expect(/[!@#$%&*]/.test(contrasena.charAt(contrasena.length - 1))).toBe(true);
   });
@@ -45,7 +45,7 @@ describe('formularioSalon', () => {
     const contrasena = generarContrasenaSalon('Li', 'Jo', 0);
 
     expect(contrasena).toHaveLength(9);
-    expect(contrasena.startsWith('lisjod')).toBe(true);
+    expect(contrasena.startsWith('LISjod')).toBe(true);
     expect(/[0-9]{2}/.test(contrasena.slice(6, 8))).toBe(true);
     expect(/[!@#$%&*]/.test(contrasena.charAt(contrasena.length - 1))).toBe(true);
   });

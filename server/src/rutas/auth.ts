@@ -190,6 +190,10 @@ type CoincidenciaAcceso =
   | { tipo: 'empleado'; datos: EmpleadoAccesoLogin; metodo: 'correo' | 'solo_contrasena' }
   | { tipo: 'usuario'; datos: UsuarioAccesoLogin; metodo: 'correo' | 'solo_contrasena' };
 
+type TipoClaveAcceso = 'cliente' | 'studio' | 'desconocida';
+
+const ROLES_INTERNOS_CONTRASENA_DIRECTA = ['maestro', 'supervisor', 'vendedor'] as const;
+
 function crearPermisosVacios(): PermisosJWT {
   return {
     aprobarSalones: false,
@@ -275,6 +279,39 @@ function esIdentificadorClaveSalon(identificador: string) {
   );
 }
 
+async function detectarTipoClaveAcceso(clave: string): Promise<TipoClaveAcceso> {
+  const claveNormalizada = sanitizarClaveSalon(clave);
+
+  if (!claveNormalizada || !esIdentificadorClaveSalon(claveNormalizada)) {
+    return 'desconocida';
+  }
+
+  const estudio = await prisma.estudio.findFirst({
+    where: {
+      OR: [{ claveCliente: claveNormalizada }, { claveDueno: claveNormalizada }],
+    },
+    select: {
+      id: true,
+      claveCliente: true,
+      claveDueno: true,
+    },
+  });
+
+  if (!estudio) {
+    return 'desconocida';
+  }
+
+  if (estudio.claveCliente === claveNormalizada) {
+    return 'cliente';
+  }
+
+  if (estudio.claveDueno === claveNormalizada) {
+    return 'studio';
+  }
+
+  return 'desconocida';
+}
+
 function obtenerTokenCsrfCabecera(solicitud: FastifyRequest): string | null {
   const valor = solicitud.headers[CABECERA_CSRF];
   if (Array.isArray(valor)) {
@@ -340,6 +377,26 @@ async function registrarAuditoriaAcceso(
 }
 
 export async function rutasAuth(servidor: FastifyInstance): Promise<void> {
+  servidor.post<{ Body: { clave?: string } }>(
+    '/auth/detectar-clave-acceso',
+    {
+      config: CONFIG_RATE_LIMIT_LOGIN ? { rateLimit: CONFIG_RATE_LIMIT_LOGIN } : {},
+    },
+    async (solicitud, respuesta) => {
+      const clave = solicitud.body?.clave?.trim() ?? '';
+
+      if (!clave) {
+        return respuesta.code(400).send({
+          error: 'Ingresa una clave para validar.',
+          codigo: 'CLAVE_REQUERIDA',
+        });
+      }
+
+      const tipo = await detectarTipoClaveAcceso(clave);
+      return respuesta.send({ datos: { tipo } });
+    },
+  );
+
   /**
    * POST /auth/iniciar-sesion
    * Acepta { email, contrasena } para usuarios en base de datos.
@@ -444,19 +501,7 @@ export async function rutasAuth(servidor: FastifyInstance): Promise<void> {
 
       // ─── Modo identificador inteligente + contraseña ─────────────────────
       const identificadorAcceso = identificadorEntrada;
-      if (!identificadorAcceso) {
-        return respuesta.code(400).send({
-          error: 'Debes ingresar un correo o teléfono para iniciar sesión.',
-          codigo: 'IDENTIFICADOR_REQUERIDO',
-        });
-      }
-
-      if (!contrasena) {
-        return respuesta.code(400).send({
-          error: 'La contraseña es requerida para iniciar con correo o teléfono.',
-          codigo: 'CONTRASENA_REQUERIDA',
-        });
-      }
+      const contrasenaLimpia = contrasena?.trim() ?? '';
 
       const coincidencias: CoincidenciaAcceso[] = [];
       let usuario: UsuarioAccesoLogin | null = null;
@@ -469,14 +514,191 @@ export async function rutasAuth(servidor: FastifyInstance): Promise<void> {
           return;
         }
 
-        if (await compararHashContrasena(contrasena, coincidencia.datos.hashContrasena)) {
+        if (await compararHashContrasena(contrasenaLimpia, coincidencia.datos.hashContrasena)) {
           coincidencias.push(coincidencia);
         }
       };
 
-      const credencial = normalizarIdentificadorAcceso(identificadorAcceso);
+      if (!identificadorAcceso && !contrasenaLimpia) {
+        return respuesta.code(400).send({
+          error: 'Ingresa tu acceso para iniciar sesión.',
+          codigo: 'IDENTIFICADOR_REQUERIDO',
+        });
+      }
 
-      if (credencial.esCorreo) {
+      if (!identificadorAcceso && contrasenaLimpia) {
+        const usuariosInternos = await prisma.usuario.findMany({
+          where: {
+            rol: { in: [...ROLES_INTERNOS_CONTRASENA_DIRECTA] },
+            activo: true,
+          },
+          select: {
+            id: true,
+            email: true,
+            hashContrasena: true,
+            nombre: true,
+            rol: true,
+            activo: true,
+            estudioId: true,
+            estudio: {
+              select: {
+                id: true,
+                nombre: true,
+                slug: true,
+                activo: true,
+                estado: true,
+                motivoRechazo: true,
+              },
+            },
+          },
+        });
+
+        await Promise.all(
+          usuariosInternos.map(async (usuarioInterno) => {
+            await registrarCoincidencia({
+              tipo: 'usuario',
+              datos: usuarioInterno,
+              metodo: 'solo_contrasena',
+            });
+          }),
+        );
+
+        if (coincidencias.length !== 1) {
+          return respuesta.code(409).send({
+            error:
+              'No pudimos confirmar el acceso solo con esa contraseña. Ingresa también tu correo para continuar.',
+            codigo: 'IDENTIFICADOR_REQUERIDO',
+          });
+        }
+      } else if (!contrasenaLimpia) {
+        const credencial = normalizarIdentificadorAcceso(identificadorAcceso);
+
+        if (credencial.esCorreo) {
+          const [clientePorCorreo, empleadoPorCorreo, usuarioPorCorreo] = await Promise.all([
+            prisma.clienteApp.findUnique({
+              where: { email: credencial.valor },
+              select: {
+                id: true,
+                email: true,
+                telefono: true,
+                hashContrasena: true,
+                activo: true,
+                nombre: true,
+                apellido: true,
+              },
+            }),
+            prisma.empleadoAcceso.findUnique({
+              where: { email: credencial.valor },
+              select: { id: true },
+            }),
+            prisma.usuario.findUnique({
+              where: { email: credencial.valor },
+              select: { id: true },
+            }),
+          ]);
+
+          if (clientePorCorreo && !empleadoPorCorreo && !usuarioPorCorreo) {
+            if (!clientePorCorreo.activo) {
+              return respuesta.code(403).send({
+                error: 'Cuenta suspendida. Contacta al administrador.',
+                codigo: 'CUENTA_SUSPENDIDA',
+              });
+            }
+
+            void prisma.clienteApp.update({
+              where: { id: clientePorCorreo.id },
+              data: { ultimoAcceso: new Date() },
+            });
+
+            return emitirTokens(servidor, respuesta, {
+              sub: clientePorCorreo.id,
+              rol: 'cliente',
+              estudioId: null,
+              nombre: `${clientePorCorreo.nombre} ${clientePorCorreo.apellido}`,
+              email: clientePorCorreo.email,
+            }, {
+              sujetoTipo: 'cliente_app',
+              ip: solicitud.ip,
+              userAgent: solicitud.headers['user-agent'],
+              solicitud,
+              accionAuditoria: 'login_exitoso',
+              detallesAuditoria: { metodo: 'correo' },
+            });
+          }
+
+          if (!clientePorCorreo && !empleadoPorCorreo && !usuarioPorCorreo) {
+            return respuesta.code(404).send({
+              error:
+                'Ese correo no está registrado. Si eres cliente nuevo, crea tu cuenta para continuar.',
+              codigo: 'EMAIL_NO_REGISTRADO',
+            });
+          }
+
+          return respuesta.code(400).send({
+            error: 'Ese acceso requiere correo y contraseña para validar tu identidad.',
+            codigo: 'CONTRASENA_REQUERIDA',
+          });
+        }
+
+        const clientePorTelefono = await prisma.clienteApp.findUnique({
+          where: { telefono: credencial.valor },
+          select: {
+            id: true,
+            email: true,
+            telefono: true,
+            hashContrasena: true,
+            activo: true,
+            nombre: true,
+            apellido: true,
+          },
+        });
+
+        if (!clientePorTelefono) {
+          return respuesta.code(404).send({
+            error: 'No encontramos un cliente activo con ese teléfono.',
+            codigo: 'TELEFONO_NO_REGISTRADO',
+          });
+        }
+
+        if (!clientePorTelefono.activo) {
+          return respuesta.code(403).send({
+            error: 'Cuenta suspendida. Contacta al administrador.',
+            codigo: 'CUENTA_SUSPENDIDA',
+          });
+        }
+
+        void prisma.clienteApp.update({
+          where: { id: clientePorTelefono.id },
+          data: { ultimoAcceso: new Date() },
+        });
+
+        return emitirTokens(servidor, respuesta, {
+          sub: clientePorTelefono.id,
+          rol: 'cliente',
+          estudioId: null,
+          nombre: `${clientePorTelefono.nombre} ${clientePorTelefono.apellido}`,
+          email: clientePorTelefono.email,
+        }, {
+          sujetoTipo: 'cliente_app',
+          ip: solicitud.ip,
+          userAgent: solicitud.headers['user-agent'],
+          solicitud,
+          accionAuditoria: 'login_exitoso',
+          detallesAuditoria: { metodo: 'telefono' },
+        });
+      }
+
+      if (!coincidencias.length && !contrasenaLimpia) {
+        return respuesta.code(400).send({
+          error: 'La contraseña es requerida para este tipo de acceso.',
+          codigo: 'CONTRASENA_REQUERIDA',
+        });
+      }
+
+      if (!coincidencias.length && identificadorAcceso) {
+        const credencial = normalizarIdentificadorAcceso(identificadorAcceso);
+
+        if (credencial.esCorreo) {
         const [clientePorCorreo, empleadoPorCorreo, usuarioPorCorreo] = await Promise.all([
           prisma.clienteApp.findUnique({
             where: { email: credencial.valor },
@@ -558,25 +780,26 @@ export async function rutasAuth(servidor: FastifyInstance): Promise<void> {
             codigo: 'EMAIL_NO_REGISTRADO',
           });
         }
-      } else {
-        const clientePorTelefono = await prisma.clienteApp.findUnique({
-          where: { telefono: credencial.valor },
-          select: {
-            id: true,
-            email: true,
-            telefono: true,
-            hashContrasena: true,
-            activo: true,
-            nombre: true,
-            apellido: true,
-          },
-        });
+        } else {
+          const clientePorTelefono = await prisma.clienteApp.findUnique({
+            where: { telefono: credencial.valor },
+            select: {
+              id: true,
+              email: true,
+              telefono: true,
+              hashContrasena: true,
+              activo: true,
+              nombre: true,
+              apellido: true,
+            },
+          });
 
-        await registrarCoincidencia(
-          clientePorTelefono
-            ? { tipo: 'cliente', datos: clientePorTelefono, metodo: 'telefono' }
-            : null,
-        );
+          await registrarCoincidencia(
+            clientePorTelefono
+              ? { tipo: 'cliente', datos: clientePorTelefono, metodo: 'telefono' }
+              : null,
+          );
+        }
       }
 
       if (coincidencias.length === 0) {

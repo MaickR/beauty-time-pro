@@ -33,38 +33,33 @@ export function DialogoConfirmacion({
 }: PropsDialogoConfirmacion) {
   if (!abierto) return null;
 
-  const colorIcono = variante === 'peligro' ? 'text-red-500' : 'text-yellow-500';
+  const colorIcono = variante === 'peligro' ? 'text-[#991b1b]' : 'text-[#143c32]';
   const colorBoton =
     variante === 'peligro'
-      ? 'bg-red-600 hover:bg-red-700 text-white'
-      : 'bg-slate-900 hover:bg-black text-white';
+      ? 'bg-[#991b1b] hover:bg-[#7f1d1d] text-white border-[#991b1b]'
+      : 'bg-[#143c32] hover:bg-[#0a2823] text-white border-[#143c32]';
 
   return (
     <div
       role="dialog"
       aria-modal="true"
       aria-labelledby="dialogo-titulo"
-      className="fixed inset-0 z-[200] flex items-center justify-center bg-black/70 backdrop-blur-sm p-4"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 backdrop-blur-sm"
       onKeyDown={(e) => e.key === 'Escape' && onCancelar()}
     >
-      <div className="bg-white rounded-[2rem] p-8 max-w-sm w-full shadow-2xl">
+      <div className="w-full max-w-sm rounded-2xl border border-[#c9c1bb] bg-white p-6 shadow-xl">
         <div className="flex flex-col items-center text-center gap-4">
-          <div className={`p-4 rounded-full bg-slate-100 ${colorIcono}`}>
-            <AlertTriangle className="w-8 h-8" />
+          <div className={`rounded-full bg-[#fef2f2] p-3.5 ${colorIcono}`}>
+            <AlertTriangle className="w-6 h-6" />
           </div>
-          <h2
-            id="dialogo-titulo"
-            className="text-lg font-black text-slate-900 uppercase tracking-tight"
-          >
+          <h2 id="dialogo-titulo" className="text-lg font-bold text-black">
             {mensaje}
           </h2>
-          {descripcion && (
-            <p className="text-sm text-slate-500 font-medium leading-relaxed">{descripcion}</p>
-          )}
+          {descripcion && <p className="text-sm text-[#5f5854] leading-relaxed">{descripcion}</p>}
           {onCambiarCampo && (
             <label className="w-full text-left">
               {etiquetaCampo && (
-                <span className="mb-2 block text-[11px] font-black uppercase tracking-wide text-slate-600">
+                <span className="mb-1.5 block text-xs font-semibold uppercase tracking-wide text-[#5f5854]">
                   {etiquetaCampo}
                 </span>
               )}
@@ -72,15 +67,15 @@ export function DialogoConfirmacion({
                 value={valorCampo ?? ''}
                 onChange={(evento) => onCambiarCampo(evento.target.value)}
                 placeholder={placeholderCampo}
-                className="w-full rounded-2xl border border-slate-200 px-4 py-3 text-sm font-semibold text-slate-900 outline-none transition focus:border-pink-400 focus:ring-2 focus:ring-pink-100"
+                className="w-full rounded-lg border border-[#c9c1bb] bg-white px-3.5 py-2.5 text-sm font-medium text-black outline-none transition focus:border-[#c6968c] focus:ring-2 focus:ring-[#f4e9e5]"
               />
             </label>
           )}
         </div>
-        <div className="flex gap-3 mt-8">
+        <div className="flex gap-3 mt-6">
           <button
             onClick={onCancelar}
-            className="flex-1 py-3 bg-slate-100 text-slate-600 font-black rounded-2xl uppercase text-xs hover:bg-slate-200 transition-colors"
+            className="flex-1 rounded-lg border border-[#c9c1bb] bg-white py-2.5 text-sm font-semibold text-[#5f5854] transition-colors hover:bg-[#f4efec]"
           >
             {textoCancelar}
           </button>
@@ -88,7 +83,7 @@ export function DialogoConfirmacion({
             onClick={onConfirmar}
             disabled={cargando}
             aria-busy={cargando}
-            className={`flex-1 py-3 font-black rounded-2xl uppercase text-xs transition-colors disabled:opacity-60 ${colorBoton}`}
+            className={`flex-1 rounded-lg border py-2.5 text-sm font-bold transition-colors disabled:opacity-50 ${colorBoton}`}
           >
             {cargando ? 'Procesando...' : textoConfirmar}
           </button>

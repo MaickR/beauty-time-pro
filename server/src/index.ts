@@ -138,6 +138,7 @@ void (async () => {
   });
 
   await servidor.register(helmet, {
+    frameguard: false,
     contentSecurityPolicy: {
       directives: {
         defaultSrc: ["'self'"],

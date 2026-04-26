@@ -3,9 +3,11 @@ import { useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
-import { Eye, EyeOff, KeyRound, Lock, Mail, UserRound } from 'lucide-react';
+import { Eye, EyeOff, KeyRound, Mail, UserRound } from 'lucide-react';
 import { consumirAvisoInicioSesion, usarTiendaAuth } from '../../tienda/tiendaAuth';
 import { usarTituloPagina } from '../../hooks/usarTituloPagina';
+import { detectarClaveAccesoAPI } from '../../servicios/servicioAuth';
+import './PaginaInicioSesion.css';
 
 function esCorreo(valor: string) {
   return z.string().email().safeParse(valor.trim()).success;
@@ -25,34 +27,11 @@ function esPosibleClaveSalon(valor: string) {
   );
 }
 
-const esquema = z
-  .object({
-    acceso: z.string().trim().min(1, 'Ingresa tu clave, correo o telefono'),
-    contrasena: z.string().trim().optional(),
-  })
-  .superRefine((datos, contexto) => {
-    const acceso = datos.acceso.trim();
-
-    if (!acceso || esPosibleClaveSalon(acceso)) {
-      return;
-    }
-
-    if (!esTelefono(acceso) && !esCorreo(acceso)) {
-      contexto.addIssue({
-        code: z.ZodIssueCode.custom,
-        path: ['acceso'],
-        message: 'Ingresa un correo, telefono o clave valida',
-      });
-    }
-
-    if (!datos.contrasena?.trim()) {
-      contexto.addIssue({
-        code: z.ZodIssueCode.custom,
-        path: ['contrasena'],
-        message: 'Ingresa tu contrasena',
-      });
-    }
-  });
+const esquema = z.object({
+  acceso: z.string().trim().min(1, 'Ingresa tu clave, correo o telefono'),
+  correoAcceso: z.string().trim().optional(),
+  contrasena: z.string().trim().optional(),
+});
 
 type CamposFormulario = z.infer<typeof esquema>;
 
@@ -129,6 +108,10 @@ export function PaginaInicioSesion() {
   const [motivoRechazo, setMotivoRechazo] = useState<string | null>(null);
   const [avisoTransitorio] = useState(() => consumirAvisoInicioSesion());
   const [requiereIdentificador, setRequiereIdentificador] = useState(false);
+  const [requiereContrasenaSecundaria, setRequiereContrasenaSecundaria] = useState(false);
+  const [modoClave, setModoClave] = useState<
+    'ninguna' | 'cliente' | 'studio' | 'desconocida' | 'indeterminada' | 'cargando'
+  >('ninguna');
 
   const navegar = useNavigate();
   const ubicacion = useLocation();
@@ -183,6 +166,7 @@ export function PaginaInicioSesion() {
     resolver: zodResolver(esquema),
     defaultValues: {
       acceso: accesoDemo?.identificador ?? '',
+      correoAcceso: '',
       contrasena: accesoDemo?.contrasena ?? '',
     },
   });
@@ -192,18 +176,83 @@ export function PaginaInicioSesion() {
   const accesoPorClave = esPosibleClaveSalon(accesoLimpio);
   const accesoPorTelefono = !accesoPorClave && esTelefono(accesoLimpio);
   const accesoPorCorreo = !accesoPorClave && esCorreo(accesoLimpio);
+  const accesoPareceContrasenaDirecta =
+    !accesoPorClave && !accesoPorCorreo && !accesoPorTelefono && accesoLimpio.length > 0;
+  const claveEsCliente = accesoPorClave && modoClave === 'cliente';
+  const claveEsStudio = accesoPorClave && modoClave === 'studio';
+  const claveDesconocida = accesoPorClave && modoClave === 'desconocida';
+  const claveIndeterminada = accesoPorClave && modoClave === 'indeterminada';
+  const claveDetectando = accesoPorClave && modoClave === 'cargando';
   const mostrarCredencialesSecundarias =
-    !accesoPorClave && (accesoLimpio.length > 0 || requiereIdentificador);
+    claveEsStudio || requiereContrasenaSecundaria || requiereIdentificador;
 
   const mensajeAyudaAcceso = requiereIdentificador
     ? 'Para continuar, ingresa el correo exacto asociado a tu cuenta.'
-    : accesoPorClave
-      ? 'Clave detectada. Puedes entrar de inmediato con ese acceso.'
-      : accesoPorTelefono
-        ? 'Acceso de cliente detectado por telefono. Solo necesitaremos tu contrasena.'
-        : accesoPorCorreo
-          ? 'Si tu cuenta requiere acceso administrativo o de salon, continua con tu contrasena.'
-          : 'Escribe tu acceso y el sistema mostrara solo lo necesario para continuar.';
+    : claveDetectando
+      ? 'Validando tipo de clave para mostrarte el acceso correcto...'
+      : claveEsCliente
+        ? 'Clave cliente detectada. Puedes entrar directo o registrarte si es tu primera vez.'
+        : claveEsStudio
+          ? 'Clave studio detectada. Continúa con correo y contraseña del salón.'
+          : claveIndeterminada
+            ? 'No pudimos validar la clave por conexión. Reintenta antes de continuar.'
+            : claveDesconocida
+              ? 'No encontramos esa clave. Verifica el dato antes de continuar.'
+              : accesoPorClave
+                ? 'Clave detectada. Puedes entrar de inmediato con ese acceso.'
+                : accesoPorTelefono
+                  ? 'Telefono de cliente detectado. Si existe una cuenta activa, podras continuar sin mas campos.'
+                  : accesoPorCorreo
+                    ? 'Si es una cuenta cliente activa podras entrar directo. Si es acceso interno, te pediremos la contrasena.'
+                    : accesoPareceContrasenaDirecta
+                      ? 'Intentaremos resolver un acceso interno con esa contrasena. Si hace falta, te pediremos el correo.'
+                      : 'Escribe tu acceso y el sistema mostrara solo lo necesario para continuar.';
+
+  useEffect(() => {
+    if (!accesoPorClave) {
+      setModoClave('ninguna');
+      setValue('correoAcceso', '', { shouldDirty: false, shouldValidate: false });
+      return;
+    }
+
+    const clave = accesoLimpio.toUpperCase();
+    setModoClave('cargando');
+
+    let activo = true;
+    const temporizador = window.setTimeout(() => {
+      void detectarClaveAccesoAPI(clave).then((resultadoDeteccion) => {
+        if (!activo) return;
+        setModoClave(resultadoDeteccion.tipo);
+      });
+    }, 220);
+
+    return () => {
+      activo = false;
+      window.clearTimeout(temporizador);
+    };
+  }, [accesoLimpio, accesoPorClave, setValue]);
+
+  useEffect(() => {
+    if (claveEsStudio || requiereIdentificador) {
+      return;
+    }
+
+    if (accesoPorClave || accesoPorTelefono || accesoLimpio.length === 0) {
+      setRequiereContrasenaSecundaria(false);
+      setValue('contrasena', '', {
+        shouldDirty: false,
+        shouldTouch: false,
+        shouldValidate: false,
+      });
+    }
+  }, [
+    accesoLimpio,
+    accesoPorClave,
+    accesoPorTelefono,
+    claveEsStudio,
+    requiereIdentificador,
+    setValue,
+  ]);
 
   useEffect(() => {
     const overflowHtmlAnterior = document.documentElement.style.overflow;
@@ -227,8 +276,57 @@ export function PaginaInicioSesion() {
 
     const acceso = datos.acceso.trim();
     const contrasena = datos.contrasena?.trim() ?? '';
+    const correoAcceso = datos.correoAcceso?.trim() ?? '';
+    const contrasenaFinal = claveEsStudio
+      ? contrasena
+      : contrasena || (accesoPareceContrasenaDirecta ? acceso : '');
 
     if (esPosibleClaveSalon(acceso)) {
+      if (claveEsStudio || claveDetectando) {
+        if (claveDetectando) {
+          setError('acceso', {
+            message: 'Estamos validando la clave. Intenta nuevamente en un instante.',
+          });
+          return;
+        }
+
+        if (!correoAcceso || !esCorreo(correoAcceso)) {
+          setError('correoAcceso', {
+            message: 'Ingresa un correo valido para continuar con la clave studio.',
+          });
+          return;
+        }
+
+        if (!contrasena) {
+          setError('contrasena', { message: 'Ingresa la contrasena del salon.' });
+          return;
+        }
+
+        const resultadoStudio = await iniciarSesion(correoAcceso, contrasena);
+        if (!resultadoStudio.exito) {
+          if (resultadoStudio.codigo) {
+            setCodigoBloqueo(resultadoStudio.codigo);
+            setMotivoRechazo(resultadoStudio.motivo ?? null);
+          }
+
+          setError('root', {
+            message: resultadoStudio.mensaje ?? 'No pudimos validar el acceso del salon.',
+          });
+          return;
+        }
+
+        navegar(resultadoStudio.ruta ?? '/');
+        return;
+      }
+
+      if (claveIndeterminada) {
+        setError('acceso', {
+          message:
+            'No pudimos validar la clave por un problema de conexión. Reintenta en un instante.',
+        });
+        return;
+      }
+
       const resultadoClave = await iniciarSesionConClave(acceso.toUpperCase());
 
       if (!resultadoClave.exito) {
@@ -247,6 +345,13 @@ export function PaginaInicioSesion() {
       return;
     }
 
+    if (!esCorreo(acceso) && !esTelefono(acceso) && !accesoPareceContrasenaDirecta) {
+      setError('acceso', {
+        message: 'Ingresa un correo, telefono o clave valida.',
+      });
+      return;
+    }
+
     if (requiereIdentificador && !esCorreo(acceso)) {
       setError('acceso', {
         message: 'Cuando hay varias cuentas, debes ingresar tu correo electronico.',
@@ -254,11 +359,29 @@ export function PaginaInicioSesion() {
       return;
     }
 
-    const resultado = await iniciarSesion(acceso || null, contrasena);
+    if (mostrarCredencialesSecundarias && !contrasena) {
+      setError('contrasena', {
+        message: 'Ingresa tu contrasena.',
+      });
+      return;
+    }
+
+    const identificadorFinal =
+      accesoPareceContrasenaDirecta && !requiereIdentificador ? null : acceso || null;
+    const resultado = await iniciarSesion(identificadorFinal, contrasenaFinal);
 
     if (!resultado.exito) {
       if (resultado.codigo === 'IDENTIFICADOR_REQUERIDO') {
         setRequiereIdentificador(true);
+        setRequiereContrasenaSecundaria(true);
+
+        if (accesoPareceContrasenaDirecta && !contrasena) {
+          setValue('contrasena', acceso, {
+            shouldDirty: true,
+            shouldTouch: true,
+            shouldValidate: false,
+          });
+        }
 
         if (!esCorreo(acceso)) {
           setValue('acceso', '', {
@@ -271,6 +394,14 @@ export function PaginaInicioSesion() {
         setError('acceso', {
           message:
             'Encontramos varias cuentas con esa contrasena. Ingresa tu correo para continuar.',
+        });
+        return;
+      }
+
+      if (resultado.codigo === 'CONTRASENA_REQUERIDA') {
+        setRequiereContrasenaSecundaria(true);
+        setError('contrasena', {
+          message: resultado.mensaje ?? 'Confirma tu acceso con tu contrasena.',
         });
         return;
       }
@@ -297,6 +428,7 @@ export function PaginaInicioSesion() {
     }
 
     setRequiereIdentificador(false);
+    setRequiereContrasenaSecundaria(false);
     const rutaDestino =
       resultado.ruta === '/vendedor' ? '/vendedor' : (rutaDesde ?? resultado.ruta ?? '/');
     navegar(rutaDestino);
@@ -308,6 +440,7 @@ export function PaginaInicioSesion() {
     }
 
     setRequiereIdentificador(false);
+    setRequiereContrasenaSecundaria(true);
     clearErrors();
 
     setValue('acceso', accesoDemo.identificador);
@@ -324,17 +457,13 @@ export function PaginaInicioSesion() {
 
   return (
     <main
-      className="relative h-[100svh] min-h-screen overflow-hidden bg-[#0A2823] text-white"
+      className="pagina-inicio-sesion relative h-svh min-h-svh w-full overflow-hidden bg-[#0A2823] text-white md:h-dvh"
       style={{ fontFamily: 'Arial, sans-serif' }}
     >
-      <div className="absolute inset-0">
-        <img
-          src="/ref-2.png"
-          alt=""
-          aria-hidden="true"
-          className="h-full w-full object-cover object-left md:object-center"
-        />
-        <div className="absolute inset-0 bg-[radial-gradient(circle_at_78%_36%,rgba(198,150,140,0.18)_0%,rgba(198,150,140,0.06)_28%,rgba(9,9,9,0)_52%),linear-gradient(112deg,rgba(8,8,8,0.56)_0%,rgba(18,18,18,0.18)_44%,rgba(6,6,6,0.62)_100%)]" />
+      <div className="absolute inset-0 overflow-hidden" aria-hidden="true">
+        <div className="fondo-login fondo-login--blur" />
+        <div className="login-background fondo-login fondo-login--principal" />
+        <div className="absolute inset-0 bg-[radial-gradient(circle_at_76%_30%,rgba(198,150,140,0.26)_0%,rgba(198,150,140,0.08)_24%,rgba(9,9,9,0)_48%),linear-gradient(110deg,rgba(7,16,13,0.78)_0%,rgba(9,32,27,0.36)_42%,rgba(5,9,8,0.74)_100%)]" />
       </div>
 
       <div
@@ -405,12 +534,9 @@ export function PaginaInicioSesion() {
                 htmlFor="acceso"
                 className="mb-2 block text-[1.02rem] font-medium text-white/92 sm:text-[1.05rem]"
               >
-                {requiereIdentificador ? 'Correo electronico' : 'Clave de acceso'}
+                {requiereIdentificador ? 'Correo electronico' : 'Acceso universal'}
               </label>
               <div className="relative">
-                <span className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-[#C6968C]/92">
-                  {accesoPorClave ? <KeyRound className="h-5 w-5" /> : <Lock className="h-5 w-5" />}
-                </span>
                 <input
                   id="acceso"
                   type="text"
@@ -422,9 +548,9 @@ export function PaginaInicioSesion() {
                   placeholder={
                     requiereIdentificador
                       ? 'Ingresa tu correo electronico'
-                      : 'Ingresa tu clave de acceso o correo'
+                      : 'Ingresa clave, correo o telefono'
                   }
-                  className="w-full rounded-[20px] border border-[#78736E]/48 bg-black/8 px-12 py-3 text-[0.96rem] text-white placeholder:text-[#cfc7c4]/58 outline-none transition focus:border-[#C6968C] focus:bg-white/[0.04] focus:ring-2 focus:ring-[#C6968C]/22 sm:py-3.5 sm:text-base"
+                  className="w-full rounded-[20px] border border-[#78736E]/48 bg-black/8 py-3 pl-5 pr-14 text-[0.96rem] text-white placeholder:text-[#d6c6be]/58 outline-none transition focus:border-[#C6968C] focus:bg-white/4 focus:ring-2 focus:ring-[#C6968C]/22 sm:py-3.5 sm:text-base"
                   aria-invalid={Boolean(errors.acceso)}
                   aria-describedby="ayuda-acceso"
                   {...register('acceso')}
@@ -433,7 +559,7 @@ export function PaginaInicioSesion() {
                   {requiereIdentificador || accesoPorCorreo ? (
                     <Mail className="h-5 w-5" />
                   ) : accesoPorClave ? (
-                    <Eye className="h-5 w-5" />
+                    <KeyRound className="h-5 w-5" />
                   ) : (
                     <Mail className="h-5 w-5" />
                   )}
@@ -444,7 +570,7 @@ export function PaginaInicioSesion() {
               ) : (
                 <p
                   id="ayuda-acceso"
-                  className="mt-1.5 text-[11px] leading-5 text-[#ddd5d0]/72 sm:text-xs"
+                  className="mt-1.5 text-[11px] leading-5 text-[#ead8d2]/72 sm:text-xs"
                 >
                   {mensajeAyudaAcceso}
                 </p>
@@ -462,9 +588,35 @@ export function PaginaInicioSesion() {
               <div className="overflow-hidden">
                 <div className="mb-3 mt-1 flex items-center gap-3 text-white/72">
                   <span className="h-px flex-1 bg-white/22" />
-                  <span className="text-sm text-[#e4dcd8]/86">continua</span>
+                  <span className="text-sm text-[#ead8d2]/86">continua</span>
                   <span className="h-px flex-1 bg-white/22" />
                 </div>
+
+                {claveEsStudio ? (
+                  <div className="mb-3.5">
+                    <label
+                      htmlFor="correoAcceso"
+                      className="mb-2 block text-base font-medium text-white/90"
+                    >
+                      Correo del salón
+                    </label>
+                    <div className="relative">
+                      <input
+                        id="correoAcceso"
+                        type="email"
+                        autoComplete="email"
+                        enterKeyHint="next"
+                        placeholder="Ingresa el correo del salón"
+                        className="w-full rounded-[20px] border border-[#78736E]/48 bg-black/8 py-3 pl-5 pr-5 text-[0.96rem] text-white placeholder:text-[#d6c6be]/58 outline-none transition focus:border-[#C6968C] focus:bg-white/4 focus:ring-2 focus:ring-[#C6968C]/22 sm:py-3.5 sm:text-base"
+                        aria-invalid={Boolean(errors.correoAcceso)}
+                        {...register('correoAcceso')}
+                      />
+                    </div>
+                    {errors.correoAcceso ? (
+                      <p className="mt-1.5 text-xs text-red-200">{errors.correoAcceso.message}</p>
+                    ) : null}
+                  </div>
+                ) : null}
 
                 <div>
                   <label
@@ -474,17 +626,13 @@ export function PaginaInicioSesion() {
                     Contraseña
                   </label>
                   <div className="relative">
-                    <Lock
-                      className="pointer-events-none absolute left-4 top-1/2 h-5 w-5 -translate-y-1/2 text-[#C6968C]/92"
-                      aria-hidden="true"
-                    />
                     <input
                       id="contrasena"
                       type={mostrarContrasena ? 'text' : 'password'}
                       autoComplete="current-password"
                       enterKeyHint="go"
                       placeholder="Contraseña"
-                      className="w-full rounded-[20px] border border-[#78736E]/48 bg-black/8 px-12 py-3 pr-12 text-[0.96rem] text-white placeholder:text-[#cfc7c4]/58 outline-none transition focus:border-[#C6968C] focus:bg-white/[0.04] focus:ring-2 focus:ring-[#C6968C]/22 sm:py-3.5 sm:text-base"
+                      className="w-full rounded-[20px] border border-[#78736E]/48 bg-black/8 py-3 pl-5 pr-14 text-[0.96rem] text-white placeholder:text-[#d6c6be]/58 outline-none transition focus:border-[#C6968C] focus:bg-white/4 focus:ring-2 focus:ring-[#C6968C]/22 sm:py-3.5 sm:text-base"
                       aria-invalid={Boolean(errors.contrasena)}
                       disabled={!mostrarCredencialesSecundarias}
                       {...register('contrasena')}
@@ -525,12 +673,12 @@ export function PaginaInicioSesion() {
               type="submit"
               disabled={isSubmitting}
               aria-busy={isSubmitting}
-              className="group relative mx-auto mt-4 flex w-full max-w-[320px] items-center justify-center rounded-full border-2 border-white/90 bg-[linear-gradient(135deg,#143C32_0%,#0A2823_100%)] px-6 py-2.5 text-lg font-bold uppercase tracking-[0.08em] text-white shadow-[0_16px_34px_rgba(0,0,0,0.32)] transition hover:brightness-110 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#C6968C]/70 focus-visible:ring-offset-2 focus-visible:ring-offset-[#102326] disabled:cursor-not-allowed disabled:opacity-60 sm:text-[1.15rem]"
+              className="group relative mx-auto mt-4 flex w-full max-w-[340px] items-center justify-center rounded-full border-2 border-white/90 bg-[linear-gradient(90deg,rgba(18,64,53,0.98)_0%,rgba(14,56,47,0.98)_48%,rgba(18,64,53,0.98)_100%)] px-6 py-2.5 text-lg font-black uppercase tracking-[0.08em] text-white shadow-[0_18px_40px_rgba(0,0,0,0.34)] transition duration-300 hover:brightness-110 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#C6968C]/70 focus-visible:ring-offset-2 focus-visible:ring-offset-[#0A2823] disabled:cursor-not-allowed disabled:opacity-60 sm:text-[1.15rem]"
             >
-              <span className="text-[1.22rem] leading-none sm:text-[1.45rem]">
+              <span className="text-[1.25rem] leading-none sm:text-[1.45rem]">
                 {isSubmitting ? '...' : 'LOGIN'}
               </span>
-              <span className="absolute right-[6px] flex h-10 w-10 items-center justify-center rounded-full bg-white text-[#143C32] shadow-[inset_0_0_0_1px_rgba(0,0,0,0.08)] sm:h-11 sm:w-11">
+              <span className="absolute right-[7px] flex h-10 w-10 items-center justify-center rounded-full bg-white text-[#143C32] shadow-[inset_0_0_0_1px_rgba(0,0,0,0.08)] transition group-hover:scale-105 sm:h-11 sm:w-11">
                 <UserRound className="h-5 w-5 sm:h-6 sm:w-6" />
               </span>
             </button>

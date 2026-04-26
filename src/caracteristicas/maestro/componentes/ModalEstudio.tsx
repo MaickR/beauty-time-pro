@@ -120,7 +120,7 @@ export function ModalEstudio({
       width: 360,
       margin: 1,
       color: {
-        dark: '#0f172a',
+        dark: '#0A2823',
         light: '#ffffff',
       },
     }).then((url) => {
@@ -723,7 +723,7 @@ export function ModalEstudio({
                     aria-controls={`categoria-servicios-${cat.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`}
                   >
                     <div className="flex min-w-0 items-center gap-3">
-                      <h4 className="truncate text-[10px] font-black bg-slate-900 text-white px-3 py-1 rounded-md uppercase">
+                      <h4 className="truncate text-[10px] font-black bg-pink-600 text-white px-3 py-1 rounded-md uppercase">
                         {cat}
                       </h4>
                       <span className="text-[10px] font-bold text-slate-600">
@@ -752,24 +752,26 @@ export function ModalEstudio({
                           return (
                             <div
                               key={`${cat}-${s}`}
-                              className={`flex flex-col justify-between p-3 rounded-xl border gap-3 transition-all ${sel ? 'bg-pink-50 border-pink-300' : 'bg-white border-slate-100'}`}
+                              className={`flex flex-col justify-between p-4 rounded-2xl border-2 gap-3 transition-all ${sel ? 'bg-rose-100 border-rose-500 shadow-md' : 'bg-white border-slate-200 hover:border-rose-300 hover:shadow-sm'}`}
                             >
                               <button
                                 type="button"
                                 onClick={() => alternarServicio(s)}
-                                className={`text-left text-[10px] font-bold flex items-center gap-2 ${sel ? 'text-pink-700' : 'text-slate-500'}`}
+                                className={`text-left text-sm font-bold flex items-center gap-2 ${sel ? 'text-slate-900' : 'text-slate-600'}`}
                               >
                                 {sel ? (
-                                  <CheckCircle2 className="h-4 w-4 text-pink-600" />
+                                  <CheckCircle2 className="h-5 w-5 text-rose-600" />
                                 ) : (
-                                  <Circle className="h-4 w-4 text-slate-400" />
+                                  <Circle className="h-4 w-4 text-slate-300" />
                                 )}
-                                <span>{obtenerEtiquetaServicioCatalogo(s)}</span>
+                                <span className="text-slate-900">
+                                  {obtenerEtiquetaServicioCatalogo(s)}
+                                </span>
                               </button>
                               {sel && (
-                                <div className="flex items-center gap-3">
-                                  <div className="flex w-full items-center gap-1 bg-white p-1 rounded-lg border border-pink-100 sm:w-auto">
-                                    <Clock className="w-3 h-3 text-pink-400" />
+                                <div className="flex flex-col sm:flex-row gap-3">
+                                  <div className="flex w-full items-center gap-2 bg-white/80 p-2 rounded-xl border border-rose-300 sm:w-auto">
+                                    <Clock className="w-4 h-4 text-rose-600 shrink-0" />
                                     <input
                                       id={`duracion-${categoriaNormalizada}-${servicioNormalizado}`}
                                       name={`duracion-${categoriaNormalizada}-${servicioNormalizado}`}
@@ -784,14 +786,12 @@ export function ModalEstudio({
                                         const entrada = e.currentTarget;
                                         entrada.value = entrada.value.replace(/^0+/, '') || '';
                                       }}
-                                      className="w-full min-w-0 text-[10px] font-black outline-none text-center text-slate-700 sm:w-16"
+                                      className="w-full min-w-0 text-sm font-bold outline-none text-center text-slate-900 bg-transparent sm:w-16"
                                     />
-                                    <span className="text-[8px] font-black text-slate-400">
-                                      MIN
-                                    </span>
+                                    <span className="text-xs font-bold text-slate-500">min</span>
                                   </div>
-                                  <div className="flex w-full items-center gap-1 bg-green-50 p-1 rounded-lg border border-green-200 sm:w-auto">
-                                    <DollarSign className="w-3 h-3 text-green-600" />
+                                  <div className="flex w-full items-center gap-2 bg-white/80 p-2 rounded-xl border border-emerald-300 sm:w-auto">
+                                    <DollarSign className="w-4 h-4 text-emerald-600 shrink-0" />
                                     <input
                                       id={`precio-${categoriaNormalizada}-${servicioNormalizado}`}
                                       name={`precio-${categoriaNormalizada}-${servicioNormalizado}`}
@@ -813,7 +813,7 @@ export function ModalEstudio({
                                       onBlur={() =>
                                         setPreciosEnEdicion((prev) => ({ ...prev, [s]: false }))
                                       }
-                                      className="w-full min-w-0 text-[10px] font-black outline-none text-center text-green-800 bg-transparent sm:w-24"
+                                      className="w-full min-w-0 text-sm font-bold outline-none text-center text-slate-900 bg-transparent sm:w-24"
                                     />
                                   </div>
                                 </div>

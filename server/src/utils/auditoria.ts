@@ -8,16 +8,21 @@ interface RegistrarAuditoriaParams {
   entidadId: string;
   detalles?: Record<string, unknown>;
   ip?: string;
+  requestId?: string;
 }
 
 export async function registrarAuditoria(params: RegistrarAuditoriaParams): Promise<void> {
+  const detallesAuditoria = params.requestId
+    ? { ...(params.detalles ?? {}), requestId: params.requestId }
+    : params.detalles;
+
   await prisma.auditLog.create({
     data: {
       usuarioId: params.usuarioId ?? null,
       accion: params.accion,
       entidadTipo: params.entidadTipo,
       entidadId: params.entidadId,
-      detalles: params.detalles as Prisma.InputJsonValue | undefined,
+      detalles: detallesAuditoria as Prisma.InputJsonValue | undefined,
       ip: params.ip ?? null,
     },
   });

@@ -64,6 +64,17 @@ interface RespuestaInicioSesion {
   datos: DatosSesion;
 }
 
+interface RespuestaDeteccionClaveAcceso {
+  datos: {
+    tipo: 'cliente' | 'studio' | 'desconocida';
+  };
+}
+
+export interface ResultadoDeteccionClaveAcceso {
+  tipo: 'cliente' | 'studio' | 'desconocida' | 'indeterminada';
+  mensaje?: string;
+}
+
 const RETRASO_REINTENTO_LOGIN_MS = 450;
 function esperar(ms: number): Promise<void> {
   return new Promise((resolver) => {
@@ -133,6 +144,37 @@ export async function buscarAccesoSalonPorClaveAPI(clave: string): Promise<Datos
     nombreSalon: salon.nombre,
     claveSalon: clave.trim().toUpperCase(),
   };
+}
+
+/**
+ * Detecta si una clave corresponde a un acceso público de cliente.
+ * No limpia la sesión ni modifica estado local: solo consulta.
+ */
+export async function detectarClaveAccesoAPI(
+  clave: string,
+): Promise<ResultadoDeteccionClaveAcceso> {
+  try {
+    const respuesta = await peticion<RespuestaDeteccionClaveAcceso>('/auth/detectar-clave-acceso', {
+      method: 'POST',
+      body: JSON.stringify({ clave: clave.trim().toUpperCase() }),
+    });
+
+    return { tipo: respuesta.datos.tipo };
+  } catch (error) {
+    if (
+      error instanceof TypeError ||
+      (error instanceof Error && /Failed to fetch|NetworkError|Load failed/i.test(error.message)) ||
+      (error instanceof ErrorAPI && error.estado >= 500)
+    ) {
+      return {
+        tipo: 'indeterminada',
+        mensaje:
+          'No pudimos validar la clave por un problema de conexión. Reintenta en un instante.',
+      };
+    }
+
+    throw error;
+  }
 }
 
 /**

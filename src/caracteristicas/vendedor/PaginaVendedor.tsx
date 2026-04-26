@@ -102,7 +102,7 @@ export function PaginaVendedor() {
   });
 
   return (
-    <div className="min-h-screen bg-[radial-gradient(circle_at_0%_0%,rgba(251,191,36,0.18),transparent_34%),radial-gradient(circle_at_100%_10%,rgba(14,165,233,0.14),transparent_28%),linear-gradient(180deg,#fffdf6_0%,#f8fafc_40%,#f3f4f6_100%)]">
+    <div className="min-h-screen bg-[radial-gradient(circle_at_0%_0%,rgba(198,150,140,0.16),transparent_34%),radial-gradient(circle_at_100%_10%,rgba(20,60,50,0.10),transparent_28%),linear-gradient(180deg,#f8f4f2_0%,#f0ebe8_40%,#ede7e4_100%)]">
       <header className="sticky top-0 z-40 border-b border-white/70 bg-white/85 backdrop-blur-xl">
         <div className="mx-auto flex max-w-7xl items-center justify-between gap-3 px-4 py-4 md:px-8">
           <div className="min-w-0">

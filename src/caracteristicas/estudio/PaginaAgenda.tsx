@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import QRCode from 'qrcode';
 import { useParams, useNavigate } from 'react-router-dom';
 import {
@@ -107,6 +107,23 @@ export function PaginaAgenda() {
     };
   }, [linkReservas]);
 
+  const manejarCerrarSesion = useCallback(async () => {
+    await cerrarSesion();
+    navegar('/iniciar-sesion', { replace: true });
+  }, [cerrarSesion, navegar]);
+
+  const manejarSalidaPorSuspension = useCallback(async () => {
+    const mensajeSuspension =
+      'Tu salon esta suspendido por falta de pago. Contacta soporte para reactivar tu acceso.';
+    await cerrarSesion();
+    navegar(
+      `/iniciar-sesion?codigo=SALON_SUSPENDIDO&mensaje=${encodeURIComponent(mensajeSuspension)}`,
+      {
+        replace: true,
+      },
+    );
+  }, [cerrarSesion, navegar]);
+
   if (cargando)
     return (
       <div className="h-screen bg-slate-50 flex items-center justify-center">
@@ -164,11 +181,6 @@ export function PaginaAgenda() {
 
   const volverPanelVendedor = () => {
     navegar('/vendedor');
-  };
-
-  const manejarCerrarSesion = async () => {
-    await cerrarSesion();
-    navegar('/iniciar-sesion', { replace: true });
   };
 
   const descargarQr = () => {
@@ -376,7 +388,7 @@ export function PaginaAgenda() {
               void actualizarEstudio(estudioId, { primeraVez: false }).catch(() => {
                 setMostrarBienvenida(true);
                 mostrarToast({
-                  mensaje: 'We could not save that this welcome guide was already seen.',
+                  mensaje: 'No se pudo guardar que esta guia de bienvenida ya fue vista.',
                   variante: 'error',
                 });
               });
@@ -386,7 +398,11 @@ export function PaginaAgenda() {
       )}
 
       {(estudio.estado === 'suspendido' || diasRestantes <= 0) && (
-        <ModalSuspension nombreSalon={estudio.name} pais={estudio.country ?? 'Mexico'} />
+        <ModalSuspension
+          nombreSalon={estudio.name}
+          pais={estudio.country ?? 'Mexico'}
+          onSalir={manejarSalidaPorSuspension}
+        />
       )}
     </div>
   );

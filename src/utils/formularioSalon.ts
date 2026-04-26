@@ -79,15 +79,23 @@ export function esEmailColaboradorValido(email: string): boolean {
 }
 
 const CARACTERES_ESPECIALES_CONTRASENA_SALON = ['#', '*', '!', '$', '%', '&'] as const;
+const REGEX_CONTRASENA_FORMATO_SALON = /^[A-Z]{3}[a-z]{3}\d{2}[#*!$%&]$/;
+export const DESCRIPCION_FORMATO_CONTRASENA_SALON =
+  'Formato: 3 mayúsculas + 3 minúsculas + 2 números + 1 especial';
 
-function normalizarFragmentoContrasena(valor: string, fallback: string): string {
+function normalizarFragmentoContrasena(
+  valor: string,
+  fallback: string,
+  opciones?: { mayusculas?: boolean },
+): string {
   const base = limpiarNombreSalonEntrada(valor)
     .normalize('NFD')
     .replace(/[\u0300-\u036f]/g, '')
-    .replace(/[^\p{L}\p{N}]/gu, '')
+    .replace(/[^\p{L}]/gu, '')
     .toLowerCase();
 
-  return `${base || fallback}${fallback}`.slice(0, 3);
+  const fragmento = `${base || fallback}${fallback}`.slice(0, 3);
+  return opciones?.mayusculas ? fragmento.toUpperCase() : fragmento.toLowerCase();
 }
 
 function obtenerDosDigitosContrasena(intento: number): string {
@@ -108,12 +116,16 @@ export function generarContrasenaSalon(
   nombreDueno: string = '',
   intento: number = 0,
 ): string {
-  const fragmentoSalon = normalizarFragmentoContrasena(nombreSalon, 'sal');
+  const fragmentoSalon = normalizarFragmentoContrasena(nombreSalon, 'sal', { mayusculas: true });
   const fragmentoDueno = normalizarFragmentoContrasena(nombreDueno, 'due');
   const digitos = obtenerDosDigitosContrasena(intento);
   const especial = obtenerCaracterEspecialContrasena(intento);
 
   return `${fragmentoSalon}${fragmentoDueno}${digitos}${especial}`;
+}
+
+export function esContrasenaFormatoSalonValida(valor: string): boolean {
+  return REGEX_CONTRASENA_FORMATO_SALON.test(valor.trim());
 }
 
 function obtenerPrefijoNombreColaborador(nombre: string): string {

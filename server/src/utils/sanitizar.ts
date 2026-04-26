@@ -5,7 +5,7 @@
 const PATRONES_MOJIBAKE: Array<[RegExp, string]> = [
   [/Ã¡/g, 'á'],
   [/Ã©/g, 'é'],
-  [/Ãí/g, 'í'],
+  [/Ã­/g, 'í'],
   [/Ã³/g, 'ó'],
   [/Ãº/g, 'ú'],
   [/Ã/g, 'Á'],

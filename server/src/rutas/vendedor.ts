@@ -8,6 +8,7 @@ import {
   resolverPorcentajesComisionVendedor,
   resolverPorcentajeComisionSegunPlan,
   estudioTienePagoPendiente,
+  asegurarCamposComisionVendedorUsuario,
 } from '../lib/comisionVendedor.js';
 import { obtenerMensajeValidacion, textoSchema, telefonoSchema } from '../lib/validacion.js';
 import {
@@ -24,7 +25,10 @@ function soloVendedor(payload: { rol: string }): boolean {
   return payload.rol === 'vendedor';
 }
 
-const SOPORTA_PORCENTAJE_COMISION_PRO =
+// Nota: no se usa el flag estático basado en Prisma.UsuarioScalarFieldEnum porque refleja
+// el schema compilado pero no garantiza que la columna exista en la BD actual del entorno.
+// En su lugar, cada handler llama asegurarCamposComisionVendedorUsuario() en runtime.
+const _PRISMA_SOPORTA_PORCENTAJE_COMISION_PRO_UNUSED =
   'porcentajeComisionPro' in (Prisma.UsuarioScalarFieldEnum as Record<string, string>);
 
 // ─── Schemas ─────────────────────────────────────────────────────────────
@@ -463,6 +467,9 @@ export async function rutasVendedor(servidor: FastifyInstance) {
         return respuesta.code(403).send({ error: 'Sin permisos para esta acción' });
       }
 
+      const columnasEstudios = await obtenerColumnasTabla('estudios');
+      const tieneInicioSuscripcion = columnasEstudios.has('inicioSuscripcion');
+
       const salones = await prisma.estudio.findMany({
         where: { vendedorId: payload.sub },
         select: {
@@ -473,7 +480,7 @@ export async function rutasVendedor(servidor: FastifyInstance) {
           pais: true,
           estado: true,
           activo: true,
-          inicioSuscripcion: true,
+          ...(tieneInicioSuscripcion ? { inicioSuscripcion: true } : {}),
           fechaVencimiento: true,
           creadoEn: true,
           _count: { select: { reservas: true } },
@@ -490,7 +497,10 @@ export async function rutasVendedor(servidor: FastifyInstance) {
           pais: s.pais,
           estado: s.estado,
           activo: s.activo,
-          inicioSuscripcion: s.inicioSuscripcion,
+          inicioSuscripcion:
+            tieneInicioSuscripcion && 'inicioSuscripcion' in s
+              ? (s as { inicioSuscripcion?: string | null }).inicioSuscripcion ?? null
+              : null,
           fechaVencimiento: s.fechaVencimiento,
           totalReservas: s._count.reservas,
           creadoEn: s.creadoEn.toISOString(),
@@ -512,11 +522,12 @@ export async function rutasVendedor(servidor: FastifyInstance) {
       }
 
       const hoy = new Date().toISOString().slice(0, 10);
+      const camposComision = await asegurarCamposComisionVendedorUsuario();
       const consultaVendedorComision = prisma.usuario.findUnique({
             where: { id: payload.sub },
             select: {
               porcentajeComision: true,
-              ...(SOPORTA_PORCENTAJE_COMISION_PRO ? { porcentajeComisionPro: true } : {}),
+              ...(camposComision.porcentajeComisionPro ? { porcentajeComisionPro: true } : {}),
             },
           });
       const [
@@ -558,7 +569,7 @@ export async function rutasVendedor(servidor: FastifyInstance) {
 
       const porcentajesComision = resolverPorcentajesComisionVendedor({
         porcentajeComision: vendedor?.porcentajeComision,
-        porcentajeComisionPro: SOPORTA_PORCENTAJE_COMISION_PRO
+        porcentajeComisionPro: camposComision.porcentajeComisionPro
           ? ((vendedor as { porcentajeComisionPro?: number | null } | null)?.porcentajeComisionPro ?? null)
           : undefined,
       });
@@ -630,16 +641,17 @@ export async function rutasVendedor(servidor: FastifyInstance) {
       solicitud.query.soloPendientesPago?.trim().toLowerCase() ?? '',
     );
     const hoy = new Date().toISOString().slice(0, 10);
+    const camposComisionVentas = await asegurarCamposComisionVendedorUsuario();
     const vendedor = await prisma.usuario.findUnique({
           where: { id: payload.sub },
           select: {
             porcentajeComision: true,
-            ...(SOPORTA_PORCENTAJE_COMISION_PRO ? { porcentajeComisionPro: true } : {}),
+            ...(camposComisionVentas.porcentajeComisionPro ? { porcentajeComisionPro: true } : {}),
           },
         });
     const porcentajesComision = resolverPorcentajesComisionVendedor({
       porcentajeComision: vendedor?.porcentajeComision,
-      porcentajeComisionPro: SOPORTA_PORCENTAJE_COMISION_PRO
+      porcentajeComisionPro: camposComisionVentas.porcentajeComisionPro
         ? ((vendedor as { porcentajeComisionPro?: number | null } | null)?.porcentajeComisionPro ?? null)
         : undefined,
     });

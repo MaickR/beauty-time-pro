@@ -34,9 +34,9 @@ export function PaginaVerificarEmail() {
   }, [token]);
 
   return (
-    <main className="flex min-h-screen items-center justify-center bg-[#f5efe6] px-6 py-10">
-      <div className="w-full max-w-md rounded-4xl border border-[#e4d8c8] bg-[#fffdf9] p-8 text-center shadow-[0_24px_80px_rgba(71,55,36,0.12)]">
-        <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-[#f3eadf] text-slate-900">
+    <main className="flex min-h-screen items-center justify-center bg-[radial-gradient(circle_at_top_left,rgba(198,150,140,0.14),transparent_32%),linear-gradient(180deg,#f8f4f2_0%,#f6f2f0_100%)] px-6 py-10">
+      <div className="w-full max-w-md rounded-4xl border border-rose-100/80 bg-[linear-gradient(165deg,#ffffff_0%,#f8f4f2_74%,#f4e9e5_100%)] p-8 text-center shadow-[0_24px_80px_rgba(10,40,35,0.10)]">
+        <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-rose-100 text-slate-900">
           {estado === 'exito' ? (
             <ShieldCheck className="h-8 w-8" aria-hidden="true" />
           ) : (
@@ -59,13 +59,13 @@ export function PaginaVerificarEmail() {
         <div className="mt-8 flex flex-col gap-3">
           <Link
             to="/iniciar-sesion"
-            className="inline-flex items-center justify-center rounded-2xl bg-[#161616] px-5 py-3 text-sm font-semibold text-white"
+            className="inline-flex items-center justify-center rounded-2xl bg-linear-to-r from-[#143C32] via-[#0A2823] to-[#78736E] px-5 py-3 text-sm font-semibold text-white shadow-lg shadow-emerald-900/20 transition hover:brightness-105"
           >
             Ir a iniciar sesión
           </Link>
           <Link
             to="/registro/cliente"
-            className="inline-flex items-center justify-center rounded-2xl border border-[#dacbb8] px-5 py-3 text-sm font-semibold text-slate-700"
+            className="inline-flex items-center justify-center rounded-2xl border border-rose-200 bg-white/90 px-5 py-3 text-sm font-semibold text-slate-700 transition hover:bg-rose-50"
           >
             Crear cuenta de cliente
           </Link>

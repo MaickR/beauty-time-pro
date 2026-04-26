@@ -5,6 +5,7 @@ import { obtenerDirectorio } from '../../../servicios/servicioAdmin';
 import { EsqueletoTarjeta } from '../../../componentes/ui/Esqueleto';
 import { ModalDetalleSalon } from './ModalDetalleSalon';
 import { Tooltip } from '../../../componentes/ui/Tooltip';
+import { BanderaPais } from '../../../componentes/ui/BanderaPais';
 import { formatearPais, formatearPlan } from '../../../utils/formato';
 
 const LIMITE = 10;
@@ -19,6 +20,14 @@ const ESTADO_BADGE: Record<string, string> = {
   suspendido: 'bg-red-100 text-red-700',
   bloqueado: 'bg-slate-200 text-slate-700',
   rechazado: 'bg-rose-100 text-rose-700',
+};
+
+const ETIQUETA_ESTADO: Record<string, string> = {
+  pendiente: 'Pendiente',
+  aprobado: 'Aprobado',
+  suspendido: 'Suspendido',
+  bloqueado: 'Bloqueado',
+  rechazado: 'Rechazado',
 };
 
 export function DirectorioAcceso() {
@@ -171,23 +180,36 @@ export function DirectorioAcceso() {
                       </span>
                     </td>
                     <td className="py-3 px-4">
-                      <div className="flex flex-col gap-1">
+                      <div className="flex items-center gap-2">
                         <span
                           className={`inline-flex w-fit rounded-full px-2.5 py-1 text-[11px] font-black ${ESTADO_BADGE[salon.estado] ?? 'bg-slate-100 text-slate-700'}`}
                         >
-                          {salon.estado}
+                          {ETIQUETA_ESTADO[salon.estado] ?? salon.estado}
                         </span>
-                        <span
-                          className={`text-[11px] font-semibold ${salon.duenoActivo ? 'text-emerald-600' : 'text-red-600'}`}
+                        <Tooltip
+                          texto={
+                            salon.duenoActivo
+                              ? 'El acceso del dueño está activo'
+                              : 'El acceso del dueño está bloqueado'
+                          }
                         >
-                          {salon.duenoActivo
-                            ? 'Acceso del dueño activo'
-                            : 'Acceso del dueño bloqueado'}
-                        </span>
+                          <span
+                            tabIndex={0}
+                            aria-label={
+                              salon.duenoActivo
+                                ? 'Acceso del dueño activo'
+                                : 'Acceso del dueño bloqueado'
+                            }
+                            className={`inline-flex h-2.5 w-2.5 rounded-full ${salon.duenoActivo ? 'bg-emerald-500' : 'bg-red-500'}`}
+                          />
+                        </Tooltip>
                       </div>
                     </td>
                     <td className="py-3 px-4 text-slate-500 hidden sm:table-cell">
-                      {formatearPais(salon.pais)}
+                      <div className="flex items-center gap-2">
+                        <BanderaPais pais={salon.pais} />
+                        <span>{formatearPais(salon.pais)}</span>
+                      </div>
                     </td>
                     <td className="py-3 px-4 text-center">
                       <Tooltip texto="Editar">

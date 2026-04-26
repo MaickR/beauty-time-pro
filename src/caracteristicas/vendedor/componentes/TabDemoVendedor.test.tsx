@@ -64,7 +64,7 @@ describe('TabDemoVendedor', () => {
 
     await waitFor(() => {
       expect(global.navigator.clipboard.writeText).toHaveBeenCalledWith(
-        'Email: qa-salon@salonpromaster.com\nPassword: SalonPro!A1B2C3',
+        'Email: qa-salon@salonpromaster.com\nContrasena: SalonPro!A1B2C3',
       );
     });
   });

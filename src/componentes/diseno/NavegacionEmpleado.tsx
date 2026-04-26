@@ -76,7 +76,7 @@ export function NavegacionEmpleado() {
                 aria-haspopup="true"
                 className="flex items-center gap-2 px-3 py-2 rounded-xl hover:bg-slate-50 transition-colors"
               >
-                <span className="w-8 h-8 rounded-full bg-pink-100 text-pink-700 font-black text-sm flex items-center justify-center select-none">
+                <span className="flex h-8 w-8 select-none items-center justify-center rounded-full bg-rose-100 text-sm font-black text-rose-700">
                   {inics}
                 </span>
                 <span className="font-bold text-slate-800 text-sm max-w-30 truncate">
@@ -128,7 +128,7 @@ export function NavegacionEmpleado() {
               onMarcarLeida={marcarLeida}
             />
             <Link to="/empleado/perfil" aria-label="Mi perfil">
-              <span className="w-8 h-8 rounded-full bg-pink-100 text-pink-700 font-black text-sm flex items-center justify-center">
+              <span className="flex h-8 w-8 items-center justify-center rounded-full bg-rose-100 text-sm font-black text-rose-700">
                 {inics}
               </span>
             </Link>
@@ -144,14 +144,14 @@ export function NavegacionEmpleado() {
         <div className="flex">
           <Link
             to="/empleado/agenda"
-            className="flex-1 flex flex-col items-center gap-1 py-3 text-slate-400 hover:text-pink-600 transition-colors"
+            className="flex flex-1 flex-col items-center gap-1 py-3 text-slate-400 transition-colors hover:text-rose-700"
           >
             <CalendarDays className="w-5 h-5" aria-hidden="true" />
             <span className="text-[10px] font-bold">Mi agenda</span>
           </Link>
           <Link
             to="/empleado/perfil"
-            className="flex-1 flex flex-col items-center gap-1 py-3 text-slate-400 hover:text-pink-600 transition-colors"
+            className="flex flex-1 flex-col items-center gap-1 py-3 text-slate-400 transition-colors hover:text-rose-700"
           >
             <User className="w-5 h-5" aria-hidden="true" />
             <span className="text-[10px] font-bold">Mi perfil</span>

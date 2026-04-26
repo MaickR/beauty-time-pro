@@ -12,20 +12,20 @@ const esquema = z
   .object({
     contrasenaNueva: z
       .string()
-      .min(8, 'MÃ­nimo 8 caracteres')
-      .regex(/[A-Z]/, 'Debe incluir al menos una letra mayÃºscula')
-      .regex(/[0-9]/, 'Debe incluir al menos un nÃºmero'),
-    confirmarContrasena: z.string().min(1, 'Confirma tu contraseÃ±a'),
+      .min(8, 'Mínimo 8 caracteres')
+      .regex(/[A-Z]/, 'Debe incluir al menos una letra mayúscula')
+      .regex(/[0-9]/, 'Debe incluir al menos un número'),
+    confirmarContrasena: z.string().min(1, 'Confirma tu contraseña'),
   })
   .refine((d) => d.contrasenaNueva === d.confirmarContrasena, {
-    message: 'Las contraseÃ±as no coinciden',
+    message: 'Las contraseñas no coinciden',
     path: ['confirmarContrasena'],
   });
 
 type CamposFormulario = z.infer<typeof esquema>;
 
 export function PaginaResetContrasena() {
-  usarTituloPagina('Nueva contraseÃ±a');
+  usarTituloPagina('Nueva contraseña');
   const [busqueda] = useSearchParams();
   const navegar = useNavigate();
   const token = busqueda.get('token') ?? '';
@@ -45,9 +45,9 @@ export function PaginaResetContrasena() {
       <div className="min-h-screen flex items-center justify-center bg-gray-50 p-6">
         <div className="w-full max-w-md bg-white rounded-2xl shadow-sm border border-slate-100 p-8 text-center">
           <AlertCircle className="w-14 h-14 text-amber-400 mx-auto mb-4" aria-hidden="true" />
-          <h1 className="text-xl font-black text-slate-900 mb-2">Enlace invÃ¡lido</h1>
+          <h1 className="text-xl font-black text-slate-900 mb-2">Enlace inválido</h1>
           <p className="text-slate-500 text-sm mb-6">
-            Este enlace de recuperaciÃ³n es invÃ¡lido o ha expirado. Solicita uno nuevo.
+            Este enlace de recuperación es inválido o ha expirado. Solicita uno nuevo.
           </p>
           <Link
             to="/recuperar-contrasena"
@@ -68,7 +68,7 @@ export function PaginaResetContrasena() {
       const mensaje =
         error instanceof Error
           ? error.message
-          : 'El enlace es invÃ¡lido o ha expirado. Solicita uno nuevo.';
+          : 'El enlace es inválido o ha expirado. Solicita uno nuevo.';
       setError('root', { message: mensaje });
     }
   };
@@ -82,15 +82,15 @@ export function PaginaResetContrasena() {
           {exitoso ? (
             <div className="text-center py-4">
               <CheckCircle className="w-14 h-14 text-green-500 mx-auto mb-4" aria-hidden="true" />
-              <h1 className="text-2xl font-black text-slate-900 mb-2">ContraseÃ±a actualizada</h1>
+              <h1 className="text-2xl font-black text-slate-900 mb-2">Contraseña actualizada</h1>
               <p className="text-slate-500 text-sm mb-6">
-                Tu contraseÃ±a fue restablecida correctamente. Ya puedes iniciar sesiÃ³n.
+                Tu contraseña fue restablecida correctamente. Ya puedes iniciar sesión.
               </p>
               <button
                 onClick={() => navegar('/iniciar-sesion')}
                 className="inline-flex items-center gap-2 text-sm font-semibold text-white bg-linear-to-r from-[#143C32] to-[#C6968C] px-6 py-3 rounded-xl hover:from-[#0A2823] hover:to-[#143C32] transition-all"
               >
-                Ir a iniciar sesiÃ³n
+                Ir a iniciar sesión
               </button>
             </div>
           ) : (
@@ -98,25 +98,25 @@ export function PaginaResetContrasena() {
               <Link
                 to="/recuperar-contrasena"
                 className="inline-flex items-center gap-1 text-sm text-slate-400 hover:text-slate-600 transition-colors mb-6"
-                aria-label="Regresar a recuperar contraseÃ±a"
+                aria-label="Regresar a recuperar contraseña"
               >
                 <ArrowLeft className="w-4 h-4" aria-hidden="true" />
                 Regresar
               </Link>
 
-              <h1 className="text-2xl font-black text-slate-900 mb-1">Nueva contraseÃ±a</h1>
+              <h1 className="text-2xl font-black text-slate-900 mb-1">Nueva contraseña</h1>
               <p className="text-slate-500 text-sm mb-6">
-                Elige una contraseÃ±a segura con al menos 8 caracteres, una mayÃºscula y un nÃºmero.
+                Elige una contraseña segura con al menos 8 caracteres, una mayúscula y un número.
               </p>
 
               <form onSubmit={handleSubmit(alEnviar)} noValidate className="space-y-4">
-                {/* Nueva contraseÃ±a */}
+                {/* Nueva contraseña */}
                 <div>
                   <label
                     htmlFor="contrasena-nueva"
                     className="block text-sm font-semibold text-slate-700 mb-1.5"
                   >
-                    Nueva contraseÃ±a
+                    Nueva contraseña
                   </label>
                   <div className="relative">
                     <Lock
@@ -136,7 +136,7 @@ export function PaginaResetContrasena() {
                       type="button"
                       onClick={() => setMostrarNueva((v) => !v)}
                       className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 transition-colors"
-                      aria-label={mostrarNueva ? 'Ocultar contraseÃ±a' : 'Mostrar contraseÃ±a'}
+                      aria-label={mostrarNueva ? 'Ocultar contraseña' : 'Mostrar contraseña'}
                     >
                       {mostrarNueva ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                     </button>
@@ -152,13 +152,13 @@ export function PaginaResetContrasena() {
                   )}
                 </div>
 
-                {/* Confirmar contraseÃ±a */}
+                {/* Confirmar contraseña */}
                 <div>
                   <label
                     htmlFor="confirmar-contrasena"
                     className="block text-sm font-semibold text-slate-700 mb-1.5"
                   >
-                    Confirmar contraseÃ±a
+                    Confirmar contraseña
                   </label>
                   <div className="relative">
                     <Lock
@@ -178,7 +178,7 @@ export function PaginaResetContrasena() {
                       type="button"
                       onClick={() => setMostrarConfirmar((v) => !v)}
                       className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 transition-colors"
-                      aria-label={mostrarConfirmar ? 'Ocultar contraseÃ±a' : 'Mostrar contraseÃ±a'}
+                      aria-label={mostrarConfirmar ? 'Ocultar contraseña' : 'Mostrar contraseña'}
                     >
                       {mostrarConfirmar ? (
                         <EyeOff className="w-4 h-4" />
@@ -219,7 +219,7 @@ export function PaginaResetContrasena() {
                       Guardando...
                     </span>
                   ) : (
-                    'Establecer nueva contraseÃ±a'
+                    'Establecer nueva contraseña'
                   )}
                 </button>
               </form>

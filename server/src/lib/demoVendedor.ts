@@ -1,11 +1,21 @@
-import { createHmac } from 'node:crypto';
+import { createHmac, randomUUID } from 'node:crypto';
 import { prisma } from '../prismaCliente.js';
-import { asegurarCampoPorcentajeComisionUsuario } from './comisionVendedor.js';
+import { asegurarCamposComisionVendedorUsuario } from './comisionVendedor.js';
+import { obtenerColumnasTabla } from './compatibilidadEsquema.js';
 import { generarClavesSalonUnicas } from './clavesSalon.js';
 import { generarSlugUnico } from '../utils/generarSlug.js';
 import { obtenerFechaISOEnZona, obtenerZonaHorariaPorPais } from '../utils/zonasHorarias.js';
 import { generarHashContrasena } from '../utils/contrasenas.js';
 import { env } from './env.js';
+
+function filtrarDatosPorColumnasDisponibles(
+  datos: Record<string, unknown>,
+  columnasDisponibles: Set<string>,
+): Record<string, unknown> {
+  return Object.fromEntries(
+    Object.entries(datos).filter(([llave, valor]) => columnasDisponibles.has(llave) && valor !== undefined),
+  );
+}
 
 const PAIS_DEMO = 'Mexico';
 const TELEFONO_DEMO = '5512345678';
@@ -157,6 +167,11 @@ function generarContrasenaDemo(usuarioId: string) {
   return `${CONTRASENA_PREFIJO_DEMO}${semilla}`;
 }
 
+function esErrorColumnaComisionLegacy(error: unknown): boolean {
+  const mensaje = error instanceof Error ? error.message : String(error ?? '');
+  return /porcentajeComision(Pro)?/i.test(mensaje) && /does not exist|Unknown column|P2022/i.test(mensaje);
+}
+
 export function obtenerCredencialesDemoVendedor(params: {
   usuarioId: string;
   emailBase: string;
@@ -188,8 +203,12 @@ async function asegurarUsuarioDuenoDemo(params: {
     where: { estudioId: params.estudioId, rol: 'dueno' },
     select: { id: true },
   });
+  const existentePorEmail = await prisma.usuario.findUnique({
+    where: { email: params.email },
+    select: { id: true },
+  });
 
-  await asegurarCampoPorcentajeComisionUsuario();
+  await asegurarCamposComisionVendedorUsuario();
   const hashContrasena = await generarHashContrasena(generarContrasenaDemo(params.usuarioId));
 
   if (existente) {
@@ -207,18 +226,56 @@ async function asegurarUsuarioDuenoDemo(params: {
     });
   }
 
-  return prisma.usuario.create({
-    data: {
-      email: params.email,
-      nombre: `${params.nombreUsuario.trim() || 'Vendedor'} ${NOMBRE_ADMIN_DEMO}`.slice(0, 120),
-      hashContrasena,
-      rol: 'dueno',
-      activo: true,
-      emailVerificado: true,
-      estudioId: params.estudioId,
-    },
-    select: { id: true },
-  });
+  if (existentePorEmail) {
+    return prisma.usuario.update({
+      where: { id: existentePorEmail.id },
+      data: {
+        email: params.email,
+        nombre: `${params.nombreUsuario.trim() || 'Vendedor'} ${NOMBRE_ADMIN_DEMO}`.slice(0, 120),
+        hashContrasena,
+        rol: 'dueno',
+        activo: true,
+        emailVerificado: true,
+        estudioId: params.estudioId,
+      },
+      select: { id: true },
+    });
+  }
+
+  try {
+    return await prisma.usuario.create({
+      data: {
+        email: params.email,
+        nombre: `${params.nombreUsuario.trim() || 'Vendedor'} ${NOMBRE_ADMIN_DEMO}`.slice(0, 120),
+        hashContrasena,
+        rol: 'dueno',
+        activo: true,
+        emailVerificado: true,
+        estudioId: params.estudioId,
+      },
+      select: { id: true },
+    });
+  } catch (error) {
+    if (!esErrorColumnaComisionLegacy(error)) {
+      throw error;
+    }
+
+    const idUsuario = randomUUID();
+    await prisma.$executeRaw`
+      INSERT INTO usuarios (id, email, hashContrasena, nombre, rol, activo, emailVerificado, estudioId)
+      VALUES (
+        ${idUsuario},
+        ${params.email},
+        ${hashContrasena},
+        ${`${params.nombreUsuario.trim() || 'Vendedor'} ${NOMBRE_ADMIN_DEMO}`.slice(0, 120)},
+        ${'dueno'},
+        ${true},
+        ${true},
+        ${params.estudioId}
+      )
+    `;
+    return { id: idUsuario };
+  }
 }
 
 async function asegurarEmpleadoDemo(params: {
@@ -313,10 +370,10 @@ async function asegurarContenidoDemoVendedor(params: {
   emailBase: string;
 }) {
   const { zonaHoraria } = obtenerFechasDemo();
+  const columnasEstudios = await obtenerColumnasTabla('estudios');
 
-  await prisma.estudio.update({
-    where: { id: params.estudioId },
-    data: {
+  const datosActualizacionEstudio = filtrarDatosPorColumnasDisponibles(
+    {
       descripcion: DESCRIPCION_DEMO,
       direccion: DIRECCION_DEMO,
       sitioWeb: SITIO_WEB_DEMO,
@@ -332,8 +389,16 @@ async function asegurarContenidoDemoVendedor(params: {
       diasAtencion: 'lunes,martes,miercoles,jueves,viernes,sabado',
       sucursales: ['Cabina principal', 'Nails bar'],
     },
-    select: { id: true },
-  });
+    columnasEstudios,
+  );
+
+  if (Object.keys(datosActualizacionEstudio).length > 0) {
+    await prisma.estudio.update({
+      where: { id: params.estudioId },
+      data: datosActualizacionEstudio,
+      select: { id: true },
+    });
+  }
 
   const personalExistente = await prisma.personal.findMany({
     where: { estudioId: params.estudioId },
@@ -732,7 +797,7 @@ export async function asegurarSalonDemoVendedor(params: {
     },
   });
 
-  await asegurarCampoPorcentajeComisionUsuario();
+  await asegurarCamposComisionVendedorUsuario();
   await prisma.usuario.update({
     where: { id: params.usuarioId },
     data: { estudioId: estudio.id },
@@ -853,6 +918,10 @@ export async function reiniciarSalonDemoVendedor(usuarioId: string) {
 
     if (reservaIds.length > 0) {
       await transaccion.reservaServicio.deleteMany({ where: { reservaId: { in: reservaIds } } });
+      await transaccion.reserva.updateMany({
+        where: { estudioId, reservaOriginalId: { not: null } },
+        data: { reservaOriginalId: null },
+      });
     }
 
     if (personalIds.length > 0) {
@@ -865,10 +934,11 @@ export async function reiniciarSalonDemoVendedor(usuarioId: string) {
     await transaccion.puntosFidelidad.deleteMany({ where: { estudioId } });
     await transaccion.configFidelidad.deleteMany({ where: { estudioId } });
     await transaccion.diaFestivo.deleteMany({ where: { estudioId } });
-    await transaccion.cliente.deleteMany({ where: { estudioId } });
-    await transaccion.personal.deleteMany({ where: { estudioId } });
+    // Mantener este orden evita violaciones de FK (reservas/pagos dependen de cliente/personal).
     await transaccion.reserva.deleteMany({ where: { estudioId } });
     await transaccion.pago.deleteMany({ where: { estudioId } });
+    await transaccion.cliente.deleteMany({ where: { estudioId } });
+    await transaccion.personal.deleteMany({ where: { estudioId } });
 
     if (usuarioIds.length > 0) {
       await transaccion.usuario.deleteMany({

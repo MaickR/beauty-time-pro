@@ -58,12 +58,15 @@ export function ModalVentas({ onCerrar }: PropsModalVentas) {
       role="dialog"
       aria-modal="true"
       aria-labelledby="modal-ventas-titulo"
-      className="fixed inset-0 z-200 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4"
+      className="fixed inset-0 z-200 flex items-center justify-center bg-slate-900/70 backdrop-blur-sm p-4"
       onKeyDown={(e) => e.key === 'Escape' && onCerrar()}
     >
-      <div className="bg-white rounded-3xl w-full max-w-lg max-h-[90vh] overflow-hidden flex flex-col shadow-2xl">
-        <div className="flex items-center justify-between px-6 py-4 border-b border-slate-200">
-          <h2 id="modal-ventas-titulo" className="text-lg font-black text-slate-900 uppercase">
+      <div className="bg-white rounded-3xl w-full max-w-2xl max-h-[90vh] overflow-hidden flex flex-col shadow-2xl border border-slate-200">
+        <div className="flex items-center justify-between px-4 py-3 sm:px-6 sm:py-4 border-b border-slate-200">
+          <h2
+            id="modal-ventas-titulo"
+            className="text-base sm:text-lg font-black text-slate-900 uppercase tracking-wide"
+          >
             Ventas
           </h2>
           <button
@@ -75,7 +78,7 @@ export function ModalVentas({ onCerrar }: PropsModalVentas) {
           </button>
         </div>
 
-        <div className="flex-1 overflow-auto px-6 py-6 space-y-4">
+        <div className="flex-1 overflow-auto px-4 py-4 sm:px-6 sm:py-6 space-y-4">
           {isLoading ? (
             <div className="space-y-4">
               {Array.from({ length: 2 }).map((_, i) => (
@@ -85,49 +88,42 @@ export function ModalVentas({ onCerrar }: PropsModalVentas) {
           ) : data ? (
             <>
               {/* Totales globales */}
-              <div className="grid grid-cols-2 gap-3">
-                <div className="bg-linear-to-br from-green-50 via-white to-red-50 rounded-2xl p-4 text-center border border-green-100">
-                  <p className="text-xs font-black text-green-700 uppercase mb-1">México · MXN</p>
-                  <p className="text-2xl font-black text-green-800">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div className="bg-linear-to-br from-emerald-50 via-white to-rose-50 rounded-2xl p-4 text-center border border-emerald-200">
+                  <p className="text-xs font-black text-emerald-700 uppercase mb-1">México · MXN</p>
+                  <p className="text-xl sm:text-2xl font-black text-emerald-800">
                     {formatearSinSimbolo(data.datos.mexico.total)}
                   </p>
                 </div>
-                <div className="bg-linear-to-br from-yellow-50 via-blue-50 to-red-50 rounded-2xl p-4 text-center border border-yellow-200">
-                  <p className="text-xs font-black text-blue-700 uppercase mb-1">Colombia · COP</p>
-                  <p className="text-2xl font-black text-blue-800">
+                <div className="bg-linear-to-br from-rose-50 via-white to-slate-100 rounded-2xl p-4 text-center border border-rose-200">
+                  <p className="text-xs font-black text-slate-700 uppercase mb-1">Colombia · COP</p>
+                  <p className="text-xl sm:text-2xl font-black text-slate-900">
                     {formatearSinSimbolo(data.datos.colombia.total)}
                   </p>
                 </div>
               </div>
 
-              {/* Detalle por país */}
+              {/* Resumen por país - limpio y directo */}
               <div className="space-y-3 mt-6">
-                {paises.map(({ nombre, datos: paisData }, indicePais) => {
+                {paises.map(({ nombre, datos: paisData }) => {
                   const expandido = expandidos[nombre] ?? false;
                   const { moneda, desglose } = paisData;
-                  const totalSalones = desglose.pro.salones + desglose.standard.salones;
-                  const esMexico = nombre === 'México';
                   return (
                     <div
-                      key={`${nombre}-${indicePais}`}
-                      className={`border rounded-2xl overflow-hidden ${esMexico ? 'border-green-200' : 'border-yellow-200'}`}
+                      key={nombre}
+                      className="border rounded-2xl overflow-hidden border-slate-200"
                     >
                       <button
                         onClick={() => alternarExpandido(nombre)}
-                        className="w-full flex items-center justify-between px-4 py-3 hover:bg-slate-50 transition-colors"
+                        className="w-full flex items-center justify-between gap-3 px-4 py-3 hover:bg-slate-50 transition-colors"
                       >
                         <div className="flex items-center gap-3">
-                          <BanderaPais pais={esMexico ? 'Mexico' : 'Colombia'} />
+                          <BanderaPais pais={nombre === 'México' ? 'Mexico' : 'Colombia'} />
                           <span className="font-black text-slate-900">{nombre}</span>
-                          <span className="text-xs font-bold text-slate-400">
-                            {totalSalones} salones
-                          </span>
                         </div>
-                        <div className="flex items-center gap-3">
-                          <span
-                            className={`text-sm font-black ${esMexico ? 'text-green-700' : 'text-blue-700'}`}
-                          >
-                            {formatearMoneda(paisData.total, moneda)}
+                        <div className="flex items-center gap-2 sm:gap-3">
+                          <span className="text-xs sm:text-sm font-black text-slate-900 text-right">
+                            PRO = {desglose.pro.salones} · STD = {desglose.standard.salones}
                           </span>
                           {expandido ? (
                             <ChevronDown className="w-4 h-4 text-slate-400" />
@@ -138,9 +134,9 @@ export function ModalVentas({ onCerrar }: PropsModalVentas) {
                       </button>
                       {expandido && (
                         <div className="border-t border-slate-100 bg-slate-50 px-4 py-3 space-y-2">
-                          <div className="flex items-center justify-between">
+                          <div className="flex items-center justify-between gap-2">
                             <span className="text-sm font-bold text-slate-600">PRO</span>
-                            <div className="text-right">
+                            <div className="text-right text-xs sm:text-sm">
                               <span className="text-sm font-bold text-slate-700">
                                 {desglose.pro.salones} salones
                               </span>
@@ -150,9 +146,9 @@ export function ModalVentas({ onCerrar }: PropsModalVentas) {
                               </span>
                             </div>
                           </div>
-                          <div className="flex items-center justify-between">
+                          <div className="flex items-center justify-between gap-2">
                             <span className="text-sm font-bold text-slate-600">Estándar</span>
-                            <div className="text-right">
+                            <div className="text-right text-xs sm:text-sm">
                               <span className="text-sm font-bold text-slate-700">
                                 {desglose.standard.salones} salones
                               </span>

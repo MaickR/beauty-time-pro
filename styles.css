@@ -12,7 +12,8 @@ body,
 
 body {
   min-height: 100vh;
-  background: #f7f4f2;
+  background: transparent;
+  color: inherit;
 }
 
 * {

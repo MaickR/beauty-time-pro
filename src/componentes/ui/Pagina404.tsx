@@ -8,7 +8,7 @@ export function Pagina404() {
   const enlaceWhatsApp = `https://wa.me/${WHATSAPP_SOPORTE}?text=${encodeURIComponent('Hola, necesito ayuda para encontrar una página dentro de Beauty Time Pro.')}`;
 
   return (
-    <main className="min-h-screen bg-[radial-gradient(circle_at_top,#fce7f3_0%,#fff7ed_38%,#f8fafc_100%)] p-6 md:p-10">
+    <main className="min-h-screen bg-[radial-gradient(circle_at_top,#f4e9e5_0%,#f8f4f2_38%,#f6f2f0_100%)] p-6 md:p-10">
       <section className="mx-auto flex min-h-[calc(100vh-3rem)] max-w-4xl items-center justify-center">
         <div className="grid w-full gap-6 rounded-[2.75rem] border border-white/70 bg-white/90 p-6 shadow-[0_30px_100px_rgba(15,23,42,0.12)] backdrop-blur md:grid-cols-[1.1fr_0.9fr] md:p-10">
           <div className="flex flex-col justify-center">

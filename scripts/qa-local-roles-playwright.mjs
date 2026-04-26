@@ -7,13 +7,18 @@ const config = {
 };
 
 const escenarios = [
-  {
-    id: 'maestro_principal',
-    rolEsperado: 'maestro',
-    acceso: process.env.BTP_MASTER_EMAIL ?? 'miguel@salonpromaster.com',
-    contrasena: process.env.BTP_MASTER_PASS ?? 'Administrador1234*',
-    rutaEsperada: /\/maestro(\/|$)/i,
-  },
+  // Solo se incluye maestro_principal si las credenciales están configuradas explícitamente por variables de entorno
+  ...(process.env.BTP_MASTER_EMAIL && process.env.BTP_MASTER_PASS
+    ? [
+        {
+          id: 'maestro_principal',
+          rolEsperado: 'maestro',
+          acceso: process.env.BTP_MASTER_EMAIL,
+          contrasena: process.env.BTP_MASTER_PASS,
+          rutaEsperada: /\/maestro(\/|$)/i,
+        },
+      ]
+    : []),
   {
     id: 'maestro_qa',
     rolEsperado: 'maestro',
@@ -134,7 +139,14 @@ async function llenarCampoAcceso(page, valor) {
 
 async function llenarContrasena(page, valor) {
   const campo = page.locator('#contrasena');
-  await campo.waitFor({ state: 'visible', timeout: config.timeoutMs });
+  await campo.waitFor({ state: 'attached', timeout: config.timeoutMs });
+  await page.waitForFunction(
+    () => {
+      const input = document.querySelector('#contrasena');
+      return Boolean(input) && !input.disabled && input.offsetParent !== null;
+    },
+    { timeout: config.timeoutMs },
+  );
   await campo.fill(valor);
 }
 
@@ -142,6 +154,42 @@ async function enviarFormulario(page) {
   const boton = page.getByRole('button', { name: /LOGIN|Entrar al sistema|Entrar/i }).first();
   await boton.waitFor({ state: 'visible', timeout: config.timeoutMs });
   await boton.click();
+}
+
+async function ejecutarLoginEscalonado(page, escenario) {
+  await llenarCampoAcceso(page, escenario.acceso);
+
+  const campoContrasena = page.locator('#contrasena');
+  const contrasenaHabilitadaInicial = await campoContrasena
+    .isEnabled()
+    .catch(() => false);
+
+  if (!contrasenaHabilitadaInicial) {
+    await enviarFormulario(page);
+
+    await Promise.race([
+      page
+        .waitForFunction(
+          () => {
+            const input = document.querySelector('#contrasena');
+            return Boolean(input) && !input.disabled && input.offsetParent !== null;
+          },
+          { timeout: config.timeoutMs },
+        )
+        .catch(() => null),
+      page.waitForURL((url) => !url.pathname.endsWith('/iniciar-sesion'), {
+        timeout: config.timeoutMs,
+      }).catch(() => null),
+    ]);
+  }
+
+  const sigueEnLogin = new URL(page.url()).pathname.endsWith('/iniciar-sesion');
+  const contrasenaHabilitada = await campoContrasena.isEnabled().catch(() => false);
+
+  if (sigueEnLogin && contrasenaHabilitada) {
+    await llenarContrasena(page, escenario.contrasena);
+    await enviarFormulario(page);
+  }
 }
 
 async function esperarResultadoLogin(page) {
@@ -301,14 +349,32 @@ async function ejecutarAccionesRol(page, rolEsperado, resultado) {
 }
 
 function evaluarCriticidad(resultado) {
-  const erroresHttpCriticos = resultado.respuestasError.filter((errorHttp) =>
-    [400, 401, 403, 500].includes(errorHttp.status),
-  );
+  // Los 400 del endpoint /auth/iniciar-sesion son esperados en el paso intermedio del login
+  // escalonado. No deben contarse como errores críticos.
+  const erroresHttpCriticos = resultado.respuestasError.filter((errorHttp) => {
+    if (errorHttp.status === 400 && /\/auth\/iniciar-sesion/.test(errorHttp.url)) {
+      return false;
+    }
+    return [400, 401, 403, 500].includes(errorHttp.status);
+  });
+
+  // Los mensajes de consola del browser sobre el 400 de login también son esperados
+  const consolaErroresCriticos = resultado.consolaErrores.filter((err) => {
+    const texto = err.texto ?? '';
+    const url = err.ubicacion?.url ?? '';
+    if (/400/.test(texto) && /\/auth\/iniciar-sesion/.test(url)) {
+      return false;
+    }
+    if (/Failed to load resource.*400/.test(texto)) {
+      return false;
+    }
+    return true;
+  });
 
   return {
     hayCriticos:
       resultado.errores.length > 0 ||
-      resultado.consolaErrores.length > 0 ||
+      consolaErroresCriticos.length > 0 ||
       resultado.erroresPagina.length > 0 ||
       resultado.requestsFallidos.length > 0 ||
       erroresHttpCriticos.length > 0,
@@ -328,9 +394,7 @@ async function ejecutarEscenario(browser, escenario) {
       timeout: config.timeoutMs,
     });
 
-    await llenarCampoAcceso(page, escenario.acceso);
-    await llenarContrasena(page, escenario.contrasena);
-    await enviarFormulario(page);
+    await ejecutarLoginEscalonado(page, escenario);
 
     await page.waitForLoadState('networkidle', { timeout: config.timeoutMs }).catch(() => {});
     const resultadoLogin = await esperarResultadoLogin(page);

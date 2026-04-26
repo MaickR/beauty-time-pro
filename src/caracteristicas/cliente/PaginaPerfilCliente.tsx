@@ -9,32 +9,32 @@ import { usarPerfilCliente } from './hooks/usarPerfilCliente';
 import { PanelReservasCliente } from './componentes/PanelReservasCliente';
 import type { Pais, FidelidadSalon } from '../../tipos';
 
-// â”€â”€ Helpers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── Helpers ──────────────────────────────────────────────────────────────────
 function inicialesDesdeNombre(n: string, a: string) {
   return (n[0] ?? '') + (a[0] ?? '');
 }
 
 const COLORES_CLIENTE = [
   '#C6968C',
-  '#CE93D8',
-  '#80DEEA',
-  '#A5D6A7',
-  '#FFF176',
-  '#FFCC80',
-  '#EF9A9A',
-  '#90CAF9',
-  '#B2DFDB',
-  '#E1BEE7',
+  '#AB7F76',
+  '#8E6861',
+  '#78736E',
+  '#6F625D',
+  '#4B8579',
+  '#36695F',
+  '#275249',
+  '#143C32',
+  '#0A2823',
 ];
 
 function formatearPais(pais: Pais): string {
-  return pais === 'Mexico' ? 'MÃ©xico' : 'Colombia';
+  return pais === 'Mexico' ? 'México' : 'Colombia';
 }
 
 function normalizarTextoPersona(valor: string): string {
   return valor
     .normalize('NFC')
-    .replace(/[^\p{L}\p{M}\s'â€™-]/gu, '')
+    .replace(/[^\p{L}\p{M}\s'’-]/gu, '')
     .replace(/\s{2,}/g, ' ')
     .trimStart();
 }
@@ -43,7 +43,7 @@ function normalizarTelefono(valor: string): string {
   return valor.replace(/\D/g, '').slice(0, 10);
 }
 
-// â”€â”€ SecciÃ³n identidad â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── Sección identidad ───────────────────────────────────────────────────────
 function SeccionIdentidadCliente({
   avatarUrl,
   nombre,
@@ -71,7 +71,7 @@ function SeccionIdentidadCliente({
           />
         ) : (
           <div
-            className="w-24 h-24 rounded-full bg-pink-100 text-pink-700 font-black text-3xl flex items-center justify-center"
+            className="w-24 h-24 rounded-full bg-rose-100 text-rose-700 font-black text-3xl flex items-center justify-center"
             aria-hidden="true"
           >
             {inics}
@@ -91,7 +91,7 @@ function SeccionIdentidadCliente({
   );
 }
 
-// â”€â”€ SecciÃ³n Fidelidad â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── Sección Fidelidad ────────────────────────────────────────────────────────
 function SeccionFidelidad({
   fidelidad,
   mensajeVacio,
@@ -108,7 +108,7 @@ function SeccionFidelidad({
           id="titulo-fidelidad"
           className="font-black text-slate-900 text-lg mb-3 flex items-center gap-2"
         >
-          <Star className="w-5 h-5 text-pink-600" aria-hidden="true" /> Programa de fidelidad
+          <Star className="w-5 h-5 text-rose-600" aria-hidden="true" /> Programa de fidelidad
         </h2>
         <div className="bg-white border border-dashed border-slate-200 rounded-3xl p-8 text-center shadow-sm">
           <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-amber-50 text-amber-500">
@@ -116,7 +116,7 @@ function SeccionFidelidad({
           </div>
           <p className="font-bold text-slate-900">
             {mensajeVacio ??
-              'AÃºn no tienes puntos de fidelidad. Â¡Reserva tu primera cita para empezar a acumular!'}
+              'Aún no tienes puntos de fidelidad. ¡Reserva tu primera cita para empezar a acumular!'}
           </p>
         </div>
       </section>
@@ -129,7 +129,7 @@ function SeccionFidelidad({
         id="titulo-fidelidad"
         className="font-black text-slate-900 text-lg mb-3 flex items-center gap-2"
       >
-        <Star className="w-5 h-5 text-pink-600" aria-hidden="true" /> Programa de fidelidad
+        <Star className="w-5 h-5 text-rose-600" aria-hidden="true" /> Programa de fidelidad
       </h2>
       <div className="space-y-3">
         {fidelidadActiva.map((f) => {
@@ -149,7 +149,7 @@ function SeccionFidelidad({
                 </p>
                 {tieneRecompensa && (
                   <span className="text-xs font-bold px-2 py-1 bg-green-50 text-green-700 rounded-full border border-green-200">
-                    ðŸŽ Â¡Recompensa disponible!
+                    ðŸŽ ¡Recompensa disponible!
                   </span>
                 )}
               </div>
@@ -165,7 +165,7 @@ function SeccionFidelidad({
                 />
               </div>
               <p className="text-xs text-slate-500">
-                {f.visitasAcumuladas} / {f.visitasRequeridas} visitas Â· {f.descripcionRecompensa}
+                {f.visitasAcumuladas} / {f.visitasRequeridas} visitas · {f.descripcionRecompensa}
               </p>
             </div>
           );
@@ -190,7 +190,7 @@ function SeccionApariencia({
       aria-labelledby="titulo-apariencia"
     >
       <div className="flex items-center gap-2 mb-4">
-        <Palette className="w-5 h-5 text-pink-600" aria-hidden="true" />
+        <Palette className="w-5 h-5 text-rose-600" aria-hidden="true" />
         <h2 id="titulo-apariencia" className="font-black text-slate-900">
           Apariencia
         </h2>
@@ -212,8 +212,8 @@ function SeccionApariencia({
             className="h-10 w-10 rounded-full border-2 transition-transform hover:scale-105"
             style={{
               backgroundColor: color,
-              borderColor: colorSeleccionado === color ? '#1e293b' : 'transparent',
-              outline: colorSeleccionado === color ? '2px solid #1e293b' : '2px solid transparent',
+              borderColor: colorSeleccionado === color ? '#0A2823' : 'transparent',
+              outline: colorSeleccionado === color ? '2px solid #0A2823' : '2px solid transparent',
               outlineOffset: '2px',
             }}
           />
@@ -223,7 +223,7 @@ function SeccionApariencia({
   );
 }
 
-// â”€â”€ SecciÃ³n ContraseÃ±a â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── Sección Contraseña ───────────────────────────────────────────────────────
 function SeccionContrasena({
   form,
   onGuardar,
@@ -243,7 +243,7 @@ function SeccionContrasena({
         aria-expanded={abierto}
       >
         <span className="flex items-center gap-2">
-          <Lock className="w-4 h-4 text-slate-400" aria-hidden="true" /> Cambiar contraseÃ±a
+          <Lock className="w-4 h-4 text-slate-400" aria-hidden="true" /> Cambiar contraseña
         </span>
         <ChevronRight
           className={`w-4 h-4 text-slate-400 transition-transform ${abierto ? 'rotate-90' : ''}`}
@@ -254,16 +254,16 @@ function SeccionContrasena({
         <div
           className="bg-white border border-slate-100 rounded-2xl mt-1 p-5 shadow-sm space-y-3"
           role="form"
-          aria-label="Formulario cambiar contraseÃ±a"
+          aria-label="Formulario cambiar contraseña"
         >
           <p className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-xs font-medium text-slate-600">
-            Usa al menos 10 caracteres, con mayÃºscula, minÃºscula, nÃºmero y sÃ­mbolo. Al
-            confirmarla se cerrarÃ¡n otras sesiones abiertas.
+            Usa al menos 10 caracteres, con mayúscula, minúscula, número y símbolo. Al confirmarla
+            se cerrarán otras sesiones abiertas.
           </p>
           {[
-            { campo: 'contrasenaActual' as const, label: 'ContraseÃ±a actual' },
-            { campo: 'contrasenaNueva' as const, label: 'Nueva contraseÃ±a' },
-            { campo: 'confirmar' as const, label: 'Confirmar contraseÃ±a' },
+            { campo: 'contrasenaActual' as const, label: 'Contraseña actual' },
+            { campo: 'contrasenaNueva' as const, label: 'Nueva contraseña' },
+            { campo: 'confirmar' as const, label: 'Confirmar contraseña' },
           ].map(({ campo, label }) => (
             <div key={campo}>
               <label htmlFor={campo} className="block text-xs font-bold text-slate-600 mb-1">
@@ -273,7 +273,7 @@ function SeccionContrasena({
                 id={campo}
                 type="password"
                 {...form.register(campo)}
-                className="w-full border border-slate-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-pink-400"
+                className="w-full border border-slate-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-rose-300"
                 aria-describedby={form.formState.errors[campo] ? `${campo}-error` : undefined}
               />
               {form.formState.errors[campo] && (
@@ -286,14 +286,14 @@ function SeccionContrasena({
           <button
             onClick={onGuardar}
             disabled={guardando}
-            className="w-full bg-pink-600 text-white rounded-xl py-3 text-sm font-black hover:bg-pink-700 transition-colors disabled:opacity-60 flex items-center justify-center gap-2"
+            className="w-full bg-rose-600 text-white rounded-xl py-3 text-sm font-black hover:bg-rose-700 transition-colors disabled:opacity-60 flex items-center justify-center gap-2"
           >
             {guardando ? (
               <>
-                <Loader2 className="w-4 h-4 animate-spin" aria-hidden="true" /> Guardandoâ€¦
+                <Loader2 className="w-4 h-4 animate-spin" aria-hidden="true" /> Guardando...
               </>
             ) : (
-              'Actualizar contraseÃ±a'
+              'Actualizar contraseña'
             )}
           </button>
         </div>
@@ -335,7 +335,7 @@ function SeccionNotificaciones() {
               setProcesando(false);
             }
           }}
-          className={`min-w-28 rounded-xl px-4 py-2 text-sm font-black transition-colors disabled:opacity-60 ${push.notificacionesActivas ? 'bg-slate-900 text-white' : 'bg-pink-600 text-white'}`}
+          className={`min-w-28 rounded-xl px-4 py-2 text-sm font-black transition-colors disabled:opacity-60 ${push.notificacionesActivas ? 'bg-slate-900 text-white' : 'bg-rose-600 text-white'}`}
         >
           {procesando ? 'Procesando...' : push.notificacionesActivas ? 'Desactivar' : 'Activar'}
         </button>
@@ -349,7 +349,7 @@ function SeccionNotificaciones() {
   );
 }
 
-// â”€â”€ PÃ¡gina principal â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── Página principal ─────────────────────────────────────────────────────────
 export function PaginaPerfilCliente() {
   const navegar = useNavigate();
   const ubicacion = useLocation();
@@ -452,22 +452,22 @@ export function PaginaPerfilCliente() {
         <button
           type="button"
           onClick={volverAlInicio}
-          className="text-sm font-black text-slate-600 hover:text-pink-600 transition-colors"
+          className="text-sm font-black text-slate-600 hover:text-rose-700 transition-colors"
         >
-          â† Volver al inicio
+          ← Volver al inicio
         </button>
 
         <section className="bg-white border border-slate-100 rounded-3xl p-2 shadow-sm">
           <div className="grid grid-cols-2 gap-2">
             <Link
               to="/cliente/perfil"
-              className={`rounded-2xl px-4 py-3 text-sm font-black text-center transition-colors ${vistaActiva === 'perfil' ? 'bg-pink-600 text-white' : 'text-slate-600 hover:bg-slate-50'}`}
+              className={`rounded-2xl px-4 py-3 text-sm font-black text-center transition-colors ${vistaActiva === 'perfil' ? 'bg-rose-600 text-white' : 'text-slate-600 hover:bg-slate-50'}`}
             >
               Mi perfil
             </Link>
             <Link
               to="/cliente/perfil?vista=reservas"
-              className={`rounded-2xl px-4 py-3 text-sm font-black text-center transition-colors ${vistaActiva === 'reservas' ? 'bg-pink-600 text-white' : 'text-slate-600 hover:bg-slate-50'}`}
+              className={`rounded-2xl px-4 py-3 text-sm font-black text-center transition-colors ${vistaActiva === 'reservas' ? 'bg-rose-600 text-white' : 'text-slate-600 hover:bg-slate-50'}`}
             >
               Mis reservas
             </Link>
@@ -504,7 +504,7 @@ export function PaginaPerfilCliente() {
               {[
                 { campo: 'nombre' as const, label: 'Nombre', type: 'text' },
                 { campo: 'apellido' as const, label: 'Apellido', type: 'text' },
-                { campo: 'telefono' as const, label: 'TelÃ©fono', type: 'tel' },
+                { campo: 'telefono' as const, label: 'Teléfono', type: 'tel' },
               ].map(({ campo, label, type }) => (
                 <div key={campo}>
                   {(() => {
@@ -532,7 +532,7 @@ export function PaginaPerfilCliente() {
                               : normalizarTextoPersona(evento.target.value);
                             registro.onChange(evento);
                           }}
-                          className="w-full border border-slate-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-pink-400"
+                          className="w-full border border-slate-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-rose-300"
                           aria-describedby={
                             formPerfil.formState.errors[campo] ? `${campo}-error` : undefined
                           }
@@ -563,7 +563,7 @@ export function PaginaPerfilCliente() {
                   type="date"
                   max={new Date().toISOString().split('T')[0]}
                   {...formPerfil.register('fechaNacimiento')}
-                  className="w-full border border-slate-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-pink-400"
+                  className="w-full border border-slate-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-rose-300"
                   aria-describedby={
                     formPerfil.formState.errors.fechaNacimiento
                       ? 'fechaNacimiento-error'
@@ -578,14 +578,14 @@ export function PaginaPerfilCliente() {
               </div>
               <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4 space-y-3">
                 <div className="flex items-center gap-2">
-                  <Mail className="w-4 h-4 text-pink-600" aria-hidden="true" />
+                  <Mail className="w-4 h-4 text-rose-600" aria-hidden="true" />
                   <p className="text-sm font-black text-slate-800">Correo de acceso</p>
                 </div>
                 <label
                   htmlFor="email-actualizacion"
                   className="block text-xs font-bold text-slate-600"
                 >
-                  Nuevo correo electrÃ³nico
+                  Nuevo correo electrónico
                 </label>
                 <input
                   id="email-actualizacion"
@@ -594,10 +594,10 @@ export function PaginaPerfilCliente() {
                   onChange={(evento) =>
                     setEmailNuevo(evento.target.value.replace(/\s+/g, '').toLowerCase())
                   }
-                  className="w-full border border-slate-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-pink-400"
+                  className="w-full border border-slate-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-rose-300"
                 />
                 <p className="text-xs text-slate-500">
-                  Tu correo actual seguirÃ¡ funcionando hasta que confirmes el nuevo enlace enviado.
+                  Tu correo actual seguirá funcionando hasta que confirmes el nuevo enlace enviado.
                 </p>
                 {perfil.emailPendiente && (
                   <p className="text-xs font-bold text-amber-700 bg-amber-50 border border-amber-200 rounded-xl px-3 py-2">
@@ -613,19 +613,19 @@ export function PaginaPerfilCliente() {
                     emailNuevoNormalizado === perfil.emailPendiente ||
                     emailNuevoNormalizado === perfil.email
                   }
-                  className="w-full rounded-xl border border-pink-200 bg-pink-50 px-4 py-3 text-sm font-black text-pink-700 transition-colors hover:bg-pink-100 disabled:opacity-60"
+                  className="w-full rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm font-black text-rose-700 transition-colors hover:bg-rose-100 disabled:opacity-60"
                 >
-                  {mutarEmail.isPending ? 'Enviando verificaciÃ³n...' : 'Actualizar email'}
+                  {mutarEmail.isPending ? 'Enviando verificación...' : 'Actualizar email'}
                 </button>
               </div>
               <button
                 type="submit"
                 disabled={mutarPerfil.isPending}
-                className="w-full bg-pink-600 text-white rounded-xl py-3 text-sm font-black hover:bg-pink-700 transition-colors disabled:opacity-60 flex items-center justify-center gap-2"
+                className="w-full bg-rose-600 text-white rounded-xl py-3 text-sm font-black hover:bg-rose-700 transition-colors disabled:opacity-60 flex items-center justify-center gap-2"
               >
                 {mutarPerfil.isPending ? (
                   <>
-                    <Loader2 className="w-4 h-4 animate-spin" aria-hidden="true" /> Guardandoâ€¦
+                    <Loader2 className="w-4 h-4 animate-spin" aria-hidden="true" /> Guardando...
                   </>
                 ) : (
                   'Guardar cambios'
@@ -660,7 +660,7 @@ export function PaginaPerfilCliente() {
 
       <DialogoConfirmacion
         abierto={dialogoSalidaAbierto}
-        mensaje="Tienes cambios sin guardar. Â¿Salir de todas formas?"
+        mensaje="Tienes cambios sin guardar. ¿Salir de todas formas?"
         textoCancelar="Seguir editando"
         textoConfirmar="Salir"
         onCancelar={() => setDialogoSalidaAbierto(false)}

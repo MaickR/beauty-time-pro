@@ -3,20 +3,20 @@ import { usarTituloPagina } from '../../hooks/usarTituloPagina';
 
 const MOTIVOS: Record<string, { titulo: string; mensaje: string; submensaje: string }> = {
   verificacion: {
-    titulo: 'Â¡Listo!',
+    titulo: '¡Listo!',
     mensaje: 'Tu cuenta fue creada correctamente.',
-    submensaje: 'Ya puedes iniciar sesiÃ³n con tu correo y contraseÃ±a.',
+    submensaje: 'Ya puedes iniciar sesión con tu correo y contraseña.',
   },
 };
 
 const MOTIVO_POR_DEFECTO = {
-  titulo: 'Â¡Correo enviado!',
-  mensaje: 'Te hemos enviado un correo electrÃ³nico.',
+  titulo: '¡Correo enviado!',
+  mensaje: 'Te hemos enviado un correo electrónico.',
   submensaje: 'Revisa tu bandeja de entrada y sigue las instrucciones.',
 };
 
 export function PaginaEmailEnviado() {
-  usarTituloPagina('Correo enviado â€” Beauty Time Pro');
+  usarTituloPagina('Correo enviado — Beauty Time Pro');
   const [params] = useSearchParams();
   const motivo = params.get('motivo') ?? '';
   const mensaje = params.get('mensaje');
@@ -33,7 +33,7 @@ export function PaginaEmailEnviado() {
             role="img"
             aria-label="Sobre de correo"
           >
-            âœ‰ï¸
+            ✉️
           </span>
         </div>
         <style>{`
@@ -52,7 +52,7 @@ export function PaginaEmailEnviado() {
             href={enlace}
             className="mb-4 inline-block text-sm font-bold text-blue-600 underline hover:text-blue-700"
           >
-            Abrir enlace de verificaciÃ³n
+            Abrir enlace de verificación
           </a>
         )}
 
@@ -60,7 +60,7 @@ export function PaginaEmailEnviado() {
           to="/iniciar-sesion"
           className="inline-block w-full bg-linear-to-r from-[#C6968C] to-[#78736E] text-white font-bold py-3.5 rounded-2xl hover:shadow-lg hover:scale-[1.01] transition-all"
         >
-          Ir a iniciar sesiÃ³n
+          Ir a iniciar sesión
         </Link>
       </div>
     </div>

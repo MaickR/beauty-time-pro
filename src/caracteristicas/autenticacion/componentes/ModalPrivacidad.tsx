@@ -65,13 +65,13 @@ export function ModalPrivacidad({ abierto, alAceptar, alCerrar }: PropsModalPriv
       role="dialog"
       aria-modal="true"
       aria-labelledby="titulo-privacidad"
-      className="fixed inset-0 z-221 flex items-center justify-center bg-slate-950/70 p-4 backdrop-blur-sm"
+      className="fixed inset-0 z-221 flex items-center justify-center bg-slate-900/70 p-4 backdrop-blur-sm"
     >
-      <div className="w-full max-w-3xl overflow-hidden rounded-4xl border border-slate-200 bg-white shadow-2xl">
+      <div className="w-full max-w-3xl overflow-hidden rounded-4xl border border-rose-100/90 bg-[linear-gradient(165deg,#ffffff_0%,#f8f4f2_82%,#f4e9e5_100%)] shadow-2xl">
         <div className="flex max-h-[80vh] h-full flex-col">
           <div className="flex items-start justify-between gap-4 border-b p-6">
             <div>
-              <p className="text-xs font-black uppercase tracking-[0.25em] text-pink-600">
+              <p className="text-xs font-black uppercase tracking-[0.25em] text-rose-600">
                 Privacidad y datos
               </p>
               <h2 id="titulo-privacidad" className="mt-1 text-xl font-bold text-slate-900">
@@ -81,7 +81,7 @@ export function ModalPrivacidad({ abierto, alAceptar, alCerrar }: PropsModalPriv
             <button
               type="button"
               onClick={alCerrar}
-              className="rounded-xl bg-slate-100 px-3 py-2 text-sm font-semibold text-slate-600 hover:bg-slate-200"
+              className="rounded-xl border border-rose-100 bg-white px-3 py-2 text-sm font-semibold text-slate-700 transition hover:bg-rose-50"
               aria-label="Cerrar política de privacidad"
             >
               Cerrar
@@ -95,7 +95,7 @@ export function ModalPrivacidad({ abierto, alAceptar, alCerrar }: PropsModalPriv
             {SECCIONES_PRIVACIDAD.map((seccion) => (
               <section
                 key={seccion.titulo}
-                className="rounded-2xl border border-slate-100 bg-slate-50 p-5"
+                className="rounded-2xl border border-slate-100 bg-white/90 p-5"
               >
                 <h3 className="text-lg font-black text-slate-900">{seccion.titulo}</h3>
                 <p className="mt-2 text-sm leading-6 text-slate-600">{seccion.contenido}</p>
@@ -106,7 +106,7 @@ export function ModalPrivacidad({ abierto, alAceptar, alCerrar }: PropsModalPriv
             <button
               type="button"
               onClick={alAceptar}
-              className="w-full rounded-lg bg-pink-600 py-3 text-sm font-semibold text-white transition-colors hover:bg-pink-700"
+              className="w-full rounded-xl bg-linear-to-r from-[#143C32] via-[#0A2823] to-[#78736E] py-3 text-sm font-semibold text-white shadow-lg shadow-emerald-900/20 transition hover:brightness-105"
             >
               He leído y acepto la política de privacidad
             </button>

@@ -125,6 +125,7 @@ export interface DetalleSalonDirectorio {
   descripcion: string | null;
   colorPrimario: string | null;
   logoUrl: string | null;
+  claveDueno: string;
   claveCliente: string;
   creadoEn: string;
   usuarios: { nombre: string; email: string }[];

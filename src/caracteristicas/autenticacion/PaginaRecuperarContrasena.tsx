@@ -9,13 +9,13 @@ import { usarTituloPagina } from '../../hooks/usarTituloPagina';
 import { MarcaAplicacion } from '../../componentes/ui/MarcaAplicacion';
 
 const esquema = z.object({
-  email: z.string().email('Ingresa un correo electrÃ³nico vÃ¡lido'),
+  email: z.string().email('Ingresa un correo electrónico válido'),
 });
 
 type CamposFormulario = z.infer<typeof esquema>;
 
 export function PaginaRecuperarContrasena() {
-  usarTituloPagina('Recuperar contraseÃ±a');
+  usarTituloPagina('Recuperar contraseña');
   const [enviado, setEnviado] = useState(false);
 
   const {
@@ -30,7 +30,7 @@ export function PaginaRecuperarContrasena() {
       await solicitarResetAPI(datos.email);
       setEnviado(true);
     } catch {
-      setError('root', { message: 'OcurriÃ³ un error. Intenta nuevamente en unos minutos.' });
+      setError('root', { message: 'Ocurrió un error. Intenta nuevamente en unos minutos.' });
     }
   };
 
@@ -45,15 +45,15 @@ export function PaginaRecuperarContrasena() {
               <CheckCircle className="w-14 h-14 text-green-500 mx-auto mb-4" aria-hidden="true" />
               <h1 className="text-2xl font-black text-slate-900 mb-2">Revisa tu correo</h1>
               <p className="text-slate-500 text-sm mb-6">
-                Si el correo existe en nuestra plataforma, recibirÃ¡s instrucciones para restablecer
-                tu contraseÃ±a en breve.
+                Si el correo existe en nuestra plataforma, recibirás instrucciones para restablecer
+                tu contraseña en breve.
               </p>
               <Link
                 to="/iniciar-sesion"
                 className="inline-flex items-center gap-2 text-sm font-semibold text-pink-600 hover:text-pink-700 transition-colors"
               >
                 <ArrowLeft className="w-4 h-4" aria-hidden="true" />
-                Volver al inicio de sesiÃ³n
+                Volver al inicio de sesión
               </Link>
             </div>
           ) : (
@@ -61,15 +61,13 @@ export function PaginaRecuperarContrasena() {
               <Link
                 to="/iniciar-sesion"
                 className="inline-flex items-center gap-1 text-sm text-slate-400 hover:text-slate-600 transition-colors mb-6"
-                aria-label="Regresar al inicio de sesiÃ³n"
+                aria-label="Regresar al inicio de sesión"
               >
                 <ArrowLeft className="w-4 h-4" aria-hidden="true" />
                 Regresar
               </Link>
 
-              <h1 className="text-2xl font-black text-slate-900 mb-1">
-                Â¿Olvidaste tu contraseÃ±a?
-              </h1>
+              <h1 className="text-2xl font-black text-slate-900 mb-1">¿Olvidaste tu contraseña?</h1>
               <p className="text-slate-500 text-sm mb-6">
                 Ingresa tu correo y te enviaremos instrucciones para restablecerla.
               </p>
@@ -80,7 +78,7 @@ export function PaginaRecuperarContrasena() {
                     htmlFor="email-recuperar"
                     className="block text-sm font-semibold text-slate-700 mb-1.5"
                   >
-                    Correo electrÃ³nico
+                    Correo electrónico
                   </label>
                   <div className="relative">
                     <Mail

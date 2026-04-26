@@ -101,13 +101,13 @@ export function PaginaRegistroCliente() {
   };
 
   return (
-    <main className="min-h-screen bg-[#f5efe6] px-6 py-10 sm:px-10 lg:px-14 lg:py-14">
+    <main className="min-h-screen bg-[radial-gradient(circle_at_top_left,rgba(198,150,140,0.16),transparent_32%),radial-gradient(circle_at_bottom_right,rgba(20,60,50,0.10),transparent_36%),linear-gradient(180deg,#f8f4f2_0%,#f4efec_48%,#f6f2f0_100%)] px-6 py-10 sm:px-10 lg:px-14 lg:py-14">
       <div className="mx-auto grid max-w-6xl gap-8 lg:grid-cols-[0.88fr_1.12fr]">
-        <section className="rounded-4xl bg-[#1d1b1a] p-8 text-white shadow-2xl shadow-black/20 sm:p-10">
+        <section className="rounded-4xl bg-[linear-gradient(160deg,#0A2823_0%,#143C32_56%,#78736E_100%)] p-8 text-white shadow-[0_30px_90px_rgba(10,40,35,0.34)] sm:p-10">
           <MarcaAplicacion variante="oscura" subtitulo="Cuenta de cliente" />
 
           <div className="mt-10 max-w-md">
-            <p className="text-sm uppercase tracking-[0.3em] text-[#f5cea7]">Registro rápido</p>
+            <p className="text-sm uppercase tracking-[0.3em] text-rose-200">Registro rápido</p>
             <h1 className="mt-4 text-4xl font-semibold leading-tight">
               Crea tu cuenta y accede al instante.
             </h1>
@@ -133,7 +133,7 @@ export function PaginaRegistroCliente() {
           </div>
         </section>
 
-        <section className="rounded-4xl border border-[#e4d8c8] bg-[#fffdf9] p-6 shadow-[0_24px_80px_rgba(71,55,36,0.12)] sm:p-8">
+        <section className="rounded-4xl border border-rose-100/90 bg-[linear-gradient(165deg,#ffffff_0%,#f8f4f2_62%,#f4e9e5_100%)] p-6 shadow-[0_24px_80px_rgba(10,40,35,0.14)] sm:p-8">
           <div className="mb-8 flex items-start justify-between gap-4">
             <div>
               <h2 className="text-3xl font-semibold tracking-tight text-slate-950">
@@ -143,7 +143,7 @@ export function PaginaRegistroCliente() {
                 Completa tus datos y entra de inmediato. No necesitas verificar con código.
               </p>
             </div>
-            <div className="hidden h-12 w-12 items-center justify-center rounded-2xl bg-[#f3eadf] text-slate-700 sm:flex">
+            <div className="hidden h-12 w-12 items-center justify-center rounded-2xl bg-rose-100 text-slate-700 sm:flex">
               <UserRound className="h-5 w-5" aria-hidden="true" />
             </div>
           </div>
@@ -166,7 +166,7 @@ export function PaginaRegistroCliente() {
                 id="nombreCompleto"
                 type="text"
                 autoComplete="name"
-                className="w-full rounded-2xl border border-[#dacbb8] bg-white px-4 py-3.5 text-sm outline-none transition focus:border-slate-900 focus:ring-2 focus:ring-[#f0d7bb]"
+                className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3.5 text-sm outline-none transition focus:border-rose-500 focus:ring-2 focus:ring-rose-100"
                 aria-invalid={Boolean(errors.nombreCompleto)}
                 {...register('nombreCompleto', {
                   onChange: (evento) => {
@@ -193,7 +193,7 @@ export function PaginaRegistroCliente() {
                     id="email"
                     type="email"
                     autoComplete="email"
-                    className="w-full rounded-2xl border border-[#dacbb8] bg-white px-10 py-3.5 text-sm outline-none transition focus:border-slate-900 focus:ring-2 focus:ring-[#f0d7bb]"
+                    className="w-full rounded-2xl border border-slate-200 bg-white px-10 py-3.5 text-sm outline-none transition focus:border-rose-500 focus:ring-2 focus:ring-rose-100"
                     aria-invalid={Boolean(errors.email)}
                     {...register('email', {
                       onChange: (evento) => {
@@ -220,7 +220,7 @@ export function PaginaRegistroCliente() {
                   autoComplete="tel"
                   inputMode="numeric"
                   maxLength={10}
-                  className="w-full rounded-2xl border border-[#dacbb8] bg-white px-4 py-3.5 text-sm outline-none transition focus:border-slate-900 focus:ring-2 focus:ring-[#f0d7bb]"
+                  className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3.5 text-sm outline-none transition focus:border-rose-500 focus:ring-2 focus:ring-rose-100"
                   aria-invalid={Boolean(errors.telefono)}
                   {...register('telefono', {
                     onChange: (evento) => {
@@ -241,7 +241,7 @@ export function PaginaRegistroCliente() {
                 </label>
                 <select
                   id="pais"
-                  className="w-full rounded-2xl border border-[#dacbb8] bg-white px-4 py-3.5 text-sm outline-none transition focus:border-slate-900 focus:ring-2 focus:ring-[#f0d7bb]"
+                  className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3.5 text-sm outline-none transition focus:border-rose-500 focus:ring-2 focus:ring-rose-100"
                   {...register('pais')}
                 >
                   {(['Mexico', 'Colombia'] as Pais[]).map((pais) => (
@@ -260,7 +260,7 @@ export function PaginaRegistroCliente() {
                   id="ciudad"
                   type="text"
                   autoComplete="address-level2"
-                  className="w-full rounded-2xl border border-[#dacbb8] bg-white px-4 py-3.5 text-sm outline-none transition focus:border-slate-900 focus:ring-2 focus:ring-[#f0d7bb]"
+                  className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3.5 text-sm outline-none transition focus:border-rose-500 focus:ring-2 focus:ring-rose-100"
                   {...register('ciudad', {
                     onChange: (evento) => {
                       evento.target.value = limpiarTextoSoloLetras(evento.target.value);
@@ -305,7 +305,7 @@ export function PaginaRegistroCliente() {
                     id="contrasena"
                     type={mostrarContrasena ? 'text' : 'password'}
                     autoComplete="new-password"
-                    className="w-full rounded-2xl border border-[#dacbb8] bg-white px-4 py-3.5 pr-12 text-sm outline-none transition focus:border-slate-900 focus:ring-2 focus:ring-[#f0d7bb]"
+                    className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3.5 pr-12 text-sm outline-none transition focus:border-rose-500 focus:ring-2 focus:ring-rose-100"
                     aria-invalid={Boolean(errors.contrasena)}
                     {...register('contrasena')}
                   />
@@ -339,7 +339,7 @@ export function PaginaRegistroCliente() {
                     id="confirmarContrasena"
                     type={mostrarConfirmacion ? 'text' : 'password'}
                     autoComplete="new-password"
-                    className="w-full rounded-2xl border border-[#dacbb8] bg-white px-4 py-3.5 pr-12 text-sm outline-none transition focus:border-slate-900 focus:ring-2 focus:ring-[#f0d7bb]"
+                    className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3.5 pr-12 text-sm outline-none transition focus:border-rose-500 focus:ring-2 focus:ring-rose-100"
                     aria-invalid={Boolean(errors.confirmarContrasena)}
                     {...register('confirmarContrasena')}
                   />
@@ -366,7 +366,7 @@ export function PaginaRegistroCliente() {
 
             <MedidorContrasena contrasena={contrasena} />
 
-            <label className="flex items-start gap-3 rounded-2xl border border-[#eadfce] bg-[#fffaf3] px-4 py-3 text-sm text-slate-600">
+            <label className="flex items-start gap-3 rounded-2xl border border-rose-100 bg-rose-50/70 px-4 py-3 text-sm text-slate-600">
               <input
                 type="checkbox"
                 className="mt-1 h-4 w-4 rounded border-slate-300"
@@ -400,7 +400,7 @@ export function PaginaRegistroCliente() {
               type="submit"
               disabled={isSubmitting}
               aria-busy={isSubmitting}
-              className="w-full rounded-2xl bg-[#161616] px-4 py-3.5 text-sm font-semibold text-white transition hover:bg-black disabled:cursor-not-allowed disabled:opacity-60"
+              className="w-full rounded-2xl bg-linear-to-r from-[#143C32] via-[#0A2823] to-[#78736E] px-4 py-3.5 text-sm font-semibold text-white shadow-lg shadow-emerald-900/20 transition hover:brightness-105 disabled:cursor-not-allowed disabled:opacity-60"
             >
               {isSubmitting ? 'Creando cuenta...' : 'Crear cuenta'}
             </button>
@@ -410,7 +410,7 @@ export function PaginaRegistroCliente() {
             ¿Ya tienes cuenta?{' '}
             <Link
               to="/iniciar-sesion"
-              className="font-semibold text-slate-900 underline decoration-[#c7b299] underline-offset-4"
+              className="font-semibold text-slate-900 underline decoration-rose-300 underline-offset-4"
             >
               Inicia sesión
             </Link>

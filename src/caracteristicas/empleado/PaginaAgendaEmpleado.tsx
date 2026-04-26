@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import QRCode from 'qrcode';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
@@ -957,7 +957,7 @@ export function PaginaAgendaEmpleado() {
   const [qrReserva, setQrReserva] = useState<string | null>(null);
   const clienteConsulta = useQueryClient();
   const { mostrarToast } = usarToast();
-  const { usuario, iniciando } = usarTiendaAuth();
+  const { usuario, iniciando, cerrarSesion } = usarTiendaAuth();
   const puedeConsultarAgenda = !iniciando && usuario?.rol === 'empleado';
   const mesSeleccionado = fechaSeleccionada.slice(0, 7);
   const mesAnteriorSeleccionado = obtenerMesAnterior(mesSeleccionado);
@@ -965,6 +965,15 @@ export function PaginaAgendaEmpleado() {
   const mesActual = fechaHoy.slice(0, 7);
   const mesActualAnterior = obtenerMesAnterior(mesActual);
   const mesActualSiguiente = obtenerMesSiguiente(mesActual);
+
+  const manejarSalidaPorSuspension = useCallback(async () => {
+    const mensajeSuspension =
+      'Tu salon esta suspendido por falta de pago. Contacta soporte para reactivar tu acceso.';
+    await cerrarSesion();
+    window.location.replace(
+      `/iniciar-sesion?codigo=SALON_SUSPENDIDO&mensaje=${encodeURIComponent(mensajeSuspension)}`,
+    );
+  }, [cerrarSesion]);
 
   const consultaAgenda = useQuery({
     queryKey: ['mi-agenda', fechaSeleccionada],
@@ -2090,6 +2099,7 @@ export function PaginaAgendaEmpleado() {
         <ModalSuspension
           nombreSalon={perfil.estudio.nombre}
           pais={perfil.estudio.pais ?? 'Mexico'}
+          onSalir={manejarSalidaPorSuspension}
         />
       )}
 

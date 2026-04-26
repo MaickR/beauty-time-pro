@@ -35,16 +35,16 @@ function formatearDias(dias: string): string {
   const mapa: Record<string, string> = {
     lunes: 'Lun',
     martes: 'Mar',
-    miercoles: 'MiÃ©',
+    miercoles: 'Mié',
     jueves: 'Jue',
     viernes: 'Vie',
-    sabado: 'SÃ¡b',
+    sabado: 'Sáb',
     domingo: 'Dom',
   };
   return dias
     .split(',')
     .map((d) => mapa[d.trim().toLowerCase()] ?? d.trim())
-    .join(' Â· ');
+    .join(' · ');
 }
 
 function agruparPorCategoria(
@@ -87,7 +87,7 @@ export function PaginaDetalleSalon() {
   });
 
   useEffect(() => {
-    if (salon?.nombre) document.title = `${salon.nombre} â€” Beauty Time Pro`;
+    if (salon?.nombre) document.title = `${salon.nombre} — Beauty Time Pro`;
     return () => {
       document.title = 'Beauty Time Pro';
     };
@@ -112,7 +112,7 @@ export function PaginaDetalleSalon() {
   if (isError || !salon) {
     return (
       <div className="min-h-screen bg-slate-50 font-sans flex flex-col items-center justify-center gap-4">
-        <p className="font-black text-slate-900 text-xl">SalÃ³n no encontrado</p>
+        <p className="font-black text-slate-900 text-xl">Salón no encontrado</p>
         <button
           onClick={() => navegar('/cliente/inicio')}
           className="text-pink-600 font-bold underline"
@@ -139,7 +139,7 @@ export function PaginaDetalleSalon() {
     <div className="min-h-screen bg-slate-50 font-sans pb-32">
       <NavegacionCliente />
 
-      {/* Hero del salÃ³n */}
+      {/* Hero del salón */}
       <div
         className="h-48 md:h-64 flex items-center justify-center"
         style={{ backgroundColor: color + '20' }}
@@ -162,7 +162,7 @@ export function PaginaDetalleSalon() {
       </div>
 
       <main className="max-w-4xl mx-auto px-4 md:px-8 -mt-6">
-        {/* Nombre y descripciÃ³n */}
+        {/* Nombre y descripción */}
         <div className="bg-white rounded-3xl p-6 shadow-sm border border-slate-100 mb-6">
           <h1 className="text-3xl font-black text-slate-900">{salon.nombre}</h1>
           {categorias.length > 0 && (
@@ -210,13 +210,13 @@ export function PaginaDetalleSalon() {
               <div className="flex items-center gap-2 text-sm text-slate-600">
                 <Clock className="w-4 h-4 text-slate-400 shrink-0" aria-hidden="true" />
                 <span>
-                  {salon.horarioApertura} â€“ {salon.horarioCierre}
+                  {salon.horarioApertura} – {salon.horarioCierre}
                 </span>
               </div>
             )}
           </div>
 
-          {/* DÃ­as de atenciÃ³n */}
+          {/* Días de atención */}
           {dias && (
             <div className="mt-4 flex items-center gap-2 text-sm text-slate-500">
               <Calendar className="w-4 h-4 shrink-0" aria-hidden="true" />
@@ -355,7 +355,7 @@ export function PaginaDetalleSalon() {
         )}
       </main>
 
-      {/* BotÃ³n flotante */}
+      {/* Botón flotante */}
       <div className="fixed bottom-0 left-0 right-0 p-4 bg-white/80 backdrop-blur-md border-t border-slate-100 flex justify-center z-40">
         <button
           onClick={() => navegar(construirRutaReservaSalonCliente(salon))}

@@ -15,6 +15,7 @@ import {
   Trash2,
   X,
 } from 'lucide-react';
+import { Copy, Check } from 'lucide-react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
@@ -30,6 +31,13 @@ import {
 // ─── Tipos ────────────────────────────────────────────
 
 type CargoColaborador = 'maestro' | 'supervisor' | 'vendedor';
+
+interface CredencialesDemo {
+  adminEmail: string;
+  adminContrasena: string;
+  empleadoEmail: string;
+  empleadoContrasena: string;
+}
 type OrdenColaboradores = 'recientes' | 'nombre' | 'rol' | 'estado';
 type DireccionOrden = 'asc' | 'desc';
 
@@ -128,13 +136,13 @@ const PERMISOS_SUPERVISOR_VACIOS: PermisosSupervisor = {
   verPreregistros: false,
 };
 
-const ETIQUETAS_PERMISOS_MAESTRO: Record<keyof Omit<PermisosMaestro, 'esMaestroTotal'>, string> = {
-  aprobarSalones: 'Aprobar salones',
-  gestionarPagos: 'Gestionar pagos',
-  crearAdmins: 'Gestionar colaboradores',
-  verAuditLog: 'Ver auditoría',
-  verMetricas: 'Ver métricas',
-  suspenderSalones: 'Suspender salones',
+const PERMISOS_SUPERVISOR_BASE_CREACION: Pick<
+  PermisosSupervisor,
+  'verControlSalones' | 'accionSuspension' | 'activarSalones'
+> = {
+  verControlSalones: true,
+  accionSuspension: true,
+  activarSalones: true,
 };
 
 const ETIQUETAS_CARGO: Record<CargoColaborador, string> = {
@@ -144,9 +152,9 @@ const ETIQUETAS_CARGO: Record<CargoColaborador, string> = {
 };
 
 const COLORES_CARGO: Record<string, string> = {
-  maestro: 'bg-purple-100 text-purple-700',
-  supervisor: 'bg-blue-100 text-blue-700',
-  vendedor: 'bg-orange-100 text-orange-700',
+  maestro: 'bg-slate-900 text-white',
+  supervisor: 'bg-rose-100 text-rose-700',
+  vendedor: 'bg-amber-100 text-amber-700',
 };
 
 interface GrupoPermisoSupervisor {
@@ -211,6 +219,14 @@ function normalizarPermisosMaestro(permisos: PermisosMaestro): PermisosMaestro {
   };
 }
 
+function normalizarPermisosSupervisorConBase(permisos: PermisosSupervisor): PermisosSupervisor {
+  return {
+    ...PERMISOS_SUPERVISOR_VACIOS,
+    ...permisos,
+    ...PERMISOS_SUPERVISOR_BASE_CREACION,
+  };
+}
+
 function AcordeonPermisos({
   titulo,
   campos,
@@ -265,6 +281,7 @@ export function GestionAdmins() {
   const { mostrarToast } = usarToast();
   const clienteConsulta = useQueryClient();
   const [mostrarFormulario, setMostrarFormulario] = useState(false);
+  const [credencialesDemo, setCredencialesDemo] = useState<CredencialesDemo | null>(null);
   const [colaboradorEditando, setColaboradorEditando] = useState<Colaborador | null>(null);
   const [colaboradorEdicionGeneral, setColaboradorEdicionGeneral] = useState<Colaborador | null>(
     null,
@@ -325,20 +342,30 @@ export function GestionAdmins() {
     mutationFn: async (datos: CamposNuevoColaborador) => {
       const cuerpo: Record<string, unknown> = { ...datos };
       if (datos.cargo === 'maestro') {
-        cuerpo.permisos = normalizarPermisosMaestro(permisosMaestroEditando);
+        cuerpo.permisos = normalizarPermisosMaestro({
+          ...PERMISOS_MAESTRO_VACIOS,
+          esMaestroTotal: true,
+        });
       } else if (datos.cargo === 'supervisor') {
-        cuerpo.permisosSupervisor = permisosSupervisorEditando;
+        cuerpo.permisosSupervisor = normalizarPermisosSupervisorConBase(permisosSupervisorEditando);
       } else {
         cuerpo.porcentajeComision = datos.porcentajeComision;
         cuerpo.porcentajeComisionPro = datos.porcentajeComisionPro;
       }
-      await peticion('/admin/admins', {
-        method: 'POST',
-        body: JSON.stringify(cuerpo),
-      });
+      return peticion<{ datos: { mensaje: string; id: string; demoVendedor?: CredencialesDemo } }>(
+        '/admin/admins',
+        { method: 'POST', body: JSON.stringify(cuerpo) },
+      );
     },
-    onSuccess: () => {
+    onSuccess: (
+      resultado:
+        | { datos: { mensaje: string; id: string; demoVendedor?: CredencialesDemo } }
+        | undefined,
+    ) => {
       mostrarToast('Colaborador creado correctamente');
+      if (resultado?.datos?.demoVendedor) {
+        setCredencialesDemo(resultado.datos.demoVendedor);
+      }
       cerrarFormulario();
       void clienteConsulta.invalidateQueries({ queryKey: ['colaboradores'] });
     },
@@ -350,7 +377,10 @@ export function GestionAdmins() {
     mutationFn: async ({ id, rol }: { id: string; rol: string }) => {
       const cuerpo: Record<string, unknown> = {};
       if (rol === 'maestro') {
-        Object.assign(cuerpo, normalizarPermisosMaestro(permisosMaestroEditando));
+        Object.assign(
+          cuerpo,
+          normalizarPermisosMaestro({ ...PERMISOS_MAESTRO_VACIOS, esMaestroTotal: true }),
+        );
       } else if (rol === 'supervisor') {
         cuerpo.permisosSupervisor = permisosSupervisorEditando;
       }
@@ -468,27 +498,6 @@ export function GestionAdmins() {
       porcentajeComision: colaborador.porcentajeComision,
       porcentajeComisionPro: colaborador.porcentajeComisionPro,
     });
-  };
-
-  const actualizarPermisoMaestro = (campo: keyof PermisosMaestro, valor: boolean) => {
-    if (campo === 'esMaestroTotal') {
-      setPermisosMaestroEditando((prev) => ({
-        ...prev,
-        aprobarSalones: valor ? true : prev.aprobarSalones,
-        gestionarPagos: valor ? true : prev.gestionarPagos,
-        crearAdmins: valor ? true : prev.crearAdmins,
-        verAuditLog: valor ? true : prev.verAuditLog,
-        verMetricas: valor ? true : prev.verMetricas,
-        suspenderSalones: valor ? true : prev.suspenderSalones,
-        esMaestroTotal: valor,
-      }));
-      return;
-    }
-    setPermisosMaestroEditando((prev) => ({
-      ...prev,
-      [campo]: valor,
-      esMaestroTotal: valor ? prev.esMaestroTotal : false,
-    }));
   };
 
   const actualizarPermisoSupervisor = (campo: keyof PermisosSupervisor, valor: boolean) => {
@@ -1042,7 +1051,6 @@ export function GestionAdmins() {
                       id="contrasena-colaborador"
                       type={mostrarContrasena ? 'text' : 'password'}
                       {...register('contrasena')}
-                      readOnly
                       className="w-full border border-slate-200 rounded-xl px-4 py-3 pr-10 text-sm focus:ring-2 focus:ring-pink-400 outline-none"
                     />
                     <button
@@ -1071,49 +1079,13 @@ export function GestionAdmins() {
                   <p className="text-xs text-red-500 mt-1">{errors.contrasena.message}</p>
                 )}
                 <p className="mt-1 text-xs font-medium text-slate-500">
-                  La contraseña se genera automáticamente con el nombre y el correo del colaborador.
+                  Puedes escribirla manualmente o generar una sugerencia automática.
                 </p>
               </div>
 
               {/* Permisos Admin (maestro) */}
-              {cargoWatch === 'maestro' && (
-                <fieldset className="border border-slate-200 rounded-xl p-4">
-                  <legend className="text-sm font-bold text-slate-700 px-1">
-                    Permisos de administrador
-                  </legend>
-                  <div className="grid grid-cols-2 gap-3 mt-2">
-                    {(
-                      Object.keys(
-                        ETIQUETAS_PERMISOS_MAESTRO,
-                      ) as (keyof typeof ETIQUETAS_PERMISOS_MAESTRO)[]
-                    ).map((campo) => (
-                      <label key={campo} className="flex items-center gap-2 cursor-pointer">
-                        <input
-                          type="checkbox"
-                          checked={permisosMaestroEditando[campo]}
-                          onChange={(e) => actualizarPermisoMaestro(campo, e.target.checked)}
-                          className="rounded"
-                        />
-                        <span className="text-sm text-slate-700">
-                          {ETIQUETAS_PERMISOS_MAESTRO[campo]}
-                        </span>
-                      </label>
-                    ))}
-                    <label className="flex items-center gap-2 cursor-pointer col-span-2">
-                      <input
-                        type="checkbox"
-                        checked={permisosMaestroEditando.esMaestroTotal}
-                        onChange={(e) =>
-                          actualizarPermisoMaestro('esMaestroTotal', e.target.checked)
-                        }
-                        className="rounded"
-                      />
-                      <span className="text-sm font-bold text-yellow-700">Maestro total</span>
-                    </label>
-                  </div>
-                </fieldset>
-              )}
 
+              {/* Permisos Supervisor */}
               {/* Permisos Supervisor */}
               {cargoWatch === 'supervisor' && (
                 <fieldset className="border border-slate-200 rounded-xl p-4">
@@ -1258,39 +1230,9 @@ export function GestionAdmins() {
             </span>
 
             {colaboradorEditando.rol === 'maestro' && (
-              <fieldset className="border border-slate-200 rounded-xl p-4 mb-6">
-                <legend className="text-sm font-bold text-slate-700 px-1">
-                  Permisos de administrador
-                </legend>
-                <div className="grid grid-cols-2 gap-3 mt-2">
-                  {(
-                    Object.keys(
-                      ETIQUETAS_PERMISOS_MAESTRO,
-                    ) as (keyof typeof ETIQUETAS_PERMISOS_MAESTRO)[]
-                  ).map((campo) => (
-                    <label key={campo} className="flex items-center gap-2 cursor-pointer">
-                      <input
-                        type="checkbox"
-                        checked={permisosMaestroEditando[campo]}
-                        onChange={(e) => actualizarPermisoMaestro(campo, e.target.checked)}
-                        className="rounded"
-                      />
-                      <span className="text-sm text-slate-700">
-                        {ETIQUETAS_PERMISOS_MAESTRO[campo]}
-                      </span>
-                    </label>
-                  ))}
-                  <label className="flex items-center gap-2 cursor-pointer col-span-2">
-                    <input
-                      type="checkbox"
-                      checked={permisosMaestroEditando.esMaestroTotal}
-                      onChange={(e) => actualizarPermisoMaestro('esMaestroTotal', e.target.checked)}
-                      className="rounded"
-                    />
-                    <span className="text-sm font-bold text-yellow-700">Maestro total</span>
-                  </label>
-                </div>
-              </fieldset>
+              <p className="text-sm text-slate-500 mb-6 rounded-xl bg-slate-50 px-4 py-3 border border-slate-200">
+                Los administradores tienen acceso completo a todas las funciones por defecto.
+              </p>
             )}
 
             {colaboradorEditando.rol === 'supervisor' && (
@@ -1330,6 +1272,131 @@ export function GestionAdmins() {
           </div>
         </div>
       )}
+      {credencialesDemo && (
+        <ModalCredencialesDemo
+          credenciales={credencialesDemo}
+          onCerrar={() => setCredencialesDemo(null)}
+        />
+      )}
     </section>
+  );
+}
+
+// ─── Modal credenciales demo del vendedor ───────────────────────────────────
+
+interface PropsModalCredencialesDemo {
+  credenciales: CredencialesDemo;
+  onCerrar: () => void;
+}
+
+function ModalCredencialesDemo({ credenciales, onCerrar }: PropsModalCredencialesDemo) {
+  const [copiadoAdmin, setCopiadoAdmin] = useState(false);
+  const [copiadoEmpleado, setCopiadoEmpleado] = useState(false);
+
+  const copiarAdmin = async () => {
+    try {
+      await navigator.clipboard.writeText(
+        `Admin: ${credenciales.adminEmail} / ${credenciales.adminContrasena}`,
+      );
+      setCopiadoAdmin(true);
+      window.setTimeout(() => setCopiadoAdmin(false), 1500);
+    } catch {
+      // Silenciar fallo de portapapeles
+    }
+  };
+
+  const copiarEmpleado = async () => {
+    try {
+      await navigator.clipboard.writeText(
+        `Empleado: ${credenciales.empleadoEmail} / ${credenciales.empleadoContrasena}`,
+      );
+      setCopiadoEmpleado(true);
+      window.setTimeout(() => setCopiadoEmpleado(false), 1500);
+    } catch {
+      // Silenciar fallo de portapapeles
+    }
+  };
+
+  return (
+    <div
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="modal-demo-titulo"
+      className="fixed inset-0 z-200 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4"
+      onKeyDown={(e) => e.key === 'Escape' && onCerrar()}
+    >
+      <div className="bg-white rounded-3xl w-full max-w-md shadow-2xl overflow-hidden">
+        <div className="flex items-center justify-between gap-4 px-6 py-4 border-b border-slate-200">
+          <h2 id="modal-demo-titulo" className="text-sm font-black text-slate-900 uppercase">
+            Demo salon created
+          </h2>
+          <button
+            onClick={onCerrar}
+            className="p-2 rounded-full hover:bg-slate-100"
+            aria-label="Cerrar"
+          >
+            <X className="w-5 h-5" />
+          </button>
+        </div>
+        <div className="px-6 py-5 space-y-4">
+          <p className="text-sm text-slate-500">
+            A demo salon has been created for this vendedor. Share these credentials so they can run
+            demos with clients.
+          </p>
+          <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4 space-y-3">
+            <p className="text-xs font-black text-slate-400 uppercase">Admin access</p>
+            <div className="flex items-center gap-2">
+              <code className="flex-1 px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs font-mono text-slate-900 break-all">
+                {credenciales.adminEmail}
+              </code>
+              <button
+                onClick={copiarAdmin}
+                className="p-2 rounded-xl border border-slate-200 hover:bg-white transition-colors shrink-0"
+                aria-label="Copiar credenciales admin"
+              >
+                {copiadoAdmin ? (
+                  <Check className="w-4 h-4 text-green-600" />
+                ) : (
+                  <Copy className="w-4 h-4 text-slate-500" />
+                )}
+              </button>
+            </div>
+            <code className="block px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs font-mono text-slate-900">
+              {credenciales.adminContrasena}
+            </code>
+          </div>
+          <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4 space-y-3">
+            <p className="text-xs font-black text-slate-400 uppercase">Employee access</p>
+            <div className="flex items-center gap-2">
+              <code className="flex-1 px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs font-mono text-slate-900 break-all">
+                {credenciales.empleadoEmail}
+              </code>
+              <button
+                onClick={copiarEmpleado}
+                className="p-2 rounded-xl border border-slate-200 hover:bg-white transition-colors shrink-0"
+                aria-label="Copiar credenciales empleado"
+              >
+                {copiadoEmpleado ? (
+                  <Check className="w-4 h-4 text-green-600" />
+                ) : (
+                  <Copy className="w-4 h-4 text-slate-500" />
+                )}
+              </button>
+            </div>
+            <code className="block px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs font-mono text-slate-900">
+              {credenciales.empleadoContrasena}
+            </code>
+          </div>
+        </div>
+        <div className="px-6 pb-5">
+          <button
+            onClick={onCerrar}
+            className="w-full py-3 rounded-2xl bg-slate-900 text-white text-sm font-black hover:bg-black transition-colors"
+          >
+            Done
+          </button>
+        </div>
+      </div>
+    </div>
   );
 }

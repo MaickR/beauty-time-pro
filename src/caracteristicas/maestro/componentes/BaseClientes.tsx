@@ -60,11 +60,6 @@ export function BaseClientes() {
     void cargarClientes();
   }, [cargarClientes]);
 
-  // Cuando cambian los filtros, volver a pág 1
-  useEffect(() => {
-    setPagina(1);
-  }, [buscarDebounced, salonId, pais, servicioFrecuente]);
-
   const manejarExportar = async () => {
     setExportando(true);
     try {
@@ -246,7 +241,10 @@ export function BaseClientes() {
             <input
               type="text"
               value={buscar}
-              onChange={(e) => setBuscar(e.target.value)}
+              onChange={(e) => {
+                setBuscar(e.target.value);
+                setPagina(1);
+              }}
               placeholder="Buscar por nombre, teléfono o correo"
               className="w-full rounded-xl border border-slate-200 py-2.5 pl-9 pr-4 text-sm focus:outline-none focus:ring-2 focus:ring-pink-300"
             />
@@ -262,7 +260,10 @@ export function BaseClientes() {
             />
             <select
               value={salonId}
-              onChange={(e) => setSalonId(e.target.value)}
+              onChange={(e) => {
+                setSalonId(e.target.value);
+                setPagina(1);
+              }}
               aria-label="Filtrar por salón"
               className="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-pink-300"
             >
@@ -278,7 +279,10 @@ export function BaseClientes() {
           <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-1">
             <select
               value={pais}
-              onChange={(e) => setPais(e.target.value)}
+              onChange={(e) => {
+                setPais(e.target.value);
+                setPagina(1);
+              }}
               aria-label="Filtrar por país"
               className="rounded-xl border border-slate-200 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-pink-300"
             >
@@ -293,7 +297,10 @@ export function BaseClientes() {
             <input
               type="text"
               value={servicioFrecuente}
-              onChange={(e) => setServicioFrecuente(e.target.value)}
+              onChange={(e) => {
+                setServicioFrecuente(e.target.value);
+                setPagina(1);
+              }}
               placeholder="Servicio frecuente"
               className="rounded-xl border border-slate-200 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-pink-300"
             />

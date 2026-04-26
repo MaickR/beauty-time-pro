@@ -100,9 +100,9 @@ export function TabDemoVendedor() {
       identificador: salonDemo.credencialesDemo.empleadoEmail,
       contrasena: salonDemo.credencialesDemo.contrasenaCompartida,
       autoIniciar: true,
-      titulo: 'Employee demo access',
+      titulo: 'Acceso demo de empleado',
       mensaje:
-        'This action switches the current session to the demo employee and opens the employee dashboard automatically.',
+        'Esta accion cambia la sesion actual al empleado demo y abre automaticamente su panel.',
     },
   };
 
@@ -211,12 +211,12 @@ export function TabDemoVendedor() {
 
           <div className="mt-6 rounded-4xl border border-emerald-100 bg-linear-to-r from-emerald-50 via-white to-emerald-50 p-4">
             <p className="text-[11px] font-black uppercase tracking-[0.22em] text-emerald-700">
-              Shared password
+              Contrasena compartida
             </p>
             <div className="mt-3 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
               <p className="text-sm text-slate-600">
-                Both demo accesses use the same password so the role switch is faster during a live
-                presentation.
+                Ambos accesos demo usan la misma contrasena para cambiar de rol mas rapido durante
+                una presentacion.
               </p>
               <button
                 type="button"
@@ -242,7 +242,7 @@ export function TabDemoVendedor() {
               contrasena={salonDemo.credencialesDemo.adminContrasena}
               onCopiarAcceso={() =>
                 copiarTexto(
-                  `Email: ${salonDemo.credencialesDemo.adminEmail}\nPassword: ${salonDemo.credencialesDemo.adminContrasena}`,
+                  `Email: ${salonDemo.credencialesDemo.adminEmail}\nContrasena: ${salonDemo.credencialesDemo.adminContrasena}`,
                   'Se copió el acceso del admin demo.',
                 )
               }
@@ -260,7 +260,7 @@ export function TabDemoVendedor() {
               contrasena={salonDemo.credencialesDemo.empleadoContrasena}
               onCopiarAcceso={() =>
                 copiarTexto(
-                  `Email: ${salonDemo.credencialesDemo.empleadoEmail}\nPassword: ${salonDemo.credencialesDemo.empleadoContrasena}`,
+                  `Email: ${salonDemo.credencialesDemo.empleadoEmail}\nContrasena: ${salonDemo.credencialesDemo.empleadoContrasena}`,
                   'Se copió el acceso del empleado demo.',
                 )
               }
@@ -294,20 +294,20 @@ export function TabDemoVendedor() {
 
           <div className="mt-6 rounded-4xl border border-slate-200 bg-slate-50 p-5">
             <p className="text-xs font-black uppercase tracking-[0.22em] text-slate-500">
-              Demo operating rules
+              Reglas de operacion demo
             </p>
             <div className="mt-4 grid gap-3">
               <div className="rounded-2xl border border-white bg-white px-4 py-3 text-sm text-slate-600 shadow-sm">
-                Reset creates a clean presentation state and rebuilds demo reservations, clients,
-                staff, products and payments inside this sandbox only.
+                Reiniciar crea un estado limpio de presentacion y reconstruye reservas, clientes,
+                personal, productos y pagos solo dentro de este entorno demo.
               </div>
               <div className="rounded-2xl border border-white bg-white px-4 py-3 text-sm text-slate-600 shadow-sm">
-                Your assigned sales, productive salons and commission records stay untouched outside
-                the demo sandbox.
+                Tus ventas asignadas, salones productivos y registros de comision se mantienen
+                intactos fuera del entorno demo.
               </div>
               <div className="rounded-2xl border border-white bg-white px-4 py-3 text-sm text-slate-600 shadow-sm">
-                Demo emails and password stay stable for the current seller, so you can repeat the
-                same walkthrough without regenerating access every time.
+                Los correos y la contrasena demo se mantienen estables para el vendedor actual, para
+                repetir el mismo recorrido sin regenerar accesos en cada intento.
               </div>
             </div>
           </div>
@@ -385,7 +385,7 @@ function TarjetaCredencialDemo({
         </div>
         <div className="rounded-2xl bg-white px-4 py-3">
           <p className="text-[11px] font-black uppercase tracking-[0.2em] text-slate-400">
-            Password
+            Contrasena
           </p>
           <div className="mt-1 flex items-center gap-3">
             <p className="text-sm font-semibold text-slate-900">{contrasena}</p>

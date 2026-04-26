@@ -32,7 +32,7 @@ export function PaginaBienvenida() {
   });
 
   return (
-    <div className="min-h-screen bg-[radial-gradient(circle_at_top_left,rgba(194,24,91,0.14),transparent_32%),radial-gradient(circle_at_bottom_right,rgba(240,98,146,0.14),transparent_34%),linear-gradient(180deg,#fff8fb_0%,#ffffff_42%,#fafafa_100%)]">
+    <div className="min-h-screen bg-[radial-gradient(circle_at_top_left,rgba(198,150,140,0.14),transparent_32%),radial-gradient(circle_at_bottom_right,rgba(20,60,50,0.08),transparent_34%),linear-gradient(180deg,#f8f4f2_0%,#ffffff_42%,#f6f2f0_100%)]">
       <header className="mx-auto flex max-w-6xl items-center justify-between px-6 py-5">
         <MarcaAplicacion />
       </header>

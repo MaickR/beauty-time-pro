@@ -37,7 +37,7 @@ function ModalAprobacion({ solicitud, onCerrar, onConfirmar, cargando }: PropsMo
     >
       <div className="bg-white rounded-3xl shadow-2xl w-full max-w-md max-h-[90vh] overflow-y-auto p-8">
         <h2 id="titulo-aprobacion" className="text-2xl font-black text-slate-900 mb-1">
-          Aprobar salÃ³n
+          Aprobar salón
         </h2>
         <p className="text-slate-500 text-sm mb-6">{solicitud.nombre}</p>
 
@@ -45,17 +45,17 @@ function ModalAprobacion({ solicitud, onCerrar, onConfirmar, cargando }: PropsMo
           <p>
             <span className="font-semibold text-slate-700">Admin:</span>{' '}
             <span className="text-slate-600">
-              {solicitud.dueno?.nombre} Â· {solicitud.dueno?.email}
+              {solicitud.dueno?.nombre} · {solicitud.dueno?.email}
             </span>
           </p>
           <p>
-            <span className="font-semibold text-slate-700">DirecciÃ³n:</span>{' '}
-            <span className="text-slate-600">{solicitud.direccion ?? 'â€”'}</span>
+            <span className="font-semibold text-slate-700">Dirección:</span>{' '}
+            <span className="text-slate-600">{solicitud.direccion ?? '—'}</span>
           </p>
         </div>
 
         <p className="text-sm font-semibold text-slate-700 mb-3">
-          Fecha de vencimiento de suscripciÃ³n
+          Fecha de vencimiento de suscripción
         </p>
         <div className="flex justify-center mb-5">
           <DayPicker
@@ -73,7 +73,7 @@ function ModalAprobacion({ solicitud, onCerrar, onConfirmar, cargando }: PropsMo
         </p>
         <p className="mb-6 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-xs text-amber-900">
           Si necesitas alinear el corte con otra fecha, puedes aprobar con un periodo inicial corto,
-          incluso de 5 dÃ­as.
+          incluso de 5 días.
         </p>
 
         <div className="flex gap-3">
@@ -88,7 +88,7 @@ function ModalAprobacion({ solicitud, onCerrar, onConfirmar, cargando }: PropsMo
             disabled={cargando}
             className="flex-1 py-3 rounded-2xl bg-green-600 text-white font-bold hover:bg-green-700 disabled:opacity-60 transition-colors"
           >
-            {cargando ? 'Aprobandoâ€¦' : 'Aprobar salÃ³n'}
+            {cargando ? 'Aprobando...' : 'Aprobar salón'}
           </button>
         </div>
       </div>
@@ -131,17 +131,17 @@ function ModalRechazo({ solicitud, onCerrar, onConfirmar, cargando }: PropsModal
             rows={4}
             value={motivo}
             onChange={(e) => setMotivo(e.target.value)}
-            placeholder="Explica por quÃ© se rechaza esta solicitudâ€¦"
+            placeholder="Explica por qué se rechaza esta solicitud..."
             className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-2xl text-sm outline-none focus:ring-2 focus:ring-red-400 focus:border-transparent resize-none"
             aria-describedby="ayuda-motivo"
           />
           {errorMotivo && (
             <p role="alert" className="mt-1 text-xs text-red-500">
-              MÃ­nimo 10 caracteres
+              Mínimo 10 caracteres
             </p>
           )}
           <p id="ayuda-motivo" className="mt-2 text-xs text-slate-400">
-            Este motivo le llegarÃ¡ al salÃ³n por email para que pueda corregir su solicitud.
+            Este motivo le llegará al salón por email para que pueda corregir su solicitud.
           </p>
         </div>
 
@@ -157,7 +157,7 @@ function ModalRechazo({ solicitud, onCerrar, onConfirmar, cargando }: PropsModal
             disabled={cargando || motivo.trim().length < 10}
             className="flex-1 py-3 rounded-2xl bg-red-600 text-white font-bold hover:bg-red-700 disabled:opacity-60 transition-colors"
           >
-            {cargando ? 'Rechazandoâ€¦' : 'Rechazar solicitud'}
+            {cargando ? 'Rechazando...' : 'Rechazar solicitud'}
           </button>
         </div>
       </div>
@@ -185,7 +185,7 @@ export function SolicitudesPendientes({ onCambio }: PropsSolicitudesPendientes) 
     mutationFn: ({ id, fecha }: { id: string; fecha: string }) => aprobarSolicitud(id, fecha),
     onSuccess: () => {
       setIdAprobar(null);
-      mostrarToast({ mensaje: 'SalÃ³n aprobado correctamente', variante: 'exito' });
+      mostrarToast({ mensaje: 'Salón aprobado correctamente', variante: 'exito' });
       void clienteConsulta.invalidateQueries({ queryKey: ['solicitudes-pendientes'] });
       void clienteConsulta.invalidateQueries({ queryKey: ['historial-salones'] });
       void clienteConsulta.invalidateQueries({ queryKey: ['admin', 'metricas'] });
@@ -222,7 +222,7 @@ export function SolicitudesPendientes({ onCambio }: PropsSolicitudesPendientes) 
           Solicitudes pendientes
         </h2>
         <span className={`px-3 py-1 rounded-full text-sm font-bold ${badgeColor}`}>
-          {isLoading ? 'â€¦' : solicitudes.length}
+          {isLoading ? '...' : solicitudes.length}
         </span>
       </div>
 
@@ -235,7 +235,7 @@ export function SolicitudesPendientes({ onCambio }: PropsSolicitudesPendientes) 
       {!isLoading && solicitudes.length === 0 && (
         <div className="flex flex-col items-center justify-center py-14 text-center bg-white rounded-3xl border border-slate-100">
           <CheckCircle className="w-14 h-14 text-green-400 mb-4" aria-hidden="true" />
-          <p className="font-bold text-slate-700 text-lg">Â¡Todo al dÃ­a!</p>
+          <p className="font-bold text-slate-700 text-lg">¡Todo al día!</p>
           <p className="text-slate-400 text-sm mt-1">No hay solicitudes pendientes.</p>
         </div>
       )}
@@ -292,7 +292,7 @@ function TarjetaSolicitud({ solicitud, onAprobar, onRechazar }: PropsTarjetaSoli
     ? solicitud.diasAtencion.split(',').map((d) => d.trim().slice(0, 2).toUpperCase())
     : [];
 
-  const diasLabel = `Hace ${solicitud.diasDesdeRegistro === 0 ? 'menos de 1' : solicitud.diasDesdeRegistro} dÃ­a${solicitud.diasDesdeRegistro !== 1 ? 's' : ''}`;
+  const diasLabel = `Hace ${solicitud.diasDesdeRegistro === 0 ? 'menos de 1' : solicitud.diasDesdeRegistro} día${solicitud.diasDesdeRegistro !== 1 ? 's' : ''}`;
 
   return (
     <div className="bg-white rounded-3xl border border-slate-100 shadow-sm p-6 flex flex-col gap-4">
@@ -328,7 +328,7 @@ function TarjetaSolicitud({ solicitud, onAprobar, onRechazar }: PropsTarjetaSoli
         <div className="flex items-center gap-2 text-slate-600">
           <Users className="w-4 h-4 text-slate-400 shrink-0" aria-hidden="true" />
           <span>
-            {solicitud.dueno?.nombre ?? 'â€”'} Â· {solicitud.dueno?.email ?? 'â€”'}
+            {solicitud.dueno?.nombre ?? '—'} · {solicitud.dueno?.email ?? '—'}
           </span>
         </div>
         {solicitud.direccion && (
@@ -347,7 +347,7 @@ function TarjetaSolicitud({ solicitud, onAprobar, onRechazar }: PropsTarjetaSoli
           <div className="flex items-center gap-2 text-slate-600">
             <Clock className="w-4 h-4 text-slate-400 shrink-0" aria-hidden="true" />
             <span>
-              {solicitud.horarioApertura} â€“ {solicitud.horarioCierre}
+              {solicitud.horarioApertura} – {solicitud.horarioCierre}
             </span>
           </div>
         )}

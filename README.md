@@ -1,8 +1,10 @@
 ﻿<div align="center">
 
-# SalonProMaster
+# Beauty Time Pro
 
 **Plataforma SaaS para la operación moderna de salones de belleza**
+
+<p><strong>Producto comercial:</strong> SalonProMaster</p>
 
 <p><strong>Dominio oficial:</strong> https://salonpromaster.com</p>
 
@@ -17,14 +19,26 @@
 
 ---
 
-SalonProMaster centraliza agenda, reservas, personal, pagos y relación con clientes en una sola plataforma. El proyecto está pensado para una operación comercial real en México y Colombia, con foco en seguridad, consistencia de negocio, rendimiento y una experiencia clara tanto para el salón como para el cliente final.
+Beauty Time Pro centraliza agenda, reservas, personal, pagos y relación con clientes en una sola plataforma. El producto está pensado para una operación comercial real en México y Colombia, con foco en seguridad, consistencia de negocio, rendimiento y una experiencia clara tanto para el salón como para el cliente final.
 
 El repositorio incluye el frontend público y privado, la API backend, validaciones de entorno, auditoría operativa y pruebas automatizadas para flujos críticos.
 
 <br>
 
+## Estado del proyecto
+
+- Arquitectura full stack con frontend React + backend Fastify
+- Desarrollo local con watcher en tiempo real para frontend y backend
+- Preparado para despliegue en Vercel + Railway
+- Validaciones de negocio y seguridad reforzadas en servidor
+- Cobertura de QA para flujos críticos, roles y reservas
+
+<br>
+
 ## Tabla de contenidos
 
+- [Estado del proyecto](#estado-del-proyecto)
+- [Inicio rápido](#inicio-rápido)
 - [Características](#características)
 - [Stack tecnológico](#stack-tecnológico)
 - [Arquitectura](#arquitectura)
@@ -34,6 +48,32 @@ El repositorio incluye el frontend público y privado, la API backend, validacio
 - [Autenticación y seguridad](#autenticación-y-seguridad)
 - [Deploy](#deploy)
 - [Licencia](#licencia)
+
+<br>
+
+## Inicio rápido
+
+### Desarrollo local con watcher
+
+~~~bash
+npm install
+cd server && npm install
+cd ..
+
+npm run dev:all
+~~~
+
+Este comando inicia frontend y backend en modo observación continua.
+
+- Frontend: http://localhost:5173
+- Backend: http://localhost:3000
+
+### Flujo recomendado
+
+1. Configurar variables de entorno del frontend y backend.
+2. Aplicar migraciones de Prisma en `server/`.
+3. Ejecutar `npm run dev:all` desde la raíz.
+4. Validar cambios en tiempo real desde el navegador y los logs del backend.
 
 <br>
 
@@ -224,6 +264,7 @@ VITE_URL_PUBLICA=http://localhost:5173
 | Script | Descripción |
 |---|---|
 | `npm run dev` | Servidor de desarrollo Vite |
+| `npm run dev:all` | Frontend + backend en modo watcher |
 | `npm run build` | Build de producción |
 | `npm run preview` | Vista previa del build |
 | `npm run test` | Ejecutar tests con Vitest |
@@ -260,6 +301,14 @@ VITE_URL_PUBLICA=http://localhost:5173
 
 ## Deploy
 
+### Stack recomendado de producción
+
+- Frontend en Vercel desde la raíz del repositorio
+- Backend en Railway apuntando a `server/`
+- Base de datos MySQL 8 administrada externamente
+- Variables de entorno separadas por ambiente
+- Dominio público del producto: https://salonpromaster.com
+
 ### Backend — Railway
 
 1. Conectar repositorio y apuntar a la carpeta `server/`
@@ -277,6 +326,14 @@ VITE_URL_PUBLICA=http://localhost:5173
 5. Confirmar que el backend tenga esos orígenes en `FRONTEND_URL` y `FRONTEND_ORIGENES_PERMITIDOS`
 6. Vercel detecta Vite automáticamente
 7. En despliegue Vercel + Railway el backend ya queda preparado para cookies `SameSite=None; Secure`, necesarias cuando frontend y API viven en dominios distintos
+
+### Checklist antes de publicar
+
+1. Ejecutar build de frontend y backend sin errores.
+2. Verificar migraciones aplicadas en producción.
+3. Confirmar `VITE_URL_API` y `FRONTEND_URL` con dominios finales.
+4. Validar CORS y cookies cross-origin.
+5. Ejecutar smoke QA de login, roles y reservas.
 
 <br>
 

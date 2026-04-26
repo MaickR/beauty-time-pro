@@ -20,6 +20,8 @@ interface Metricas {
   salonesActivos: number;
   salonesPendientes: number;
   salonesSuspendidos: number;
+  salonesPlanPro: number;
+  salonesPlanStandard: number;
   salonesVencidos: number;
   salonesPorVencer7Dias: number;
   salonesPorVencer30Dias: number;
@@ -84,13 +86,8 @@ function TarjetaMetrica({
   );
 }
 
-function resumirVentasOcultas(ingresos: IngresoPorMoneda[]) {
-  const activos = ingresos.filter((ingreso) => ingreso.actual > 0);
-  if (activos.length === 0) {
-    return 'Sin ventas registradas';
-  }
-
-  return activos.length === 1 ? '1 mercado con ventas' : `${activos.length} mercados con ventas`;
+function resumirVentasPorPlan(metricas: Metricas) {
+  return `PRO=${metricas.salonesPlanPro}, STD=${metricas.salonesPlanStandard}`;
 }
 
 export function MetricasGlobales() {
@@ -154,8 +151,7 @@ export function MetricasGlobales() {
         <TarjetaMetrica
           icono={<Wallet className="w-5 h-5" />}
           etiqueta="Ventas"
-          valor="Ver detalle"
-          descripcion={resumirVentasOcultas(data.ingresosPorMoneda)}
+          valor={resumirVentasPorPlan(data)}
           colorFondo="bg-emerald-100"
           colorIcono="text-emerald-700"
           onClick={() => setModalActivo('ventas')}

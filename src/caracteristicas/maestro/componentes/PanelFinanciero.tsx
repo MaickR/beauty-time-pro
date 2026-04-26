@@ -90,7 +90,7 @@ export function PanelFinanciero({ estudios, onAbrirPago, onRecargar }: PropsPane
 
   const mutacionReactivacion = useMutation({
     mutationFn: (estudioId: string) =>
-      peticion<{ datos: { mensaje: string } }>(`/admin/salones/${estudioId}/suspender`, {
+      peticion<{ datos: { mensaje: string } }>(`/admin/salones/${estudioId}/activar`, {
         method: 'PUT',
       }),
     onSuccess: (res) => {

@@ -74,7 +74,7 @@ export function VisorReservas({ estudio, reservas, onCerrar }: PropsVisorReserva
       width: 360,
       margin: 1,
       color: {
-        dark: '#0f172a',
+        dark: '#0A2823',
         light: '#ffffff',
       },
     }).then((url) => {

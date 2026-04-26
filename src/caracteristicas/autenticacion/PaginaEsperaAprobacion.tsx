@@ -4,7 +4,7 @@ import { usarTituloPagina } from '../../hooks/usarTituloPagina';
 import { guardarAvisoInicioSesion } from '../../tienda/tiendaAuth';
 
 export function PaginaEsperaAprobacion() {
-  usarTituloPagina('Solicitud enviada â€” Beauty Time Pro');
+  usarTituloPagina('Solicitud enviada — Beauty Time Pro');
   const navegar = useNavigate();
 
   useEffect(() => {
@@ -21,7 +21,7 @@ export function PaginaEsperaAprobacion() {
   return (
     <div className="min-h-screen flex flex-col items-center justify-center bg-linear-to-br from-pink-50 to-slate-100 p-6">
       <div className="max-w-md w-full text-center bg-white rounded-3xl shadow-sm border border-slate-100 px-10 py-14">
-        {/* Ãcono animado */}
+        {/* Ícono animado */}
         <div className="flex justify-center mb-6">
           <span
             className="text-6xl"
@@ -29,7 +29,7 @@ export function PaginaEsperaAprobacion() {
             role="img"
             aria-label="Reloj de arena"
           >
-            â³
+            ⏳
           </span>
         </div>
         <style>{`
@@ -39,13 +39,13 @@ export function PaginaEsperaAprobacion() {
           }
         `}</style>
 
-        <h1 className="text-3xl font-black text-slate-900 mb-3">Â¡Solicitud enviada!</h1>
+        <h1 className="text-3xl font-black text-slate-900 mb-3">¡Solicitud enviada!</h1>
         <p className="text-slate-500 leading-relaxed mb-2">
-          Revisaremos los datos de tu salÃ³n y te responderemos por correo electrÃ³nico en un plazo
-          de <span className="font-semibold text-slate-700">24 a 48 horas</span>.
+          Revisaremos los datos de tu salón y te responderemos por correo electrónico en un plazo de{' '}
+          <span className="font-semibold text-slate-700">24 a 48 horas</span>.
         </p>
         <p className="text-slate-400 text-sm mb-8">
-          Si necesitas hacer cambios en tu solicitud, contÃ¡ctanos a travÃ©s de nuestro correo de
+          Si necesitas hacer cambios en tu solicitud, contáctanos a través de nuestro correo de
           soporte.
         </p>
 

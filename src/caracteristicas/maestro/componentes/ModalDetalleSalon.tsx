@@ -1,6 +1,6 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { X, Copy, Check, QrCode, Save, Eye, EyeOff, MessageCircle } from 'lucide-react';
+import { X, Copy, Check, QrCode, Save, Eye, EyeOff, MessageCircle, RefreshCw } from 'lucide-react';
 import { ErrorAPI } from '../../../lib/clienteHTTP';
 import {
   obtenerDetalleSalonDirectorio,
@@ -10,11 +10,15 @@ import {
 import { formatearFechaHumana } from '../../../utils/formato';
 import { EsqueletoTarjeta } from '../../../componentes/ui/Esqueleto';
 import {
+  DESCRIPCION_FORMATO_CONTRASENA_SALON,
+  esContrasenaFormatoSalonValida,
   esEmailSalonValido,
+  generarContrasenaSalon,
   limpiarNombrePersonaEntrada,
   limpiarNombreSalonEntrada,
   limpiarTelefonoEntrada,
 } from '../../../utils/formularioSalon';
+import { usarToast } from '../../../componentes/ui/ProveedorToast';
 
 interface PropsModalDetalleSalon {
   salonId: string;
@@ -25,12 +29,25 @@ type PestanaDetalle = 'informacion' | 'historial' | 'acceso';
 
 const LIMITE_HISTORIAL = 10;
 
+function formatearMesHistorial(valor: string): string {
+  if (!/^\d{4}-\d{2}$/.test(valor)) return valor;
+  const [anio, mes] = valor.split('-').map(Number);
+  const fecha = new Date(anio, (mes || 1) - 1, 1);
+  if (Number.isNaN(fecha.getTime())) return valor;
+  return fecha.toLocaleDateString('es-MX', { month: 'long', year: 'numeric' });
+}
+
 export function ModalDetalleSalon({ salonId, onCerrar }: PropsModalDetalleSalon) {
   const queryClient = useQueryClient();
+  const { mostrarToast } = usarToast();
   const [pestana, setPestana] = useState<PestanaDetalle>('informacion');
   const [paginaHistorial, setPaginaHistorial] = useState(1);
   const [copiado, setCopiado] = useState<string | null>(null);
   const [erroresGuardado, setErroresGuardado] = useState<string | null>(null);
+  const [filtroHistorialBusqueda, setFiltroHistorialBusqueda] = useState('');
+  const [filtroHistorialTipo, setFiltroHistorialTipo] = useState('todos');
+  const [filtroHistorialPlan, setFiltroHistorialPlan] = useState('todos');
+  const [filtroHistorialMes, setFiltroHistorialMes] = useState('todos');
 
   // Datos del salón
   const { data: salon, isLoading: cargandoSalon } = useQuery({
@@ -54,31 +71,55 @@ export function ModalDetalleSalon({ salonId, onCerrar }: PropsModalDetalleSalon)
 
   const hayCambios = Object.keys(camposEditados).length > 0;
   const emailDuenoActual = salon?.usuarios[0]?.email ?? salon?.emailContacto ?? '';
+  const nombreDuenoActual = salon?.usuarios[0]?.nombre ?? salon?.propietario ?? '';
+  const contrasenaDuenoActual = salon?.claveDueno ?? '';
+
+  const generarContrasenaDueno = () => {
+    if (!salon) return;
+    const nombreSalon = obtenerValorCampo('nombre', salon.nombre);
+    const nombreDueno = obtenerValorCampo('propietario', nombreDuenoActual);
+    const nuevaContrasena = generarContrasenaSalon(nombreSalon, nombreDueno);
+    editarCampo('contrasenaDueno', nuevaContrasena);
+  };
 
   // Guardar
   const { mutate: guardar, isPending: guardando } = useMutation({
     mutationFn: () => {
       const datos = { ...camposEditados };
-      // No enviar contraseña vacía
-      if ('contrasenaDueno' in datos && !datos.contrasenaDueno?.trim()) {
-        delete datos.contrasenaDueno;
+      // No enviar contrasena vacia ni sin cambios.
+      if ('contrasenaDueno' in datos) {
+        const contrasenaEditada = String(datos.contrasenaDueno ?? '').trim();
+        if (!contrasenaEditada || contrasenaEditada === contrasenaDuenoActual) {
+          delete datos.contrasenaDueno;
+        } else {
+          if (!esContrasenaFormatoSalonValida(contrasenaEditada)) {
+            throw new Error(
+              `La contraseña del dueño no cumple el patrón. ${DESCRIPCION_FORMATO_CONTRASENA_SALON}.`,
+            );
+          }
+          datos.contrasenaDueno = contrasenaEditada;
+        }
       }
       return actualizarSalonDirectorio(salonId, datos);
     },
     onSuccess: () => {
       setCamposEditados({});
       setErroresGuardado(null);
-      queryClient.invalidateQueries({ queryKey: ['admin', 'directorio', salonId] });
-      queryClient.invalidateQueries({ queryKey: ['admin', 'directorio'] });
-      queryClient.invalidateQueries({ queryKey: ['admin', 'metricas'] });
+      mostrarToast({ mensaje: 'Cambios guardados correctamente', variante: 'exito' });
+      void queryClient.invalidateQueries({ queryKey: ['admin', 'directorio', salonId] });
+      void queryClient.invalidateQueries({ queryKey: ['admin', 'directorio'] });
+      void queryClient.invalidateQueries({ queryKey: ['admin', 'metricas'] });
     },
     onError: (error: Error) => {
       if (error instanceof ErrorAPI) {
         setErroresGuardado(error.message);
+        mostrarToast({ mensaje: error.message, variante: 'error' });
         return;
       }
 
-      setErroresGuardado(error.message || 'No se pudieron guardar los cambios. Intenta de nuevo.');
+      const mensaje = error.message || 'No se pudieron guardar los cambios. Intenta de nuevo.';
+      setErroresGuardado(mensaje);
+      mostrarToast({ mensaje, variante: 'error' });
     },
   });
 
@@ -90,14 +131,59 @@ export function ModalDetalleSalon({ salonId, onCerrar }: PropsModalDetalleSalon)
     staleTime: 15_000,
   });
 
+  const opcionesTipoHistorial = useMemo(() => {
+    if (!historial?.datos?.length) return [];
+    return [...new Set(historial.datos.map((pago) => pago.concepto).filter(Boolean))].sort((a, b) =>
+      a.localeCompare(b, 'es'),
+    );
+  }, [historial?.datos]);
+
+  const opcionesPlanHistorial = useMemo(() => {
+    if (!historial?.datos?.length) return [];
+    return [...new Set(historial.datos.map((pago) => pago.plan).filter(Boolean))].sort((a, b) =>
+      a.localeCompare(b, 'es'),
+    );
+  }, [historial?.datos]);
+
+  const opcionesMesHistorial = useMemo(() => {
+    if (!historial?.datos?.length) return [];
+    return [
+      ...new Set(historial.datos.map((pago) => pago.fechaPago.slice(0, 7)).filter(Boolean)),
+    ].sort((a, b) => b.localeCompare(a, 'es'));
+  }, [historial?.datos]);
+
+  const historialFiltrado = useMemo(() => {
+    if (!historial?.datos?.length) return [];
+
+    const termino = filtroHistorialBusqueda.trim().toLowerCase();
+
+    return historial.datos.filter((pago) => {
+      const coincideTipo = filtroHistorialTipo === 'todos' || pago.concepto === filtroHistorialTipo;
+      const coincidePlan = filtroHistorialPlan === 'todos' || pago.plan === filtroHistorialPlan;
+      const coincideMes =
+        filtroHistorialMes === 'todos' || pago.fechaPago.slice(0, 7) === filtroHistorialMes;
+      const coincideBusqueda =
+        !termino || `${pago.concepto} ${pago.plan} ${pago.moneda}`.toLowerCase().includes(termino);
+
+      return coincideTipo && coincidePlan && coincideMes && coincideBusqueda;
+    });
+  }, [
+    filtroHistorialBusqueda,
+    filtroHistorialMes,
+    filtroHistorialPlan,
+    filtroHistorialTipo,
+    historial?.datos,
+  ]);
+
   // Copiar al portapapeles
   const copiar = async (clave: string, texto: string) => {
     try {
       await navigator.clipboard.writeText(texto);
       setCopiado(clave);
       setTimeout(() => setCopiado(null), 2000);
+      mostrarToast({ mensaje: 'Copiado al portapapeles', variante: 'exito' });
     } catch {
-      // Silenciar
+      mostrarToast({ mensaje: 'No se pudo copiar al portapapeles', variante: 'error' });
     }
   };
 
@@ -163,20 +249,22 @@ export function ModalDetalleSalon({ salonId, onCerrar }: PropsModalDetalleSalon)
         </div>
 
         {/* Pestañas */}
-        <div className="grid grid-cols-3 border-b border-slate-200 bg-white">
-          {pestanas.map((p) => (
-            <button
-              key={p.clave}
-              onClick={() => setPestana(p.clave)}
-              className={`min-w-0 px-2 py-3 text-center text-[10px] font-black uppercase transition-all sm:text-xs ${
-                pestana === p.clave
-                  ? 'text-pink-600 border-b-2 border-pink-600 bg-pink-50/50'
-                  : 'text-slate-400 hover:text-slate-600'
-              }`}
-            >
-              {p.etiqueta}
-            </button>
-          ))}
+        <div className="border-b border-slate-200 bg-slate-100 p-1">
+          <div className="grid grid-cols-3 gap-1">
+            {pestanas.map((p) => (
+              <button
+                key={p.clave}
+                onClick={() => setPestana(p.clave)}
+                className={`min-w-0 rounded-xl px-2 py-3 text-center text-[10px] font-black uppercase transition-all sm:text-xs ${
+                  pestana === p.clave
+                    ? 'bg-pink-600 text-white shadow-sm'
+                    : 'text-slate-500 hover:bg-white hover:text-slate-700 active:bg-slate-200'
+                }`}
+              >
+                {p.etiqueta}
+              </button>
+            ))}
+          </div>
         </div>
 
         {/* Contenido */}
@@ -231,10 +319,11 @@ export function ModalDetalleSalon({ salonId, onCerrar }: PropsModalDetalleSalon)
               <CampoEditable
                 etiqueta="Contraseña del salón"
                 campo="contrasenaDueno"
-                valor={obtenerValorCampo('contrasenaDueno', '')}
+                valor={obtenerValorCampo('contrasenaDueno', contrasenaDuenoActual)}
                 tipo="password"
-                placeholder="Solo si deseas cambiarla"
+                placeholder="Contraseña de acceso del salón"
                 onChange={editarCampo}
+                onGenerar={generarContrasenaDueno}
               />
 
               {obtenerValorCampo('emailDueno', emailDuenoActual) &&
@@ -307,38 +396,93 @@ export function ModalDetalleSalon({ salonId, onCerrar }: PropsModalDetalleSalon)
                 </div>
               ) : historial && historial.datos.length > 0 ? (
                 <>
-                  <table className="w-full text-sm">
-                    <thead>
-                      <tr className="border-b border-slate-200">
-                        <th className="text-left py-3 px-2 text-xs font-black text-slate-400 uppercase">
-                          Fecha
-                        </th>
-                        <th className="text-left py-3 px-2 text-xs font-black text-slate-400 uppercase">
-                          Concepto
-                        </th>
-                        <th className="text-left py-3 px-2 text-xs font-black text-slate-400 uppercase">
-                          Plan
-                        </th>
-                        <th className="text-right py-3 px-2 text-xs font-black text-slate-400 uppercase">
-                          Monto
-                        </th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {historial.datos.map((p) => (
-                        <tr key={p.id} className="border-b border-slate-50 hover:bg-slate-50">
-                          <td className="py-3 px-2 text-slate-600">
-                            {formatearFechaHumana(p.fechaPago)}
-                          </td>
-                          <td className="py-3 px-2 font-bold text-slate-900">{p.concepto}</td>
-                          <td className="py-3 px-2 text-slate-600">{p.plan}</td>
-                          <td className="py-3 px-2 text-right font-black text-slate-900">
-                            {formatearMoneda(p.monto, p.moneda)}
-                          </td>
-                        </tr>
+                  <div className="mb-4 grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+                    <input
+                      value={filtroHistorialBusqueda}
+                      onChange={(evento) => setFiltroHistorialBusqueda(evento.target.value)}
+                      placeholder="Buscar en historial"
+                      className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm font-medium outline-none focus:ring-2 focus:ring-pink-500"
+                    />
+
+                    <select
+                      value={filtroHistorialTipo}
+                      onChange={(evento) => setFiltroHistorialTipo(evento.target.value)}
+                      className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm font-medium outline-none focus:ring-2 focus:ring-pink-500"
+                    >
+                      <option value="todos">Todos los conceptos</option>
+                      {opcionesTipoHistorial.map((concepto) => (
+                        <option key={concepto} value={concepto}>
+                          {concepto}
+                        </option>
                       ))}
-                    </tbody>
-                  </table>
+                    </select>
+
+                    <select
+                      value={filtroHistorialPlan}
+                      onChange={(evento) => setFiltroHistorialPlan(evento.target.value)}
+                      className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm font-medium outline-none focus:ring-2 focus:ring-pink-500"
+                    >
+                      <option value="todos">Todos los planes</option>
+                      {opcionesPlanHistorial.map((plan) => (
+                        <option key={plan} value={plan}>
+                          {plan}
+                        </option>
+                      ))}
+                    </select>
+
+                    <select
+                      value={filtroHistorialMes}
+                      onChange={(evento) => setFiltroHistorialMes(evento.target.value)}
+                      className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm font-medium outline-none focus:ring-2 focus:ring-pink-500"
+                    >
+                      <option value="todos">Todos los meses</option>
+                      {opcionesMesHistorial.map((mes) => (
+                        <option key={mes} value={mes}>
+                          {formatearMesHistorial(mes)}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  {historialFiltrado.length > 0 ? (
+                    <table className="w-full text-sm">
+                      <thead>
+                        <tr className="border-b border-slate-200">
+                          <th className="text-left py-3 px-2 text-xs font-black text-slate-400 uppercase">
+                            Fecha
+                          </th>
+                          <th className="text-left py-3 px-2 text-xs font-black text-slate-400 uppercase">
+                            Concepto
+                          </th>
+                          <th className="text-left py-3 px-2 text-xs font-black text-slate-400 uppercase">
+                            Plan
+                          </th>
+                          <th className="text-right py-3 px-2 text-xs font-black text-slate-400 uppercase">
+                            Monto
+                          </th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {historialFiltrado.map((p) => (
+                          <tr key={p.id} className="border-b border-slate-50 hover:bg-slate-50">
+                            <td className="py-3 px-2 text-slate-600">
+                              {formatearFechaHumana(p.fechaPago)}
+                            </td>
+                            <td className="py-3 px-2 font-bold text-slate-900">{p.concepto}</td>
+                            <td className="py-3 px-2 text-slate-600">{p.plan}</td>
+                            <td className="py-3 px-2 text-right font-black text-slate-900">
+                              {formatearMoneda(p.monto, p.moneda)}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  ) : (
+                    <p className="rounded-2xl border border-slate-200 bg-slate-50 py-6 text-center text-sm font-semibold text-slate-500">
+                      No hay registros que coincidan con los filtros actuales.
+                    </p>
+                  )}
+
                   <div className="flex items-center justify-between mt-4">
                     <p className="text-xs font-bold text-slate-500">
                       Página {paginaHistorial} de {historial.totalPaginas}
@@ -372,6 +516,9 @@ export function ModalDetalleSalon({ salonId, onCerrar }: PropsModalDetalleSalon)
               {/* Clave del salón */}
               <div className="p-4 bg-slate-50 rounded-2xl space-y-2">
                 <p className="text-xs font-black text-slate-400 uppercase">Clave del salón</p>
+                <p className="text-[11px] text-slate-500">
+                  Código que usan los clientes para buscar el salón y hacer reservas.
+                </p>
                 <div className="flex items-center gap-2">
                   <code className="flex-1 px-3 py-2 bg-white border border-slate-200 rounded-xl text-sm font-mono font-bold text-slate-900">
                     {salon.claveCliente}
@@ -388,6 +535,21 @@ export function ModalDetalleSalon({ salonId, onCerrar }: PropsModalDetalleSalon)
                     )}
                   </button>
                 </div>
+              </div>
+
+              <div className="p-4 bg-slate-50 rounded-2xl space-y-2">
+                <CampoEditable
+                  etiqueta="Contraseña de acceso del salón"
+                  campo="contrasenaDueno"
+                  valor={obtenerValorCampo('contrasenaDueno', contrasenaDuenoActual)}
+                  tipo="password"
+                  placeholder="Contraseña de acceso del salón"
+                  onChange={editarCampo}
+                  onGenerar={generarContrasenaDueno}
+                />
+                <p className="text-[11px] text-slate-500">
+                  Contraseña con la que el dueño accede al dashboard del salón.
+                </p>
               </div>
 
               {/* QR */}
@@ -431,6 +593,18 @@ export function ModalDetalleSalon({ salonId, onCerrar }: PropsModalDetalleSalon)
                 </div>
               </div>
 
+              {hayCambios && (
+                <button
+                  type="button"
+                  onClick={() => guardar()}
+                  disabled={guardando}
+                  className="w-full flex items-center justify-center gap-2 py-3 rounded-xl bg-pink-600 text-white text-sm font-black transition-colors hover:bg-pink-700 disabled:opacity-50"
+                >
+                  <Save className="w-4 h-4" />
+                  {guardando ? 'Guardando cambios...' : 'Guardar cambios de acceso'}
+                </button>
+              )}
+
               <button
                 type="button"
                 onClick={() => window.open(enlaceWhatsApp, '_blank', 'noopener,noreferrer')}
@@ -456,6 +630,7 @@ function CampoEditable({
   tipo = 'text',
   placeholder,
   onChange,
+  onGenerar,
 }: {
   etiqueta: string;
   campo: string;
@@ -463,6 +638,7 @@ function CampoEditable({
   tipo?: 'text' | 'email' | 'password' | 'date' | 'tel';
   placeholder?: string;
   onChange: (campo: string, valor: string) => void;
+  onGenerar?: () => void;
 }) {
   const [mostrarContrasena, setMostrarContrasena] = useState(false);
   const [copiado, setCopiado] = useState(false);
@@ -488,14 +664,14 @@ function CampoEditable({
           value={valor}
           onChange={(e) => onChange(campo, e.target.value)}
           placeholder={placeholder}
-          className={`w-full rounded-xl border border-slate-200 px-3 py-2 text-sm font-medium outline-none focus:ring-2 focus:ring-pink-500 ${esPassword ? 'pr-21' : ''}`}
+          className={`w-full rounded-xl border border-slate-200 px-3 py-2 text-sm font-medium outline-none focus:ring-2 focus:ring-pink-500 ${esPassword ? 'pr-28' : ''}`}
         />
         {esPassword && (
           <>
             <button
               type="button"
               onClick={() => void copiarValor()}
-              className="absolute right-10 top-1/2 -translate-y-1/2 rounded-lg p-1 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-700"
+              className="absolute right-18 top-1/2 -translate-y-1/2 rounded-lg p-1 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-700"
               aria-label="Copiar contraseña"
             >
               {copiado ? (
@@ -504,6 +680,16 @@ function CampoEditable({
                 <Copy className="w-4 h-4" />
               )}
             </button>
+            {onGenerar && (
+              <button
+                type="button"
+                onClick={onGenerar}
+                className="absolute right-10 top-1/2 -translate-y-1/2 rounded-lg p-1 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-700"
+                aria-label="Generar contraseña"
+              >
+                <RefreshCw className="w-4 h-4" />
+              </button>
+            )}
             <button
               type="button"
               onClick={() => setMostrarContrasena((prev) => !prev)}

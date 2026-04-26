@@ -26,6 +26,8 @@ function obtenerIconoTipo(tipo: NotificacionEstudio['tipo']) {
       return <AlertTriangle className="w-5 h-5 text-amber-500 shrink-0" aria-hidden="true" />;
     case 'pago_confirmado':
       return <CheckCircle2 className="w-5 h-5 text-green-500 shrink-0" aria-hidden="true" />;
+    case 'reactivacion':
+      return <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0" aria-hidden="true" />;
     case 'cambio_precio_plan':
       return <Bell className="w-5 h-5 text-sky-500 shrink-0" aria-hidden="true" />;
     case 'suspension':
@@ -49,6 +51,8 @@ function obtenerColorFondo(tipo: NotificacionEstudio['tipo']) {
       return 'bg-amber-50 border-amber-200';
     case 'pago_confirmado':
       return 'bg-green-50 border-green-200';
+    case 'reactivacion':
+      return 'bg-emerald-50 border-emerald-200';
     case 'cambio_precio_plan':
       return 'bg-sky-50 border-sky-200';
     case 'suspension':

@@ -3,19 +3,23 @@ import { Tooltip } from './Tooltip';
 
 type TonoBotonIcono = 'neutro' | 'primario' | 'advertencia' | 'peligro' | 'exito';
 
-interface PropsBotonIconoAccion
-  extends Omit<ButtonHTMLAttributes<HTMLButtonElement>, 'children' | 'aria-label'> {
+interface PropsBotonIconoAccion extends Omit<
+  ButtonHTMLAttributes<HTMLButtonElement>,
+  'children' | 'aria-label'
+> {
   descripcion: string;
   icono: ReactNode;
   tono?: TonoBotonIcono;
 }
 
 const ESTILOS_TONO: Record<TonoBotonIcono, string> = {
-  neutro: 'border-slate-200 bg-white text-slate-500 hover:border-slate-300 hover:bg-slate-50 hover:text-slate-700',
-  primario: 'border-pink-200 bg-pink-50 text-pink-700 hover:border-pink-300 hover:bg-pink-100',
-  advertencia: 'border-amber-200 bg-amber-50 text-amber-700 hover:border-amber-300 hover:bg-amber-100',
-  peligro: 'border-red-200 bg-red-50 text-red-700 hover:border-red-300 hover:bg-red-100',
-  exito: 'border-emerald-200 bg-emerald-50 text-emerald-700 hover:border-emerald-300 hover:bg-emerald-100',
+  neutro: 'border-[#c9c1bb] bg-white text-[#5f5854] hover:border-[#b2a8a1] hover:bg-[#f4efec]',
+  primario:
+    'border-[#c6968c] bg-[#f4e9e5] text-[#5c423e] hover:border-[#ab7f76] hover:bg-[#fbf6f4]',
+  advertencia:
+    'border-[#c9c1bb] bg-[#f4efec] text-[#5f5854] hover:border-[#b2a8a1] hover:bg-[#e9e4e0]',
+  peligro: 'border-[#9e2b1f] bg-[#fef2f2] text-[#991b1b] hover:border-[#7f1d1d] hover:bg-[#fee2e2]',
+  exito: 'border-[#143c32] bg-[#eff5f3] text-[#143c32] hover:border-[#0a2823] hover:bg-[#d9e8e3]',
 };
 
 export function BotonIconoAccion({
@@ -33,7 +37,7 @@ export function BotonIconoAccion({
         type={type}
         aria-label={descripcion}
         disabled={disabled}
-        className={`inline-flex h-10 w-10 items-center justify-center rounded-2xl border transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${ESTILOS_TONO[tono]} ${className}`.trim()}
+        className={`inline-flex h-10 w-10 items-center justify-center rounded-xl border transition-all duration-180 disabled:cursor-not-allowed disabled:opacity-50 active:translate-y-0 hover:-translate-y-0.5 ${ESTILOS_TONO[tono]} ${className}`.trim()}
         {...props}
       >
         {icono}

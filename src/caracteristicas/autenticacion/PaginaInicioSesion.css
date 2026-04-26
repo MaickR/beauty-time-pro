@@ -1,0 +1,62 @@
+.pagina-inicio-sesion {
+  --imagen-login: url('/login-telefono.png');
+  min-height: 100vh;
+  min-height: 100svh;
+  min-height: 100dvh;
+  width: 100%;
+  overflow: hidden;
+}
+
+.fondo-login {
+  position: absolute;
+  inset: 0;
+  background-image: var(--imagen-login);
+  background-repeat: no-repeat;
+  background-position: center;
+  background-size: cover;
+  image-rendering: auto;
+}
+
+.login-background {
+  min-height: 100vh;
+  min-height: 100svh;
+  min-height: 100dvh;
+  width: 100%;
+}
+
+.fondo-login--blur {
+  opacity: 0.38;
+  filter: blur(10px);
+  transform: scale(1.08);
+}
+
+.fondo-login--principal {
+  background-position: center;
+  background-size: cover;
+}
+
+@media (min-width: 768px) {
+  .pagina-inicio-sesion {
+    --imagen-login: url('/login-tablet.png');
+  }
+
+  .fondo-login--principal {
+    background-position: center;
+  }
+}
+
+@media (min-width: 1024px) {
+  .pagina-inicio-sesion {
+    --imagen-login: url('/ref-2.png');
+  }
+
+  .fondo-login--principal {
+    background-position: center;
+  }
+}
+
+@media (min-width: 2561px) {
+  .pagina-inicio-sesion {
+    --imagen-login: url('/ref-2.png');
+  }
+}

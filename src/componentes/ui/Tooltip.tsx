@@ -114,14 +114,14 @@ export function Tooltip({ texto, children }: PropsTooltip) {
       {visible && (
         <span
           role="tooltip"
-          className={`pointer-events-none absolute left-1/2 z-[140] -translate-x-1/2 whitespace-nowrap rounded-xl bg-gray-800 px-3 py-2 text-xs font-bold text-white shadow-xl ${
+          className={`pointer-events-none absolute left-1/2 z-140 -translate-x-1/2 whitespace-nowrap rounded-xl border border-slate-700 bg-slate-900 px-3 py-2 text-xs font-bold text-white shadow-xl ${
             posicion === 'arriba' ? 'bottom-[calc(100%+12px)]' : 'top-[calc(100%+12px)]'
           }`}
         >
           {texto}
           <span
-            className={`absolute left-1/2 h-3 w-3 -translate-x-1/2 rotate-45 bg-gray-800 ${
-              posicion === 'arriba' ? 'bottom-[-5px]' : 'top-[-5px]'
+            className={`absolute left-1/2 h-3 w-3 -translate-x-1/2 rotate-45 border-slate-700 bg-slate-900 ${
+              posicion === 'arriba' ? '-bottom-1.25' : '-top-1.25'
             }`}
             aria-hidden="true"
           />

@@ -44,7 +44,7 @@ export function NavegacionCliente() {
 
   usarTemaSalon(colorCliente, { restaurarAlDesmontar: true });
 
-  // Cerrar menÃº al clic exterior
+  // Cerrar menú al clic exterior
   useEffect(() => {
     function manejarClicExterior(e: MouseEvent) {
       if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
@@ -88,7 +88,7 @@ export function NavegacionCliente() {
           <div className="relative" ref={menuRef}>
             <button
               onClick={() => setMenuAbierto((a) => !a)}
-              aria-label="Abrir menÃº de usuario"
+              aria-label="Abrir menú de usuario"
               aria-expanded={menuAbierto}
               aria-haspopup="true"
               className="flex items-center gap-2 px-3 py-2 rounded-xl hover:bg-slate-50 transition-colors"
@@ -97,10 +97,10 @@ export function NavegacionCliente() {
                 <img
                   src={avatarUrl}
                   alt="Foto de perfil"
-                  className="w-8 h-8 rounded-full object-cover border border-pink-100"
+                  className="h-8 w-8 rounded-full border border-rose-200/70 object-cover"
                 />
               ) : (
-                <span className="w-8 h-8 rounded-full bg-pink-100 text-pink-700 font-black text-sm flex items-center justify-center select-none">
+                <span className="flex h-8 w-8 select-none items-center justify-center rounded-full bg-rose-100 text-sm font-black text-rose-700">
                   {inics}
                 </span>
               )}
@@ -141,7 +141,7 @@ export function NavegacionCliente() {
                   onClick={handleCerrarSesion}
                   className="flex items-center gap-3 px-4 py-3 text-sm text-red-600 hover:bg-red-50 font-medium w-full text-left transition-colors"
                 >
-                  <LogOut className="w-4 h-4" aria-hidden="true" /> Cerrar sesiÃ³n
+                  <LogOut className="w-4 h-4" aria-hidden="true" /> Cerrar sesión
                 </button>
               </div>
             )}
@@ -149,7 +149,7 @@ export function NavegacionCliente() {
         </div>
       </header>
 
-      {/* Header mÃ³vil */}
+      {/* Header móvil */}
       <header className="bg-white border-b border-slate-100 sticky top-0 z-50 md:hidden">
         <div className="px-4 h-14 flex items-center justify-between">
           <Link to="/cliente/inicio">
@@ -160,10 +160,10 @@ export function NavegacionCliente() {
               <img
                 src={avatarUrl}
                 alt="Foto de perfil"
-                className="w-8 h-8 rounded-full object-cover border border-pink-100"
+                className="h-8 w-8 rounded-full border border-rose-200/70 object-cover"
               />
             ) : (
-              <span className="w-8 h-8 rounded-full bg-pink-100 text-pink-700 font-black text-sm flex items-center justify-center">
+              <span className="flex h-8 w-8 items-center justify-center rounded-full bg-rose-100 text-sm font-black text-rose-700">
                 {inics}
               </span>
             )}
@@ -171,29 +171,29 @@ export function NavegacionCliente() {
         </div>
       </header>
 
-      {/* Barra de navegaciÃ³n inferior (mÃ³vil) */}
+      {/* Barra de navegación inferior (móvil) */}
       <nav
         className="fixed bottom-0 left-0 right-0 bg-white border-t border-slate-100 z-40 md:hidden"
-        aria-label="NavegaciÃ³n principal"
+        aria-label="Navegación principal"
       >
         <div className="flex">
           <Link
             to="/cliente/inicio"
-            className="flex-1 flex flex-col items-center gap-1 py-3 text-slate-400 hover:text-pink-600 transition-colors"
+            className="flex flex-1 flex-col items-center gap-1 py-3 text-slate-400 transition-colors hover:text-rose-700"
           >
             <Home className="w-5 h-5" aria-hidden="true" />
             <span className="text-[10px] font-bold">Inicio</span>
           </Link>
           <Link
             to="/cliente/perfil?vista=reservas"
-            className="flex-1 flex flex-col items-center gap-1 py-3 text-slate-400 hover:text-pink-600 transition-colors"
+            className="flex flex-1 flex-col items-center gap-1 py-3 text-slate-400 transition-colors hover:text-rose-700"
           >
             <Star className="w-5 h-5" aria-hidden="true" />
             <span className="text-[10px] font-bold">Mis reservas</span>
           </Link>
           <Link
             to="/cliente/perfil"
-            className="flex-1 flex flex-col items-center gap-1 py-3 text-slate-400 hover:text-pink-600 transition-colors"
+            className="flex flex-1 flex-col items-center gap-1 py-3 text-slate-400 transition-colors hover:text-rose-700"
           >
             <User className="w-5 h-5" aria-hidden="true" />
             <span className="text-[10px] font-bold">Perfil</span>

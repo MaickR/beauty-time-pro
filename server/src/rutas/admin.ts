@@ -1,6 +1,6 @@
 import type { FastifyInstance } from 'fastify';
 import type { Prisma } from '../generated/prisma/client.js';
-import { randomBytes, randomInt, randomUUID } from 'node:crypto';
+import { randomUUID } from 'node:crypto';
 import { z } from 'zod';
 import { prisma } from '../prismaCliente.js';
 import { verificarJWT } from '../middleware/autenticacion.js';
@@ -9,7 +9,13 @@ import { revocarSesionesPorSujeto } from '../lib/sesionesAuth.js';
 import { resolverCategoriasSalon } from '../lib/categoriasSalon.js';
 import { construirSelectDesdeColumnas, obtenerColumnasTabla } from '../lib/compatibilidadEsquema.js';
 import { cacheSalonesPublicos } from '../lib/cache.js';
-import { enviarEmailBienvenidaSalon, enviarEmailRechazoSalon, enviarEmailCancelacionProcesada, enviarEmailRecordatorioPagoSalon } from '../servicios/servicioEmail.js';
+import {
+  enviarEmailBienvenidaSalon,
+  enviarEmailCancelacionProcesada,
+  enviarEmailPagoConfirmado,
+  enviarEmailRecordatorioPagoSalon,
+  enviarEmailRechazoSalon,
+} from '../servicios/servicioEmail.js';
 import { generarHashContrasena } from '../utils/contrasenas.js';
 import { registrarAuditoria } from '../utils/auditoria.js';
 import { emailSchema, fechaIsoSchema, obtenerMensajeValidacion, telefonoSchema, textoSchema } from '../lib/validacion.js';
@@ -24,11 +30,14 @@ import { obtenerFechaISOEnZona, obtenerZonaHorariaPorPais } from '../utils/zonas
 import { generarSlugUnico } from '../utils/generarSlug.js';
 import { esEmailValido } from '../utils/validarEmail.js';
 import {
+  esContrasenaFormatoSalonValida,
   esNombrePersonaRegistroValido,
   esNombreSalonRegistroValido,
   esTelefonoSalonRegistroValido,
+  generarContrasenaFormatoSalon,
   limpiarNombrePersonaRegistro,
   limpiarNombreSalonRegistro,
+  MENSAJE_FORMATO_CONTRASENA_SALON,
   normalizarTelefonoSalonRegistro,
 } from '../utils/registroSalon.js';
 
@@ -60,7 +69,10 @@ const esquemaCrearSalonAdmin = z.object({
   nombreSalon: esquemaNombreSalonRegistro,
   nombreAdmin: esquemaNombrePersonaRegistro,
   email: emailSchema.refine(esEmailValido, 'Solo se aceptan correos personales permitidos (@gmail, @hotmail, @outlook o @yahoo)'),
-  contrasena: z.string().min(8, 'La contraseña debe tener al menos 8 caracteres'),
+  contrasena: z
+    .string()
+    .trim()
+    .refine(esContrasenaFormatoSalonValida, MENSAJE_FORMATO_CONTRASENA_SALON),
   telefono: esquemaTelefonoSalonRegistro,
   pais: z.enum(['Mexico', 'Colombia']).optional().default('Mexico'),
   plan: z.enum(['STANDARD', 'PRO']).optional().default('STANDARD'),
@@ -94,17 +106,6 @@ const esquemaCrearSalonAdmin = z.object({
   })).optional().default([]),
 });
 
-function generarContrasenaAleatoria(): string {
-  const chars = 'abcdefghijkmnpqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXYZ23456789';
-  let result = '';
-  result += 'ABCDEFGH'[randomInt(8)]!;
-  result += '23456789'[randomInt(8)]!;
-  for (let i = 0; i < 8; i++) {
-    result += chars[randomInt(chars.length)]!;
-  }
-  return result;
-}
-
 function diasDesde(fecha: Date): number {
   return Math.floor((Date.now() - fecha.getTime()) / (1000 * 60 * 60 * 24));
 }
@@ -129,6 +130,24 @@ function esPrismaErrorConCodigo(error: unknown, codigo: string): boolean {
     'code' in error &&
     (error as { code?: string }).code === codigo
   );
+}
+
+const MENSAJE_CLAVE_DUENO_DUPLICADA =
+  'La contrasena del dueno ya esta en uso por otro salon. Genera una nueva contrasena.';
+
+async function existeClaveDuenoDuplicada(
+  claveDueno: string,
+  estudioIdExcluir?: string,
+): Promise<boolean> {
+  const existente = await prisma.estudio.findFirst({
+    where: {
+      claveDueno,
+      ...(estudioIdExcluir ? { id: { not: estudioIdExcluir } } : {}),
+    },
+    select: { id: true },
+  });
+
+  return Boolean(existente);
 }
 
 async function obtenerSujetosAutenticacionEstudio(estudioId: string) {
@@ -660,21 +679,20 @@ async function insertarRegistroCompat(
       });
       return;
     case 'usuarios':
-      await prisma.usuario.create({
-        data: datosLimpios as Prisma.UsuarioCreateInput,
-        ...(columnasDisponibles
-          ? {
-              select: construirSelectDesdeColumnas(columnasDisponibles, [
-                'id',
-                'email',
-                'rol',
-                'activo',
-                'estudioId',
-                'creadoEn',
-              ]) as Prisma.UsuarioSelect,
-            }
-          : {}),
-      });
+      await insertarUsuarioCompat(
+        datosLimpios as {
+          id: string;
+          email: string;
+          hashContrasena: string;
+          rol: string;
+          estudioId?: string;
+          nombre?: string;
+          activo?: boolean;
+          emailVerificado?: boolean;
+          actualizadoEn?: Date;
+        },
+        columnasDisponibles ?? (await obtenerColumnasTabla('usuarios')),
+      );
       return;
     case 'personal':
       await prisma.personal.create({
@@ -711,6 +729,90 @@ async function insertarRegistroCompat(
     default:
       throw new Error(`Tabla no soportada en inserción compat: ${tabla}`);
   }
+}
+
+async function insertarUsuarioCompat(
+  datos: {
+    id: string;
+    email: string;
+    hashContrasena: string;
+    rol: string;
+    estudioId?: string;
+    nombre?: string;
+    activo?: boolean;
+    emailVerificado?: boolean;
+    actualizadoEn?: Date;
+  },
+  columnasUsuarios: Set<string>,
+) {
+  const entradasInsertables = Object.entries(datos).filter(
+    ([columna, valor]) => columnasUsuarios.has(columna) && valor !== undefined,
+  );
+
+  const columnasMinimasPresentes =
+    columnasUsuarios.has('id') &&
+    columnasUsuarios.has('email') &&
+    columnasUsuarios.has('hashContrasena') &&
+    columnasUsuarios.has('rol');
+
+  if (!columnasMinimasPresentes) {
+    throw new Error('La tabla usuarios no cuenta con columnas mínimas compatibles');
+  }
+
+  const columnasSql = entradasInsertables.map(([columna]) => `\`${columna}\``).join(', ');
+  const placeholders = entradasInsertables.map(() => '?').join(', ');
+  const valores = entradasInsertables.map(([, valor]) => valor);
+
+  await prisma.$executeRawUnsafe(
+    `INSERT INTO usuarios (${columnasSql}) VALUES (${placeholders})`,
+    ...valores,
+  );
+}
+
+async function insertarProductoCompat(
+  datos: {
+    estudioId: string;
+    nombre: string;
+    categoria?: string;
+    precio: number;
+  },
+  columnasProductos: Set<string>,
+) {
+  if (columnasProductos.size === 0) {
+    return;
+  }
+
+  const marcaTiempoActual = formatearFechaHoraSQL(new Date());
+  const datosBase: Record<string, unknown> = {
+    id: randomUUID(),
+    estudioId: datos.estudioId,
+    nombre: datos.nombre,
+    categoria: datos.categoria?.trim() || 'General',
+    precio: datos.precio,
+    activo: true,
+    creadoEn: marcaTiempoActual,
+    actualizadoEn: marcaTiempoActual,
+  };
+
+  const entradasInsertables = Object.entries(datosBase).filter(([columna]) => columnasProductos.has(columna));
+
+  const columnasRequeridasPresentes =
+    columnasProductos.has('estudioId') &&
+    columnasProductos.has('nombre') &&
+    columnasProductos.has('precio');
+
+  if (!columnasRequeridasPresentes) {
+    throw new Error('La tabla productos no cuenta con columnas mínimas compatibles');
+  }
+
+  const columnasSql = entradasInsertables.map(([columna]) => `\`${columna}\``).join(', ');
+  const placeholders = entradasInsertables.map(() => '?').join(', ');
+  const valores = entradasInsertables.map(([, valor]) => valor);
+
+  await prisma.$executeRawUnsafe(
+    `INSERT INTO productos (${columnasSql}) VALUES (${placeholders})`,
+    ...valores,
+  );
 }
 
 async function actualizarRegistroCompat(
@@ -1228,6 +1330,7 @@ export async function rutasAdmin(servidor: FastifyInstance): Promise<void> {
         entidadId: id,
         detalles: { nombre: estudio.nombre, fechaVencimiento },
         ip: solicitud.ip,
+        requestId: solicitud.id,
       });
 
       void enviarEmailBienvenidaSalon({
@@ -1290,6 +1393,7 @@ export async function rutasAdmin(servidor: FastifyInstance): Promise<void> {
         entidadId: id,
         detalles: { nombre: estudio.nombre, motivo: motivo.trim() },
         ip: solicitud.ip,
+        requestId: solicitud.id,
       });
 
       const dueno = estudio.usuarios[0] ?? null;
@@ -1441,9 +1545,14 @@ export async function rutasAdmin(servidor: FastifyInstance): Promise<void> {
           return respuesta.code(409).send({ error: 'Ya existe un usuario con ese email' });
         }
 
-        const hashContrasena = await generarHashContrasena(contrasena);
+        const contrasenaDueno = contrasena.trim();
+        if (await existeClaveDuenoDuplicada(contrasenaDueno)) {
+          return respuesta.code(409).send({ error: MENSAJE_CLAVE_DUENO_DUPLICADA });
+        }
+        const hashContrasena = await generarHashContrasena(contrasenaDueno);
 
-        const { claveDueno, claveCliente } = await generarClavesSalonUnicas(nombreSalon);
+        const { claveCliente } = await generarClavesSalonUnicas(nombreSalon);
+        const claveDueno = contrasenaDueno;
         const slugEstudio = await generarSlugUnico(nombreSalon);
         const sucursalesNormalizadas =
           planNormalizado === 'PRO'
@@ -1488,11 +1597,12 @@ export async function rutasAdmin(servidor: FastifyInstance): Promise<void> {
 
         const monedaInicial = obtenerMonedaPorPais(pais);
         const montoInicial = precioPlanActual.monto;
-        const [columnasEstudios, columnasUsuarios, columnasPersonal, columnasPagos] = await Promise.all([
+        const [columnasEstudios, columnasUsuarios, columnasPersonal, columnasPagos, columnasProductos] = await Promise.all([
           obtenerColumnasTabla('estudios'),
           obtenerColumnasTabla('usuarios'),
           obtenerColumnasTabla('personal'),
           obtenerColumnasTabla('pagos'),
+          obtenerColumnasTabla('productos'),
         ]);
         const usuarioCreadoId = randomUUID();
         const estudioCreadoId = randomUUID();
@@ -1580,15 +1690,31 @@ export async function rutasAdmin(servidor: FastifyInstance): Promise<void> {
           }
 
           if (productos.length > 0) {
-            await prisma.producto.createMany({
-              data: productos.map((producto) => ({
-                estudioId: estudioCreadoId,
-                nombre: producto.nombre.trim(),
-                categoria: producto.categoria?.trim() || 'General',
-                precio: producto.precio,
-                activo: true,
-              })),
-            });
+            if (columnasProductos.size === 0) {
+              solicitud.log.warn(
+                { estudioId: estudioCreadoId },
+                'La tabla productos no está disponible; se omite la carga inicial de productos',
+              );
+            } else {
+              try {
+                for (const producto of productos) {
+                  await insertarProductoCompat(
+                    {
+                      estudioId: estudioCreadoId,
+                      nombre: producto.nombre.trim(),
+                      categoria: producto.categoria,
+                      precio: producto.precio,
+                    },
+                    columnasProductos,
+                  );
+                }
+              } catch (errorProductos) {
+                solicitud.log.warn(
+                  { err: errorProductos, estudioId: estudioCreadoId },
+                  'No se pudieron persistir los productos iniciales; el salón se creó sin catálogo inicial',
+                );
+              }
+            }
           }
 
           try {
@@ -1626,6 +1752,17 @@ export async function rutasAdmin(servidor: FastifyInstance): Promise<void> {
         });
       } catch (error) {
         solicitud.log.error({ err: error }, 'Fallo al crear salon desde admin');
+
+        if (esPrismaErrorConCodigo(error, 'P2002')) {
+          return respuesta.code(409).send({ error: 'Ya existe un salón o usuario con datos únicos duplicados' });
+        }
+
+        if (esPrismaErrorConCodigo(error, 'P2022')) {
+          return respuesta
+            .code(500)
+            .send({ error: 'Configuración incompleta de base de datos para crear salones.' });
+        }
+
         return respuesta.code(500).send({
           error: 'No se pudo crear el salon',
         });
@@ -1731,6 +1868,7 @@ export async function rutasAdmin(servidor: FastifyInstance): Promise<void> {
             entidadTipo: 'estudio',
             entidadId: id,
             ip: solicitud.ip,
+            requestId: solicitud.id,
           });
         } catch (error) {
           solicitud.log.warn(
@@ -1771,12 +1909,31 @@ export async function rutasAdmin(servidor: FastifyInstance): Promise<void> {
         return respuesta.code(404).send({ error: 'Usuario dueño no encontrado para este salón' });
       }
 
-      const contrasenaTemporal = generarContrasenaAleatoria();
+      const estudio = await prisma.estudio.findUnique({
+        where: { id },
+        select: { nombre: true },
+      });
+
+      let contrasenaTemporal = generarContrasenaFormatoSalon(estudio?.nombre ?? 'Salon', usuario.nombre);
+      let intento = 0;
+      while (await existeClaveDuenoDuplicada(contrasenaTemporal, id)) {
+        intento += 1;
+        if (intento >= 12) {
+          return respuesta.code(409).send({ error: MENSAJE_CLAVE_DUENO_DUPLICADA });
+        }
+        contrasenaTemporal = generarContrasenaFormatoSalon(estudio?.nombre ?? 'Salon', usuario.nombre);
+      }
       const nuevoHash = await generarHashContrasena(contrasenaTemporal);
 
-      await prisma.usuario.update({
-        where: { id: usuario.id },
-        data: { hashContrasena: nuevoHash },
+      await prisma.$transaction(async (tx) => {
+        await tx.usuario.update({
+          where: { id: usuario.id },
+          data: { hashContrasena: nuevoHash },
+        });
+        await tx.estudio.update({
+          where: { id },
+          data: { claveDueno: contrasenaTemporal },
+        });
       });
 
       // Se devuelve la contraseña en texto plano UNA sola vez — el frontend la muestra y no la almacena
@@ -1850,6 +2007,7 @@ export async function rutasAdmin(servidor: FastifyInstance): Promise<void> {
           meses: meses ?? null,
         },
         ip: solicitud.ip,
+        requestId: solicitud.id,
       });
 
       return respuesta.send({
@@ -1954,6 +2112,7 @@ export async function rutasAdmin(servidor: FastifyInstance): Promise<void> {
               dentroVentanaRecordatorio,
             },
             ip: solicitud.ip,
+            requestId: solicitud.id,
           });
         } catch (errorAuditoria) {
           solicitud.log.warn(
@@ -2124,6 +2283,7 @@ export async function rutasAdmin(servidor: FastifyInstance): Promise<void> {
               fechaVencimiento: estudio.fechaVencimiento,
             },
             ip: solicitud.ip,
+            requestId: solicitud.id,
           });
         } catch (errorAuditoria) {
           solicitud.log.warn(
@@ -2265,6 +2425,8 @@ export async function rutasAdmin(servidor: FastifyInstance): Promise<void> {
           salonesActivos,
           salonesPendientes,
           salonesSuspendidos,
+          salonesPlanPro: resumenSuscripcionesActivas.totalActivasPro,
+          salonesPlanStandard: resumenSuscripcionesActivas.totalActivasStandard,
           salonesVencidos,
           salonesPorVencer7Dias,
           salonesPorVencer30Dias,
@@ -2400,6 +2562,7 @@ export async function rutasAdmin(servidor: FastifyInstance): Promise<void> {
         entidadId: id,
         detalles: { nombre: estudio.nombre, accion, respuesta: respuestaMaestro ?? null },
         ip: solicitud.ip,
+        requestId: solicitud.id,
       });
 
       const dueno = estudio.usuarios[0];
@@ -2502,11 +2665,20 @@ export async function rutasAdmin(servidor: FastifyInstance): Promise<void> {
         return respuesta.code(409).send({ error: 'Ya existe un usuario con ese email' });
       }
 
-      const contrasenaFinal = contrasenaManual && contrasenaManual.length >= 8
-        ? contrasenaManual
-        : generarContrasenaAleatoria();
+      const contrasenaManualLimpia = typeof contrasenaManual === 'string' ? contrasenaManual.trim() : '';
+      if (contrasenaManualLimpia && !esContrasenaFormatoSalonValida(contrasenaManualLimpia)) {
+        return respuesta.code(400).send({ error: MENSAJE_FORMATO_CONTRASENA_SALON });
+      }
+
+      const contrasenaFinal =
+        contrasenaManualLimpia ||
+        generarContrasenaFormatoSalon(preregistro.nombreSalon, preregistro.propietario);
+      if (await existeClaveDuenoDuplicada(contrasenaFinal)) {
+        return respuesta.code(409).send({ error: MENSAJE_CLAVE_DUENO_DUPLICADA });
+      }
       const hashContrasena = await generarHashContrasena(contrasenaFinal);
-      const { claveDueno, claveCliente } = await generarClavesSalonUnicas(preregistro.nombreSalon);
+      const { claveCliente } = await generarClavesSalonUnicas(preregistro.nombreSalon);
+      const claveDueno = contrasenaFinal;
       const slugEstudio = await generarSlugUnico(preregistro.nombreSalon);
 
       const zonaHorariaPais = obtenerZonaHorariaPorPais(preregistro.pais);
@@ -3110,6 +3282,7 @@ export async function rutasAdmin(servidor: FastifyInstance): Promise<void> {
         entidadId: id,
         detalles: { nombre: estudio.nombre, motivo },
         ip: solicitud.ip,
+        requestId: solicitud.id,
       });
 
       return respuesta.send({ datos: { mensaje: 'Salón bloqueado correctamente' } });
@@ -3141,20 +3314,36 @@ export async function rutasAdmin(servidor: FastifyInstance): Promise<void> {
         obtenerColumnasTabla('estudios'),
         obtenerColumnasTabla('usuarios'),
       ]);
-      const estudio = await prisma.estudio.findUnique({
+      const selectEstudioActivacion = construirSelectDesdeColumnas(columnasEstudios, [
+        'id',
+        'nombre',
+        'estado',
+        'inicioSuscripcion',
+        'fechaVencimiento',
+      ]) as Prisma.EstudioSelect;
+
+      const estudio = (await prisma.estudio.findUnique({
         where: { id },
-        select: { id: true, nombre: true, estado: true },
-      });
+        select: selectEstudioActivacion,
+      })) as Record<string, unknown> | null;
 
       if (!estudio) {
         return respuesta.code(404).send({ error: 'Salón no encontrado' });
       }
 
-      if (estudio.estado !== 'suspendido' && estudio.estado !== 'bloqueado') {
+      const estadoAnterior = estudio['estado'];
+      if (estadoAnterior !== 'suspendido' && estadoAnterior !== 'bloqueado') {
         return respuesta.code(400).send({ error: 'Solo se pueden activar salones suspendidos o bloqueados' });
       }
 
-      const estadoAnterior = estudio.estado;
+      const nombreSalon =
+        typeof estudio['nombre'] === 'string' && estudio['nombre'].trim().length > 0
+          ? estudio['nombre']
+          : 'Salón';
+      const inicioSuscripcion =
+        typeof estudio['inicioSuscripcion'] === 'string' ? estudio['inicioSuscripcion'] : null;
+      const fechaVencimiento =
+        typeof estudio['fechaVencimiento'] === 'string' ? estudio['fechaVencimiento'] : null;
 
       try {
         await actualizarRegistroCompat('estudios', 'id', id, {
@@ -3205,16 +3394,80 @@ export async function rutasAdmin(servidor: FastifyInstance): Promise<void> {
         }
       }
 
+      const dueno = await prisma.usuario.findFirst({
+        where: {
+          estudioId: id,
+          ...(columnasUsuarios.has('rol') ? { rol: 'dueno' } : {}),
+        },
+        select: {
+          id: true,
+          email: true,
+          nombre: true,
+        },
+      });
+
+      const mensajeReactivacion = fechaVencimiento
+        ? `Tu cuenta fue reactivada. Vigencia actual: ${inicioSuscripcion ?? 'inicio vigente'} al ${fechaVencimiento}.`
+        : 'Tu cuenta fue reactivada correctamente. Ya puedes continuar operando en el sistema.';
+
+      try {
+        await prisma.notificacionEstudio.create({
+          data: {
+            estudioId: id,
+            tipo: 'reactivacion',
+            titulo: 'Cuenta reactivada',
+            mensaje: mensajeReactivacion,
+          },
+        });
+      } catch (errorNotificacion) {
+        solicitud.log.warn(
+          { err: errorNotificacion, estudioId: id },
+          'No se pudo registrar la notificación de reactivación del salón',
+        );
+      }
+
+      if (dueno?.email && fechaVencimiento) {
+        try {
+          await enviarEmailPagoConfirmado({
+            email: dueno.email,
+            nombreDueno: dueno.nombre ?? nombreSalon,
+            nombreSalon,
+            nuevaFechaVencimiento: fechaVencimiento,
+          });
+        } catch (errorCorreo) {
+          solicitud.log.warn(
+            { err: errorCorreo, estudioId: id, usuarioId: dueno.id },
+            'No se pudo enviar el correo de reactivación al dueño',
+          );
+        }
+      }
+
       await registrarAuditoria({
         usuarioId: payload.sub,
         accion: 'activar_salon',
         entidadTipo: 'estudio',
         entidadId: id,
-        detalles: { nombre: estudio.nombre, estadoAnterior },
+        detalles: {
+          nombre: nombreSalon,
+          estadoAnterior,
+          inicioSuscripcion,
+          fechaVencimiento,
+          notificacionReactivacion: true,
+          correoDuenoEnviado: Boolean(dueno?.email && fechaVencimiento),
+        },
         ip: solicitud.ip,
+        requestId: solicitud.id,
       });
 
-      return respuesta.send({ datos: { mensaje: 'Salón activado correctamente' } });
+      return respuesta.send({
+        datos: {
+          mensaje: 'Salón activado correctamente',
+          periodo: {
+            inicioSuscripcion,
+            fechaVencimiento,
+          },
+        },
+      });
     },
   );
 
@@ -3240,37 +3493,108 @@ export async function rutasAdmin(servidor: FastifyInstance): Promise<void> {
       }
 
       const { id } = solicitud.params;
-      const { inicioSuscripcion, fechaVencimiento, plan, contrasena, mensajesMasivosExtra } = solicitud.body;
+      const cuerpo = solicitud.body ?? {};
+      if (typeof cuerpo !== 'object' || cuerpo === null || Array.isArray(cuerpo)) {
+        return respuesta.code(400).send({ error: 'Solicitud inválida' });
+      }
 
-      const estudio = await prisma.estudio.findUnique({
-        where: { id },
-        select: { id: true, nombre: true, pais: true, plan: true, inicioSuscripcion: true, fechaVencimiento: true, mensajesMasivosExtra: true },
-      });
+      const { inicioSuscripcion, fechaVencimiento, plan, contrasena, mensajesMasivosExtra } =
+        cuerpo as {
+          inicioSuscripcion?: string;
+          fechaVencimiento?: string;
+          plan?: 'STANDARD' | 'PRO';
+          contrasena?: string;
+          mensajesMasivosExtra?: number;
+        };
+      const columnasEstudios = await obtenerColumnasTabla('estudios');
+      const selectEstudio = construirSelectDesdeColumnas(columnasEstudios, [
+        'id',
+        'nombre',
+        'pais',
+        'plan',
+        'inicioSuscripcion',
+        'fechaVencimiento',
+        'mensajesMasivosExtra',
+      ]) as Prisma.EstudioSelect;
+
+      let estudio: Record<string, unknown> | null;
+      try {
+        estudio = (await prisma.estudio.findUnique({
+          where: { id },
+          select: selectEstudio,
+        })) as Record<string, unknown> | null;
+      } catch (error) {
+        if (!esErrorCompatibilidadAdmin(error)) {
+          throw error;
+        }
+
+        const selectCompat = construirSelectDesdeColumnas(columnasEstudios, [
+          'id',
+          'nombre',
+          'pais',
+          'plan',
+          'inicioSuscripcion',
+          'fechaVencimiento',
+        ]) as Prisma.EstudioSelect;
+        estudio = (await prisma.estudio.findUnique({
+          where: { id },
+          select: selectCompat,
+        })) as Record<string, unknown> | null;
+      }
 
       if (!estudio) {
         return respuesta.code(404).send({ error: 'Salón no encontrado' });
       }
 
-      const actualizacion: Prisma.EstudioUpdateInput = {};
-      const detallesAudit: Record<string, unknown> = { nombre: estudio.nombre };
+      const nombreSalon =
+        typeof estudio['nombre'] === 'string' && estudio['nombre'].trim().length > 0
+          ? estudio['nombre']
+          : 'Salón';
+      const planAnterior = estudio['plan'] === 'PRO' ? 'PRO' : 'STANDARD';
+      const paisSalon = typeof estudio['pais'] === 'string' ? estudio['pais'] : 'Mexico';
+
+      const actualizacion: Record<string, unknown> = {};
+      const detallesAudit: Record<string, unknown> = { nombre: nombreSalon };
 
       if (inicioSuscripcion) {
         if (!/^\d{4}-\d{2}-\d{2}$/.test(inicioSuscripcion)) {
-          return respuesta.code(400).send({ error: 'Formato de fecha inválido para inicioSuscripcion' });
+          return respuesta
+            .code(400)
+            .send({ error: 'Formato de fecha inválido para inicioSuscripcion' });
         }
-        detallesAudit.inicioSuscripcionAnterior = estudio.inicioSuscripcion;
-        actualizacion.inicioSuscripcion = inicioSuscripcion;
+        if (!columnasEstudios.has('inicioSuscripcion')) {
+          return respuesta
+            .code(400)
+            .send({ error: 'La columna inicioSuscripcion no está disponible en este entorno' });
+        }
+
+        detallesAudit.inicioSuscripcionAnterior = estudio['inicioSuscripcion'] ?? null;
+        actualizacion['inicioSuscripcion'] = inicioSuscripcion;
       }
 
       if (fechaVencimiento) {
         if (!/^\d{4}-\d{2}-\d{2}$/.test(fechaVencimiento)) {
-          return respuesta.code(400).send({ error: 'Formato de fecha inválido para fechaVencimiento' });
+          return respuesta
+            .code(400)
+            .send({ error: 'Formato de fecha inválido para fechaVencimiento' });
         }
-        detallesAudit.fechaVencimientoAnterior = estudio.fechaVencimiento;
-        actualizacion.fechaVencimiento = fechaVencimiento;
+        if (!columnasEstudios.has('fechaVencimiento')) {
+          return respuesta
+            .code(400)
+            .send({ error: 'La columna fechaVencimiento no está disponible en este entorno' });
+        }
+
+        detallesAudit.fechaVencimientoAnterior = estudio['fechaVencimiento'] ?? null;
+        actualizacion['fechaVencimiento'] = fechaVencimiento;
       }
 
       if (plan && (plan === 'STANDARD' || plan === 'PRO')) {
+        if (!columnasEstudios.has('plan')) {
+          return respuesta
+            .code(400)
+            .send({ error: 'La columna plan no está disponible en este entorno' });
+        }
+
         if (plan === 'STANDARD') {
           const totalPersonalActivo = await prisma.personal.count({
             where: { estudioId: id, activo: true },
@@ -3287,36 +3611,72 @@ export async function rutasAdmin(servidor: FastifyInstance): Promise<void> {
           }
         }
 
-        detallesAudit.planAnterior = estudio.plan;
-        actualizacion.plan = plan;
+        detallesAudit.planAnterior = planAnterior;
+        actualizacion['plan'] = plan;
       }
 
-      if (typeof mensajesMasivosExtra === 'number' && mensajesMasivosExtra >= 0 && Number.isInteger(mensajesMasivosExtra)) {
-        detallesAudit.mensajesMasivosExtraAnterior = estudio.mensajesMasivosExtra;
-        actualizacion.mensajesMasivosExtra = mensajesMasivosExtra;
+      if (mensajesMasivosExtra !== undefined) {
+        if (
+          typeof mensajesMasivosExtra !== 'number' ||
+          !Number.isInteger(mensajesMasivosExtra) ||
+          mensajesMasivosExtra < 0
+        ) {
+          return respuesta
+            .code(400)
+            .send({ error: 'mensajesMasivosExtra debe ser un entero mayor o igual a 0' });
+        }
+
+        if (!columnasEstudios.has('mensajesMasivosExtra')) {
+          return respuesta
+            .code(400)
+            .send({ error: 'La columna mensajesMasivosExtra no está disponible en este entorno' });
+        }
+
+        detallesAudit.mensajesMasivosExtraAnterior =
+          typeof estudio['mensajesMasivosExtra'] === 'number' ? estudio['mensajesMasivosExtra'] : 0;
+        actualizacion['mensajesMasivosExtra'] = mensajesMasivosExtra;
       }
 
       if (Object.keys(actualizacion).length > 0) {
-        await prisma.estudio.update({ where: { id }, data: actualizacion });
+        await prisma.estudio.update({
+          where: { id },
+          data: actualizacion as Prisma.EstudioUpdateInput,
+        });
       }
 
       if (plan && (plan === 'STANDARD' || plan === 'PRO')) {
         await asegurarPrecioActualSalon({
           estudioId: id,
           plan,
-          pais: estudio.pais,
+          pais: paisSalon,
         });
       }
 
-      if (contrasena && contrasena.length >= 8) {
+      const contrasenaLimpia = typeof contrasena === 'string' ? contrasena.trim() : '';
+      if (contrasenaLimpia) {
+        if (!esContrasenaFormatoSalonValida(contrasenaLimpia)) {
+          return respuesta.code(400).send({ error: MENSAJE_FORMATO_CONTRASENA_SALON });
+        }
+
+        if (await existeClaveDuenoDuplicada(contrasenaLimpia, id)) {
+          return respuesta.code(409).send({ error: MENSAJE_CLAVE_DUENO_DUPLICADA });
+        }
+
         const dueno = await prisma.usuario.findFirst({ where: { estudioId: id, rol: 'dueno' } });
         if (dueno) {
-          const nuevoHash = await generarHashContrasena(contrasena);
-          await prisma.usuario.update({
-            where: { id: dueno.id },
-            data: { hashContrasena: nuevoHash },
+          const nuevoHash = await generarHashContrasena(contrasenaLimpia);
+          await prisma.$transaction(async (tx) => {
+            await tx.usuario.update({
+              where: { id: dueno.id },
+              data: { hashContrasena: nuevoHash },
+            });
+            await tx.estudio.update({
+              where: { id },
+              data: { claveDueno: contrasenaLimpia },
+            });
           });
           detallesAudit.contrasenaModificada = true;
+          detallesAudit.claveDuenoActualizada = true;
         }
       }
 
@@ -3327,6 +3687,7 @@ export async function rutasAdmin(servidor: FastifyInstance): Promise<void> {
         entidadId: id,
         detalles: detallesAudit,
         ip: solicitud.ip,
+        requestId: solicitud.id,
       });
 
       return respuesta.send({ datos: { mensaje: 'Suscripción actualizada correctamente' } });
@@ -3600,6 +3961,7 @@ export async function rutasAdmin(servidor: FastifyInstance): Promise<void> {
             descripcion?: string | null;
             colorPrimario?: string | null;
             logoUrl?: string | null;
+            claveDueno?: string | null;
             claveCliente?: string | null;
             creadoEn?: Date | null;
             usuarios: Array<{ nombre: string | null; email: string | null }>;
@@ -3625,6 +3987,7 @@ export async function rutasAdmin(servidor: FastifyInstance): Promise<void> {
             descripcion: true,
             colorPrimario: true,
             logoUrl: true,
+            claveDueno: true,
             claveCliente: true,
             creadoEn: true,
             usuarios: {
@@ -3651,6 +4014,7 @@ export async function rutasAdmin(servidor: FastifyInstance): Promise<void> {
             inicioSuscripcion: true,
             fechaVencimiento: true,
             emailContacto: true,
+            claveDueno: true,
             usuarios: {
               where: { rol: 'dueno' },
               take: 1,
@@ -3673,6 +4037,7 @@ export async function rutasAdmin(servidor: FastifyInstance): Promise<void> {
           descripcion: estudio.descripcion ?? null,
           colorPrimario: estudio.colorPrimario ?? null,
           logoUrl: estudio.logoUrl ?? null,
+          claveDueno: estudio.claveDueno ?? null,
           claveCliente: estudio.claveCliente ?? null,
           creadoEn: estudio.creadoEn ?? null,
         },
@@ -3790,10 +4155,16 @@ export async function rutasAdmin(servidor: FastifyInstance): Promise<void> {
       }
 
       if (contrasenaDueno) {
-        if (contrasenaDueno.length < 8) {
-          return respuesta.code(400).send({ error: 'La contraseña del dueño debe tener al menos 8 caracteres' });
+        if (!esContrasenaFormatoSalonValida(contrasenaDueno)) {
+          return respuesta.code(400).send({ error: MENSAJE_FORMATO_CONTRASENA_SALON });
+        }
+        if (await existeClaveDuenoDuplicada(contrasenaDueno, id)) {
+          return respuesta.code(409).send({ error: MENSAJE_CLAVE_DUENO_DUPLICADA });
         }
         actualizacionDueno['hashContrasena'] = await generarHashContrasena(contrasenaDueno);
+        if (!columnasEstudios || columnasEstudios.has('claveDueno')) {
+          actualizacion['claveDueno'] = contrasenaDueno;
+        }
       }
 
       if (actualizacion.plan !== undefined && actualizacion.plan !== 'STANDARD' && actualizacion.plan !== 'PRO') {
@@ -3868,6 +4239,7 @@ export async function rutasAdmin(servidor: FastifyInstance): Promise<void> {
             emailContactoAnterior: estudio.emailContacto ?? null,
           },
           ip: solicitud.ip,
+          requestId: solicitud.id,
         });
 
         return respuesta.send({ datos: { mensaje: 'Salón actualizado correctamente' } });
@@ -3943,6 +4315,7 @@ export async function rutasAdmin(servidor: FastifyInstance): Promise<void> {
                 actualizacionModoCompat: true,
               },
               ip: solicitud.ip,
+              requestId: solicitud.id,
             });
 
             if (
