@@ -2,12 +2,12 @@ import { useQuery } from '@tanstack/react-query';
 import { Store } from 'lucide-react';
 import { obtenerMisSalones } from '../../../servicios/servicioVendedor';
 
-const ESTADOS_SALON: Record<string, { etiqueta: string; color: string }> = {
-  aprobado: { etiqueta: 'Activo', color: 'bg-green-100 text-green-700' },
-  pendiente: { etiqueta: 'Pendiente', color: 'bg-amber-100 text-amber-700' },
-  suspendido: { etiqueta: 'Suspendido', color: 'bg-red-100 text-red-700' },
-  bloqueado: { etiqueta: 'Bloqueado', color: 'bg-slate-200 text-slate-600' },
-  rechazado: { etiqueta: 'Rechazado', color: 'bg-red-100 text-red-700' },
+const ESTADOS_SALON: Record<string, { etiqueta: string; clase: string }> = {
+  aprobado: { etiqueta: 'Activo', clase: 'badge badge-active' },
+  pendiente: { etiqueta: 'Pendiente', clase: 'badge badge-pending' },
+  suspendido: { etiqueta: 'Suspendido', clase: 'badge badge-suspend' },
+  bloqueado: { etiqueta: 'Bloqueado', clase: 'badge badge-neutral' },
+  rechazado: { etiqueta: 'Rechazado', clase: 'badge badge-danger' },
 };
 
 export function TabSalonesVendedor() {
@@ -64,7 +64,7 @@ export function TabSalonesVendedor() {
                   <td className="px-4 py-3 text-slate-600">{s.propietario}</td>
                   <td className="px-4 py-3">
                     <span
-                      className={`px-2 py-0.5 rounded text-xs font-bold ${s.plan === 'PRO' ? 'bg-purple-100 text-purple-700' : 'bg-slate-100 text-slate-600'}`}
+                      className={s.plan === 'PRO' ? 'badge badge-premium' : 'badge badge-neutral'}
                     >
                       {s.plan}
                     </span>
@@ -75,11 +75,7 @@ export function TabSalonesVendedor() {
                   </td>
                   <td className="px-4 py-3 text-slate-600">{s.fechaVencimiento}</td>
                   <td className="px-4 py-3 text-center">
-                    <span
-                      className={`inline-block px-3 py-1 rounded-full text-xs font-bold ${estado.color}`}
-                    >
-                      {estado.etiqueta}
-                    </span>
+                    <span className={estado.clase}>{estado.etiqueta}</span>
                   </td>
                 </tr>
               );
@@ -105,11 +101,7 @@ export function TabSalonesVendedor() {
                     <strong>{s.totalReservas}</strong> reservas
                   </p>
                 </div>
-                <span
-                  className={`px-3 py-1 rounded-full text-xs font-bold shrink-0 ${estado.color}`}
-                >
-                  {estado.etiqueta}
-                </span>
+                <span className={`${estado.clase} shrink-0`}>{estado.etiqueta}</span>
               </div>
             </article>
           );

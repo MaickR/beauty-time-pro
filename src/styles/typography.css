@@ -1,0 +1,156 @@
+/* =============================================================
+ * Design System Salon Pro Master — Tipografía y Tablas
+ * Fase 5 de 5: Escala tipográfica, tablas de datos y utilidades
+ * Todos los colores usan exclusivamente variables de tokens.css.
+ * Los colores de marca NUNCA se usan en texto corriente.
+ * ============================================================= */
+
+@layer base {
+  body {
+    font-size: 14px;
+    color: var(--c-text-body);
+    background: var(--c-white);
+    line-height: 1.6;
+  }
+
+  h1 {
+    font-size: 22px;
+    font-weight: 500;
+    color: var(--c-text);
+    margin: 0 0 8px;
+  }
+
+  h2 {
+    font-size: 18px;
+    font-weight: 500;
+    color: var(--c-text-heading);
+    margin: 0 0 6px;
+  }
+
+  h3 {
+    font-size: 15px;
+    font-weight: 500;
+    color: var(--c-text-heading);
+    margin: 0 0 4px;
+  }
+
+  h4 {
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--c-text-label);
+    margin: 0 0 4px;
+  }
+
+  p {
+    font-size: 13px;
+    color: var(--c-text-body);
+    line-height: 1.65;
+    margin: 0 0 10px;
+  }
+}
+
+@layer components {
+  /* ── Utilidades tipográficas ─────────────────────────────────── */
+  .text-secondary {
+    color: var(--c-text-secondary);
+    font-size: 12px;
+  }
+
+  .text-tertiary {
+    color: var(--c-text-tertiary);
+    font-size: 11px;
+  }
+
+  .text-data {
+    color: var(--c-text-label);
+    font-size: 13px;
+  }
+
+  .text-link {
+    color: var(--c-primary);
+    font-weight: 500;
+    cursor: pointer;
+    text-decoration: none;
+  }
+
+  .text-link:hover {
+    color: var(--c-primary-hover);
+    text-decoration: underline;
+  }
+
+  /* ── Tablas de datos ─────────────────────────────────────────── */
+  .data-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 13px;
+    table-layout: fixed;
+  }
+
+  .data-table th {
+    background-color: var(--c-bg-tertiary);
+    color: var(--c-text-secondary);
+    font-size: 11px;
+    font-weight: 500;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    padding: 10px 14px;
+    text-align: left;
+    border-bottom: 1px solid var(--c-border);
+  }
+
+  .data-table td {
+    padding: 11px 14px;
+    color: var(--c-text-data);
+    border-bottom: 1px solid var(--c-border);
+    vertical-align: middle;
+  }
+
+  .data-table tbody tr {
+    background-color: var(--c-white);
+    transition: background-color 0.1s ease;
+  }
+
+  .data-table tbody tr:hover {
+    background-color: var(--c-primary-50);
+  }
+
+  .data-table tbody tr.selected {
+    background-color: var(--c-primary-100);
+  }
+
+  .data-table tbody tr.row-danger {
+    background-color: var(--c-danger-bg);
+  }
+
+  .data-table tbody tr.row-warning {
+    background-color: var(--c-warning-bg);
+  }
+
+  .data-table .col-secondary {
+    color: var(--c-text-secondary);
+    font-size: 12px;
+  }
+
+  .data-table .col-amount {
+    color: var(--c-text-label);
+    font-weight: 500;
+  }
+
+  /* ── Separadores y fondos ────────────────────────────────────── */
+  .page-bg {
+    background-color: var(--c-bg-secondary);
+    min-height: 100vh;
+  }
+
+  .section-bg {
+    background-color: var(--c-bg-tertiary);
+    border-radius: var(--radius-lg);
+    padding: 20px;
+  }
+
+  .divider {
+    height: 1px;
+    background-color: var(--c-border);
+    margin: 16px 0;
+  }
+}

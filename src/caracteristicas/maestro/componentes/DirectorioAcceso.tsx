@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { Eye, Search } from 'lucide-react';
+import { Eye } from 'lucide-react';
 import { obtenerDirectorio } from '../../../servicios/servicioAdmin';
 import { EsqueletoTarjeta } from '../../../componentes/ui/Esqueleto';
 import { ModalDetalleSalon } from './ModalDetalleSalon';
@@ -12,23 +12,26 @@ const LIMITE = 10;
 const RETRASO_BUSQUEDA = 300;
 const OPCIONES_PAIS = ['Todos', 'Mexico', 'Colombia'] as const;
 const OPCIONES_PLAN = ['Todos', 'STANDARD', 'PRO'] as const;
-const OPCIONES_ESTADO = ['Todos', 'pendiente', 'aprobado', 'suspendido', 'bloqueado'] as const;
+const OPCIONES_ESTADO = ['Todos', 'pendiente', 'aprobado', 'bloqueado'] as const;
 
 const ESTADO_BADGE: Record<string, string> = {
   pendiente: 'bg-amber-100 text-amber-700',
   aprobado: 'bg-emerald-100 text-emerald-700',
-  suspendido: 'bg-red-100 text-red-700',
   bloqueado: 'bg-slate-200 text-slate-700',
-  rechazado: 'bg-rose-100 text-rose-700',
 };
 
 const ETIQUETA_ESTADO: Record<string, string> = {
   pendiente: 'Pendiente',
   aprobado: 'Aprobado',
-  suspendido: 'Suspendido',
   bloqueado: 'Bloqueado',
-  rechazado: 'Rechazado',
 };
+
+function normalizarEstadoDirectorio(estado: string): keyof typeof ETIQUETA_ESTADO {
+  if (estado === 'pendiente' || estado === 'aprobado') {
+    return estado;
+  }
+  return 'bloqueado';
+}
 
 export function DirectorioAcceso() {
   const [busqueda, setBusqueda] = useState('');
@@ -84,14 +87,13 @@ export function DirectorioAcceso() {
       </h2>
 
       {/* Buscador */}
-      <div className="mb-4 relative max-w-md">
-        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+      <div className="mb-4 max-w-md">
         <input
           type="text"
           value={busqueda}
           onChange={(e) => manejarBusqueda(e.target.value)}
           placeholder="Buscar por salón o dueño..."
-          className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-slate-200 text-sm font-medium outline-none focus:ring-2 focus:ring-pink-500"
+          className="w-full px-4 py-2.5 rounded-xl border border-slate-200 text-sm font-medium outline-none focus:ring-2 focus:ring-pink-500"
         />
       </div>
 
@@ -180,30 +182,11 @@ export function DirectorioAcceso() {
                       </span>
                     </td>
                     <td className="py-3 px-4">
-                      <div className="flex items-center gap-2">
-                        <span
-                          className={`inline-flex w-fit rounded-full px-2.5 py-1 text-[11px] font-black ${ESTADO_BADGE[salon.estado] ?? 'bg-slate-100 text-slate-700'}`}
-                        >
-                          {ETIQUETA_ESTADO[salon.estado] ?? salon.estado}
-                        </span>
-                        <Tooltip
-                          texto={
-                            salon.duenoActivo
-                              ? 'El acceso del dueño está activo'
-                              : 'El acceso del dueño está bloqueado'
-                          }
-                        >
-                          <span
-                            tabIndex={0}
-                            aria-label={
-                              salon.duenoActivo
-                                ? 'Acceso del dueño activo'
-                                : 'Acceso del dueño bloqueado'
-                            }
-                            className={`inline-flex h-2.5 w-2.5 rounded-full ${salon.duenoActivo ? 'bg-emerald-500' : 'bg-red-500'}`}
-                          />
-                        </Tooltip>
-                      </div>
+                      <span
+                        className={`inline-flex w-fit rounded-full px-2.5 py-1 text-[11px] font-black ${ESTADO_BADGE[normalizarEstadoDirectorio(salon.estado)] ?? 'bg-slate-100 text-slate-700'}`}
+                      >
+                        {ETIQUETA_ESTADO[normalizarEstadoDirectorio(salon.estado)]}
+                      </span>
                     </td>
                     <td className="py-3 px-4 text-slate-500 hidden sm:table-cell">
                       <div className="flex items-center gap-2">

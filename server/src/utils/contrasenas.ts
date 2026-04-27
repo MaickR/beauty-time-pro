@@ -23,11 +23,21 @@ export async function compararHashContrasena(
   contrasena: string,
   hashGuardado: string,
 ): Promise<boolean> {
-  if (!hashGuardado.startsWith(`${PREFIJO_PBKDF2}$`)) {
-    return bcrypt.compare(contrasena, hashGuardado);
+  const hashNormalizado = typeof hashGuardado === 'string' ? hashGuardado.trim() : '';
+
+  if (!hashNormalizado) {
+    return false;
   }
 
-  const [, iteracionesTexto, salt, hashEsperado] = hashGuardado.split('$');
+  if (!hashNormalizado.startsWith(`${PREFIJO_PBKDF2}$`)) {
+    try {
+      return await bcrypt.compare(contrasena, hashNormalizado);
+    } catch {
+      return false;
+    }
+  }
+
+  const [, iteracionesTexto, salt, hashEsperado] = hashNormalizado.split('$');
   const iteraciones = Number.parseInt(iteracionesTexto ?? '', 10);
 
   if (!salt || !hashEsperado || Number.isNaN(iteraciones) || iteraciones <= 0) {

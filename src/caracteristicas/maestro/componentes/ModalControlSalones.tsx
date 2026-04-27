@@ -313,7 +313,7 @@ export function ModalControlSalones({ onCerrar }: PropsModalControlSalones) {
         </div>
 
         {/* Pestañas */}
-        <div className="flex border-b border-slate-200 px-6">
+        <div className="tabs px-6">
           {(
             [
               ['activos', 'Activos'],
@@ -324,7 +324,7 @@ export function ModalControlSalones({ onCerrar }: PropsModalControlSalones) {
             <button
               key={key}
               onClick={() => setTab(key)}
-              className={`px-4 py-3 text-xs font-black uppercase border-b-2 transition-all ${tab === key ? 'border-pink-600 text-pink-600' : 'border-transparent text-slate-400 hover:text-slate-700'}`}
+              className={`tab-item${tab === key ? ' active' : ''}`}
             >
               {label}
             </button>
@@ -730,20 +730,23 @@ export function ModalControlSalones({ onCerrar }: PropsModalControlSalones) {
       {/* Mini-modal de edición */}
       {modalEditar && (
         <div
-          className="fixed inset-0 z-210 flex items-center justify-center bg-black/50 p-4"
+          className="fixed inset-0 z-210 flex items-center justify-center bg-black/50 p-3 sm:p-4"
           onKeyDown={(e) => e.key === 'Escape' && setModalEditar(null)}
         >
           <div
             role="dialog"
             aria-modal="true"
-            className="bg-white rounded-2xl p-6 max-w-sm w-full shadow-2xl"
+            className="w-full max-w-lg rounded-2xl bg-white p-5 shadow-2xl sm:p-8 max-h-[90vh] overflow-y-auto"
           >
-            <h3 className="text-base font-black text-slate-900 mb-4">
+            <h3 className="mb-1 text-lg font-black text-slate-900 sm:text-xl">
               Editar suscripción — {modalEditar.nombre}
             </h3>
-            <div className="space-y-3">
-              <div>
-                <label className="block text-xs font-bold text-slate-500 mb-1">
+            <p className="mb-6 text-sm font-medium text-slate-500">
+              Actualiza vigencia, plan y contraseña del dueño sin perder consistencia del perfil.
+            </p>
+            <div className="space-y-6">
+              <div className="rounded-2xl border border-slate-200/90 bg-slate-50/60 p-4 sm:p-5">
+                <label className="mb-2 block text-xs font-bold text-slate-600">
                   Fecha de inicio
                 </label>
                 <input
@@ -752,11 +755,11 @@ export function ModalControlSalones({ onCerrar }: PropsModalControlSalones) {
                   onChange={(e) =>
                     setFormEditar((f) => ({ ...f, inicioSuscripcion: e.target.value }))
                   }
-                  className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-pink-500"
+                  className="w-full rounded-xl border border-slate-200 bg-white px-3 py-3 text-sm font-medium text-slate-700 outline-none focus:ring-2 focus:ring-pink-500"
                 />
               </div>
-              <div>
-                <label className="block text-xs font-bold text-slate-500 mb-1">
+              <div className="rounded-2xl border border-slate-200/90 bg-slate-50/60 p-4 sm:p-5">
+                <label className="mb-2 block text-xs font-bold text-slate-600">
                   Fecha de vencimiento
                 </label>
                 <input
@@ -765,34 +768,34 @@ export function ModalControlSalones({ onCerrar }: PropsModalControlSalones) {
                   onChange={(e) =>
                     setFormEditar((f) => ({ ...f, fechaVencimiento: e.target.value }))
                   }
-                  className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-pink-500"
+                  className="w-full rounded-xl border border-slate-200 bg-white px-3 py-3 text-sm font-medium text-slate-700 outline-none focus:ring-2 focus:ring-pink-500"
                 />
               </div>
-              <div>
-                <label className="block text-xs font-bold text-slate-500 mb-1">Plan</label>
+              <div className="rounded-2xl border border-slate-200/90 bg-slate-50/60 p-4 sm:p-5">
+                <label className="mb-2 block text-xs font-bold text-slate-600">Plan</label>
                 <select
                   value={formEditar.plan}
                   onChange={(e) => setFormEditar((f) => ({ ...f, plan: e.target.value }))}
-                  className="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm font-medium outline-none focus:ring-2 focus:ring-pink-500"
+                  className="w-full rounded-xl border border-slate-200 bg-white px-3 py-3 text-sm font-semibold text-slate-700 outline-none focus:ring-2 focus:ring-pink-500"
                 >
                   <option value="STANDARD">Estándar</option>
                   <option value="PRO">Pro</option>
                 </select>
               </div>
-              <div>
-                <label className="block text-xs font-bold text-slate-500 mb-1">
+              <div className="rounded-2xl border border-slate-200/90 bg-slate-50/60 p-4 sm:p-5">
+                <label className="mb-2 block text-xs font-bold text-slate-600">
                   Nueva contraseña del dueño (opcional)
                 </label>
-                <p className="mb-2 text-[11px] font-medium text-slate-500">
+                <p className="mb-3 text-xs font-medium leading-relaxed text-slate-500">
                   {DESCRIPCION_FORMATO_CONTRASENA_SALON}.
                 </p>
-                <div className="flex gap-2">
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-stretch">
                   <input
                     type="text"
                     value={formEditar.contrasena}
                     onChange={(e) => setFormEditar((f) => ({ ...f, contrasena: e.target.value }))}
                     placeholder="Dejar vacío para mantener actual"
-                    className="flex-1 rounded-xl border border-slate-200 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-pink-500 font-mono"
+                    className="flex-1 rounded-xl border border-slate-200 bg-white px-3 py-3 text-sm font-mono text-slate-700 outline-none focus:ring-2 focus:ring-pink-500"
                   />
                   <button
                     type="button"
@@ -804,24 +807,24 @@ export function ModalControlSalones({ onCerrar }: PropsModalControlSalones) {
                     }
                     title="Generar contraseña formato salón"
                     aria-label="Generar contraseña formato salón"
-                    className="px-3 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 transition-colors"
+                    className="inline-flex h-11 w-full items-center justify-center rounded-xl border border-slate-200 bg-white px-4 text-sm font-semibold text-slate-700 transition-colors hover:bg-slate-100 hover:text-slate-900 sm:w-auto"
                   >
-                    <RefreshCw className="w-4 h-4 text-slate-600" />
+                    <RefreshCw className="h-4 w-4 text-slate-600" />
                   </button>
                 </div>
               </div>
             </div>
-            <div className="flex gap-3 justify-end mt-4">
+            <div className="mt-6 flex flex-wrap items-center justify-center gap-3">
               <button
                 onClick={() => setModalEditar(null)}
-                className="px-4 py-2 rounded-xl text-xs font-bold text-slate-600 hover:bg-slate-100"
+                className="w-full rounded-xl border border-slate-200 px-5 py-2.5 text-sm font-bold text-slate-600 transition-colors hover:bg-slate-100 sm:w-auto"
               >
                 Cancelar
               </button>
               <button
                 onClick={guardarEditar}
                 disabled={mutEditar.isPending}
-                className="px-4 py-2 rounded-xl bg-pink-600 text-white text-xs font-bold hover:bg-pink-700 disabled:opacity-50"
+                className="w-full rounded-xl bg-pink-600 px-5 py-2.5 text-sm font-bold text-white transition-colors hover:bg-pink-700 disabled:opacity-50 sm:w-auto"
               >
                 {mutEditar.isPending ? 'Guardando...' : 'Guardar'}
               </button>

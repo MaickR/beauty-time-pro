@@ -257,8 +257,8 @@ export function ModalDetalleSalon({ salonId, onCerrar }: PropsModalDetalleSalon)
                 onClick={() => setPestana(p.clave)}
                 className={`min-w-0 rounded-xl px-2 py-3 text-center text-[10px] font-black uppercase transition-all sm:text-xs ${
                   pestana === p.clave
-                    ? 'bg-pink-600 text-white shadow-sm'
-                    : 'text-slate-500 hover:bg-white hover:text-slate-700 active:bg-slate-200'
+                    ? 'bg-[var(--c-primary)] text-white shadow-sm'
+                    : 'text-slate-500 hover:bg-white hover:text-[var(--c-primary-dark)] active:bg-slate-200'
                 }`}
               >
                 {p.etiqueta}

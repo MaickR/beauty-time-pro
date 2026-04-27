@@ -7,9 +7,6 @@ import {
   ChevronDown,
   ChevronUp,
   User,
-  Mail,
-  Phone,
-  MapPin,
   FileText,
   Copy,
   Download,
@@ -48,6 +45,8 @@ interface ConfirmacionAprobacionPreregistro {
   urlReserva: string;
 }
 
+type RespuestaPreregistrosCache = Awaited<ReturnType<typeof obtenerPreregistrosAdmin>>;
+
 // ─── Componente principal ────────────────────────────────────────────────────
 
 export function PreregistrosAdmin() {
@@ -71,6 +70,34 @@ export function PreregistrosAdmin() {
   const mutacionAprobar = useMutation({
     mutationFn: ({ id }: { id: string; preregistro: PreregistroAdmin }) => aprobarPreregistro(id),
     onSuccess: (res, variables) => {
+      clienteConsulta.setQueryData<RespuestaPreregistrosCache>(
+        ['admin', 'preregistros', filtroEstado, pagina],
+        (actual) => {
+          if (!actual) return actual;
+
+          const actualizados = actual.datos.map((registro) =>
+            registro.id === variables.id
+              ? {
+                  ...registro,
+                  estado: 'aprobado',
+                  estudioCreadoId: res.datos.estudioId,
+                  actualizadoEn: new Date().toISOString(),
+                }
+              : registro,
+          );
+
+          if (filtroEstado === 'pendiente') {
+            return {
+              ...actual,
+              datos: actualizados.filter((registro) => registro.id !== variables.id),
+              total: Math.max(0, actual.total - 1),
+            };
+          }
+
+          return { ...actual, datos: actualizados };
+        },
+      );
+
       clienteConsulta.invalidateQueries({ queryKey: ['admin', 'preregistros'] });
       clienteConsulta.invalidateQueries({ queryKey: ['admin', 'directorio'] });
       clienteConsulta.invalidateQueries({ queryKey: ['admin', 'metricas'] });
@@ -287,25 +314,29 @@ function TarjetaPreregistro({
       {/* Detalle expandido */}
       {expandido && (
         <div className="border-t border-slate-100 px-5 py-4 space-y-4">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
-            <div className="flex items-center gap-2 text-slate-600">
-              <Mail className="w-4 h-4 text-slate-400 shrink-0" />
-              <span>{pr.emailPropietario}</span>
-            </div>
-            <div className="flex items-center gap-2 text-slate-600">
-              <Phone className="w-4 h-4 text-slate-400 shrink-0" />
-              <span>{pr.telefonoPropietario}</span>
-            </div>
-            <div className="flex items-center gap-2 text-slate-600">
-              <MapPin className="w-4 h-4 text-slate-400 shrink-0" />
-              <span>
-                {pr.pais}
-                {pr.direccion ? ` — ${pr.direccion}` : ''}
-              </span>
-            </div>
-            <div className="text-slate-600">
-              <span className="font-semibold">Plan:</span> {pr.plan}
-            </div>
+          <div className="grid grid-cols-1 gap-3 rounded-2xl border border-slate-200 bg-slate-50 p-4 text-sm md:grid-cols-2">
+            <p className="text-slate-700">
+              <span className="font-black text-slate-900">Nombre del salón:</span> {pr.nombreSalon}
+            </p>
+            <p className="text-slate-700">
+              <span className="font-black text-slate-900">Administrador:</span> {pr.propietario}
+            </p>
+            <p className="text-slate-700">
+              <span className="font-black text-slate-900">Dirección:</span>{' '}
+              {pr.direccion?.trim() || 'Sin dirección registrada'}
+            </p>
+            <p className="text-slate-700">
+              <span className="font-black text-slate-900">País:</span> {pr.pais}
+            </p>
+            <p className="text-slate-700">
+              <span className="font-black text-slate-900">Teléfono:</span> {pr.telefonoPropietario}
+            </p>
+            <p className="text-slate-700 break-all">
+              <span className="font-black text-slate-900">Correo:</span> {pr.emailPropietario}
+            </p>
+            <p className="text-slate-700 md:col-span-2">
+              <span className="font-black text-slate-900">Plan:</span> {pr.plan}
+            </p>
           </div>
 
           {pr.categorias && (

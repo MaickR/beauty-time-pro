@@ -28,7 +28,7 @@ function soloVendedor(payload: { rol: string }): boolean {
 // Nota: no se usa el flag estático basado en Prisma.UsuarioScalarFieldEnum porque refleja
 // el schema compilado pero no garantiza que la columna exista en la BD actual del entorno.
 // En su lugar, cada handler llama asegurarCamposComisionVendedorUsuario() en runtime.
-const _PRISMA_SOPORTA_PORCENTAJE_COMISION_PRO_UNUSED =
+const PRISMA_SOPORTA_PORCENTAJE_COMISION_PRO =
   'porcentajeComisionPro' in (Prisma.UsuarioScalarFieldEnum as Record<string, string>);
 
 // ─── Schemas ─────────────────────────────────────────────────────────────
@@ -65,10 +65,14 @@ export async function rutasVendedor(servidor: FastifyInstance) {
       return respuesta.code(404).send({ error: 'Salon demo no disponible' });
     }
 
+    const urlReservas = salonDemo.claveCliente ? `/reservar/${salonDemo.claveCliente}` : null;
+
     const credencialesDemo = obtenerCredencialesDemoVendedor({
       usuarioId: payload.sub,
       emailBase: vendedor.email,
       nombreBase: vendedor.nombre ?? undefined,
+      claveReservas: salonDemo.claveCliente ?? null,
+      urlReservas,
     });
 
     return respuesta.send({
@@ -94,6 +98,8 @@ export async function rutasVendedor(servidor: FastifyInstance) {
           empleadoEmail: credencialesDemo.empleadoEmail,
           empleadoContrasena: credencialesDemo.empleadoContrasena,
           contrasenaCompartida: credencialesDemo.contrasenaCompartida,
+          claveReservas: credencialesDemo.claveReservas,
+          urlReservas: credencialesDemo.urlReservas,
         },
       },
     });
@@ -523,11 +529,13 @@ export async function rutasVendedor(servidor: FastifyInstance) {
 
       const hoy = new Date().toISOString().slice(0, 10);
       const camposComision = await asegurarCamposComisionVendedorUsuario();
+      const soportaPorcentajeComisionPro =
+        camposComision.porcentajeComisionPro && PRISMA_SOPORTA_PORCENTAJE_COMISION_PRO;
       const consultaVendedorComision = prisma.usuario.findUnique({
             where: { id: payload.sub },
             select: {
               porcentajeComision: true,
-              ...(camposComision.porcentajeComisionPro ? { porcentajeComisionPro: true } : {}),
+              ...(soportaPorcentajeComisionPro ? { porcentajeComisionPro: true } : {}),
             },
           });
       const [
@@ -569,7 +577,7 @@ export async function rutasVendedor(servidor: FastifyInstance) {
 
       const porcentajesComision = resolverPorcentajesComisionVendedor({
         porcentajeComision: vendedor?.porcentajeComision,
-        porcentajeComisionPro: camposComision.porcentajeComisionPro
+        porcentajeComisionPro: soportaPorcentajeComisionPro
           ? ((vendedor as { porcentajeComisionPro?: number | null } | null)?.porcentajeComisionPro ?? null)
           : undefined,
       });
@@ -642,16 +650,18 @@ export async function rutasVendedor(servidor: FastifyInstance) {
     );
     const hoy = new Date().toISOString().slice(0, 10);
     const camposComisionVentas = await asegurarCamposComisionVendedorUsuario();
+    const soportaPorcentajeComisionProVentas =
+      camposComisionVentas.porcentajeComisionPro && PRISMA_SOPORTA_PORCENTAJE_COMISION_PRO;
     const vendedor = await prisma.usuario.findUnique({
           where: { id: payload.sub },
           select: {
             porcentajeComision: true,
-            ...(camposComisionVentas.porcentajeComisionPro ? { porcentajeComisionPro: true } : {}),
+            ...(soportaPorcentajeComisionProVentas ? { porcentajeComisionPro: true } : {}),
           },
         });
     const porcentajesComision = resolverPorcentajesComisionVendedor({
       porcentajeComision: vendedor?.porcentajeComision,
-      porcentajeComisionPro: camposComisionVentas.porcentajeComisionPro
+      porcentajeComisionPro: soportaPorcentajeComisionProVentas
         ? ((vendedor as { porcentajeComisionPro?: number | null } | null)?.porcentajeComisionPro ?? null)
         : undefined,
     });

@@ -1,0 +1,76 @@
+/* =============================================================
+ * Design System Salon Pro Master — CSS Custom Properties
+ * Fase 1 de 5: Design Tokens
+ * Fuente de verdad única. No usar valores hardcodeados en
+ * componentes; siempre referenciar estas variables.
+ * ============================================================= */
+
+:root {
+  /* === PRIMARIO — Brand Green === */
+  --c-primary-50: #eef7f1;
+  --c-primary-100: #d5eadb;
+  --c-primary-200: #a9d5b7;
+  --c-primary-300: #7cbf93;
+  --c-primary: #519b67; /* base — botones CTA, activo */
+  --c-primary-hover: #3d7a50; /* hover de botón primario */
+  --c-primary-active: #2e5c3c; /* pressed / active */
+  --c-primary-dark: #1e3d28; /* sidebar, encabezados oscuros */
+  --c-primary-deeper: #0f1f14; /* fondo sidebar colapsado */
+
+  /* === ACENTO — Rose Gold / Salmón === */
+  --c-accent-50: #fef6f2;
+  --c-accent-100: #fde8d9;
+  --c-accent-200: #fbd1b3;
+  --c-accent: #f4a981; /* base — botones secundarios */
+  --c-accent-hover: #e07a4a; /* hover botón acento */
+  --c-accent-text: #5c2610; /* texto sobre fondo acento */
+  --c-accent-dark: #8b3e1f;
+
+  /* === NEUTRALES === */
+  --c-white: #ffffff; /* fondo principal de la app */
+  --c-bg-secondary: #fafafa; /* fondo de secciones / cards */
+  --c-bg-tertiary: #f4f4f4; /* encabezados de tabla, fondos sutiles */
+  --c-border: #e5e5e5; /* bordes generales */
+  --c-border-strong: #d0d0d0; /* bordes de inputs */
+
+  /* === TIPOGRAFÍA === */
+  --c-text: #0d0d0d; /* títulos H1 */
+  --c-text-heading: #1a1a1a; /* H2, H3 */
+  --c-text-label: #2e2e2e; /* datos de tablas, texto prominente */
+  --c-text-body: #484848; /* cuerpo de texto general */
+  --c-text-secondary: #6b6b6b; /* subtítulos, metadatos */
+  --c-text-tertiary: #9e9e9e; /* placeholders, captions, hints */
+
+  /* === SEMÁNTICOS === */
+  --c-success: #16a34a;
+  --c-success-bg: #dcfce7;
+  --c-success-text: #166534;
+
+  --c-warning: #d97706;
+  --c-warning-bg: #fffbeb;
+  --c-warning-text: #92400e;
+
+  --c-danger: #dc2626;
+  --c-danger-bg: #fef2f2;
+  --c-danger-text: #991b1b;
+
+  --c-info: #2563eb;
+  --c-info-bg: #eff6ff;
+  --c-info-text: #1e40af;
+
+  --c-premium: #7c3aed;
+  --c-premium-bg: #faf5ff;
+  --c-premium-text: #6b21a8;
+
+  --c-suspend: #ca8a04;
+  --c-suspend-bg: #fef9c3;
+  --c-suspend-text: #854d0e;
+
+  /* === RADIO Y SOMBRAS === */
+  --radius-sm: 6px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+  --radius-pill: 999px;
+  --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.08);
+  --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.1);
+}

@@ -4,6 +4,11 @@
  */
 @import 'tailwindcss';
 @import 'react-day-picker/dist/style.css';
+@import './styles/tokens.css';
+@import './styles/buttons.css';
+@import './styles/badges.css';
+@import './styles/forms.css';
+@import './styles/typography.css';
 
 :root {
   /* Colores principales */

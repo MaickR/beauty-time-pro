@@ -3861,7 +3861,9 @@ export async function rutasAdmin(servidor: FastifyInstance): Promise<void> {
       const limite = Math.min(100, Math.max(1, parseInt(limiteStr ?? '10', 10)));
       const saltar = (pagina - 1) * limite;
 
-      const where: Prisma.EstudioWhereInput = {};
+      const where: Prisma.EstudioWhereInput = {
+        estado: { in: ['pendiente', 'aprobado', 'suspendido', 'bloqueado'] },
+      };
       if (buscar) {
         const buscNorm = buscar.trim();
         where.OR = [
@@ -3872,11 +3874,10 @@ export async function rutasAdmin(servidor: FastifyInstance): Promise<void> {
       if (pais === 'Mexico' || pais === 'Colombia') {
         where.pais = pais;
       }
-      if (
-        estado &&
-        ['pendiente', 'aprobado', 'rechazado', 'suspendido', 'bloqueado'].includes(estado)
-      ) {
-        where.estado = estado as 'pendiente' | 'aprobado' | 'rechazado' | 'suspendido' | 'bloqueado';
+      if (estado === 'pendiente' || estado === 'aprobado') {
+        where.estado = estado;
+      } else if (estado === 'bloqueado') {
+        where.estado = { in: ['bloqueado', 'suspendido'] };
       }
       if (plan && ['STANDARD', 'PRO'].includes(plan)) {
         where.plan = plan as 'STANDARD' | 'PRO';

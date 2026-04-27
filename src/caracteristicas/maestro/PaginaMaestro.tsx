@@ -42,6 +42,7 @@ export function PaginaMaestro() {
   const { mostrarToast } = usarToast();
   const clienteConsulta = useQueryClient();
   const [pagoEstudio, setPagoEstudio] = useState<Estudio | null>(null);
+  const [vigenciasActualizadas, setVigenciasActualizadas] = useState<Record<string, string>>({});
   const [tabActiva, setTabActiva] = useState<TabMaestro>('directorio');
   const hook = usarFormularioEstudio();
 
@@ -110,7 +111,13 @@ export function PaginaMaestro() {
       pagoEstudio,
       monto,
       moneda,
-      (msg) => {
+      (msg, resultado) => {
+        if (resultado.nuevaFechaVencimiento) {
+          setVigenciasActualizadas((actuales) => ({
+            ...actuales,
+            [pagoEstudio.id]: resultado.nuevaFechaVencimiento!,
+          }));
+        }
         recargar();
         void clienteConsulta.invalidateQueries({ queryKey: ['admin', 'metricas'] });
         mostrarToast(msg);
@@ -145,11 +152,11 @@ export function PaginaMaestro() {
 
       <main className="max-w-7xl mx-auto p-8">
         {tabsDisponibles.length > 0 && (
-          <nav className="no-imprimir mb-8 flex flex-col gap-1 rounded-2xl border border-slate-200 bg-slate-100 p-1 sm:flex-row sm:flex-wrap sm:justify-start">
+          <nav className="no-imprimir mb-8 flex flex-col gap-1 rounded-2xl border border-slate-200 bg-slate-100 p-1 sm:flex-row sm:flex-nowrap sm:justify-center sm:overflow-x-auto">
             {tabsDisponibles.includes('directorio') && (
               <button
                 onClick={() => setTabActiva('directorio')}
-                className={`flex w-full items-center justify-center gap-2 rounded-xl px-6 py-3 text-xs font-black transition-all sm:w-auto sm:justify-start ${tabActiva === 'directorio' ? 'bg-white shadow-sm text-slate-900' : 'text-slate-500 hover:text-slate-800'}`}
+                className={`flex w-full items-center justify-center gap-2 rounded-xl px-4 py-3 text-xs font-black transition-all sm:w-auto sm:px-5 lg:px-6 ${tabActiva === 'directorio' ? 'bg-white shadow-sm text-slate-900' : 'text-slate-500 hover:text-slate-800'}`}
               >
                 <Store className="w-4 h-4" /> {tituloSeccionDirectorio}
               </button>
@@ -157,7 +164,7 @@ export function PaginaMaestro() {
             {tabsDisponibles.includes('estado-cuenta') && (
               <button
                 onClick={() => setTabActiva('estado-cuenta')}
-                className={`flex w-full items-center justify-center gap-2 rounded-xl px-6 py-3 text-xs font-black transition-all sm:w-auto sm:justify-start ${tabActiva === 'estado-cuenta' ? 'bg-white shadow-sm text-slate-900' : 'text-slate-500 hover:text-slate-800'}`}
+                className={`flex w-full items-center justify-center gap-2 rounded-xl px-4 py-3 text-xs font-black transition-all sm:w-auto sm:px-5 lg:px-6 ${tabActiva === 'estado-cuenta' ? 'bg-white shadow-sm text-slate-900' : 'text-slate-500 hover:text-slate-800'}`}
               >
                 <PieChart className="w-4 h-4" /> Control de cobros
               </button>
@@ -165,7 +172,7 @@ export function PaginaMaestro() {
             {tabsDisponibles.includes('administradores') && (
               <button
                 onClick={() => setTabActiva('administradores')}
-                className={`flex w-full items-center justify-center gap-2 rounded-xl px-6 py-3 text-xs font-black transition-all sm:w-auto sm:justify-start ${tabActiva === 'administradores' ? 'bg-white shadow-sm text-slate-900' : 'text-slate-500 hover:text-slate-800'}`}
+                className={`flex w-full items-center justify-center gap-2 rounded-xl px-4 py-3 text-xs font-black transition-all sm:w-auto sm:px-5 lg:px-6 ${tabActiva === 'administradores' ? 'bg-white shadow-sm text-slate-900' : 'text-slate-500 hover:text-slate-800'}`}
               >
                 <Users className="w-4 h-4" /> Colaboradores
               </button>
@@ -173,7 +180,7 @@ export function PaginaMaestro() {
             {tabsDisponibles.includes('preregistros') && (
               <button
                 onClick={() => setTabActiva('preregistros')}
-                className={`flex w-full items-center justify-center gap-2 rounded-xl px-6 py-3 text-xs font-black transition-all sm:w-auto sm:justify-start ${tabActiva === 'preregistros' ? 'bg-white shadow-sm text-slate-900' : 'text-slate-500 hover:text-slate-800'}`}
+                className={`flex w-full items-center justify-center gap-2 rounded-xl px-4 py-3 text-xs font-black transition-all sm:w-auto sm:px-5 lg:px-6 ${tabActiva === 'preregistros' ? 'bg-white shadow-sm text-slate-900' : 'text-slate-500 hover:text-slate-800'}`}
               >
                 <ClipboardList className="w-4 h-4" /> Pre-registros
               </button>
@@ -181,7 +188,7 @@ export function PaginaMaestro() {
             {tabsDisponibles.includes('base-datos') && (
               <button
                 onClick={() => setTabActiva('base-datos')}
-                className={`flex w-full items-center justify-center gap-2 rounded-xl px-6 py-3 text-xs font-black transition-all sm:w-auto sm:justify-start ${tabActiva === 'base-datos' ? 'bg-white shadow-sm text-slate-900' : 'text-slate-500 hover:text-slate-800'}`}
+                className={`flex w-full items-center justify-center gap-2 rounded-xl px-4 py-3 text-xs font-black transition-all sm:w-auto sm:px-5 lg:px-6 ${tabActiva === 'base-datos' ? 'bg-white shadow-sm text-slate-900' : 'text-slate-500 hover:text-slate-800'}`}
               >
                 <Database className="w-4 h-4" /> Base de Datos
               </button>
@@ -242,6 +249,7 @@ export function PaginaMaestro() {
               estudios={estudios}
               onAbrirPago={setPagoEstudio}
               onRecargar={recargar}
+              vigenciasActualizadas={vigenciasActualizadas}
             />
           </>
         )}

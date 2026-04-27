@@ -13,13 +13,16 @@ interface PropsBotonIconoAccion extends Omit<
 }
 
 const ESTILOS_TONO: Record<TonoBotonIcono, string> = {
-  neutro: 'border-[#c9c1bb] bg-white text-[#5f5854] hover:border-[#b2a8a1] hover:bg-[#f4efec]',
+  neutro:
+    'border-[var(--c-border-strong)] bg-[var(--c-white)] text-[var(--c-text-secondary)] hover:border-[var(--c-border)] hover:bg-[var(--c-bg-tertiary)]',
   primario:
-    'border-[#c6968c] bg-[#f4e9e5] text-[#5c423e] hover:border-[#ab7f76] hover:bg-[#fbf6f4]',
+    'border-[var(--c-accent)] bg-[var(--c-accent-50)] text-[var(--c-accent-text)] hover:border-[var(--c-accent-hover)] hover:bg-[var(--c-accent-100)]',
   advertencia:
-    'border-[#c9c1bb] bg-[#f4efec] text-[#5f5854] hover:border-[#b2a8a1] hover:bg-[#e9e4e0]',
-  peligro: 'border-[#9e2b1f] bg-[#fef2f2] text-[#991b1b] hover:border-[#7f1d1d] hover:bg-[#fee2e2]',
-  exito: 'border-[#143c32] bg-[#eff5f3] text-[#143c32] hover:border-[#0a2823] hover:bg-[#d9e8e3]',
+    'border-[var(--c-border-strong)] bg-[var(--c-bg-tertiary)] text-[var(--c-text-secondary)] hover:border-[var(--c-border)] hover:bg-[var(--c-bg-secondary)]',
+  peligro:
+    'border-[var(--c-danger)] bg-[var(--c-danger-bg)] text-[var(--c-danger-text)] hover:border-[var(--c-danger-text)] hover:bg-[var(--c-danger-bg)]',
+  exito:
+    'border-[var(--c-primary-dark)] bg-[var(--c-primary-50)] text-[var(--c-primary-dark)] hover:border-[var(--c-primary-deeper)] hover:bg-[var(--c-primary-100)]',
 };
 
 export function BotonIconoAccion({

@@ -2,7 +2,10 @@ import { useEffect, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { actualizarEstudio, crearSalonAdmin } from '../../../servicios/servicioEstudios';
 import { sincronizarPersonalEstudio } from '../../../servicios/servicioPersonal';
-import { confirmarPago as _confirmarPago } from '../../../servicios/servicioPagos';
+import {
+  confirmarPago as _confirmarPago,
+  type ResumenPagoSuscripcion,
+} from '../../../servicios/servicioPagos';
 import { ErrorAPI } from '../../../lib/clienteHTTP';
 import {
   convertirMonedaACentavos,
@@ -434,7 +437,7 @@ export async function confirmarPago(
   estudio: Estudio,
   monto: number,
   moneda: 'MXN' | 'COP',
-  onExito: (msg: string) => void,
+  onExito: (msg: string, resultado: ResumenPagoSuscripcion) => void,
   onError: (msg: string) => void,
 ) {
   try {
@@ -448,6 +451,7 @@ export async function confirmarPago(
 
     onExito(
       `Pago registrado en ${resultado.moneda}. Nueva vigencia: ${fechaNueva}. Base usada: ${fechaBase}. ${regla}`,
+      resultado,
     );
   } catch (err) {
     console.error(err);

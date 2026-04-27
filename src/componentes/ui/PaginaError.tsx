@@ -28,17 +28,11 @@ export function PaginaError({
         <p className="text-slate-500 font-medium mb-8">{mensaje}</p>
         <div className="flex flex-col sm:flex-row gap-3 justify-center">
           {onReintentar && (
-            <button
-              onClick={onReintentar}
-              className="bg-slate-900 text-white font-black px-8 py-4 rounded-2xl uppercase tracking-widest hover:bg-black transition-colors"
-            >
+            <button onClick={onReintentar} className="btn-primary">
               Intentar de nuevo
             </button>
           )}
-          <button
-            onClick={() => navegar(-1)}
-            className="border border-slate-200 text-slate-700 font-bold px-8 py-4 rounded-2xl hover:bg-slate-100 transition-colors"
-          >
+          <button onClick={() => navegar(-1)} className="btn-ghost">
             Volver atrás
           </button>
         </div>

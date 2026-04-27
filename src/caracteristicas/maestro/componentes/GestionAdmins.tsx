@@ -2,7 +2,6 @@ import { useEffect, useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   Plus,
-  Search,
   Settings,
   Pencil,
   Eye,
@@ -37,6 +36,8 @@ interface CredencialesDemo {
   adminContrasena: string;
   empleadoEmail: string;
   empleadoContrasena: string;
+  claveReservas?: string | null;
+  urlReservas?: string | null;
 }
 type OrdenColaboradores = 'recientes' | 'nombre' | 'rol' | 'estado';
 type DireccionOrden = 'asc' | 'desc';
@@ -274,6 +275,21 @@ function AcordeonPermisos({
         </div>
       )}
     </div>
+  );
+}
+
+function BanderasComision({
+  porcentajeStandard,
+  porcentajePro,
+}: {
+  porcentajeStandard: number;
+  porcentajePro: number;
+}) {
+  return (
+    <span className="inline-flex items-center gap-1 rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[11px] font-black text-emerald-800">
+      <span className="rounded-full bg-white px-1.5 py-0.5">STD {porcentajeStandard}%</span>
+      <span className="rounded-full bg-emerald-100 px-1.5 py-0.5">PRO {porcentajePro}%</span>
+    </span>
   );
 }
 
@@ -581,31 +597,33 @@ export function GestionAdmins() {
         <h2 id="titulo-colaboradores" className="text-2xl font-black text-slate-900">
           Colaboradores
         </h2>
-        <div className="flex w-full flex-col gap-3 sm:w-auto sm:flex-row sm:items-center">
-          <label className="flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-3 text-sm font-semibold text-slate-600">
-            <span>Ordenar por</span>
-            <select
-              value={orden}
-              onChange={(evento) => setOrden(evento.target.value as OrdenColaboradores)}
-              className="bg-transparent text-sm font-semibold text-slate-900 outline-none"
-            >
-              <option value="recientes">Último acceso</option>
-              <option value="nombre">Nombre</option>
-              <option value="rol">Rol</option>
-              <option value="estado">Estado</option>
-            </select>
-          </label>
-          <label className="flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-3 text-sm font-semibold text-slate-600">
-            <span>Dirección</span>
-            <select
-              value={direccionOrden}
-              onChange={(evento) => setDireccionOrden(evento.target.value as DireccionOrden)}
-              className="bg-transparent text-sm font-semibold text-slate-900 outline-none"
-            >
-              <option value="asc">Ascendente</option>
-              <option value="desc">Descendente</option>
-            </select>
-          </label>
+        <div className="flex w-full flex-col gap-3 xl:w-auto xl:flex-row xl:items-end">
+          <div className="grid gap-3 sm:grid-cols-2 xl:w-auto">
+            <label className="flex min-w-44 flex-col gap-1 rounded-xl border border-slate-200 bg-white px-3 py-2 text-slate-600">
+              <span className="text-[11px] font-black uppercase tracking-wide">Ordenar por</span>
+              <select
+                value={orden}
+                onChange={(evento) => setOrden(evento.target.value as OrdenColaboradores)}
+                className="w-full rounded-lg bg-slate-50 px-2 py-1.5 text-sm font-semibold text-slate-900 outline-none"
+              >
+                <option value="recientes">Último acceso</option>
+                <option value="nombre">Nombre</option>
+                <option value="rol">Rol</option>
+                <option value="estado">Estado</option>
+              </select>
+            </label>
+            <label className="flex min-w-44 flex-col gap-1 rounded-xl border border-slate-200 bg-white px-3 py-2 text-slate-600">
+              <span className="text-[11px] font-black uppercase tracking-wide">Dirección</span>
+              <select
+                value={direccionOrden}
+                onChange={(evento) => setDireccionOrden(evento.target.value as DireccionOrden)}
+                className="w-full rounded-lg bg-slate-50 px-2 py-1.5 text-sm font-semibold text-slate-900 outline-none"
+              >
+                <option value="asc">Ascendente</option>
+                <option value="desc">Descendente</option>
+              </select>
+            </label>
+          </div>
           <button
             onClick={() => {
               setColaboradorEdicionGeneral(null);
@@ -621,7 +639,7 @@ export function GestionAdmins() {
               setPermisosMaestroEditando(PERMISOS_MAESTRO_VACIOS);
               setPermisosSupervisorEditando(PERMISOS_SUPERVISOR_VACIOS);
             }}
-            className="flex items-center justify-center gap-2 bg-pink-600 text-white px-5 py-3 rounded-xl font-bold shadow hover:bg-pink-700 transition-all shrink-0 w-full sm:w-auto"
+            className="flex w-full shrink-0 items-center justify-center gap-2 rounded-xl bg-pink-600 px-5 py-3 font-bold text-white shadow transition-all hover:bg-pink-700 xl:w-auto"
           >
             <Plus className="w-4 h-4" /> Nuevo colaborador
           </button>
@@ -629,22 +647,26 @@ export function GestionAdmins() {
       </div>
 
       <div className="grid gap-3 rounded-2xl border border-slate-200 bg-white p-4 lg:grid-cols-[1.1fr_1.1fr_0.7fr_0.7fr]">
-        <label className="relative block">
-          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+        <label className="block">
+          <span className="mb-1 block text-[11px] font-black uppercase tracking-wide text-slate-500">
+            Nombre
+          </span>
           <input
             value={filtroNombre}
             onChange={(evento) => setFiltroNombre(evento.target.value)}
             placeholder="Filtrar por nombre"
-            className="w-full rounded-xl border border-slate-200 py-3 pl-10 pr-3 text-sm font-medium outline-none focus:ring-2 focus:ring-pink-400"
+            className="w-full rounded-xl border border-slate-200 px-3 py-3 text-sm font-medium outline-none focus:ring-2 focus:ring-pink-400"
           />
         </label>
-        <label className="relative block">
-          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+        <label className="block">
+          <span className="mb-1 block text-[11px] font-black uppercase tracking-wide text-slate-500">
+            Correo
+          </span>
           <input
             value={filtroEmail}
             onChange={(evento) => setFiltroEmail(evento.target.value)}
             placeholder="Filtrar por correo"
-            className="w-full rounded-xl border border-slate-200 py-3 pl-10 pr-3 text-sm font-medium outline-none focus:ring-2 focus:ring-pink-400"
+            className="w-full rounded-xl border border-slate-200 px-3 py-3 text-sm font-medium outline-none focus:ring-2 focus:ring-pink-400"
           />
         </label>
         <select
@@ -726,10 +748,10 @@ export function GestionAdmins() {
                               colaborador.rol}
                           </span>
                           {colaborador.rol === 'vendedor' && (
-                            <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700">
-                              Comisión STD {colaborador.porcentajeComision}% · PRO{' '}
-                              {colaborador.porcentajeComisionPro}%
-                            </span>
+                            <BanderasComision
+                              porcentajeStandard={colaborador.porcentajeComision}
+                              porcentajePro={colaborador.porcentajeComisionPro}
+                            />
                           )}
                           {colaborador.rol === 'maestro' &&
                             colaborador.permisos?.esMaestroTotal && (
@@ -897,10 +919,10 @@ export function GestionAdmins() {
                       {ETIQUETAS_CARGO[colaborador.rol as CargoColaborador] ?? colaborador.rol}
                     </span>
                     {colaborador.rol === 'vendedor' && (
-                      <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700">
-                        Comisión STD {colaborador.porcentajeComision}% · PRO{' '}
-                        {colaborador.porcentajeComisionPro}%
-                      </span>
+                      <BanderasComision
+                        porcentajeStandard={colaborador.porcentajeComision}
+                        porcentajePro={colaborador.porcentajeComisionPro}
+                      />
                     )}
                     <span
                       className={`text-xs font-semibold px-2 py-0.5 rounded-full ${colaborador.activo ? 'bg-green-100 text-green-700' : 'bg-slate-200 text-slate-600'}`}
@@ -1292,11 +1314,12 @@ interface PropsModalCredencialesDemo {
 function ModalCredencialesDemo({ credenciales, onCerrar }: PropsModalCredencialesDemo) {
   const [copiadoAdmin, setCopiadoAdmin] = useState(false);
   const [copiadoEmpleado, setCopiadoEmpleado] = useState(false);
+  const [copiadoReservas, setCopiadoReservas] = useState(false);
 
   const copiarAdmin = async () => {
     try {
       await navigator.clipboard.writeText(
-        `Admin: ${credenciales.adminEmail} / ${credenciales.adminContrasena}`,
+        `Administrador: ${credenciales.adminEmail} / ${credenciales.adminContrasena}`,
       );
       setCopiadoAdmin(true);
       window.setTimeout(() => setCopiadoAdmin(false), 1500);
@@ -1317,6 +1340,23 @@ function ModalCredencialesDemo({ credenciales, onCerrar }: PropsModalCredenciale
     }
   };
 
+  const copiarReservas = async () => {
+    const lineas = [
+      credenciales.urlReservas ? `Link de reservas: ${credenciales.urlReservas}` : null,
+      credenciales.claveReservas ? `Clave de reservas: ${credenciales.claveReservas}` : null,
+    ].filter(Boolean) as string[];
+
+    if (lineas.length === 0) return;
+
+    try {
+      await navigator.clipboard.writeText(lineas.join('\n'));
+      setCopiadoReservas(true);
+      window.setTimeout(() => setCopiadoReservas(false), 1500);
+    } catch {
+      // Silenciar fallo de portapapeles
+    }
+  };
+
   return (
     <div
       role="dialog"
@@ -1328,7 +1368,7 @@ function ModalCredencialesDemo({ credenciales, onCerrar }: PropsModalCredenciale
       <div className="bg-white rounded-3xl w-full max-w-md shadow-2xl overflow-hidden">
         <div className="flex items-center justify-between gap-4 px-6 py-4 border-b border-slate-200">
           <h2 id="modal-demo-titulo" className="text-sm font-black text-slate-900 uppercase">
-            Demo salon created
+            Salón demo creado
           </h2>
           <button
             onClick={onCerrar}
@@ -1340,11 +1380,11 @@ function ModalCredencialesDemo({ credenciales, onCerrar }: PropsModalCredenciale
         </div>
         <div className="px-6 py-5 space-y-4">
           <p className="text-sm text-slate-500">
-            A demo salon has been created for this vendedor. Share these credentials so they can run
-            demos with clients.
+            Se creó un salón demo para este vendedor. Comparte estos accesos para que pueda
+            presentar la plataforma con clientes.
           </p>
           <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4 space-y-3">
-            <p className="text-xs font-black text-slate-400 uppercase">Admin access</p>
+            <p className="text-xs font-black text-slate-400 uppercase">Acceso administrador</p>
             <div className="flex items-center gap-2">
               <code className="flex-1 px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs font-mono text-slate-900 break-all">
                 {credenciales.adminEmail}
@@ -1366,7 +1406,7 @@ function ModalCredencialesDemo({ credenciales, onCerrar }: PropsModalCredenciale
             </code>
           </div>
           <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4 space-y-3">
-            <p className="text-xs font-black text-slate-400 uppercase">Employee access</p>
+            <p className="text-xs font-black text-slate-400 uppercase">Acceso empleado</p>
             <div className="flex items-center gap-2">
               <code className="flex-1 px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs font-mono text-slate-900 break-all">
                 {credenciales.empleadoEmail}
@@ -1387,13 +1427,39 @@ function ModalCredencialesDemo({ credenciales, onCerrar }: PropsModalCredenciale
               {credenciales.empleadoContrasena}
             </code>
           </div>
+          {(credenciales.urlReservas || credenciales.claveReservas) && (
+            <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4 space-y-3">
+              <p className="text-xs font-black text-slate-400 uppercase">Acceso a reservas</p>
+              {credenciales.urlReservas && (
+                <code className="block px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs font-mono text-slate-900 break-all">
+                  {credenciales.urlReservas}
+                </code>
+              )}
+              {credenciales.claveReservas && (
+                <code className="block px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs font-mono text-slate-900 break-all">
+                  Clave: {credenciales.claveReservas}
+                </code>
+              )}
+              <button
+                onClick={copiarReservas}
+                className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-black text-slate-700 hover:bg-slate-100 transition-colors"
+              >
+                {copiadoReservas ? (
+                  <Check className="w-4 h-4 text-green-600" />
+                ) : (
+                  <Copy className="w-4 h-4 text-slate-500" />
+                )}
+                {copiadoReservas ? 'Copiado' : 'Copiar link y clave'}
+              </button>
+            </div>
+          )}
         </div>
         <div className="px-6 pb-5">
           <button
             onClick={onCerrar}
             className="w-full py-3 rounded-2xl bg-slate-900 text-white text-sm font-black hover:bg-black transition-colors"
           >
-            Done
+            Cerrar
           </button>
         </div>
       </div>

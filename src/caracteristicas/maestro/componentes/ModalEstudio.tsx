@@ -174,11 +174,11 @@ export function ModalEstudio({
         className="fixed inset-0 z-60 flex items-start justify-center overflow-y-auto bg-black/80 p-3 backdrop-blur-xl sm:items-center sm:p-4"
       >
         <div className="flex max-h-[calc(100vh-1.5rem)] w-full max-w-3xl flex-col overflow-hidden rounded-4xl bg-white shadow-2xl sm:max-h-[90vh] sm:rounded-[3rem]">
-          <div className="flex items-start justify-between gap-4 border-b bg-slate-50 p-4 sm:items-center sm:p-8">
+          <div className="flex items-start justify-between gap-4 border-b border-slate-200 bg-linear-to-r from-slate-50 to-white p-5 sm:items-center sm:p-8">
             <div className="min-w-0">
               <h2
                 id="modal-estudio-titulo"
-                className="text-xl font-black italic uppercase tracking-tighter sm:text-2xl"
+                className="text-xl font-black tracking-tight text-slate-900 sm:text-3xl"
               >
                 Registro completado
               </h2>
@@ -187,14 +187,18 @@ export function ModalEstudio({
                 material del salón.
               </p>
             </div>
-            <button onClick={onCerrar} aria-label="Cerrar modal">
-              <XCircle className="w-8 h-8 text-slate-300 hover:text-red-500" />
+            <button
+              onClick={onCerrar}
+              aria-label="Cerrar modal"
+              className="rounded-full p-1 text-slate-300 transition-colors hover:bg-red-50 hover:text-red-500"
+            >
+              <XCircle className="h-8 w-8" />
             </button>
           </div>
 
           <div className="flex-1 overflow-y-auto p-4 sm:p-6 md:p-8">
             <div className="mx-auto flex max-w-2xl flex-col gap-5 sm:gap-6">
-              <section className="rounded-4xl border border-slate-200 bg-slate-50 p-5 sm:p-6">
+              <section className="rounded-4xl border border-slate-200 bg-linear-to-b from-slate-50 to-white p-5 shadow-sm sm:p-6">
                 <div className="mb-4 flex items-center gap-2 text-[11px] font-black uppercase tracking-wide text-pink-600">
                   <Mail className="h-4 w-4" /> Acceso del dueño
                 </div>
@@ -213,7 +217,7 @@ export function ModalEstudio({
                   </p>
                 </div>
 
-                <div className="mt-5 rounded-2xl border border-slate-200 bg-white p-4">
+                <div className="mt-5 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
                   <div className="mb-2 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                     <span className="text-[10px] font-black uppercase tracking-wide text-slate-500">
                       Contraseña inicial
@@ -221,7 +225,7 @@ export function ModalEstudio({
                     <button
                       type="button"
                       onClick={() => copiarTexto('contrasena', confirmacionAlta.contrasenaDueno)}
-                      className="inline-flex items-center gap-2 rounded-full border border-slate-200 px-3 py-1 text-[10px] font-black uppercase text-slate-600"
+                      className="inline-flex items-center gap-2 rounded-full border border-slate-200 px-3 py-1.5 text-[10px] font-black uppercase text-slate-600 transition-colors hover:bg-slate-50"
                     >
                       <Copy className="h-3.5 w-3.5" />
                       {copiado === 'contrasena' ? 'Copiada' : 'Copiar'}
@@ -253,7 +257,7 @@ export function ModalEstudio({
                     type="button"
                     onClick={descargarQr}
                     disabled={!qrReserva}
-                    className="inline-flex items-center justify-center gap-2 rounded-full bg-slate-950 px-4 py-2 text-xs font-black uppercase text-white disabled:opacity-50"
+                    className="inline-flex items-center justify-center gap-2 rounded-full bg-slate-950 px-4 py-2 text-xs font-black uppercase text-white transition-colors hover:bg-slate-800 disabled:opacity-50"
                   >
                     <Download className="h-4 w-4" /> Descargar
                   </button>
@@ -272,12 +276,12 @@ export function ModalEstudio({
                 </div>
               </section>
 
-              <section className="rounded-4xl border border-slate-900 bg-slate-950 p-5 text-white sm:p-6">
-                <div className="mb-4 flex items-center gap-2 text-[11px] font-black uppercase tracking-wide text-pink-400">
+              <section className="rounded-4xl border border-slate-800 bg-slate-950 p-5 text-white shadow-inner sm:p-6">
+                <div className="mb-4 flex items-center gap-2 text-[11px] font-black uppercase tracking-wide text-pink-300">
                   <KeyRound className="h-4 w-4" /> Acceso público a reservas
                 </div>
                 <div className="space-y-4">
-                  <div className="rounded-2xl border border-slate-800 bg-slate-900 px-4 py-4">
+                  <div className="rounded-2xl border border-slate-700 bg-slate-900/90 px-4 py-4">
                     <div className="mb-2 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                       <span className="text-[10px] font-black uppercase tracking-wide text-slate-400">
                         Clave acceso clientes
@@ -287,7 +291,7 @@ export function ModalEstudio({
                         onClick={() =>
                           copiarTexto('clave-clientes', confirmacionAlta.claveClientes)
                         }
-                        className="inline-flex items-center gap-2 rounded-full border border-slate-700 px-3 py-1 text-[10px] font-black uppercase text-white"
+                        className="inline-flex items-center gap-2 rounded-full border border-slate-600 px-3 py-1.5 text-[10px] font-black uppercase text-white transition-colors hover:bg-slate-800"
                       >
                         <Copy className="h-3.5 w-3.5" />
                         {copiado === 'clave-clientes' ? 'Copiada' : 'Copiar'}
@@ -298,7 +302,7 @@ export function ModalEstudio({
                     </code>
                   </div>
 
-                  <div className="rounded-2xl border border-slate-800 bg-slate-900 px-4 py-4">
+                  <div className="rounded-2xl border border-slate-700 bg-slate-900/90 px-4 py-4">
                     <div className="mb-2 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                       <span className="text-[10px] font-black uppercase tracking-wide text-slate-400">
                         URL para compartir
@@ -306,7 +310,7 @@ export function ModalEstudio({
                       <button
                         type="button"
                         onClick={() => copiarTexto('url-reserva', confirmacionAlta.urlReserva)}
-                        className="inline-flex items-center gap-2 rounded-full border border-slate-700 px-3 py-1 text-[10px] font-black uppercase text-white"
+                        className="inline-flex items-center gap-2 rounded-full border border-slate-600 px-3 py-1.5 text-[10px] font-black uppercase text-white transition-colors hover:bg-slate-800"
                       >
                         <Copy className="h-3.5 w-3.5" />
                         {copiado === 'url-reserva' ? 'Copiada' : 'Copiar'}
@@ -708,7 +712,7 @@ export function ModalEstudio({
               return (
                 <div
                   key={cat}
-                  className="space-y-3 bg-slate-50/50 p-4 sm:p-6 rounded-4xl border border-slate-100"
+                  className="space-y-4 rounded-3xl border border-slate-200 bg-linear-to-b from-slate-50 to-white p-4 shadow-sm sm:p-6"
                 >
                   <button
                     type="button"
@@ -718,15 +722,15 @@ export function ModalEstudio({
                         [cat]: !categoriaAbierta,
                       }))
                     }
-                    className="flex w-full items-center justify-between gap-3 rounded-2xl bg-white/90 px-4 py-3 text-left"
+                    className="flex w-full items-center justify-between gap-3 rounded-2xl border border-slate-200 bg-white px-4 py-3 text-left transition-colors hover:bg-slate-50"
                     aria-expanded={categoriaAbierta}
                     aria-controls={`categoria-servicios-${cat.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`}
                   >
                     <div className="flex min-w-0 items-center gap-3">
-                      <h4 className="truncate text-[10px] font-black bg-pink-600 text-white px-3 py-1 rounded-md uppercase">
+                      <h4 className="inline-flex whitespace-nowrap rounded-full bg-pink-600 px-3 py-1.5 text-[11px] font-black uppercase tracking-wide text-white sm:text-xs">
                         {cat}
                       </h4>
-                      <span className="text-[10px] font-bold text-slate-600">
+                      <span className="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-bold text-slate-600">
                         {cantidadSeleccionados} seleccionados
                       </span>
                     </div>
@@ -740,7 +744,7 @@ export function ModalEstudio({
                   {categoriaAbierta && (
                     <div
                       id={`categoria-servicios-${cat.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`}
-                      className="space-y-4"
+                      className="space-y-5"
                     >
                       <div className="grid grid-cols-1 gap-3 md:grid-cols-2 lg:grid-cols-3">
                         {todos.map((s) => {
@@ -752,7 +756,7 @@ export function ModalEstudio({
                           return (
                             <div
                               key={`${cat}-${s}`}
-                              className={`flex flex-col justify-between p-4 rounded-2xl border-2 gap-3 transition-all ${sel ? 'bg-rose-100 border-rose-500 shadow-md' : 'bg-white border-slate-200 hover:border-rose-300 hover:shadow-sm'}`}
+                              className={`flex flex-col justify-between gap-3 rounded-2xl border-2 p-4 transition-all ${sel ? 'border-rose-500 bg-rose-100 shadow-md ring-1 ring-rose-200' : 'border-slate-200 bg-white hover:border-rose-300 hover:shadow-sm'}`}
                             >
                               <button
                                 type="button"
@@ -834,12 +838,12 @@ export function ModalEstudio({
                             }))
                           }
                           placeholder={`+ Añadir servicio en ${cat}...`}
-                          className="flex-1 text-[10px] font-bold p-3 rounded-xl border border-slate-200 outline-none focus:border-pink-400 bg-white"
+                          className="flex-1 rounded-xl border border-slate-200 bg-white p-3 text-sm font-semibold text-slate-700 outline-none transition-colors focus:border-pink-400"
                         />
                         <button
                           type="button"
                           onClick={() => agregarServicioPersonalizado(cat)}
-                          className="bg-slate-800 text-white px-4 py-2 rounded-xl text-[10px] font-black hover:bg-black"
+                          className="rounded-xl bg-slate-800 px-4 py-2 text-xs font-black text-white transition-colors hover:bg-black"
                         >
                           AÑADIR
                         </button>
@@ -1050,13 +1054,26 @@ export function ModalEstudio({
           </section>
 
           {modo === 'ADD' && (
-            <section className="bg-slate-900 p-8 rounded-4xl text-white">
-              <div className="font-black text-xs text-pink-400 uppercase tracking-wide mb-3">
-                {textosAgregar.tituloInformativo}
+            <section className="rounded-4xl border border-slate-800 bg-slate-900 p-6 text-white sm:p-8">
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-pink-500/20 text-pink-300">
+                  <KeyRound className="h-4 w-4" />
+                </span>
+                <div className="font-black text-xs uppercase tracking-wide text-pink-300">
+                  {textosAgregar.tituloInformativo}
+                </div>
               </div>
-              <p className="text-sm font-medium text-slate-300">
+              <p className="mt-3 text-sm font-medium leading-relaxed text-slate-300">
                 {textosAgregar.descripcionInformativa}
               </p>
+              <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                <div className="rounded-2xl border border-slate-700 bg-slate-800/70 px-4 py-3 text-xs font-semibold text-slate-200">
+                  Contraseña del dueño lista para copiar al finalizar.
+                </div>
+                <div className="rounded-2xl border border-slate-700 bg-slate-800/70 px-4 py-3 text-xs font-semibold text-slate-200">
+                  Clave cliente y URL pública generadas con QR descargable.
+                </div>
+              </div>
             </section>
           )}
 

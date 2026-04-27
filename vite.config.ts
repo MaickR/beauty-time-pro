@@ -7,16 +7,39 @@ export default defineConfig(({ mode }) => {
   const variables = loadEnv(mode, process.cwd(), '');
   const urlApi = variables.VITE_URL_API || 'http://localhost:3000';
 
+  const desactivarCacheDev = {
+    name: 'btp-desactivar-cache-dev',
+    configureServer(server: import('vite').ViteDevServer) {
+      server.middlewares.use((req, res, next) => {
+        delete req.headers['if-none-match'];
+        delete req.headers['if-modified-since'];
+        res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+        res.setHeader('Pragma', 'no-cache');
+        res.setHeader('Expires', '0');
+        next();
+      });
+    },
+  };
+
   return {
     plugins: [
       react(),
       // Tailwind CSS v4 — sin tailwind.config.js, detección automática de clases
       tailwindcss(),
+      desactivarCacheDev,
     ],
+    optimizeDeps: {
+      force: true,
+    },
     server: {
       host: '0.0.0.0',
       port: 5173,
       strictPort: true,
+      headers: {
+        'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate',
+        Pragma: 'no-cache',
+        Expires: '0',
+      },
       hmr: {
         host: 'localhost',
         port: 5173,

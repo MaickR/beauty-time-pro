@@ -1,0 +1,211 @@
+/* =============================================================
+ * Design System Salon Pro Master — Button Variants
+ * Fase 2 de 5: Botones, variantes y estados
+ * Todas las clases usan exclusivamente variables de tokens.css.
+ * ============================================================= */
+
+@layer components {
+  /* ── Base compartida ────────────────────────────────────────── */
+  .btn-base {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    border-radius: var(--radius-md);
+    padding: 9px 20px;
+    font-size: 13px;
+    font-weight: 500;
+    line-height: 1;
+    cursor: pointer;
+    white-space: nowrap;
+    text-decoration: none;
+    transition:
+      background-color 0.15s ease,
+      border-color 0.15s ease,
+      color 0.15s ease,
+      transform 0.1s ease;
+  }
+
+  .btn-base:disabled,
+  .btn-base[aria-disabled='true'] {
+    cursor: not-allowed;
+    opacity: 0.55;
+    pointer-events: none;
+  }
+
+  /* ── Primario — CTA, Guardar, Confirmar, Agendar ────────────── */
+  .btn-primary {
+    background-color: var(--c-primary);
+    color: #ffffff;
+    border: none;
+    border-radius: var(--radius-md);
+    padding: 9px 20px;
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+    transition:
+      background-color 0.15s ease,
+      transform 0.1s ease;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    white-space: nowrap;
+    text-decoration: none;
+  }
+
+  .btn-primary:hover:not(:disabled) {
+    background-color: var(--c-primary-hover);
+  }
+
+  .btn-primary:active:not(:disabled) {
+    background-color: var(--c-primary-active);
+    transform: scale(0.98);
+  }
+
+  .btn-primary:disabled,
+  .btn-primary[aria-disabled='true'] {
+    background-color: var(--c-bg-tertiary);
+    color: var(--c-text-tertiary);
+    cursor: not-allowed;
+  }
+
+  /* ── Secundario — Ver, Explorar, Rose Gold ──────────────────── */
+  .btn-secondary {
+    background-color: var(--c-accent);
+    color: var(--c-accent-text);
+    border: none;
+    border-radius: var(--radius-md);
+    padding: 9px 20px;
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: background-color 0.15s ease;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    white-space: nowrap;
+    text-decoration: none;
+  }
+
+  .btn-secondary:hover:not(:disabled) {
+    background-color: var(--c-accent-hover);
+    color: #ffffff;
+  }
+
+  .btn-secondary:active:not(:disabled) {
+    background-color: var(--c-accent-dark);
+    color: #ffffff;
+    transform: scale(0.98);
+  }
+
+  .btn-secondary:disabled,
+  .btn-secondary[aria-disabled='true'] {
+    cursor: not-allowed;
+    opacity: 0.55;
+  }
+
+  /* ── Outline — Cancelar, Volver (variante con identidad) ────── */
+  .btn-outline {
+    background-color: transparent;
+    color: var(--c-primary);
+    border: 1.5px solid var(--c-primary);
+    border-radius: var(--radius-md);
+    padding: 8px 20px;
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: background-color 0.15s ease;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    white-space: nowrap;
+    text-decoration: none;
+  }
+
+  .btn-outline:hover:not(:disabled) {
+    background-color: var(--c-primary-50);
+  }
+
+  .btn-outline:active:not(:disabled) {
+    background-color: var(--c-primary-100);
+    transform: scale(0.98);
+  }
+
+  .btn-outline:disabled,
+  .btn-outline[aria-disabled='true'] {
+    cursor: not-allowed;
+    opacity: 0.55;
+  }
+
+  /* ── Ghost — Cancelar, Volver (neutro, sin identidad) ───────── */
+  .btn-ghost {
+    background-color: transparent;
+    color: var(--c-text-secondary);
+    border: 1.5px solid var(--c-border-strong);
+    border-radius: var(--radius-md);
+    padding: 8px 20px;
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+    transition:
+      background-color 0.15s ease,
+      color 0.15s ease;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    white-space: nowrap;
+    text-decoration: none;
+  }
+
+  .btn-ghost:hover:not(:disabled) {
+    background-color: var(--c-bg-tertiary);
+    color: var(--c-text-label);
+  }
+
+  .btn-ghost:active:not(:disabled) {
+    transform: scale(0.98);
+  }
+
+  .btn-ghost:disabled,
+  .btn-ghost[aria-disabled='true'] {
+    cursor: not-allowed;
+    opacity: 0.55;
+  }
+
+  /* ── Danger — Eliminar, Rechazar ────────────────────────────── */
+  .btn-danger {
+    background-color: transparent;
+    color: var(--c-danger);
+    border: 1.5px solid var(--c-danger);
+    border-radius: var(--radius-md);
+    padding: 8px 20px;
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: background-color 0.15s ease;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    white-space: nowrap;
+    text-decoration: none;
+  }
+
+  .btn-danger:hover:not(:disabled) {
+    background-color: var(--c-danger-bg);
+  }
+
+  .btn-danger:active:not(:disabled) {
+    transform: scale(0.98);
+  }
+
+  .btn-danger:disabled,
+  .btn-danger[aria-disabled='true'] {
+    cursor: not-allowed;
+    opacity: 0.55;
+  }
+}

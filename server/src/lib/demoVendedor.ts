@@ -1,4 +1,4 @@
-import { createHmac, randomUUID } from 'node:crypto';
+import { randomUUID } from 'node:crypto';
 import { prisma } from '../prismaCliente.js';
 import { asegurarCamposComisionVendedorUsuario } from './comisionVendedor.js';
 import { obtenerColumnasTabla } from './compatibilidadEsquema.js';
@@ -6,7 +6,6 @@ import { generarClavesSalonUnicas } from './clavesSalon.js';
 import { generarSlugUnico } from '../utils/generarSlug.js';
 import { obtenerFechaISOEnZona, obtenerZonaHorariaPorPais } from '../utils/zonasHorarias.js';
 import { generarHashContrasena } from '../utils/contrasenas.js';
-import { env } from './env.js';
 
 function filtrarDatosPorColumnasDisponibles(
   datos: Record<string, unknown>,
@@ -25,7 +24,6 @@ const DESCRIPCION_DEMO =
   'Salon demo completamente operativo para presentar Beauty Time Pro con agenda, productos, clientes y cobros sin tocar informacion productiva.';
 const NOMBRE_ADMIN_DEMO = 'Admin Demo';
 const NOMBRE_EMPLEADO_DEMO = 'Especialista Demo';
-const CONTRASENA_PREFIJO_DEMO = 'SalonPro!';
 
 const SERVICIOS_DEMO = [
   { name: 'Haircut Signature', duration: 60, price: 42000 },
@@ -147,24 +145,34 @@ export function obtenerCorreosDemoVendedor(params: {
 }) {
   const primerNombre = obtenerPrimerNombreDemo(params.nombreBase, params.emailBase);
   const sufijoUsuario = params.usuarioId
-    ? params.usuarioId.replace(/[^a-zA-Z0-9]/g, '').toLowerCase().slice(-6)
+    ? params.usuarioId.replace(/[^a-zA-Z0-9]/g, '').toLowerCase().slice(-5)
     : '';
-  const segmentoUnico = sufijoUsuario ? `${primerNombre}-${sufijoUsuario}` : primerNombre;
+  const baseCorreo = primerNombre.replace(/-/g, '');
+  const segmentoUnico = `${baseCorreo}${sufijoUsuario || 'demo'}`.slice(0, 24);
 
   return {
-    admin: `${segmentoUnico}-salon@salonpromaster.com`,
-    empleado: `${segmentoUnico}-emp@salonpromaster.com`,
+    admin: `${segmentoUnico}@salonpromaster.com`,
+    empleado: `${segmentoUnico}.equipo@salonpromaster.com`,
   };
 }
 
-function generarContrasenaDemo(usuarioId: string) {
-  const semilla = createHmac('sha256', env.JWT_SECRETO)
-    .update(`demo-vendedor:${usuarioId}`)
-    .digest('base64url')
-    .replace(/[^A-Za-z0-9]/g, '')
-    .slice(0, 6);
+function construirSufijoUsuario(usuarioId: string) {
+  const semilla = usuarioId.replace(/[^a-zA-Z0-9]/g, '').toLowerCase();
+  return semilla.slice(-4) || 'demo';
+}
 
-  return `${CONTRASENA_PREFIJO_DEMO}${semilla}`;
+function generarContrasenaDemoPorTipo(params: {
+  usuarioId: string;
+  nombreBase?: string;
+  emailBase: string;
+  tipo: 'admin' | 'empleado';
+}) {
+  const primerNombre = obtenerPrimerNombreDemo(params.nombreBase, params.emailBase).replace(/-/g, '');
+  const nombreSegmento = `${primerNombre.charAt(0).toUpperCase()}${primerNombre.slice(1)}`.slice(0, 6) || 'Demo';
+  const tipoSegmento = params.tipo === 'admin' ? 'Adm' : 'Emp';
+  const sufijo = construirSufijoUsuario(params.usuarioId);
+  const contrasena = `${nombreSegmento}${tipoSegmento}${sufijo}`;
+  return contrasena.length >= 8 ? contrasena : `${contrasena}2025`.slice(0, 12);
 }
 
 function esErrorColumnaComisionLegacy(error: unknown): boolean {
@@ -176,28 +184,43 @@ export function obtenerCredencialesDemoVendedor(params: {
   usuarioId: string;
   emailBase: string;
   nombreBase?: string;
+  claveReservas?: string | null;
+  urlReservas?: string | null;
 }) {
   const correos = obtenerCorreosDemoVendedor({
     usuarioId: params.usuarioId,
     emailBase: params.emailBase,
     nombreBase: params.nombreBase,
   });
-  const contrasenaCompartida = generarContrasenaDemo(params.usuarioId);
+  const adminContrasena = generarContrasenaDemoPorTipo({
+    usuarioId: params.usuarioId,
+    emailBase: params.emailBase,
+    nombreBase: params.nombreBase,
+    tipo: 'admin',
+  });
+  const empleadoContrasena = generarContrasenaDemoPorTipo({
+    usuarioId: params.usuarioId,
+    emailBase: params.emailBase,
+    nombreBase: params.nombreBase,
+    tipo: 'empleado',
+  });
 
   return {
     adminEmail: correos.admin,
-    adminContrasena: contrasenaCompartida,
+    adminContrasena,
     empleadoEmail: correos.empleado,
-    empleadoContrasena: contrasenaCompartida,
-    contrasenaCompartida,
+    empleadoContrasena,
+    contrasenaCompartida: null,
+    claveReservas: params.claveReservas ?? null,
+    urlReservas: params.urlReservas ?? null,
   };
 }
 
 async function asegurarUsuarioDuenoDemo(params: {
-  usuarioId: string;
   estudioId: string;
   nombreUsuario: string;
   email: string;
+  contrasena: string;
 }) {
   const existente = await prisma.usuario.findFirst({
     where: { estudioId: params.estudioId, rol: 'dueno' },
@@ -209,7 +232,7 @@ async function asegurarUsuarioDuenoDemo(params: {
   });
 
   await asegurarCamposComisionVendedorUsuario();
-  const hashContrasena = await generarHashContrasena(generarContrasenaDemo(params.usuarioId));
+  const hashContrasena = await generarHashContrasena(params.contrasena);
 
   if (existente) {
     return prisma.usuario.update({
@@ -279,11 +302,11 @@ async function asegurarUsuarioDuenoDemo(params: {
 }
 
 async function asegurarEmpleadoDemo(params: {
-  usuarioId: string;
   estudioId: string;
   email: string;
+  contrasena: string;
 }) {
-  const hashContrasena = await generarHashContrasena(generarContrasenaDemo(params.usuarioId));
+  const hashContrasena = await generarHashContrasena(params.contrasena);
   const accesoExistente = await prisma.empleadoAcceso.findUnique({
     where: { email: params.email },
     select: { id: true },
@@ -350,15 +373,15 @@ async function asegurarEstructuraDemoVendedor(params: {
   });
 
   await asegurarUsuarioDuenoDemo({
-    usuarioId: params.usuarioId,
     estudioId: params.estudioId,
     nombreUsuario: params.nombreUsuario,
     email: credencialesDemo.adminEmail,
+    contrasena: credencialesDemo.adminContrasena,
   });
   await asegurarEmpleadoDemo({
-    usuarioId: params.usuarioId,
     estudioId: params.estudioId,
     email: credencialesDemo.empleadoEmail,
+    contrasena: credencialesDemo.empleadoContrasena,
   });
 
   return credencialesDemo;
@@ -730,6 +753,7 @@ export async function asegurarSalonDemoVendedor(params: {
           id: true,
           slug: true,
           nombre: true,
+          claveCliente: true,
         },
       },
     },
@@ -752,6 +776,7 @@ export async function asegurarSalonDemoVendedor(params: {
       id: usuario.estudio.id,
       slug: usuario.estudio.slug,
       nombre: usuario.estudio.nombre,
+      claveCliente: usuario.estudio.claveCliente,
     };
   }
 
@@ -794,6 +819,7 @@ export async function asegurarSalonDemoVendedor(params: {
       id: true,
       slug: true,
       nombre: true,
+      claveCliente: true,
     },
   });
 
@@ -853,6 +879,7 @@ export async function obtenerSalonDemoVendedor(usuarioId: string) {
       id: true,
       slug: true,
       nombre: true,
+      claveCliente: true,
       plan: true,
       estado: true,
       activo: true,

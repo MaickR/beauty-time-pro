@@ -1,0 +1,145 @@
+/* =============================================================
+ * Design System Salon Pro Master — Badges & Alerts
+ * Fase 3 de 5: Estados, indicadores y mensajes de sistema
+ * Todas las clases usan exclusivamente variables de tokens.css.
+ * ============================================================= */
+
+@layer components {
+  /* ── Badge base ─────────────────────────────────────────────── */
+  .badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 3px 10px;
+    border-radius: var(--radius-pill);
+    font-size: 11px;
+    font-weight: 500;
+    white-space: nowrap;
+    line-height: 1.4;
+  }
+
+  .badge::before {
+    content: '';
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    display: inline-block;
+    flex-shrink: 0;
+  }
+
+  /* ── Variantes de estado ────────────────────────────────────── */
+
+  /* Activo / Confirmado / Pago recibido */
+  .badge-active {
+    background: var(--c-success-bg);
+    color: var(--c-success-text);
+  }
+  .badge-active::before {
+    background: var(--c-success);
+  }
+
+  /* Pendiente / Por confirmar */
+  .badge-pending {
+    background: var(--c-accent-100);
+    color: var(--c-accent-dark);
+  }
+  .badge-pending::before {
+    background: var(--c-accent);
+  }
+
+  /* Suspendido temporalmente */
+  .badge-suspend {
+    background: var(--c-suspend-bg);
+    color: var(--c-suspend-text);
+  }
+  .badge-suspend::before {
+    background: var(--c-suspend);
+  }
+
+  /* Cancelado / Error / Inactivo / Rechazado */
+  .badge-danger {
+    background: var(--c-danger-bg);
+    color: var(--c-danger-text);
+  }
+  .badge-danger::before {
+    background: var(--c-danger);
+  }
+
+  /* Informativo */
+  .badge-info {
+    background: var(--c-info-bg);
+    color: var(--c-info-text);
+  }
+  .badge-info::before {
+    background: var(--c-info);
+  }
+
+  /* Premium / Feature especial */
+  .badge-premium {
+    background: var(--c-premium-bg);
+    color: var(--c-premium-text);
+  }
+  .badge-premium::before {
+    background: var(--c-premium);
+  }
+
+  /* Advertencia / Por vencer */
+  .badge-warning {
+    background: var(--c-warning-bg);
+    color: var(--c-warning-text);
+  }
+  .badge-warning::before {
+    background: var(--c-warning);
+  }
+
+  /* Neutro / Bloqueado / Sin datos */
+  .badge-neutral {
+    background: var(--c-bg-tertiary);
+    color: var(--c-text-secondary);
+  }
+  .badge-neutral::before {
+    background: var(--c-text-tertiary);
+  }
+
+  /* ── Alertas de bloque (mensajes de sistema) ────────────────── */
+  .alert {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    padding: 12px 16px;
+    border-radius: var(--radius-md);
+    font-size: 13px;
+    border: 1px solid transparent;
+    line-height: 1.5;
+  }
+
+  .alert-success {
+    background: var(--c-success-bg);
+    color: var(--c-success-text);
+    border-color: #bbf7d0;
+  }
+
+  .alert-warning {
+    background: var(--c-warning-bg);
+    color: var(--c-warning-text);
+    border-color: #fde68a;
+  }
+
+  .alert-danger {
+    background: var(--c-danger-bg);
+    color: var(--c-danger-text);
+    border-color: #fecaca;
+  }
+
+  .alert-info {
+    background: var(--c-info-bg);
+    color: var(--c-info-text);
+    border-color: #bfdbfe;
+  }
+
+  .alert-suspend {
+    background: var(--c-suspend-bg);
+    color: var(--c-suspend-text);
+    border-color: #fde047;
+  }
+}

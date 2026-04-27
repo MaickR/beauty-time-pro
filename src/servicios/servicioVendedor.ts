@@ -98,7 +98,9 @@ export interface SalonDemoVendedor {
     adminContrasena: string;
     empleadoEmail: string;
     empleadoContrasena: string;
-    contrasenaCompartida: string;
+    contrasenaCompartida: string | null;
+    claveReservas?: string | null;
+    urlReservas?: string | null;
   };
 }
 

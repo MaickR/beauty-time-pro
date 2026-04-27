@@ -265,7 +265,11 @@ function filtrarDatosPorColumnas(
 }
 
 function construirSelectUsuariosCompat(columnasDisponibles: Set<string>) {
-  return construirSelectDesdeColumnas(columnasDisponibles, [...CAMPOS_USUARIO_COLABORADOR]);
+  const camposSeleccionables = SOPORTA_PORCENTAJE_COMISION_PRO
+    ? [...CAMPOS_USUARIO_COLABORADOR]
+    : CAMPOS_USUARIO_COLABORADOR.filter((campo) => campo !== 'porcentajeComisionPro');
+
+  return construirSelectDesdeColumnas(columnasDisponibles, camposSeleccionables);
 }
 
 async function listarColaboradoresCompat() {
@@ -831,13 +835,17 @@ export async function rutasAdmins(servidor: FastifyInstance): Promise<void> {
         }
         // Vendedor no tiene permisos granulares
 
-        if (cargo === 'vendedor') {
-          await asegurarSalonDemoVendedor({
-            usuarioId: nuevoColaborador.id,
-            nombre: nuevoColaborador.nombre,
-            email: nuevoColaborador.email,
-          });
-        }
+        const salonDemoVendedor =
+          cargo === 'vendedor'
+            ? await asegurarSalonDemoVendedor({
+                usuarioId: nuevoColaborador.id,
+                nombre: nuevoColaborador.nombre,
+                email: nuevoColaborador.email,
+              })
+            : null;
+
+        const claveReservasDemo = salonDemoVendedor?.claveCliente ?? null;
+        const urlReservasDemo = claveReservasDemo ? `/reservar/${claveReservasDemo}` : null;
 
         const credencialesDemo =
           cargo === 'vendedor'
@@ -845,6 +853,8 @@ export async function rutasAdmins(servidor: FastifyInstance): Promise<void> {
                 usuarioId: nuevoColaborador.id,
                 emailBase: nuevoColaborador.email,
                 nombreBase: nuevoColaborador.nombre,
+                claveReservas: claveReservasDemo,
+                urlReservas: urlReservasDemo,
               })
             : null;
 

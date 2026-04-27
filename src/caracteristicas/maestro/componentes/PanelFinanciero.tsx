@@ -28,9 +28,15 @@ interface PropsPanelFinanciero {
   estudios: Estudio[];
   onAbrirPago: (estudio: Estudio) => void;
   onRecargar: () => void;
+  vigenciasActualizadas?: Record<string, string>;
 }
 
-export function PanelFinanciero({ estudios, onAbrirPago, onRecargar }: PropsPanelFinanciero) {
+export function PanelFinanciero({
+  estudios,
+  onAbrirPago,
+  onRecargar,
+  vigenciasActualizadas,
+}: PropsPanelFinanciero) {
   const { mostrarToast } = usarToast();
   const clienteConsulta = useQueryClient();
   const [busqueda, setBusqueda] = useState('');
@@ -110,7 +116,22 @@ export function PanelFinanciero({ estudios, onAbrirPago, onRecargar }: PropsPane
   };
 
   const { filtrados, totalPaginas, paginados } = useMemo(() => {
-    let resultado = [...estudios];
+    let resultado = estudios.map((estudio) => {
+      const vigenciaActualizada = vigenciasActualizadas?.[estudio.id];
+      if (!vigenciaActualizada) {
+        return estudio;
+      }
+
+      return {
+        ...estudio,
+        paidUntil: vigenciaActualizada,
+        estado:
+          estudio.estado === 'suspendido' || estudio.estado === 'bloqueado'
+            ? 'aprobado'
+            : estudio.estado,
+      } as Estudio;
+    });
+
     if (filtroPais !== 'Todos') resultado = resultado.filter((e) => e.country === filtroPais);
     if (filtroCobro === 'pendientes_pago') {
       resultado = resultado.filter((estudio) => {
@@ -134,7 +155,7 @@ export function PanelFinanciero({ estudios, onAbrirPago, onRecargar }: PropsPane
       totalPaginas: total,
       paginados: resultado.slice(inicio, inicio + REGISTROS_POR_PAGINA),
     };
-  }, [estudios, filtroCobro, filtroPais, busquedaAplicada, pagina]);
+  }, [estudios, vigenciasActualizadas, filtroCobro, filtroPais, busquedaAplicada, pagina]);
 
   return (
     <div className="space-y-6">

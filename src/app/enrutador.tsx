@@ -54,7 +54,35 @@ const PaginaAdminEstudio = lazy(() =>
   })),
 );
 const PaginaMaestro = lazy(() =>
-  import('../caracteristicas/maestro/PaginaMaestro').then((m) => ({ default: m.PaginaMaestro })),
+  import('../caracteristicas/maestro/PaginaMaestro')
+    .then((m) => {
+      if (typeof window !== 'undefined') {
+        window.sessionStorage.removeItem('btp_reintento_import_maestro');
+      }
+
+      return { default: m.PaginaMaestro };
+    })
+    .catch((error: unknown) => {
+      const mensaje = String(error ?? '');
+      const esFalloDeImportacionDinamica =
+        mensaje.includes('Failed to fetch dynamically imported module') ||
+        mensaje.includes('ERR_CACHE_READ_FAILURE');
+
+      if (typeof window !== 'undefined' && esFalloDeImportacionDinamica) {
+        const claveRecuperacion = 'btp_reintento_import_maestro';
+        const yaReintento = window.sessionStorage.getItem(claveRecuperacion) === '1';
+
+        if (!yaReintento) {
+          window.sessionStorage.setItem(claveRecuperacion, '1');
+          window.location.reload();
+          return new Promise<never>(() => {
+            // Mantiene Suspense activo mientras se recarga la pagina.
+          });
+        }
+      }
+
+      throw error;
+    }),
 );
 const PaginaReserva = lazy(() =>
   import('../caracteristicas/reserva/PaginaReserva').then((m) => ({ default: m.PaginaReserva })),

@@ -251,7 +251,8 @@ async function asegurarSlugEstudioUsuario(
 
 function normalizarIdentificadorAcceso(identificador: string) {
   const valorLimpio = identificador.trim();
-  const esCorreo = valorLimpio.includes('@');
+  const contieneLetras = /[a-zA-Z]/.test(valorLimpio);
+  const esCorreo = valorLimpio.includes('@') || contieneLetras;
 
   if (esCorreo) {
     return {

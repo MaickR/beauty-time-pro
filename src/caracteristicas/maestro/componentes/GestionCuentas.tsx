@@ -98,12 +98,7 @@ interface PropsBadgeEstado {
 
 function BadgeEstado({ activo }: PropsBadgeEstado) {
   return (
-    <span
-      className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold ${
-        activo ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-600'
-      }`}
-    >
-      <span className={`w-1.5 h-1.5 rounded-full ${activo ? 'bg-green-500' : 'bg-red-400'}`} />
+    <span className={activo ? 'badge badge-active' : 'badge badge-suspend'}>
       {activo ? 'Activo' : 'Suspendido'}
     </span>
   );
@@ -124,7 +119,7 @@ function obtenerEstadoSuscripcionSalon(estudio: EstudioConAdmin): EstadoSuscripc
   if (admin && !admin.activo) {
     return {
       etiqueta: 'Suspendida',
-      clases: 'bg-slate-200 text-slate-700',
+      clases: 'badge badge-suspend',
     };
   }
 
@@ -140,20 +135,20 @@ function obtenerEstadoSuscripcionSalon(estudio: EstudioConAdmin): EstadoSuscripc
   if (diferenciaDias < 0) {
     return {
       etiqueta: 'Vencida',
-      clases: 'bg-red-100 text-red-700',
+      clases: 'badge badge-danger',
     };
   }
 
   if (diferenciaDias < 7) {
     return {
       etiqueta: 'Por vencer',
-      clases: 'bg-yellow-100 text-yellow-800',
+      clases: 'badge badge-warning',
     };
   }
 
   return {
     etiqueta: 'Activa',
-    clases: 'bg-green-100 text-green-700',
+    clases: 'badge badge-active',
   };
 }
 
@@ -165,9 +160,7 @@ function BadgeSuscripcion({ estudio }: PropsBadgeSuscripcion) {
   const estado = obtenerEstadoSuscripcionSalon(estudio);
 
   return (
-    <span
-      className={`inline-flex items-center gap-2 rounded-full px-2.5 py-1 text-xs font-semibold ${estado.clases}`}
-    >
+    <span className={estado.clases}>
       <span className="h-2 w-2 rounded-full bg-current opacity-70" />
       {estado.etiqueta}
     </span>

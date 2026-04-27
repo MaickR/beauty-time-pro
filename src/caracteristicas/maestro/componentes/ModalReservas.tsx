@@ -165,37 +165,43 @@ export function ModalReservas({ onCerrar }: PropsModalReservas) {
 
         {/* Controles de fecha y filtros */}
         <div className="px-6 py-4 border-b border-slate-100 space-y-3">
-          <div className="flex flex-wrap items-center gap-3">
-            <CalendarDays className="w-4 h-4 text-slate-400" />
-            <label className="sr-only" htmlFor="reservas-fecha-desde">
-              Desde
-            </label>
-            <input
-              id="reservas-fecha-desde"
-              type="date"
-              value={fechaInicio}
-              onChange={(e) => {
-                setFechaInicio(e.target.value);
-                setPagina(1);
-              }}
-              className="rounded-xl border border-slate-200 px-3 py-2 text-sm font-medium outline-none focus:ring-2 focus:ring-pink-500"
-            />
-            <span className="text-xs font-bold text-slate-400">a</span>
-            <label className="sr-only" htmlFor="reservas-fecha-hasta">
-              Hasta
-            </label>
-            <input
-              id="reservas-fecha-hasta"
-              type="date"
-              value={fechaFin}
-              onChange={(e) => {
-                setFechaFin(e.target.value);
-                setPagina(1);
-              }}
-              className="rounded-xl border border-slate-200 px-3 py-2 text-sm font-medium outline-none focus:ring-2 focus:ring-pink-500"
-            />
+          <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+            <div className="flex items-start gap-2">
+              <CalendarDays className="mt-2 h-4 w-4 shrink-0 text-slate-400" />
+              <div className="grid grid-cols-1 gap-2 sm:grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] sm:items-center sm:gap-3">
+                <label className="sr-only" htmlFor="reservas-fecha-desde">
+                  Desde
+                </label>
+                <input
+                  id="reservas-fecha-desde"
+                  type="date"
+                  value={fechaInicio}
+                  onChange={(e) => {
+                    setFechaInicio(e.target.value);
+                    setPagina(1);
+                  }}
+                  className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm font-medium outline-none focus:ring-2 focus:ring-pink-500"
+                />
+                <span className="hidden text-center text-xs font-bold text-slate-400 sm:block">
+                  a
+                </span>
+                <label className="sr-only" htmlFor="reservas-fecha-hasta">
+                  Hasta
+                </label>
+                <input
+                  id="reservas-fecha-hasta"
+                  type="date"
+                  value={fechaFin}
+                  onChange={(e) => {
+                    setFechaFin(e.target.value);
+                    setPagina(1);
+                  }}
+                  className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm font-medium outline-none focus:ring-2 focus:ring-pink-500"
+                />
+              </div>
+            </div>
             {data && (
-              <span className="ml-auto text-sm font-black text-pink-600">
+              <span className="text-sm font-black text-pink-600 md:text-right">
                 {data.totalReservas.toLocaleString('es-MX')} reservas en total
               </span>
             )}

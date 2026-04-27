@@ -109,9 +109,9 @@ const ESTILOS_ESTADO: Record<
   Exclude<EstadoPreregistro, ''>,
   { clase: string; etiqueta: string }
 > = {
-  pendiente: { clase: 'bg-amber-100 text-amber-800', etiqueta: 'Pendiente' },
-  aprobado: { clase: 'bg-emerald-100 text-emerald-800', etiqueta: 'Aprobado' },
-  rechazado: { clase: 'bg-rose-100 text-rose-800', etiqueta: 'Rechazado' },
+  pendiente: { clase: 'badge badge-pending', etiqueta: 'Pendiente' },
+  aprobado: { clase: 'badge badge-active', etiqueta: 'Aprobado' },
+  rechazado: { clase: 'badge badge-danger', etiqueta: 'Rechazado' },
 };
 
 export function TabPreregistros() {
@@ -641,9 +641,7 @@ function TarjetaPreregistro({ preregistro }: { preregistro: PreregistroSalon }) 
           </p>
         </div>
 
-        <span
-          className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-black ${estilo.clase}`}
-        >
+        <span className={estilo.clase}>
           {preregistro.estado === 'pendiente' && (
             <Clock3 className="h-3.5 w-3.5" aria-hidden="true" />
           )}

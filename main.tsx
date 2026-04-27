@@ -13,7 +13,28 @@ declare global {
   }
 }
 
+async function limpiarCachesDesarrollo() {
+  if (!import.meta.env.DEV || typeof window === 'undefined') {
+    return;
+  }
+
+  try {
+    if ('serviceWorker' in navigator) {
+      const registros = await navigator.serviceWorker.getRegistrations();
+      await Promise.all(registros.map((registro) => registro.unregister()));
+    }
+
+    if ('caches' in window) {
+      const llaves = await window.caches.keys();
+      await Promise.all(llaves.map((llave) => window.caches.delete(llave)));
+    }
+  } catch {
+    // En desarrollo no bloqueamos el render por errores de limpieza de cache.
+  }
+}
+
 instalarRecuperacionDeChunks();
+void limpiarCachesDesarrollo();
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>

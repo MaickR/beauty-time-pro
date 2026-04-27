@@ -167,7 +167,7 @@ export function TabVentasVendedor() {
                       <p className="truncate text-sm text-slate-500">{venta.adminSalonNombre}</p>
                     </div>
                     <span
-                      className={`rounded-full px-3 py-1 text-[11px] font-black ${venta.pendientePago ? 'bg-amber-100 text-amber-800' : 'bg-emerald-100 text-emerald-700'}`}
+                      className={venta.pendientePago ? 'badge badge-pending' : 'badge badge-active'}
                     >
                       {venta.pendientePago ? 'Pendiente' : 'Al corriente'}
                     </span>
@@ -254,11 +254,11 @@ export function TabVentasVendedor() {
                       </td>
                       <td className="px-3 py-4">
                         <p className="font-semibold text-slate-900">{venta.fechaVencimiento}</p>
-                        <p
-                          className={`mt-2 inline-flex rounded-full px-2.5 py-1 text-[11px] font-bold ${venta.pendientePago ? 'bg-amber-100 text-amber-800' : 'bg-emerald-100 text-emerald-700'}`}
+                        <span
+                          className={`mt-2 ${venta.pendientePago ? 'badge badge-pending' : 'badge badge-active'}`}
                         >
                           {venta.pendientePago ? 'Pendiente de pago' : 'Al corriente'}
-                        </p>
+                        </span>
                       </td>
                       <td className="px-3 py-4 text-right font-bold text-slate-900">
                         {formatearDinero(

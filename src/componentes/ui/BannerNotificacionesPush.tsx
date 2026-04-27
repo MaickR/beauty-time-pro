@@ -23,15 +23,11 @@ export function BannerNotificacionesPush({
           type="button"
           onClick={() => void onActivar()}
           disabled={activando}
-          className="bg-pink-600 text-white px-3 py-1 rounded-lg text-xs font-bold disabled:opacity-60"
+          className="btn-primary disabled:opacity-60"
         >
           {activando ? 'Activando...' : 'Activar'}
         </button>
-        <button
-          type="button"
-          onClick={onDescartar}
-          className="text-slate-500 text-xs font-bold px-2 py-1"
-        >
+        <button type="button" onClick={onDescartar} className="btn-ghost">
           Ahora no
         </button>
       </div>

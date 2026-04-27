@@ -39,11 +39,15 @@ function TarjetaResumen({
   colorEtiqueta?: string;
 }) {
   return (
-    <article className={`flex flex-col justify-between rounded-3xl ${colorFondo} p-6 shadow-sm`}>
+    <article
+      className={`flex min-h-34 flex-col items-center justify-center rounded-3xl ${colorFondo} p-6 text-center shadow-sm`}
+    >
       <p className={`text-[11px] font-black uppercase tracking-[0.2em] ${colorEtiqueta}`}>
         {etiqueta}
       </p>
-      <p className={`mt-4 text-4xl font-black ${colorTexto}`}>{valor.toLocaleString('es-MX')}</p>
+      <p className={`mt-3 text-5xl font-black leading-none tabular-nums sm:text-6xl ${colorTexto}`}>
+        {valor.toLocaleString('es-MX')}
+      </p>
     </article>
   );
 }
