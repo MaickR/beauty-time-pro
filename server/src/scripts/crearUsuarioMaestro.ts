@@ -72,26 +72,44 @@ async function asegurarMaestro(datos: DatosMaestro): Promise<void> {
 		return;
 	}
 
-	const hashContrasena = await generarHashContrasena(datos.contrasena);
-
-	const usuario = await prisma.usuario.upsert({
+	// Verificar si el usuario ya existe para NO sobreescribir su contraseña en cada redeploy.
+	// Solo se actualiza la contraseña desde el env var en la creación inicial.
+	const usuarioExistente = await prisma.usuario.findUnique({
 		where: { email: datos.email },
-		update: {
-			hashContrasena,
-			nombre: datos.nombre,
-			rol: 'maestro',
-			activo: true,
-			emailVerificado: true,
-		},
-		create: {
-			email: datos.email,
-			hashContrasena,
-			nombre: datos.nombre,
-			rol: 'maestro',
-			activo: true,
-			emailVerificado: true,
-		},
+		select: { id: true },
 	});
+
+	let usuario: { id: string };
+
+	if (usuarioExistente) {
+		// Usuario ya existe: solo asegurar rol, nombre y estado activo — nunca resetear contraseña.
+		usuario = await prisma.usuario.update({
+			where: { id: usuarioExistente.id },
+			data: {
+				nombre: datos.nombre,
+				rol: 'maestro',
+				activo: true,
+				emailVerificado: true,
+			},
+			select: { id: true },
+		});
+		console.log(`[maestro] Perfil existente asegurado (contraseña preservada): ${datos.email}`);
+	} else {
+		// Usuario nuevo: crear con la contraseña del env var.
+		const hashContrasena = await generarHashContrasena(datos.contrasena);
+		usuario = await prisma.usuario.create({
+			data: {
+				email: datos.email,
+				hashContrasena,
+				nombre: datos.nombre,
+				rol: 'maestro',
+				activo: true,
+				emailVerificado: true,
+			},
+			select: { id: true },
+		});
+		console.log(`[maestro] Nuevo perfil maestro creado: ${datos.email}`);
+	}
 
 	await prisma.permisosMaestro.upsert({
 		where: { usuarioId: usuario.id },

@@ -134,8 +134,10 @@ void (async () => {
   const servidor = Fastify({
     logger: true,
     bodyLimit: 1_048_576 /* 1 MB */,
-    // Mantener desactivada la confianza en proxies evita spoofing por X-Forwarded-*.
-    trustProxy: false,
+    // Confiar en exactamente 1 nivel de proxy (Railway/Vercel/CDN) para que el
+    // rate limiting por IP use la dirección real del cliente via X-Forwarded-For.
+    // '1' limita el trust a un solo hop y evita spoofing de IPs arbitrarias.
+    trustProxy: 1,
   });
 
   await servidor.register(helmet, {
