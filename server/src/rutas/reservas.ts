@@ -44,6 +44,7 @@ import {
   notificarNuevaCita,
   obtenerReservaConRelacionesPorId,
 } from '../utils/notificarReserva.js';
+import { publicarEventoDisponibilidadTiempoReal } from '../lib/canalDisponibilidadTiempoReal.js';
 import { calcularEdadDesdeFechaNacimiento } from '../lib/validacion.js';
 
 async function asegurarInfraestructuraServiciosDetalle(): Promise<boolean> {
@@ -1129,9 +1130,12 @@ export async function rutasReservas(servidor: FastifyInstance): Promise<void> {
       });
     }
 
-    // Calcular edad para detectar menor de edad
+    // Calcular edad para detectar menor de edad solo en reserva pública de cliente app.
+    // En reserva manual interna se captura cumpleaños (día/mes), no una fecha de nacimiento completa.
     const nacimiento = new Date(`${fechaNacimiento}T00:00:00`);
-    const edad = fechaNacimiento ? calcularEdadDesdeFechaNacimiento(fechaNacimiento) : null;
+    const edad = esClienteApp && fechaNacimiento
+      ? calcularEdadDesdeFechaNacimiento(fechaNacimiento)
+      : null;
     const esMenorDeEdad = edad !== null && edad < 18;
 
     // Rechazar reservas en fechas pasadas
@@ -1331,6 +1335,14 @@ export async function rutasReservas(servidor: FastifyInstance): Promise<void> {
     void notificarNuevaCita(reserva).catch((error) => {
       servidor.log.error(error);
     });
+    publicarEventoDisponibilidadTiempoReal({
+      tipo: 'reserva_creada',
+      estudioId: reserva.estudioId,
+      reservaId: reserva.id,
+      fecha: reserva.fecha,
+      personalId: reserva.personalId,
+      timestamp: new Date().toISOString(),
+    });
 
     return respuesta.code(201).send({
       datos: serializarReservaApi(reserva),
@@ -1472,6 +1484,14 @@ export async function rutasReservas(servidor: FastifyInstance): Promise<void> {
       if (reservaCompleta) {
         void notificarCitaCancelada(reservaCompleta);
       }
+      publicarEventoDisponibilidadTiempoReal({
+        tipo: 'reserva_cancelada',
+        estudioId: actualizada.estudioId,
+        reservaId: actualizada.id,
+        fecha: actualizada.fecha,
+        personalId: actualizada.personalId,
+        timestamp: new Date().toISOString(),
+      });
 
       return respuesta.send({ datos: actualizada });
     },
@@ -1636,6 +1656,15 @@ export async function rutasReservas(servidor: FastifyInstance): Promise<void> {
           void revertirVisitaFidelidad(reservaExistente.clienteId, reservaExistente.estudioId);
         }
       }
+
+      publicarEventoDisponibilidadTiempoReal({
+        tipo: estado === 'cancelled' ? 'reserva_cancelada' : 'reserva_actualizada',
+        estudioId: reservaExistente.estudioId,
+        reservaId: actualizada.id,
+        fecha: actualizada.fecha,
+        personalId: actualizada.personalId,
+        timestamp: new Date().toISOString(),
+      });
 
       return respuesta.send({ datos: actualizada });
     },

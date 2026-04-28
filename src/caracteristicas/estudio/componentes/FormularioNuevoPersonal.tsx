@@ -69,6 +69,7 @@ export function FormularioNuevoPersonal({
   const [mostrarContrasenaAcceso, setMostrarContrasenaAcceso] = useState(false);
   const [porcentajeComisionBase, setPorcentajeComisionBase] = useState(0);
   const [comisionServicios, setComisionServicios] = useState<Record<string, string>>({});
+  const [comisionPorServicioActiva, setComisionPorServicioActiva] = useState(false);
   const puedeCerrar = modoModal && typeof alCerrar === 'function';
 
   const alternarEspecialidad = (servicio: string) => {
@@ -104,15 +105,20 @@ export function FormularioNuevoPersonal({
         breakEnd: descansoFin,
         workingDays: diasLaborales,
         commissionBasePercentage: porcentajeComisionBase,
-        serviceCommissionPercentages: Object.fromEntries(
-          Object.entries(comisionServicios)
-            .map(([servicio, porcentaje]) => [
-              servicio,
-              Number.parseInt(porcentaje.replace(/\D/g, ''), 10),
-            ])
-            .filter((entrada): entrada is [string, number] => Number.isFinite(entrada[1]))
-            .map(([servicio, porcentaje]) => [servicio, Math.min(100, Math.max(0, porcentaje))]),
-        ),
+        serviceCommissionPercentages: comisionPorServicioActiva
+          ? Object.fromEntries(
+              Object.entries(comisionServicios)
+                .map(([servicio, porcentaje]) => [
+                  servicio,
+                  Number.parseInt(porcentaje.replace(/\D/g, ''), 10),
+                ])
+                .filter((entrada): entrada is [string, number] => Number.isFinite(entrada[1]))
+                .map(([servicio, porcentaje]) => [
+                  servicio,
+                  Math.min(100, Math.max(0, porcentaje)),
+                ]),
+            )
+          : {},
       });
 
       await crearAccesoEmpleado(estudioId, personal.id, {
@@ -136,6 +142,7 @@ export function FormularioNuevoPersonal({
       setMostrarContrasenaAcceso(false);
       setPorcentajeComisionBase(0);
       setComisionServicios({});
+      setComisionPorServicioActiva(false);
 
       clienteConsulta.setQueryData<Personal[]>(['personal-estudio', estudioId], (actual) => {
         if (!actual) {
@@ -361,38 +368,63 @@ export function FormularioNuevoPersonal({
 
               {especialidades.length > 0 && (
                 <div className="sm:col-span-2 space-y-2">
-                  <p className="text-xs font-semibold text-emerald-700">Por servicio (opcional)</p>
-                  <div className="grid gap-1.5 sm:grid-cols-2">
-                    {especialidades.map((servicio) => (
-                      <label
-                        key={`comision-${servicio}`}
-                        className="flex items-center justify-between gap-2 rounded-xl border border-emerald-200 bg-white px-3 py-1.5"
-                      >
-                        <span className="truncate text-xs font-semibold text-slate-700">
-                          {servicio}
-                        </span>
-                        <div className="flex items-center gap-1">
-                          <input
-                            type="number"
-                            min={0}
-                            max={100}
-                            step={1}
-                            value={comisionServicios[servicio] ?? ''}
-                            onChange={(evento) => {
-                              const valor = evento.target.value.replace(/\D/g, '');
-                              setComisionServicios((actual) => ({
-                                ...actual,
-                                [servicio]: valor,
-                              }));
-                            }}
-                            placeholder="Base"
-                            className="w-14 rounded-lg border border-emerald-200 px-2 py-1 text-right text-xs font-bold text-slate-800 outline-none focus:ring-2 focus:ring-emerald-300"
-                          />
-                          <span className="text-xs font-black text-emerald-700">%</span>
-                        </div>
-                      </label>
-                    ))}
+                  <div className="flex items-center justify-between">
+                    <p className="text-xs font-semibold text-emerald-700">Comisión por servicio</p>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setComisionPorServicioActiva((activa) => {
+                          if (activa) setComisionServicios({});
+                          return !activa;
+                        });
+                      }}
+                      className={`flex h-5 w-9 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-emerald-400 focus:ring-offset-1 ${
+                        comisionPorServicioActiva ? 'bg-emerald-600' : 'bg-slate-300'
+                      }`}
+                      aria-pressed={comisionPorServicioActiva}
+                      aria-label="Alternar comisión por servicio"
+                    >
+                      <span
+                        className={`ml-0.5 h-4 w-4 rounded-full bg-white shadow transition-transform ${
+                          comisionPorServicioActiva ? 'translate-x-4' : 'translate-x-0'
+                        }`}
+                      />
+                    </button>
                   </div>
+
+                  {comisionPorServicioActiva && (
+                    <div className="grid gap-1.5 sm:grid-cols-2">
+                      {especialidades.map((servicio) => (
+                        <label
+                          key={`comision-${servicio}`}
+                          className="flex items-center justify-between gap-2 rounded-xl border border-emerald-200 bg-white px-3 py-1.5"
+                        >
+                          <span className="truncate text-xs font-semibold text-slate-700">
+                            {servicio}
+                          </span>
+                          <div className="flex items-center gap-1">
+                            <input
+                              type="number"
+                              min={0}
+                              max={100}
+                              step={1}
+                              value={comisionServicios[servicio] ?? ''}
+                              onChange={(evento) => {
+                                const valor = evento.target.value.replace(/\D/g, '');
+                                setComisionServicios((actual) => ({
+                                  ...actual,
+                                  [servicio]: valor,
+                                }));
+                              }}
+                              placeholder="Base"
+                              className="w-14 rounded-lg border border-emerald-200 px-2 py-1 text-right text-xs font-bold text-slate-800 outline-none focus:ring-2 focus:ring-emerald-300"
+                            />
+                            <span className="text-xs font-black text-emerald-700">%</span>
+                          </div>
+                        </label>
+                      ))}
+                    </div>
+                  )}
                 </div>
               )}
             </div>

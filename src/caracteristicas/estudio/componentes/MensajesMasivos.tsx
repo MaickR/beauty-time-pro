@@ -158,7 +158,7 @@ export function MensajesMasivos({ estudioId, plan }: PropsMensajesMasivos) {
             <button
               type="button"
               onClick={() => setMostrarFormulario(true)}
-              className="px-6 py-3 rounded-2xl bg-(--color-primario) hover:bg-(--color-primario-oscuro) text-white text-sm font-black uppercase tracking-widest transition-colors shadow-sm"
+              className="px-6 py-3 rounded-2xl bg-[var(--color-primario)] hover:bg-[var(--color-primario-oscuro)] text-white text-sm font-black uppercase tracking-widest transition-colors shadow-sm"
             >
               Nuevo mensaje masivo
             </button>
@@ -253,7 +253,7 @@ export function MensajesMasivos({ estudioId, plan }: PropsMensajesMasivos) {
                   type="button"
                   onClick={enviar}
                   disabled={mutacion.isPending || !titulo.trim() || !texto.trim()}
-                  className="inline-flex items-center gap-2 px-6 py-3 rounded-2xl bg-(--color-primario) hover:bg-(--color-primario-oscuro) text-white text-sm font-black uppercase tracking-widest transition-colors shadow-sm disabled:opacity-60"
+                  className="inline-flex items-center gap-2 px-6 py-3 rounded-2xl bg-[var(--color-primario)] hover:bg-[var(--color-primario-oscuro)] text-white text-sm font-black uppercase tracking-widest transition-colors shadow-sm disabled:opacity-60"
                 >
                   <Send className="w-4 h-4" />
                   {mutacion.isPending ? 'Enviando...' : 'Enviar mensaje'}

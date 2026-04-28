@@ -230,7 +230,7 @@ export function ConfigFidelidad({ estudioId, plan }: PropsConfigFidelidad) {
               type="button"
               onClick={() => mutacion.mutate(formulario)}
               disabled={mutacion.isPending}
-              className="px-6 py-3 rounded-2xl bg-(--color-primario) hover:bg-(--color-primario-oscuro) text-white font-black uppercase tracking-widest text-sm disabled:opacity-60"
+              className="px-6 py-3 rounded-2xl bg-[var(--color-primario)] hover:bg-[var(--color-primario-oscuro)] text-white font-black uppercase tracking-widest text-sm disabled:opacity-60"
             >
               {mutacion.isPending ? 'Guardando...' : 'Guardar configuración'}
             </button>

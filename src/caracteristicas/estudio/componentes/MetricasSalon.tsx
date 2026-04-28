@@ -49,7 +49,7 @@ interface PropsMetricasSalon {
 interface PropsStatCard {
   title: string;
   value: string | number;
-  subtitle: ReactNode;
+  subtitle?: ReactNode;
   color: string;
   icon: ReactNode;
   onClick: () => void;
@@ -250,7 +250,9 @@ function StatCard({ title, value, subtitle, color, icon, onClick }: PropsStatCar
       <div className="min-w-0 w-full">
         <p className="text-sm font-bold text-slate-400 uppercase tracking-wider">{title}</p>
         <p className="text-2xl font-black text-center text-slate-900">{value}</p>
-        <p className="mt-1 text-xs font-medium text-slate-500">{subtitle}</p>
+        {subtitle !== undefined && (
+          <p className="mt-1 text-xs font-medium text-slate-500">{subtitle}</p>
+        )}
       </div>
     </button>
   );
@@ -1202,7 +1204,7 @@ export function MetricasSalon({
     staleTime: 30_000,
     refetchInterval: 60_000,
     refetchIntervalInBackground: false,
-    refetchOnWindowFocus: false,
+    refetchOnWindowFocus: true,
   });
 
   const data = consultaMetricas.data;
@@ -1245,27 +1247,13 @@ export function MetricasSalon({
               icon={<Calendar size={20} />}
               color="bg-blue-600"
               onClick={() => setActiveModal('citas')}
-              subtitle="Agendamientos del dia"
             />
             <StatCard
-              title="INGRESOS DEL SALON"
+              title="INGRESOS DEL MES"
               value={formatearDinero(data.ingresos.mes.total, data.plan.moneda)}
               icon={<DollarSign size={20} />}
               color="bg-emerald-600"
               onClick={() => setActiveModal('ganancias')}
-              subtitle={
-                <span className="block space-y-0.5 text-[11px] font-semibold text-slate-500">
-                  <span className="block">
-                    Hoy: {formatearDinero(data.ingresos.dia.total, data.plan.moneda)}
-                  </span>
-                  <span className="block">
-                    Semana: {formatearDinero(data.ingresos.semana.total, data.plan.moneda)}
-                  </span>
-                  <span className="block">
-                    Mes: {formatearDinero(data.ingresos.mes.total, data.plan.moneda)}
-                  </span>
-                </span>
-              }
             />
             <StatCard
               title="ESPECIALISTAS"
@@ -1273,7 +1261,6 @@ export function MetricasSalon({
               icon={<Users size={20} />}
               color="bg-purple-600"
               onClick={() => setActiveModal('especialistas')}
-              subtitle="Staff activo ahora"
             />
             <StatCard
               title="PLAN ACTUAL"
@@ -1281,15 +1268,13 @@ export function MetricasSalon({
               icon={<CreditCard size={20} />}
               color="bg-orange-600"
               onClick={() => setActiveModal('plan')}
-              subtitle={data.plan.actual === 'PRO' ? 'Beneficios Pro Activos' : 'Standard'}
             />
             <StatCard
-              title="DIAS RESTANTES DE SUSCRIPCION"
+              title="DIAS RESTANTES"
               value={data.corte.dias}
               icon={<Clock size={20} />}
               color="bg-rose-600"
               onClick={() => setActiveModal('corte')}
-              subtitle="Dias restantes"
             />
           </div>
 

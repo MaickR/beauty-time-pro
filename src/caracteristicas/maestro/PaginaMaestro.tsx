@@ -287,6 +287,7 @@ export function PaginaMaestro() {
             setEntradaServicioPersonalizado: hook.setEntradaServicioPersonalizado,
           }}
           onRegenerarContrasenaDueno={hook.regenerarContrasenaDueno}
+          onDescartarBorrador={hook.descartarBorrador}
           onEnviar={(e) => hook.enviarFormulario(e, recargar, mostrarToast, mostrarToast)}
           onCerrar={hook.cerrarModal}
         />

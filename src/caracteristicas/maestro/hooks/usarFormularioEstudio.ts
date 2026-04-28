@@ -101,14 +101,17 @@ function restaurarBorradorAlta(claveBorrador: string): FormularioEstudio | null 
 
     const datos = JSON.parse(borrador) as Partial<FormularioEstudio>;
     const hoy = obtenerFechaLocalISO(new Date());
+    const contrasenaGuardada = datos.contrasenaDueno?.trim() ?? '';
+    const contrasenaValida = esContrasenaFormatoSalonValida(contrasenaGuardada)
+      ? contrasenaGuardada
+      : generarContrasenaSalon(datos.name ?? '', datos.owner ?? '', 0);
+
     return {
       ...crearEstadoInicial(),
       ...datos,
       subscriptionStart:
         datos.subscriptionStart && datos.subscriptionStart >= hoy ? datos.subscriptionStart : hoy,
-      contrasenaDueno:
-        datos.contrasenaDueno?.trim() ||
-        generarContrasenaSalon(datos.name ?? '', datos.owner ?? ''),
+      contrasenaDueno: contrasenaValida,
       phone: limpiarTelefonoEntrada(datos.phone ?? ''),
       reintentosContrasenaDueno: Math.min(5, Math.max(1, datos.reintentosContrasenaDueno ?? 1)),
     };

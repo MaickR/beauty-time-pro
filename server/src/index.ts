@@ -36,6 +36,7 @@ import { rutasMensajesMasivos } from './rutas/mensajesMasivos.js';
 import { rutasProductos } from './rutas/productos.js';
 import { rutasVendedor } from './rutas/vendedor.js';
 import { rutasPreciosPlanes } from './rutas/preciosPlanes.js';
+import { rutasDisponibilidadTiempoReal } from './rutas/disponibilidadTiempoReal.js';
 
 const INTERVALO_MINIMO_SINCRONIZACION_MS = 60_000;
 let sincronizacionReactivacionEnCurso = false;
@@ -274,6 +275,7 @@ void (async () => {
   await servidor.register(rutasProductos);
   await servidor.register(rutasVendedor);
   await servidor.register(rutasPreciosPlanes);
+  await servidor.register(rutasDisponibilidadTiempoReal);
 
   servidor.get(
     '/salud',

@@ -223,23 +223,36 @@ export async function rutasPersonal(servidor: FastifyInstance): Promise<void> {
         comisionServicios: resultado.data.comisionServicios,
       });
 
-      const empleado = await prisma.personal.create({
-        data: {
-          estudioId: id,
-          nombre,
-          avatarUrl: null,
-          especialidades: especialidades ?? [],
-          activo: activo ?? true,
-          horaInicio: horaInicio ?? null,
-          horaFin: horaFin ?? null,
-          descansoInicio: descansoInicio ?? null,
-          descansoFin: descansoFin ?? null,
-          diasTrabajo: diasTrabajo !== undefined ? (diasTrabajo ?? Prisma.JsonNull) : Prisma.JsonNull,
-        },
+      let empleado: Awaited<ReturnType<typeof prisma.personal.create>>;
+      try {
+        empleado = await prisma.personal.create({
+          data: {
+            estudioId: id,
+            nombre,
+            avatarUrl: null,
+            especialidades: especialidades ?? [],
+            activo: activo ?? true,
+            horaInicio: horaInicio ?? null,
+            horaFin: horaFin ?? null,
+            descansoInicio: descansoInicio ?? null,
+            descansoFin: descansoFin ?? null,
+            diasTrabajo: diasTrabajo !== undefined ? (diasTrabajo ?? Prisma.JsonNull) : Prisma.JsonNull,
+          },
+        });
+      } catch (errorCreacion) {
+        solicitud.log.error({ err: errorCreacion, estudioId: id, nombre }, 'Error al crear especialista en DB');
+        return respuesta.code(500).send({ error: 'No se pudo crear el especialista. Intenta nuevamente.' });
+      }
+
+      // Guardar configuración de comisiones (sin bloquear la respuesta si falla)
+      await guardarConfiguracionComisionPersonal(empleado.id, configuracionComision).catch((errComision) => {
+        solicitud.log.warn({ err: errComision, personalId: empleado.id }, 'No se pudo guardar configuración de comisión; se usarán valores por defecto');
       });
 
-      await guardarConfiguracionComisionPersonal(empleado.id, configuracionComision);
-      await sincronizarNumeroEspecialistas(id);
+      await sincronizarNumeroEspecialistas(id).catch((errSync) => {
+        solicitud.log.warn({ err: errSync, estudioId: id }, 'No se pudo sincronizar contador de especialistas');
+      });
+
       return respuesta.code(201).send({
         datos: {
           ...empleado,

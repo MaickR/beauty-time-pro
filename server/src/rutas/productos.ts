@@ -124,10 +124,27 @@ export async function rutasProductos(servidor: FastifyInstance): Promise<void> {
     '/estudio/:id/productos',
     { preHandler: verificarJWT },
     async (solicitud, respuesta) => {
-      const payload = solicitud.user as { rol: string; estudioId: string | null };
+      const payload = solicitud.user as { sub: string; rol: string; estudioId: string | null };
       const { id } = solicitud.params;
 
-      if (!tieneAccesoAdministrativoEstudio(payload, id)) {
+      let tieneAcceso = tieneAccesoAdministrativoEstudio(payload, id);
+
+      if (!tieneAcceso && payload.rol === 'empleado') {
+        const accesoEmpleado = await prisma.empleadoAcceso.findUnique({
+          where: { id: payload.sub },
+          select: {
+            personal: {
+              select: {
+                estudioId: true,
+              },
+            },
+          },
+        });
+
+        tieneAcceso = accesoEmpleado?.personal?.estudioId === id;
+      }
+
+      if (!tieneAcceso) {
         return respuesta.code(403).send({ error: 'Sin permisos para esta acción' });
       }
 

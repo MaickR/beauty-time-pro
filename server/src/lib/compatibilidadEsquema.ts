@@ -7,10 +7,14 @@ const REGEX_DEFINICION_COLUMNA = /^[A-Za-z0-9_(),.'`\s-]+$/;
 const cacheColumnas = new Map<string, Set<string>>();
 let cacheTablas: Set<string> | null = null;
 
-export async function obtenerColumnasTabla(tabla: string): Promise<Set<string>> {
+export async function obtenerColumnasTabla(
+  tabla: string,
+  opciones?: { forzarRecarga?: boolean },
+): Promise<Set<string>> {
   const nombreTabla = tabla.trim();
+  const forzarRecarga = opciones?.forzarRecarga ?? false;
   const enCache = cacheColumnas.get(nombreTabla);
-  if (enCache) {
+  if (!forzarRecarga && enCache) {
     return enCache;
   }
 
@@ -55,7 +59,7 @@ export async function asegurarColumnaTabla(
   columna: string,
   definicionSql: string,
 ): Promise<boolean> {
-  const columnas = await obtenerColumnasTabla(tabla);
+  const columnas = await obtenerColumnasTabla(tabla, { forzarRecarga: true });
   if (columnas.has(columna)) {
     return true;
   }
@@ -80,7 +84,7 @@ export async function asegurarColumnaTabla(
   }
 
   limpiarCacheCompatibilidadEsquema();
-  const columnasActualizadas = await obtenerColumnasTabla(tabla);
+  const columnasActualizadas = await obtenerColumnasTabla(tabla, { forzarRecarga: true });
   return columnasActualizadas.has(columna);
 }
 

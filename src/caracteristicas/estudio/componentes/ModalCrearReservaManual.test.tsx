@@ -159,11 +159,11 @@ describe('ModalCrearReservaManual', () => {
     fireEvent.change(screen.getByLabelText(/Teléfono/i), {
       target: { value: '5510002233' },
     });
-    fireEvent.change(screen.getByLabelText(/Fecha de nacimiento/i), {
-      target: { value: '1990-04-16' },
+    fireEvent.change(screen.getByLabelText(/Fecha de cumpleaños/i), {
+      target: { value: '2026-04-16' },
     });
     fireEvent.change(screen.getByLabelText(/Correo electrónico/i), {
-      target: { value: 'cliente.qa@salonpromaster.com' },
+      target: { value: 'cliente.qa@gmail.com' },
     });
 
     fireEvent.click(screen.getByRole('button', { name: 'Crear cita' }));
@@ -175,8 +175,8 @@ describe('ModalCrearReservaManual', () => {
           studioName: 'MIKELOV STUDIO',
           clientName: 'Cliente Flujo QA',
           clientPhone: '5510002233',
-          fechaNacimiento: '1990-04-16',
-          email: 'cliente.qa@salonpromaster.com',
+          fechaNacimiento: '2026-04-16',
+          email: 'cliente.qa@gmail.com',
           staffId: 'qa-personal',
           staffName: 'QA Especialista',
           date: '2026-04-17',

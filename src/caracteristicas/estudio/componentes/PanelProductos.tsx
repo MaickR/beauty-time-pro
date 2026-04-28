@@ -111,7 +111,8 @@ export function PanelProductos({ estudioId, moneda, plan }: PropsPanelProductos)
   });
 
   const mutacionToggle = useMutation({
-    mutationFn: (producto: Producto) => editarProducto(estudioId, producto.id, { activo: !producto.activo }),
+    mutationFn: (producto: Producto) =>
+      editarProducto(estudioId, producto.id, { activo: !producto.activo }),
     onSuccess: () => {
       void clienteConsulta.invalidateQueries({ queryKey: claveConsulta });
       mostrarToast('Estado del producto actualizado');
@@ -189,7 +190,8 @@ export function PanelProductos({ estudioId, moneda, plan }: PropsPanelProductos)
               El catálogo de productos está disponible solo en membresías PRO
             </h3>
             <p className="max-w-2xl text-sm text-slate-600">
-              Al subir de plan podrás gestionar productos extra, mostrarlos en tus flujos de venta y mantenerlos visibles u ocultos con control total desde este panel.
+              Al subir de plan podrás gestionar productos extra, mostrarlos en tus flujos de venta y
+              mantenerlos visibles u ocultos con control total desde este panel.
             </p>
           </div>
         </div>
@@ -216,7 +218,7 @@ export function PanelProductos({ estudioId, moneda, plan }: PropsPanelProductos)
             <button
               type="button"
               onClick={() => setMostrarFormulario(true)}
-              className="inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-(--color-primario) px-5 py-3 text-sm font-black uppercase tracking-widest text-white shadow-sm transition-colors hover:bg-(--color-primario-oscuro) sm:w-auto"
+              className="inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-[var(--color-primario)] px-5 py-3 text-sm font-black uppercase tracking-widest text-white shadow-sm transition-colors hover:bg-[var(--color-primario-oscuro)] sm:w-auto"
             >
               <Plus className="h-4 w-4" /> Agregar producto
             </button>
@@ -267,7 +269,10 @@ export function PanelProductos({ estudioId, moneda, plan }: PropsPanelProductos)
 
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
             <div>
-              <label htmlFor="nombreProducto" className="mb-1 block text-sm font-bold text-slate-700">
+              <label
+                htmlFor="nombreProducto"
+                className="mb-1 block text-sm font-bold text-slate-700"
+              >
                 Nombre
               </label>
               <input
@@ -280,7 +285,10 @@ export function PanelProductos({ estudioId, moneda, plan }: PropsPanelProductos)
               />
             </div>
             <div>
-              <label htmlFor="categoriaProducto" className="mb-1 block text-sm font-bold text-slate-700">
+              <label
+                htmlFor="categoriaProducto"
+                className="mb-1 block text-sm font-bold text-slate-700"
+              >
                 Categoría
               </label>
               <select
@@ -297,7 +305,10 @@ export function PanelProductos({ estudioId, moneda, plan }: PropsPanelProductos)
               </select>
             </div>
             <div>
-              <label htmlFor="precioProducto" className="mb-1 block text-sm font-bold text-slate-700">
+              <label
+                htmlFor="precioProducto"
+                className="mb-1 block text-sm font-bold text-slate-700"
+              >
                 Precio
               </label>
               <input
@@ -317,7 +328,7 @@ export function PanelProductos({ estudioId, moneda, plan }: PropsPanelProductos)
             type="button"
             onClick={enviar}
             disabled={mutacionCrear.isPending || mutacionEditar.isPending}
-            className="w-full rounded-2xl bg-(--color-primario) px-6 py-3 text-sm font-black uppercase tracking-widest text-white shadow-sm transition-colors hover:bg-(--color-primario-oscuro) disabled:opacity-60 sm:w-auto"
+            className="w-full rounded-2xl bg-[var(--color-primario)] px-6 py-3 text-sm font-black uppercase tracking-widest text-white shadow-sm transition-colors hover:bg-[var(--color-primario-oscuro)] disabled:opacity-60 sm:w-auto"
           >
             {mutacionCrear.isPending || mutacionEditar.isPending
               ? 'Guardando...'

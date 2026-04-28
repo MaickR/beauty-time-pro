@@ -1598,7 +1598,7 @@ export async function rutasAdmin(servidor: FastifyInstance): Promise<void> {
         const monedaInicial = obtenerMonedaPorPais(pais);
         const montoInicial = precioPlanActual.monto;
         const [columnasEstudios, columnasUsuarios, columnasPersonal, columnasPagos, columnasProductos] = await Promise.all([
-          obtenerColumnasTabla('estudios'),
+          obtenerColumnasTabla('estudios', { forzarRecarga: true }),
           obtenerColumnasTabla('usuarios'),
           obtenerColumnasTabla('personal'),
           obtenerColumnasTabla('pagos'),
@@ -2715,7 +2715,7 @@ export async function rutasAdmin(servidor: FastifyInstance): Promise<void> {
       const monedaInicial = obtenerMonedaPorPais(preregistro.pais);
       const montoInicial = precioPlanActual.monto;
       const [columnasEstudios, columnasUsuarios, columnasPagos] = await Promise.all([
-        obtenerColumnasTabla('estudios'),
+        obtenerColumnasTabla('estudios', { forzarRecarga: true }),
         obtenerColumnasTabla('usuarios'),
         obtenerColumnasTabla('pagos'),
       ]);

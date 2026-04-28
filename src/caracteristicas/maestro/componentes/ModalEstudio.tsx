@@ -53,6 +53,7 @@ interface PropsModalEstudio {
   catalogoProps: PropsCatalogo;
   onEnviar: (e: React.FormEvent<HTMLFormElement>) => void;
   onCerrar: () => void;
+  onDescartarBorrador?: () => void;
   confirmacionAlta: ConfirmacionAltaSalon | null;
   onRegenerarContrasenaDueno: () => void;
   textosModoAgregar?: {
@@ -78,6 +79,7 @@ export function ModalEstudio({
   catalogoProps,
   onEnviar,
   onCerrar,
+  onDescartarBorrador,
   confirmacionAlta,
   onRegenerarContrasenaDueno,
   textosModoAgregar,
@@ -346,12 +348,24 @@ export function ModalEstudio({
     >
       <div className="bg-white w-full max-w-5xl max-h-[90vh] rounded-[3rem] overflow-hidden flex flex-col shadow-2xl">
         <div className="p-8 border-b flex justify-between items-center bg-slate-50">
-          <h2
-            id="modal-estudio-titulo"
-            className="text-2xl font-black italic uppercase tracking-tighter"
-          >
-            {modo === 'EDIT' ? 'Editar salón' : textosAgregar.titulo}
-          </h2>
+          <div className="flex items-center gap-3">
+            <h2
+              id="modal-estudio-titulo"
+              className="text-2xl font-black italic uppercase tracking-tighter"
+            >
+              {modo === 'EDIT' ? 'Editar salón' : textosAgregar.titulo}
+            </h2>
+            {modo === 'ADD' && onDescartarBorrador && (
+              <button
+                type="button"
+                onClick={onDescartarBorrador}
+                className="text-[11px] font-bold text-slate-400 hover:text-red-500 underline underline-offset-2 transition-colors"
+                title="Borrar los datos guardados y empezar desde cero"
+              >
+                Empezar desde cero
+              </button>
+            )}
+          </div>
           <button onClick={onCerrar} aria-label="Cerrar modal">
             <XCircle className="w-8 h-8 text-slate-300 hover:text-red-500" />
           </button>

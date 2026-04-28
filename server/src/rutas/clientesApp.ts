@@ -701,10 +701,7 @@ export async function rutasClientesApp(servidor: FastifyInstance): Promise<void>
       });
 
       const conDisponibilidad = especialistas.filter((especialista) => {
-        if (especialista.slotsLibres.length === 0 && especialista.slotsOcupados.length === 0) {
-          return false;
-        }
-
+        // Filtrar por especialidades si fueron seleccionadas servicios
         if (serviciosSeleccionados.length === 0) {
           return true;
         }

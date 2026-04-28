@@ -69,6 +69,18 @@ export function PaginaAdminEstudio() {
     navegar(`/estudio/${identificadorRutaPrivada}/admin`, { replace: true });
   }, [identificadorRutaPrivada, slug, navegar]);
 
+  const manejarSalidaPorSuspension = useCallback(async () => {
+    const mensajeSuspension =
+      'Tu salon esta suspendido por falta de pago. Contacta soporte para reactivar tu acceso.';
+    await cerrarSesion();
+    navegar(
+      `/iniciar-sesion?codigo=SALON_SUSPENDIDO&mensaje=${encodeURIComponent(mensajeSuspension)}`,
+      {
+        replace: true,
+      },
+    );
+  }, [cerrarSesion, navegar]);
+
   if (cargando)
     return (
       <div className="h-screen bg-slate-50 flex items-center justify-center">
@@ -131,18 +143,6 @@ export function PaginaAdminEstudio() {
     await cerrarSesion();
     navegar('/iniciar-sesion', { replace: true });
   };
-
-  const manejarSalidaPorSuspension = useCallback(async () => {
-    const mensajeSuspension =
-      'Tu salon esta suspendido por falta de pago. Contacta soporte para reactivar tu acceso.';
-    await cerrarSesion();
-    navegar(
-      `/iniciar-sesion?codigo=SALON_SUSPENDIDO&mensaje=${encodeURIComponent(mensajeSuspension)}`,
-      {
-        replace: true,
-      },
-    );
-  }, [cerrarSesion, navegar]);
 
   return (
     <div className="min-h-screen bg-slate-50 font-sans pb-20">

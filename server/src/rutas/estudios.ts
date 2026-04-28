@@ -324,7 +324,7 @@ function esErrorCompatibilidadEstudio(error: unknown): boolean {
   return (
     codigo === 'P2022' ||
     /Unknown column/i.test(mensaje) ||
-    /(pinCancelacionHash|plan|primeraVez|cancelacionSolicitada|fechaSolicitudCancelacion|motivoCancelacion|precioPlanActualId|precioPlanProximoId|fechaAplicacionPrecioProximo|estudioPrincipalId|permiteReservasPublicas|excepcionesDisponibilidad)/i.test(
+    /(pinCancelacionHash|plan|primeraVez|cancelacionSolicitada|fechaSolicitudCancelacion|motivoCancelacion|precioPlanActualId|precioPlanProximoId|fechaAplicacionPrecioProximo|estudioPrincipalId|permiteReservasPublicas|excepcionesDisponibilidad|metodosPagoReserva)/i.test(
       mensaje,
     )
   );
@@ -473,7 +473,6 @@ const seleccionarEstudioPanelCompat = {
   servicios: true,
   serviciosCustom: true,
   festivos: true,
-  excepcionesDisponibilidad: true,
   colorPrimario: true,
   logoUrl: true,
   descripcion: true,
@@ -1279,6 +1278,8 @@ export async function rutasEstudios(servidor: FastifyInstance): Promise<void> {
         return respuesta.code(400).send({ error: errorSucursalesPlan, codigo: 'LIMITE_PLAN' });
       }
 
+      const columnasEstudios = await obtenerColumnasTabla('estudios', { forzarRecarga: true });
+
       const estudio = await prisma.estudio.create({
         data: {
           nombre: datos.nombre,
@@ -1308,8 +1309,12 @@ export async function rutasEstudios(servidor: FastifyInstance): Promise<void> {
           servicios: (datos.servicios ?? []) as Prisma.InputJsonValue,
           serviciosCustom: (datos.serviciosCustom ?? []) as Prisma.InputJsonValue,
           festivos: datos.festivos ?? [],
-          excepcionesDisponibilidad: (datos.excepcionesDisponibilidad ?? []) as Prisma.InputJsonValue,
-          metodosPagoReserva: normalizarMetodosPagoReserva(datos.metodosPagoReserva) as Prisma.InputJsonValue,
+          ...(columnasEstudios.has('excepcionesDisponibilidad') && {
+            excepcionesDisponibilidad: (datos.excepcionesDisponibilidad ?? []) as Prisma.InputJsonValue,
+          }),
+          ...(columnasEstudios.has('metodosPagoReserva') && {
+            metodosPagoReserva: normalizarMetodosPagoReserva(datos.metodosPagoReserva) as Prisma.InputJsonValue,
+          }),
           ...(datos.colorPrimario !== undefined && { colorPrimario: datos.colorPrimario }),
           ...(datos.descripcion !== undefined && { descripcion: sanitizarTexto(datos.descripcion ?? '') }),
           ...(datos.direccion !== undefined && { direccion: sanitizarTexto(datos.direccion ?? '') }),
@@ -1749,11 +1754,23 @@ export async function rutasEstudios(servidor: FastifyInstance): Promise<void> {
     '/estudios/:id/disponibilidad',
     { preHandler: verificarJWT },
     async (solicitud, respuesta) => {
-      const payload = solicitud.user as { rol: string; estudioId: string | null };
+      const payload = solicitud.user as {
+        rol: string;
+        estudioId: string | null;
+        personalId?: string | null;
+      };
       const { id } = solicitud.params;
       const { personalId, fecha, duracion } = solicitud.query;
 
-      if (!(payload.rol === 'maestro' || (payload.rol === 'dueno' && payload.estudioId === id))) {
+      const esMaestro = payload.rol === 'maestro';
+      const esDuenoDelEstudio = payload.rol === 'dueno' && payload.estudioId === id;
+      const esEmpleadoPropio =
+        payload.rol === 'empleado' &&
+        payload.estudioId === id &&
+        Boolean(payload.personalId) &&
+        payload.personalId === personalId;
+
+      if (!(esMaestro || esDuenoDelEstudio || esEmpleadoPropio)) {
         return respuesta.code(403).send({ error: 'Sin permisos para esta acción' });
       }
 

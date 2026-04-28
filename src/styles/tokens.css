@@ -37,6 +37,7 @@
   --c-text: #0d0d0d; /* títulos H1 */
   --c-text-heading: #1a1a1a; /* H2, H3 */
   --c-text-label: #2e2e2e; /* datos de tablas, texto prominente */
+  --c-text-data: #2e2e2e; /* alias para celdas de tablas */
   --c-text-body: #484848; /* cuerpo de texto general */
   --c-text-secondary: #6b6b6b; /* subtítulos, metadatos */
   --c-text-tertiary: #9e9e9e; /* placeholders, captions, hints */
@@ -73,4 +74,13 @@
   --radius-pill: 999px;
   --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.08);
   --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.1);
+
+  /* === COMPATIBILIDAD LEGACY (migración incremental) === */
+  --color-primario: var(--c-primary);
+  --color-primario-oscuro: var(--c-primary-dark);
+  --color-primario-suave: var(--c-primary-50);
+  --color-texto: var(--c-text);
+  --color-texto-suave: var(--c-text-secondary);
+  --color-borde: var(--c-border);
+  --color-superficie: var(--c-white);
 }

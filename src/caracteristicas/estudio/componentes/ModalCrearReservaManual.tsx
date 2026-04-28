@@ -1,25 +1,45 @@
-import { useState } from 'react';
-import { useMutation, useQuery } from '@tanstack/react-query';
+import { useEffect, useMemo, useState } from 'react';
+import { useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/react-query';
 import { zodResolver } from '@hookform/resolvers/zod';
-import { X, CalendarDays } from 'lucide-react';
+import { X, CalendarDays, ChevronLeft, ChevronRight } from 'lucide-react';
 import { useForm } from 'react-hook-form';
 import { z } from 'zod';
-import { SelectorFecha } from '../../../componentes/ui/SelectorFecha';
 import { usarToast } from '../../../componentes/ui/ProveedorToast';
 import { DIAS_SEMANA } from '../../../lib/constantes';
 import { obtenerOpcionesMetodosPagoReserva } from '../../../lib/metodosPagoReserva';
 import { crearReserva, obtenerDisponibilidadEstudio } from '../../../servicios/servicioReservas';
+import { obtenerProductos, type Producto } from '../../../servicios/servicioProductos';
+import { esEmailSalonValido } from '../../../utils/formularioSalon';
+import { URL_BASE, obtenerCabecerasAutenticadas } from '../../../lib/clienteHTTP';
 import { obtenerFechaLocalISO, formatearDinero } from '../../../utils/formato';
 import type { Estudio, Moneda, Servicio } from '../../../tipos';
 
 const esquemaFormulario = z.object({
-  nombreCliente: z.string().min(2, 'Mínimo 2 caracteres'),
+  nombreCliente: z
+    .string()
+    .trim()
+    .min(2, 'Mínimo 2 caracteres')
+    .regex(/^[\p{L}\p{M}\s'’-]+$/u, 'El nombre solo acepta letras, espacios, apóstrofes y guiones'),
   telefonoCliente: z.string().regex(/^[0-9]{10}$/, '10 dígitos sin espacios'),
   fechaNacimiento: z.string().min(1, 'Selecciona una fecha'),
-  email: z.string().email('Correo inválido').or(z.literal('')),
+  email: z
+    .string()
+    .email('Correo inválido')
+    .refine((valor) => esEmailSalonValido(valor), {
+      message: 'Solo se aceptan correos personales @gmail, @hotmail, @outlook o @yahoo',
+    })
+    .or(z.literal('')),
   metodoPago: z.enum(['cash', 'card', 'bank_transfer', 'digital_transfer']),
   marcaTinte: z.string().optional(),
-  observaciones: z.string().max(500, 'Máximo 500 caracteres').optional(),
+  observaciones: z
+    .string()
+    .trim()
+    .max(240, 'Máximo 240 caracteres')
+    .regex(
+      /^[\p{L}\p{M}\p{N}\s.,:;()¿?¡!'"%/#&+\-–—]*$/u,
+      'Las notas solo aceptan letras, números y signos comunes',
+    )
+    .optional(),
 });
 
 type DatosFormulario = z.infer<typeof esquemaFormulario>;
@@ -44,6 +64,54 @@ const PALABRAS_COLOR = [
   'mechas',
 ];
 
+function obtenerFechaDesdeIso(fechaIso: string): Date {
+  const partes = fechaIso.split('-');
+  const anio = Number(partes[0]);
+  const mes = Number(partes[1]);
+  const dia = Number(partes[2]);
+
+  if (!anio || !mes || !dia) {
+    return new Date();
+  }
+
+  return new Date(anio, mes - 1, dia);
+}
+
+function obtenerFechaIsoLocal(fecha: Date): string {
+  const anio = fecha.getFullYear();
+  const mes = `${fecha.getMonth() + 1}`.padStart(2, '0');
+  const dia = `${fecha.getDate()}`.padStart(2, '0');
+  return `${anio}-${mes}-${dia}`;
+}
+
+function obtenerInicioMesIso(fechaIso: string): string {
+  const fecha = obtenerFechaDesdeIso(fechaIso);
+  fecha.setDate(1);
+  return obtenerFechaIsoLocal(fecha);
+}
+
+function moverMesIso(fechaIso: string, desplazamientoMeses: number): string {
+  const fecha = obtenerFechaDesdeIso(fechaIso);
+  fecha.setDate(1);
+  fecha.setMonth(fecha.getMonth() + desplazamientoMeses);
+  return obtenerFechaIsoLocal(fecha);
+}
+
+function construirCuadriculaMes(fechaIso: string): Array<string | null> {
+  const inicioMes = obtenerFechaDesdeIso(obtenerInicioMesIso(fechaIso));
+  const primerDiaSemana = inicioMes.getDay();
+  const diasMes = new Date(inicioMes.getFullYear(), inicioMes.getMonth() + 1, 0).getDate();
+
+  return Array.from({ length: 42 }, (_, indice) => {
+    const dia = indice - primerDiaSemana + 1;
+    if (dia <= 0 || dia > diasMes) {
+      return null;
+    }
+
+    return obtenerFechaIsoLocal(new Date(inicioMes.getFullYear(), inicioMes.getMonth(), dia));
+  });
+}
+
 export function ModalCrearReservaManual({
   abierto,
   estudio,
@@ -52,11 +120,47 @@ export function ModalCrearReservaManual({
   onReservaCreada,
 }: PropsModalCrearReservaManual) {
   const { mostrarToast } = usarToast();
+  const clienteConsulta = useQueryClient();
+  const anioActual = new Date().getFullYear();
+  const limiteCumpleInicio = `${anioActual}-01-01`;
+  const limiteCumpleFin = `${anioActual}-12-31`;
   const [personalSeleccionado, setPersonalSeleccionado] = useState('');
   const [serviciosSeleccionados, setServiciosSeleccionados] = useState<Servicio[]>([]);
   const [horaSeleccionada, setHoraSeleccionada] = useState('');
+  const [fechaCumpleanosSeleccionada, setFechaCumpleanosSeleccionada] = useState('');
+  const [productosSeleccionados, setProductosSeleccionados] = useState<Record<string, number>>({});
+  const [fechaSeleccionada, setFechaSeleccionada] = useState(obtenerFechaLocalISO(fechaVista));
   const moneda: Moneda = estudio.country === 'Colombia' ? 'COP' : 'MXN';
-  const fechaStr = obtenerFechaLocalISO(fechaVista);
+  const fechaSeleccionadaDate = useMemo(
+    () => obtenerFechaDesdeIso(fechaSeleccionada),
+    [fechaSeleccionada],
+  );
+  const inicioMesCalendario = useMemo(
+    () => obtenerInicioMesIso(fechaSeleccionada),
+    [fechaSeleccionada],
+  );
+  const fechaMesCalendario = useMemo(
+    () => obtenerFechaDesdeIso(inicioMesCalendario),
+    [inicioMesCalendario],
+  );
+  const tituloMesCalendario = fechaMesCalendario.toLocaleDateString('es-MX', {
+    month: 'long',
+    year: 'numeric',
+  });
+  const cuadriculaMes = useMemo(
+    () => construirCuadriculaMes(fechaSeleccionada),
+    [fechaSeleccionada],
+  );
+  const fechasMesConsultables = useMemo(
+    () => cuadriculaMes.filter((fecha): fecha is string => Boolean(fecha)),
+    [cuadriculaMes],
+  );
+  const fechaSeleccionadaTexto = fechaSeleccionadaDate.toLocaleDateString('es-MX', {
+    weekday: 'long',
+    day: 'numeric',
+    month: 'long',
+    year: 'numeric',
+  });
   const miembro = estudio.staff.find((item) => item.id === personalSeleccionado);
   const serviciosDisponibles = personalSeleccionado
     ? estudio.selectedServices.filter((servicio) => miembro?.specialties.includes(servicio.name))
@@ -67,26 +171,232 @@ export function ModalCrearReservaManual({
     0,
   );
   const totalPrecio = serviciosSeleccionados.reduce((total, servicio) => total + servicio.price, 0);
-  const nombreDia = DIAS_SEMANA[fechaVista.getDay()]!;
+  const esPlanPro = estudio.plan === 'PRO';
+  const nombreDia = DIAS_SEMANA[fechaSeleccionadaDate.getDay()]!;
   const horarioDia = estudio.schedule[nombreDia];
-  const esFestivo = estudio.holidays?.includes(fechaStr) ?? false;
+  const esFestivo = estudio.holidays?.includes(fechaSeleccionada) ?? false;
   const duracionConsulta = totalDuracion > 0 ? totalDuracion : 30;
+  const puedeConsultarDisponibilidad = Boolean(
+    miembro && horarioDia?.isOpen && !esFestivo && serviciosSeleccionados.length > 0,
+  );
+
+  useEffect(() => {
+    if (!abierto) {
+      return;
+    }
+
+    setFechaSeleccionada(obtenerFechaLocalISO(fechaVista));
+    setHoraSeleccionada('');
+  }, [abierto, fechaVista]);
+
+  useEffect(() => {
+    if (!abierto || !estudio.id) {
+      return;
+    }
+
+    const controlador = new AbortController();
+    let cancelado = false;
+
+    const procesarEvento = () => {
+      void clienteConsulta.invalidateQueries({
+        queryKey: ['disponibilidad-estudio', estudio.id, personalSeleccionado],
+      });
+      void clienteConsulta.invalidateQueries({
+        queryKey: ['disponibilidad-estudio-calendario', estudio.id, personalSeleccionado],
+      });
+    };
+
+    const conectar = async () => {
+      while (!cancelado) {
+        try {
+          const cabeceras = obtenerCabecerasAutenticadas('GET', {
+            Accept: 'text/event-stream',
+          });
+
+          const respuesta = await fetch(`${URL_BASE}/disponibilidad/stream/${estudio.id}`, {
+            method: 'GET',
+            headers: cabeceras,
+            credentials: 'include',
+            signal: controlador.signal,
+          });
+
+          if (!respuesta.ok || !respuesta.body) {
+            throw new Error('No fue posible abrir el stream de disponibilidad');
+          }
+
+          const lector = respuesta.body.getReader();
+          const decoder = new TextDecoder();
+          let buffer = '';
+
+          while (!cancelado) {
+            const lectura = await lector.read();
+            if (lectura.done) {
+              break;
+            }
+
+            buffer += decoder.decode(lectura.value, { stream: true });
+            const bloques = buffer.split('\n\n');
+            buffer = bloques.pop() ?? '';
+
+            for (const bloque of bloques) {
+              const lineas = bloque.split('\n');
+              const tipoEvento = lineas
+                .find((linea) => linea.startsWith('event:'))
+                ?.replace('event:', '')
+                .trim();
+
+              if (tipoEvento !== 'disponibilidad') {
+                continue;
+              }
+
+              procesarEvento();
+            }
+          }
+        } catch {
+          if (cancelado || controlador.signal.aborted) {
+            return;
+          }
+
+          await new Promise((resolve) => setTimeout(resolve, 1200));
+        }
+      }
+    };
+
+    void conectar();
+
+    return () => {
+      cancelado = true;
+      controlador.abort();
+    };
+  }, [abierto, clienteConsulta, estudio.id, personalSeleccionado]);
+
   const consultaDisponibilidad = useQuery({
     queryKey: [
       'disponibilidad-estudio',
       estudio.id,
       personalSeleccionado,
-      fechaStr,
+      fechaSeleccionada,
       duracionConsulta,
     ],
     queryFn: () =>
-      obtenerDisponibilidadEstudio(estudio.id, personalSeleccionado, fechaStr, duracionConsulta),
-    enabled: Boolean(miembro && horarioDia?.isOpen && !esFestivo),
-    staleTime: 30_000,
+      obtenerDisponibilidadEstudio(
+        estudio.id,
+        personalSeleccionado,
+        fechaSeleccionada,
+        duracionConsulta,
+      ),
+    enabled: puedeConsultarDisponibilidad,
+    staleTime: 10_000,
+    refetchOnWindowFocus: true,
   });
+
+  const consultasDisponibilidadMes = useQueries({
+    queries: fechasMesConsultables.map((fechaDia) => {
+      const fechaDiaDate = obtenerFechaDesdeIso(fechaDia);
+      const nombreDiaSemana = DIAS_SEMANA[fechaDiaDate.getDay()]!;
+      const horarioDiaSemana = estudio.schedule[nombreDiaSemana];
+      const fechaDiaFestiva = estudio.holidays?.includes(fechaDia) ?? false;
+      const puedeConsultarDia = Boolean(
+        miembro &&
+        horarioDiaSemana?.isOpen &&
+        !fechaDiaFestiva &&
+        serviciosSeleccionados.length > 0,
+      );
+
+      return {
+        queryKey: [
+          'disponibilidad-estudio-calendario',
+          estudio.id,
+          personalSeleccionado,
+          fechaDia,
+          duracionConsulta,
+        ],
+        queryFn: async () => {
+          const slots = await obtenerDisponibilidadEstudio(
+            estudio.id,
+            personalSeleccionado,
+            fechaDia,
+            duracionConsulta,
+          );
+          return slots.filter((slot) => slot.status === 'AVAILABLE').length;
+        },
+        enabled: puedeConsultarDia,
+        staleTime: 10_000,
+        refetchOnWindowFocus: true,
+      };
+    }),
+  });
+
+  const consultaProductos = useQuery<Producto[]>({
+    queryKey: ['productos-reserva-manual', estudio.id],
+    queryFn: () => obtenerProductos(estudio.id),
+    enabled: abierto && esPlanPro,
+    staleTime: 60_000,
+  });
+
+  const productosDisponibles = (consultaProductos.data ?? []).filter((producto) => producto.activo);
+  const productosSeleccionadosListado = productosDisponibles
+    .filter((producto) => (productosSeleccionados[producto.id] ?? 0) > 0)
+    .map((producto) => ({
+      ...producto,
+      cantidad: productosSeleccionados[producto.id] ?? 0,
+    }));
+  const totalProductos = productosSeleccionadosListado.reduce(
+    (total, producto) => total + producto.precio * producto.cantidad,
+    0,
+  );
+  const totalGeneral = totalPrecio + totalProductos;
   const slotsDisponibles = (consultaDisponibilidad.data ?? []).filter(
     (slot) => slot.status === 'AVAILABLE',
   );
+  const disponibilidadPorFecha = new Map(
+    fechasMesConsultables.map((fechaDia, indice) => {
+      const fechaDiaDate = obtenerFechaDesdeIso(fechaDia);
+      const nombreDiaSemana = DIAS_SEMANA[fechaDiaDate.getDay()]!;
+      const horarioDiaSemana = estudio.schedule[nombreDiaSemana];
+      const fechaDiaFestiva = estudio.holidays?.includes(fechaDia) ?? false;
+      const consultaDia = consultasDisponibilidadMes[indice];
+      const totalSlots = consultaDia?.data ?? 0;
+      const cargandoDia = Boolean(consultaDia?.isLoading || consultaDia?.isFetching);
+      const errorDia = Boolean(consultaDia?.isError);
+      const seleccionado = fechaDia === fechaSeleccionada;
+      const esHoy = fechaDia === obtenerFechaLocalISO(new Date());
+
+      let estado: 'cerrado' | 'sin-servicios' | 'sin-disponibilidad' | 'disponible' | 'error';
+
+      if (!horarioDiaSemana?.isOpen || fechaDiaFestiva) {
+        estado = 'cerrado';
+      } else if (serviciosSeleccionados.length === 0 || !miembro) {
+        estado = 'sin-servicios';
+      } else if (errorDia) {
+        estado = 'error';
+      } else if (!cargandoDia && totalSlots <= 0) {
+        estado = 'sin-disponibilidad';
+      } else {
+        estado = 'disponible';
+      }
+
+      return [
+        fechaDia,
+        {
+          fechaDia,
+          fechaDiaDate,
+          totalSlots,
+          cargandoDia,
+          estado,
+          seleccionado,
+          esHoy,
+        },
+      ] as const;
+    }),
+  );
+  const disponibilidadMes = cuadriculaMes.map((fechaDia) => {
+    if (!fechaDia) {
+      return null;
+    }
+
+    return disponibilidadPorFecha.get(fechaDia) ?? null;
+  });
 
   const formulario = useForm<DatosFormulario>({
     resolver: zodResolver(esquemaFormulario),
@@ -105,6 +415,24 @@ export function ModalCrearReservaManual({
     PALABRAS_COLOR.some((palabra) => servicio.name.toLowerCase().includes(palabra)),
   );
 
+  function normalizarCumpleanosAnual(valor: string): string {
+    if (!valor) {
+      return '';
+    }
+
+    const partes = valor.split('-');
+    if (partes.length !== 3) {
+      return '';
+    }
+
+    const [, mes, dia] = partes;
+    if (!mes || !dia) {
+      return '';
+    }
+
+    return `${anioActual}-${mes}-${dia}`;
+  }
+
   const mutacionCrear = useMutation({
     mutationFn: async (datos: DatosFormulario) => {
       await crearReserva({
@@ -112,7 +440,7 @@ export function ModalCrearReservaManual({
         studioName: estudio.name,
         clientName: datos.nombreCliente,
         clientPhone: datos.telefonoCliente,
-        fechaNacimiento: datos.fechaNacimiento,
+        fechaNacimiento: fechaCumpleanosSeleccionada || datos.fechaNacimiento,
         email: datos.email,
         services: serviciosSeleccionados,
         totalDuration: totalDuracion,
@@ -125,7 +453,10 @@ export function ModalCrearReservaManual({
         colorNumber: null,
         observaciones: datos.observaciones || null,
         paymentMethod: datos.metodoPago,
-        date: fechaStr,
+        productosSeleccionados: Object.entries(productosSeleccionados)
+          .filter(([, cantidad]) => cantidad > 0)
+          .map(([productoId, cantidad]) => ({ productoId, cantidad })),
+        date: fechaSeleccionada,
         time: horaSeleccionada,
         createdAt: new Date().toISOString(),
       });
@@ -144,6 +475,8 @@ export function ModalCrearReservaManual({
       setPersonalSeleccionado('');
       setServiciosSeleccionados([]);
       setHoraSeleccionada('');
+      setFechaCumpleanosSeleccionada('');
+      setProductosSeleccionados({});
       onReservaCreada();
       onCerrar();
     },
@@ -165,6 +498,16 @@ export function ModalCrearReservaManual({
     setHoraSeleccionada('');
   }
 
+  function seleccionarFechaCalendario(fechaDia: string) {
+    setFechaSeleccionada(fechaDia);
+    setHoraSeleccionada('');
+  }
+
+  function cambiarMes(desplazamiento: number) {
+    setFechaSeleccionada((actual) => moverMesIso(actual, desplazamiento));
+    setHoraSeleccionada('');
+  }
+
   function cambiarPersonal(personalId: string) {
     setPersonalSeleccionado(personalId);
     setServiciosSeleccionados((actuales) => {
@@ -174,6 +517,36 @@ export function ModalCrearReservaManual({
       return actuales.filter((servicio) => miembroSiguiente.specialties.includes(servicio.name));
     });
     setHoraSeleccionada('');
+  }
+
+  function alternarProducto(productoId: string) {
+    setProductosSeleccionados((actual) => {
+      if (actual[productoId]) {
+        const siguiente = { ...actual };
+        delete siguiente[productoId];
+        return siguiente;
+      }
+
+      return {
+        ...actual,
+        [productoId]: 1,
+      };
+    });
+  }
+
+  function cambiarCantidadProducto(productoId: string, cantidad: number) {
+    setProductosSeleccionados((actual) => {
+      if (cantidad <= 0) {
+        const siguiente = { ...actual };
+        delete siguiente[productoId];
+        return siguiente;
+      }
+
+      return {
+        ...actual,
+        [productoId]: Math.min(20, Math.max(1, cantidad)),
+      };
+    });
   }
 
   if (!abierto) return null;
@@ -193,12 +566,7 @@ export function ModalCrearReservaManual({
             </h2>
             <p className="mt-1 flex items-center gap-2 text-sm font-medium text-slate-500">
               <CalendarDays className="h-4 w-4 text-pink-500" aria-hidden="true" />
-              {fechaVista.toLocaleDateString('es-MX', {
-                weekday: 'long',
-                day: 'numeric',
-                month: 'long',
-                year: 'numeric',
-              })}
+              {fechaSeleccionadaTexto}
             </p>
           </div>
           <button
@@ -271,6 +639,84 @@ export function ModalCrearReservaManual({
             </div>
 
             <div>
+              <div className="mb-3 rounded-3xl border border-slate-200 bg-slate-50 p-4">
+                <div className="flex items-center justify-between gap-3">
+                  <div>
+                    <p className="text-xs font-bold uppercase tracking-wide text-slate-500">
+                      Calendario en tiempo real
+                    </p>
+                    <p className="text-sm font-black capitalize text-slate-800">
+                      {tituloMesCalendario}
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => cambiarMes(-1)}
+                      aria-label="Mes anterior"
+                      className="rounded-xl border border-slate-200 bg-white p-2 text-slate-600 transition-colors hover:bg-slate-100"
+                    >
+                      <ChevronLeft className="h-4 w-4" aria-hidden="true" />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => cambiarMes(1)}
+                      aria-label="Mes siguiente"
+                      className="rounded-xl border border-slate-200 bg-white p-2 text-slate-600 transition-colors hover:bg-slate-100"
+                    >
+                      <ChevronRight className="h-4 w-4" aria-hidden="true" />
+                    </button>
+                  </div>
+                </div>
+
+                <div className="mt-3 grid grid-cols-7 text-center text-[10px] font-black uppercase tracking-wide text-slate-400">
+                  {['D', 'L', 'M', 'M', 'J', 'V', 'S'].map((diaSemana, indice) => (
+                    <div key={`${diaSemana}-${indice}`} className="py-1">
+                      {diaSemana}
+                    </div>
+                  ))}
+                </div>
+
+                <div className="mt-2 grid grid-cols-7 gap-2">
+                  {disponibilidadMes.map((dia, indice) => {
+                    if (!dia) {
+                      return (
+                        <div key={`vacio-${indice}`} className="h-20 rounded-2xl bg-transparent" />
+                      );
+                    }
+
+                    const numeroDia = dia.fechaDiaDate.toLocaleDateString('es-MX', {
+                      day: '2-digit',
+                    });
+                    const claseEstado =
+                      dia.estado === 'cerrado'
+                        ? 'border-slate-200 bg-slate-100 text-slate-500'
+                        : dia.estado === 'error'
+                          ? 'border-rose-200 bg-rose-50 text-rose-700'
+                          : dia.estado === 'sin-disponibilidad'
+                            ? 'border-amber-200 bg-amber-50 text-amber-700'
+                            : dia.estado === 'sin-servicios'
+                              ? 'border-slate-200 bg-white text-slate-400'
+                              : 'border-emerald-200 bg-emerald-50 text-emerald-700';
+
+                    return (
+                      <button
+                        key={dia.fechaDia}
+                        type="button"
+                        onClick={() => seleccionarFechaCalendario(dia.fechaDia)}
+                        className={`h-20 rounded-2xl border px-2 py-2 text-center transition-colors ${claseEstado} ${
+                          dia.seleccionado ? 'ring-2 ring-slate-900 ring-offset-1' : ''
+                        }`}
+                      >
+                        <span className="block pt-2 text-lg font-black leading-none">
+                          {numeroDia}
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
               <p className="mb-2 text-xs font-bold uppercase text-slate-500">Horario disponible</p>
               {!horarioDia?.isOpen || esFestivo ? (
                 <p className="rounded-2xl border border-dashed border-slate-200 px-4 py-5 text-sm text-slate-400">
@@ -278,7 +724,7 @@ export function ModalCrearReservaManual({
                 </p>
               ) : serviciosSeleccionados.length === 0 ? (
                 <p className="rounded-2xl border border-dashed border-slate-200 px-4 py-5 text-sm text-slate-400">
-                  Selecciona servicios para ver horarios disponibles.
+                  Selecciona servicios para ver disponibilidad en tiempo real.
                 </p>
               ) : consultaDisponibilidad.isLoading ? (
                 <p className="rounded-2xl border border-dashed border-slate-200 px-4 py-5 text-sm text-slate-400">
@@ -304,13 +750,136 @@ export function ModalCrearReservaManual({
               )}
             </div>
 
+            {esPlanPro && (
+              <div>
+                <p className="mb-2 text-xs font-bold uppercase text-slate-500">
+                  Productos adicionales (opcional)
+                </p>
+                {consultaProductos.isLoading ? (
+                  <p className="rounded-2xl border border-dashed border-slate-200 px-4 py-5 text-sm text-slate-400">
+                    Cargando productos...
+                  </p>
+                ) : productosDisponibles.length === 0 ? (
+                  <p className="rounded-2xl border border-dashed border-slate-200 px-4 py-5 text-sm text-slate-400">
+                    No hay productos activos en el catálogo.
+                  </p>
+                ) : (
+                  <div className="grid gap-2">
+                    {productosDisponibles.map((producto) => {
+                      const activo = (productosSeleccionados[producto.id] ?? 0) > 0;
+                      return (
+                        <div
+                          key={producto.id}
+                          className={`rounded-2xl border px-4 py-3 ${
+                            activo ? 'border-pink-300 bg-pink-50' : 'border-slate-200 bg-white'
+                          }`}
+                        >
+                          <div className="flex items-center justify-between gap-3">
+                            <button
+                              type="button"
+                              onClick={() => alternarProducto(producto.id)}
+                              className="text-left"
+                            >
+                              <p className="text-sm font-bold text-slate-800">{producto.nombre}</p>
+                              <p className="text-xs font-medium text-slate-500">
+                                {producto.categoria || 'General'} ·{' '}
+                                {formatearDinero(producto.precio, moneda)}
+                              </p>
+                            </button>
+                            {activo && (
+                              <input
+                                type="number"
+                                min={1}
+                                max={20}
+                                value={productosSeleccionados[producto.id] ?? 1}
+                                onChange={(evento) =>
+                                  cambiarCantidadProducto(
+                                    producto.id,
+                                    Number.parseInt(evento.target.value, 10) || 1,
+                                  )
+                                }
+                                className="w-20 rounded-xl border border-slate-200 px-2 py-1 text-sm font-semibold text-slate-700"
+                              />
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            )}
+
             <div className="rounded-3xl bg-pink-50 p-4 border border-pink-200">
               <p className="text-xs font-bold uppercase tracking-widest text-pink-600">Resumen</p>
-              <p className="mt-2 text-sm font-medium text-slate-700">
+              <div className="mt-2 space-y-1 text-sm text-slate-700">
+                <p>
+                  Especialista: <span className="font-bold">{miembro?.name || 'Pendiente'}</span>
+                </p>
+                <p>
+                  Fecha y hora:{' '}
+                  <span className="font-bold">
+                    {fechaSeleccionadaDate.toLocaleDateString('es-MX')} ·{' '}
+                    {horaSeleccionada || 'Pendiente'}
+                  </span>
+                </p>
+                <p>
+                  Cliente:{' '}
+                  <span className="font-bold">
+                    {formulario.watch('nombreCliente') || 'Pendiente'}
+                  </span>
+                </p>
+                <p>
+                  Teléfono:{' '}
+                  <span className="font-bold">
+                    {formulario.watch('telefonoCliente') || 'Pendiente'}
+                  </span>
+                </p>
+                <p>
+                  Birthday:{' '}
+                  <span className="font-bold">{fechaCumpleanosSeleccionada || 'Pendiente'}</span>
+                </p>
+                <p>
+                  Email: <span className="font-bold">{formulario.watch('email') || 'N/A'}</span>
+                </p>
+                <p>
+                  Método de pago:{' '}
+                  <span className="font-bold">{formulario.watch('metodoPago') || 'Pendiente'}</span>
+                </p>
+                <p>
+                  Servicios:{' '}
+                  <span className="font-bold">
+                    {serviciosSeleccionados.length > 0
+                      ? serviciosSeleccionados.map((servicio) => servicio.name).join(', ')
+                      : 'Pendiente'}
+                  </span>
+                </p>
+                {productosSeleccionadosListado.length > 0 && (
+                  <p>
+                    Productos:{' '}
+                    <span className="font-bold">
+                      {productosSeleccionadosListado
+                        .map((producto) => `${producto.nombre} x${producto.cantidad}`)
+                        .join(', ')}
+                    </span>
+                  </p>
+                )}
+                <p>
+                  Observaciones:{' '}
+                  <span className="font-bold">{formulario.watch('observaciones') || 'N/A'}</span>
+                </p>
+              </div>
+              <p className="mt-3 text-sm font-medium text-slate-700">
                 {serviciosSeleccionados.length} servicio(s) · {totalDuracion} min
               </p>
+              <p className="mt-1 text-sm font-bold text-slate-700">
+                Servicios: {formatearDinero(totalPrecio, moneda)}
+              </p>
+              <p className="mt-1 text-sm font-bold text-slate-700">
+                Productos: {formatearDinero(totalProductos, moneda)}
+              </p>
               <p className="mt-1 text-2xl font-black text-pink-700">
-                {formatearDinero(totalPrecio, moneda)}
+                Total: {formatearDinero(totalGeneral, moneda)}
               </p>
             </div>
           </div>
@@ -378,19 +947,37 @@ export function ModalCrearReservaManual({
             </div>
             <div>
               <input type="hidden" {...formulario.register('fechaNacimiento')} />
-              <SelectorFecha
-                etiqueta="Fecha de nacimiento"
-                valor={formulario.watch('fechaNacimiento') ?? ''}
-                max={new Date().toISOString().split('T')[0]}
-                error={formulario.formState.errors.fechaNacimiento?.message}
-                alCambiar={(valor) =>
-                  formulario.setValue('fechaNacimiento', valor, {
+              <label
+                htmlFor="fechaCumpleanos"
+                className="mb-1 block text-xs font-bold uppercase text-slate-500"
+              >
+                Fecha de cumpleaños (día y mes)
+              </label>
+              <input
+                id="fechaCumpleanos"
+                type="date"
+                value={fechaCumpleanosSeleccionada}
+                min={limiteCumpleInicio}
+                max={limiteCumpleFin}
+                onChange={(evento) => {
+                  const valorNormalizado = normalizarCumpleanosAnual(evento.target.value);
+                  setFechaCumpleanosSeleccionada(valorNormalizado);
+                  formulario.setValue('fechaNacimiento', valorNormalizado, {
                     shouldDirty: true,
                     shouldTouch: true,
                     shouldValidate: true,
-                  })
-                }
+                  });
+                }}
+                className="w-full rounded-2xl border border-slate-200 px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-pink-400"
               />
+              <p className="mt-1 text-[11px] text-slate-400">
+                Selecciona solo día y mes. El año está fijo en {anioActual}.
+              </p>
+              {formulario.formState.errors.fechaNacimiento && (
+                <p className="mt-1 text-xs text-red-500">
+                  {formulario.formState.errors.fechaNacimiento.message}
+                </p>
+              )}
             </div>
             <div>
               <label
@@ -441,8 +1028,8 @@ export function ModalCrearReservaManual({
               <textarea
                 id="observaciones"
                 rows={3}
-                maxLength={500}
-                placeholder="Allergies, preferences, special requests..."
+                maxLength={240}
+                placeholder="Alergias, preferencias, solicitudes especiales..."
                 {...formulario.register('observaciones')}
                 className="w-full resize-none rounded-2xl border border-slate-200 px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-pink-400"
               />

@@ -495,7 +495,7 @@ function ModalPreregistroVendedor({
               etiqueta="Categorias principales (opcional)"
               valor={formulario.categorias}
               onChange={(valor) => onCambiarFormulario((prev) => ({ ...prev, categorias: valor }))}
-              placeholder="Cabello, Unas, Barberia"
+              placeholder="Cabello, Uñas, Barbería"
             />
             <Campo
               etiqueta="Notas comerciales (opcional)"
