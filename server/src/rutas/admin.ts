@@ -4423,15 +4423,20 @@ export async function rutasAdmin(servidor: FastifyInstance): Promise<void> {
 
   /**
    * POST /admin/qa/sembrar — dispara el seed de credenciales QA en producción
-   * Solo accesible por maestro con permiso esMaestroTotal
+   * Solo accesible por maestro con permiso crearAdmins
    */
   servidor.post(
     '/admin/qa/sembrar',
-    { preHandler: [verificarJWT, requierePermiso('esMaestroTotal')] },
+    { preHandler: [verificarJWT, requierePermiso('crearAdmins')] },
     async (_solicitud, respuesta) => {
-      const { asegurarCredencialesQaLogin } = await import('../lib/credencialesQaLogin.js');
-      const resultado = await asegurarCredencialesQaLogin();
-      return respuesta.send({ datos: resultado });
+      try {
+        const { asegurarCredencialesQaLogin } = await import('../lib/credencialesQaLogin.js');
+        const resultado = await asegurarCredencialesQaLogin();
+        return respuesta.send({ datos: resultado });
+      } catch (error) {
+        const mensaje = error instanceof Error ? error.message : String(error);
+        return respuesta.code(500).send({ error: 'Error en seed QA', detalle: mensaje });
+      }
     },
   );
 }
