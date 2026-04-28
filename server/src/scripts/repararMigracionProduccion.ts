@@ -78,6 +78,19 @@ const REPARACIONES_MIGRACION: ReparacionMigracion[] = [
     tablasBase: ['estudios'],
     reparar: () => asegurarColumnaTabla('estudios', 'metodosPagoReserva', 'JSON NULL'),
   },
+  {
+    nombre: '20260427191651_agregar_excepciones_disponibilidad',
+    tablasBase: ['estudios', 'reservas'],
+    reparar: async () => {
+      const [col1, col2, col3, col4] = await Promise.all([
+        asegurarColumnaTabla('estudios', 'excepcionesDisponibilidad', 'JSON NULL'),
+        asegurarColumnaTabla('reservas', 'metodoPago', 'VARCHAR(191) NULL'),
+        asegurarColumnaTabla('reservas', 'motivoCancelacion', 'VARCHAR(191) NULL'),
+        asegurarColumnaTabla('reservas', 'productosAdicionales', 'JSON NULL'),
+      ]);
+      return col1 && col2 && col3 && col4;
+    },
+  },
 ];
 
 interface EstadoMigracion {
