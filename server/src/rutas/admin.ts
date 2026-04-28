@@ -4420,6 +4420,20 @@ export async function rutasAdmin(servidor: FastifyInstance): Promise<void> {
       return respuesta.send({ datos, total, pagina, totalPaginas: Math.ceil(total / limite) });
     },
   );
+
+  /**
+   * POST /admin/qa/sembrar — dispara el seed de credenciales QA en producción
+   * Solo accesible por maestro con permiso esMaestroTotal
+   */
+  servidor.post(
+    '/admin/qa/sembrar',
+    { preHandler: [verificarJWT, requierePermiso('esMaestroTotal')] },
+    async (_solicitud, respuesta) => {
+      const { asegurarCredencialesQaLogin } = await import('../lib/credencialesQaLogin.js');
+      const resultado = await asegurarCredencialesQaLogin();
+      return respuesta.send({ datos: resultado });
+    },
+  );
 }
 
 type RegistroBaseCliente = {
