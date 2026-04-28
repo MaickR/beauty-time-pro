@@ -112,8 +112,8 @@ export function PaginaReserva() {
     setClienteVinculado(cliente);
     flujo.precargarContacto({
       nombreCliente: `${cliente.nombre} ${cliente.apellido}`.trim(),
-      telefonoCliente: cliente.telefono,
-      fechaNacimiento: cliente.fechaNacimiento,
+      telefonoCliente: cliente.telefono ?? '',
+      fechaNacimiento: cliente.fechaNacimiento ?? '',
       email: cliente.email,
     });
   };

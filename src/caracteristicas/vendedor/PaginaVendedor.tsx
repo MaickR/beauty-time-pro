@@ -3,7 +3,6 @@ import { useQuery } from '@tanstack/react-query';
 import {
   BarChart3,
   Bell,
-  BellRing,
   FileText,
   FlaskConical,
   Landmark,
@@ -102,18 +101,21 @@ export function PaginaVendedor() {
   });
 
   return (
-    <div className="min-h-screen bg-[radial-gradient(circle_at_0%_0%,rgba(198,150,140,0.16),transparent_34%),radial-gradient(circle_at_100%_10%,rgba(20,60,50,0.10),transparent_28%),linear-gradient(180deg,#f8f4f2_0%,#f0ebe8_40%,#ede7e4_100%)]">
-      <header className="sticky top-0 z-40 border-b border-white/70 bg-white/85 backdrop-blur-xl">
-        <div className="mx-auto flex max-w-7xl items-center justify-between gap-3 px-4 py-4 md:px-8">
-          <div className="min-w-0">
-            <p className="text-[11px] font-black uppercase tracking-[0.3em] text-slate-500">
-              Panel comercial
-            </p>
-            <h1 className="mt-1 truncate text-xl font-black text-slate-900 md:text-3xl">
-              {usuario?.nombre
-                ? `Hola ${usuario.nombre}, vamos por mas cierres`
-                : 'Panel de vendedor'}
-            </h1>
+    <div className="min-h-screen bg-slate-50">
+      <header className="sticky top-0 z-40 border-b border-slate-200 bg-white shadow-sm">
+        <div className="mx-auto flex max-w-7xl items-center justify-between gap-3 px-4 py-4 md:px-6 md:py-5">
+          <div className="flex items-center gap-3">
+            <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-pink-600 text-white shrink-0">
+              <TrendingUp className="h-5 w-5" aria-hidden="true" />
+            </div>
+            <div className="min-w-0">
+              <p className="text-[9px] font-black uppercase tracking-widest text-slate-400">
+                Portal Comercial
+              </p>
+              <h1 className="truncate text-xl font-black italic uppercase leading-none text-slate-900 md:text-2xl">
+                {usuario?.nombre ?? 'Vendedor'}
+              </h1>
+            </div>
           </div>
 
           <div className="flex items-center gap-2">
@@ -123,18 +125,18 @@ export function PaginaVendedor() {
               onClick={() => {
                 void cerrarSesion();
               }}
-              aria-label="Cerrar sesion"
+              aria-label="Cerrar sesión"
               className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-bold text-slate-700 transition hover:border-rose-200 hover:bg-rose-50 hover:text-rose-700"
             >
               <LogOut className="h-4 w-4" aria-hidden="true" />
-              <span className="hidden sm:inline">Cerrar sesion</span>
+              <span className="hidden sm:inline">Cerrar sesión</span>
             </button>
           </div>
         </div>
       </header>
 
-      <nav className="border-b border-slate-200/70 bg-white/70">
-        <div className="mx-auto flex max-w-7xl gap-2 overflow-x-auto px-4 py-2 md:px-8">
+      <nav className="border-b border-slate-200 bg-white">
+        <div className="mx-auto flex max-w-7xl gap-1 overflow-x-auto px-4 py-3 md:px-6">
           {TABS.map(({ valor, etiqueta, icono: Icono }) => (
             <button
               key={valor}
@@ -157,7 +159,7 @@ export function PaginaVendedor() {
         </div>
       </nav>
 
-      <main className="mx-auto max-w-7xl px-4 py-8 md:px-8">
+      <main className="mx-auto max-w-7xl 2xl:max-w-screen-2xl px-4 py-6 md:px-6">
         {tabActivo === 'dashboard' && (
           <SeccionDashboard
             resumen={resumen ?? null}
@@ -283,80 +285,56 @@ function SeccionDashboard({
 
   return (
     <div className="space-y-6">
-      <section className="grid gap-4 lg:grid-cols-[1.35fr_0.95fr]">
-        <article className="rounded-4xl border border-slate-200 bg-white/90 p-6 shadow-sm">
-          <div className="flex flex-wrap items-start justify-between gap-3">
-            <div>
-              <p className="text-xs font-black uppercase tracking-[0.28em] text-slate-500">
-                Embudo comercial
-              </p>
-              <h2 className="mt-2 text-3xl font-black tracking-tight text-slate-900">
-                Pipeline vendedor en tiempo real
-              </h2>
-              <p className="mt-2 text-sm text-slate-500">
-                Haz click en cualquier metrica para abrir tabla detallada con filtros.
-              </p>
-            </div>
-            <span className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-bold text-slate-600">
-              <BellRing className="h-3.5 w-3.5" aria-hidden="true" />
-              Refresco cada 30 s
-            </span>
+      <section className="overflow-hidden rounded-[2.75rem] bg-linear-to-br from-slate-950 via-slate-900 to-pink-700 text-white shadow-xl">
+        <div className="grid gap-6 p-6 md:p-8 lg:grid-cols-[minmax(0,1fr)_300px] lg:items-end">
+          <div>
+            <p className="text-xs font-black uppercase tracking-[0.28em] text-pink-200">
+              Commercial Pipeline
+            </p>
+            <h2 className="mt-2 text-3xl font-black tracking-tight md:text-4xl">
+              {resumen.aprobados} active salons
+            </h2>
+            <p className="mt-3 max-w-xl text-sm font-medium text-slate-200 md:text-base">
+              Click any metric to open a detailed table with filters. Data refreshes every 30s.
+            </p>
           </div>
 
-          <div className="mt-6 grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
-            {tarjetas.map((tarjeta) => (
-              <button
-                key={tarjeta.titulo}
-                type="button"
-                onClick={() => onAbrirDetalle(tarjeta.id)}
-                className={`rounded-3xl border p-5 text-left transition hover:-translate-y-0.5 hover:shadow-lg ${tarjeta.estilo}`}
-              >
-                <tarjeta.icono className="h-5 w-5 opacity-80" aria-hidden="true" />
-                <p className="mt-4 text-xs font-bold uppercase opacity-75">{tarjeta.titulo}</p>
-                <p className="mt-1 text-3xl font-black">{tarjeta.valor}</p>
-                <p className="mt-2 text-sm opacity-80">{tarjeta.subtitulo}</p>
-              </button>
-            ))}
-          </div>
-        </article>
-
-        <article className="rounded-4xl border border-slate-200 bg-slate-950 p-6 text-white shadow-sm">
-          <p className="text-xs font-black uppercase tracking-[0.28em] text-white/60">
-            Pulso de ventas
-          </p>
-          <p className="mt-3 text-4xl font-black tracking-tight">
-            {formatearDinero(resumen.ingresosGenerados, monedaPrincipal)}
-          </p>
-          <p className="mt-2 text-sm text-white/70">Ingreso total generado por tu cartera.</p>
-
-          <div className="mt-6 space-y-3">
-            <div className="rounded-3xl bg-white/10 p-4">
-              <p className="text-xs font-black uppercase tracking-[0.2em] text-white/60">
-                Comision proyectada
+          <div className="rounded-4xl border border-white/15 bg-white/10 p-5 backdrop-blur-sm">
+            <p className="text-[10px] font-black uppercase tracking-[0.24em] text-pink-100">
+              Revenue generated
+            </p>
+            <p className="mt-3 text-2xl font-black text-white">
+              {formatearDinero(resumen.ingresosGenerados, monedaPrincipal)}
+            </p>
+            <p className="mt-2 text-sm text-slate-200">
+              Commission: {formatearDinero(resumen.comisionGenerada, monedaPrincipal)}
+            </p>
+            <div className="mt-3 space-y-1 text-xs font-bold uppercase tracking-wide text-pink-100">
+              <p>
+                Standard {resumen.porcentajeComision}% · Pro {resumen.porcentajeComisionPro}%
               </p>
-              <p className="mt-2 text-xl font-black">
-                {formatearDinero(resumen.comisionGenerada, monedaPrincipal)}
-              </p>
-              <p className="mt-2 text-xs text-white/70">
-                Standard {resumen.porcentajeComision}% - Pro {resumen.porcentajeComisionPro}%
-              </p>
-            </div>
-            <div className="rounded-3xl bg-white/10 p-4">
-              <p className="text-xs font-black uppercase tracking-[0.2em] text-white/60">
-                Tasa de aprobacion
-              </p>
-              <div className="mt-3 h-3 overflow-hidden rounded-full bg-white/15">
-                <div
-                  className="h-full rounded-full bg-emerald-400"
-                  style={{ width: `${tasaAprobacion}%` }}
-                />
-              </div>
-              <p className="mt-2 text-sm text-white/80">
-                {tasaAprobacion}% de pre-registros convertidos.
-              </p>
+              <p>Approval rate: {tasaAprobacion}%</p>
             </div>
           </div>
-        </article>
+        </div>
+
+        <div className="grid gap-3 border-t border-white/10 bg-slate-950/30 p-4 md:grid-cols-4 md:p-6">
+          {tarjetas.map((tarjeta) => (
+            <button
+              key={tarjeta.titulo}
+              type="button"
+              onClick={() => onAbrirDetalle(tarjeta.id)}
+              className="group rounded-3xl border border-white/10 bg-white/10 p-4 text-left transition hover:bg-white/15"
+            >
+              <tarjeta.icono className="h-5 w-5 text-pink-200" aria-hidden="true" />
+              <p className="mt-3 text-xs font-bold uppercase tracking-wide text-white/60">
+                {tarjeta.titulo}
+              </p>
+              <p className="mt-1 text-3xl font-black text-white">{tarjeta.valor}</p>
+              <p className="mt-2 text-xs text-white/60">{tarjeta.subtitulo}</p>
+            </button>
+          ))}
+        </div>
       </section>
 
       <section className="grid gap-4 lg:grid-cols-[1fr_1fr]">

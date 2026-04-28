@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
-import { AlertTriangle, Gift } from 'lucide-react';
+import { ChevronDown, Gift } from 'lucide-react';
 import {
   buscarClienteFidelidadPorTelefono,
   type EstadoFidelidadCliente,
@@ -12,7 +12,6 @@ import {
   limpiarNombrePersonaEntrada,
   limpiarTelefonoEntrada,
 } from '../../../utils/formularioSalon';
-import { esCumpleanosActualValido } from '../../../lib/registroCliente';
 import { obtenerOpcionesMetodosPagoReserva } from '../../../lib/metodosPagoReserva';
 import type { Estudio, MetodoPagoReserva } from '../../../tipos';
 import type { usarFlujoReserva } from '../hooks/usarFlujoReserva';
@@ -27,25 +26,6 @@ const esquema = z.object({
     .min(3, 'Mínimo 3 caracteres')
     .regex(/^[\p{L}\p{M}\s'’-]+$/u, 'Ingresa letras, espacios, apóstrofes y guiones válidos'),
   telefonoCliente: z.string().regex(/^[0-9]{10}$/, '10 dígitos sin espacios ni guiones'),
-  fechaNacimiento: z
-    .string()
-    .min(1, 'La fecha de cumpleaños es requerida')
-    .refine((v) => {
-      if (esCumpleanosActualValido(v)) {
-        return true;
-      }
-      const d = new Date(v);
-      return !isNaN(d.getTime()) && d <= new Date();
-    }, 'No puede ser una fecha futura')
-    .refine((v) => {
-      if (esCumpleanosActualValido(v)) {
-        return true;
-      }
-      const d = new Date(v);
-      const hace100 = new Date();
-      hace100.setFullYear(hace100.getFullYear() - 100);
-      return d >= hace100;
-    }, 'Fecha no puede ser mayor a 100 años'),
   email: z
     .string()
     .refine(
@@ -78,22 +58,11 @@ interface PropsFormularioContacto {
   onEnviar: (datos: DatosEnvioContacto) => void;
 }
 
-function calcularEdad(fechaNacimiento: string): number | null {
-  if (esCumpleanosActualValido(fechaNacimiento)) {
-    return null;
-  }
-  const nacimiento = new Date(fechaNacimiento);
-  const hoy = new Date();
-  let edad = hoy.getFullYear() - nacimiento.getFullYear();
-  const cumple = new Date(hoy.getFullYear(), nacimiento.getMonth(), nacimiento.getDate());
-  if (hoy < cumple) edad--;
-  return edad;
-}
-
 export function FormularioContacto({ estudio, flujo, onEnviar }: PropsFormularioContacto) {
   const [fidelidadCliente, setFidelidadCliente] = useState<EstadoFidelidadCliente | null>(null);
   const [consultandoFidelidad, setConsultandoFidelidad] = useState(false);
   const [usarRecompensa, setUsarRecompensa] = useState(false);
+  const [mostrarOpcionales, setMostrarOpcionales] = useState(false);
   const metodosPagoDisponibles = obtenerOpcionesMetodosPagoReserva(estudio.metodosPagoReserva);
   const {
     register,
@@ -106,7 +75,6 @@ export function FormularioContacto({ estudio, flujo, onEnviar }: PropsFormulario
     defaultValues: {
       nombreCliente: flujo.nombreCliente,
       telefonoCliente: flujo.telefonoCliente,
-      fechaNacimiento: flujo.fechaNacimiento,
       email: flujo.email,
       metodoPago:
         metodosPagoDisponibles.find((metodo) => metodo.valor === flujo.metodoPago)?.valor ??
@@ -115,12 +83,7 @@ export function FormularioContacto({ estudio, flujo, onEnviar }: PropsFormulario
     },
   });
 
-  const fechaNacimientoValor = watch('fechaNacimiento');
   const metodoPagoSeleccionado = watch('metodoPago');
-  const registroFechaNacimiento = register('fechaNacimiento');
-  const edadCliente =
-    fechaNacimientoValor && !errors.fechaNacimiento ? calcularEdad(fechaNacimientoValor) : null;
-  const esMenor = edadCliente !== null ? edadCliente < 18 : false;
   const seccionesDetalleServicio = useMemo(
     () =>
       flujo.serviciosSeleccionados.map((servicio) => {
@@ -140,16 +103,9 @@ export function FormularioContacto({ estudio, flujo, onEnviar }: PropsFormulario
   useEffect(() => {
     flujo.actualizarContacto('nombreCliente', valores.nombreCliente ?? '');
     flujo.actualizarContacto('telefonoCliente', valores.telefonoCliente ?? '');
-    flujo.actualizarContacto('fechaNacimiento', valores.fechaNacimiento ?? '');
     flujo.actualizarContacto('email', valores.email ?? '');
     flujo.actualizarContacto('metodoPago', valores.metodoPago ?? 'cash');
-  }, [
-    valores.nombreCliente,
-    valores.telefonoCliente,
-    valores.fechaNacimiento,
-    valores.email,
-    valores.metodoPago,
-  ]);
+  }, [valores.nombreCliente, valores.telefonoCliente, valores.email, valores.metodoPago]);
 
   useEffect(() => {
     const metodoPredeterminado = metodosPagoDisponibles[0]?.valor ?? 'cash';
@@ -168,9 +124,8 @@ export function FormularioContacto({ estudio, flujo, onEnviar }: PropsFormulario
   useEffect(() => {
     setValue('nombreCliente', flujo.nombreCliente, { shouldDirty: false });
     setValue('telefonoCliente', flujo.telefonoCliente, { shouldDirty: false });
-    setValue('fechaNacimiento', flujo.fechaNacimiento, { shouldDirty: false });
     setValue('email', flujo.email, { shouldDirty: false });
-  }, [flujo.nombreCliente, flujo.telefonoCliente, flujo.fechaNacimiento, flujo.email, setValue]);
+  }, [flujo.nombreCliente, flujo.telefonoCliente, flujo.email, setValue]);
 
   const formularioValido =
     flujo.personalSeleccionado && flujo.horaSeleccionada && flujo.serviciosSeleccionados.length > 0;
@@ -211,7 +166,7 @@ export function FormularioContacto({ estudio, flujo, onEnviar }: PropsFormulario
 
   return (
     <section className="bg-slate-900 rounded-[2.5rem] md:rounded-[3.25rem] p-5 md:p-8 shadow-2xl flex flex-col text-white">
-      <h3 className="text-lg md:text-2xl font-black italic uppercase tracking-tighter mb-6 flex items-center gap-3">
+      <h3 className="text-lg md:text-2xl font-black italic uppercase tracking-tighter mb-6 flex items-center gap-3 text-white">
         <span
           className="bg-pink-600 text-white w-8 h-8 rounded-full flex items-center justify-center text-sm"
           aria-hidden="true"
@@ -373,90 +328,75 @@ export function FormularioContacto({ estudio, flujo, onEnviar }: PropsFormulario
             </div>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <div>
-              <label
-                htmlFor="fechaNacimiento"
-                className="block text-[10px] font-black text-pink-400 uppercase tracking-widest mb-3 ml-2"
-              >
-                Fecha de Cumpleaños{' '}
-                <span className="text-red-500 text-sm" aria-hidden="true">
-                  *
-                </span>
-              </label>
-              <input
-                id="fechaNacimiento"
-                type="date"
-                {...registroFechaNacimiento}
-                value={fechaNacimientoValor ?? ''}
-                min="1926-01-01"
-                max={new Date().toISOString().split('T')[0]}
-                onChange={(evento) => {
-                  registroFechaNacimiento.onChange(evento);
-                  setValue('fechaNacimiento', evento.target.value, {
-                    shouldDirty: true,
-                    shouldTouch: true,
-                    shouldValidate: true,
-                  });
-                }}
-                className="w-full rounded-2xl border border-slate-700 bg-slate-800 px-4 py-4 text-sm font-bold text-white outline-none transition-all focus:ring-2 focus:ring-pink-500 aria-invalid:border-red-500"
-                aria-required="true"
-                aria-invalid={errors.fechaNacimiento ? 'true' : 'false'}
-                aria-describedby={
-                  errors.fechaNacimiento
-                    ? 'error-fecha-nacimiento'
-                    : esMenor
-                      ? 'aviso-menor'
-                      : undefined
-                }
+          <div>
+            <button
+              type="button"
+              onClick={() => setMostrarOpcionales((v) => !v)}
+              className="flex w-full items-center justify-between rounded-2xl border border-slate-700 bg-slate-800/60 px-5 py-3 text-left text-[10px] font-black uppercase tracking-widest text-slate-400 transition hover:bg-slate-800"
+              aria-expanded={mostrarOpcionales}
+            >
+              <span>Optional details (email &amp; notes)</span>
+              <ChevronDown
+                className={`h-4 w-4 transition-transform ${mostrarOpcionales ? 'rotate-180' : ''}`}
+                aria-hidden="true"
               />
-              {errors.fechaNacimiento && (
-                <p
-                  id="error-fecha-nacimiento"
-                  role="alert"
-                  className="mt-2 ml-2 text-red-400 text-xs font-bold"
-                >
-                  {errors.fechaNacimiento.message}
-                </p>
-              )}
-              {esMenor && !errors.fechaNacimiento && (
-                <p
-                  id="aviso-menor"
-                  className="mt-3 px-4 py-3 bg-yellow-900/40 border border-yellow-700/60 rounded-xl text-yellow-300 text-xs font-bold flex items-start gap-2"
-                >
-                  <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" aria-hidden="true" />
-                  Cliente menor de edad. Al confirmar, el salón quedará informado de que se requiere
-                  acompañante adulto el día de la cita.
-                </p>
-              )}
-            </div>
+            </button>
 
-            <div>
-              <label
-                htmlFor="email"
-                className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3 ml-2"
-              >
-                Correo Electrónico{' '}
-                <span className="text-slate-600 text-[9px] normal-case">(opcional)</span>
-              </label>
-              <input
-                id="email"
-                type="email"
-                {...register('email')}
-                className="w-full px-6 py-4 bg-slate-800 border border-slate-700 rounded-2xl font-bold text-white outline-none focus:border-pink-500 transition-all"
-                placeholder="Ej: maria@gmail.com"
-                aria-describedby={errors.email ? 'error-email' : undefined}
-              />
-              {errors.email && (
-                <p
-                  id="error-email"
-                  role="alert"
-                  className="mt-2 ml-2 text-red-400 text-xs font-bold"
-                >
-                  {errors.email.message}
-                </p>
-              )}
-            </div>
+            {mostrarOpcionales && (
+              <div className="mt-4 space-y-5">
+                <div>
+                  <label
+                    htmlFor="email"
+                    className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3 ml-2"
+                  >
+                    Email Address{' '}
+                    <span className="text-slate-600 text-[9px] normal-case">(optional)</span>
+                  </label>
+                  <input
+                    id="email"
+                    type="email"
+                    {...register('email')}
+                    className="w-full px-6 py-4 bg-slate-800 border border-slate-700 rounded-2xl font-bold text-white outline-none focus:border-pink-500 transition-all"
+                    placeholder="e.g. maria@gmail.com"
+                    aria-describedby={errors.email ? 'error-email' : undefined}
+                  />
+                  {errors.email && (
+                    <p
+                      id="error-email"
+                      role="alert"
+                      className="mt-2 ml-2 text-red-400 text-xs font-bold"
+                    >
+                      {errors.email.message}
+                    </p>
+                  )}
+                </div>
+
+                <div>
+                  <label
+                    htmlFor="observaciones"
+                    className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3 ml-2"
+                  >
+                    Notes <span className="text-slate-600 text-[9px] normal-case">(optional)</span>
+                  </label>
+                  <textarea
+                    id="observaciones"
+                    rows={3}
+                    maxLength={240}
+                    placeholder="Allergies, preferences or a brief indication..."
+                    {...register('observaciones')}
+                    className="w-full px-6 py-4 bg-slate-800 border border-slate-700 rounded-2xl font-bold text-white outline-none focus:border-pink-500 transition-all resize-none"
+                  />
+                  <p className="mt-2 ml-2 text-[11px] text-slate-400">
+                    {(watch('observaciones') ?? '').length}/240 characters
+                  </p>
+                  {errors.observaciones && (
+                    <p className="mt-2 ml-2 text-red-400 text-xs font-bold">
+                      {errors.observaciones.message}
+                    </p>
+                  )}
+                </div>
+              </div>
+            )}
           </div>
 
           <div>
@@ -517,31 +457,6 @@ export function FormularioContacto({ estudio, flujo, onEnviar }: PropsFormulario
             <p className="mt-1 text-slate-300">
               Salón: {flujo.sucursalSeleccionada || estudio.name || 'Principal'}
             </p>
-          </div>
-
-          <div>
-            <label
-              htmlFor="observaciones"
-              className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3 ml-2"
-            >
-              Notas <span className="text-slate-600 text-[9px] normal-case">(opcional)</span>
-            </label>
-            <textarea
-              id="observaciones"
-              rows={3}
-              maxLength={240}
-              placeholder="Alergias, preferencias o una indicación breve..."
-              {...register('observaciones')}
-              className="w-full px-6 py-4 bg-slate-800 border border-slate-700 rounded-2xl font-bold text-white outline-none focus:border-pink-500 transition-all resize-none"
-            />
-            <p className="mt-2 ml-2 text-[11px] text-slate-400">
-              {(watch('observaciones') ?? '').length}/240 caracteres
-            </p>
-            {errors.observaciones && (
-              <p className="mt-2 ml-2 text-red-400 text-xs font-bold">
-                {errors.observaciones.message}
-              </p>
-            )}
           </div>
         </div>
 

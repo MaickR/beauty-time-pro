@@ -121,13 +121,9 @@ export function ModalCrearReservaManual({
 }: PropsModalCrearReservaManual) {
   const { mostrarToast } = usarToast();
   const clienteConsulta = useQueryClient();
-  const anioActual = new Date().getFullYear();
-  const limiteCumpleInicio = `${anioActual}-01-01`;
-  const limiteCumpleFin = `${anioActual}-12-31`;
   const [personalSeleccionado, setPersonalSeleccionado] = useState('');
   const [serviciosSeleccionados, setServiciosSeleccionados] = useState<Servicio[]>([]);
   const [horaSeleccionada, setHoraSeleccionada] = useState('');
-  const [fechaCumpleanosSeleccionada, setFechaCumpleanosSeleccionada] = useState('');
   const [productosSeleccionados, setProductosSeleccionados] = useState<Record<string, number>>({});
   const [fechaSeleccionada, setFechaSeleccionada] = useState(obtenerFechaLocalISO(fechaVista));
   const moneda: Moneda = estudio.country === 'Colombia' ? 'COP' : 'MXN';
@@ -415,24 +411,6 @@ export function ModalCrearReservaManual({
     PALABRAS_COLOR.some((palabra) => servicio.name.toLowerCase().includes(palabra)),
   );
 
-  function normalizarCumpleanosAnual(valor: string): string {
-    if (!valor) {
-      return '';
-    }
-
-    const partes = valor.split('-');
-    if (partes.length !== 3) {
-      return '';
-    }
-
-    const [, mes, dia] = partes;
-    if (!mes || !dia) {
-      return '';
-    }
-
-    return `${anioActual}-${mes}-${dia}`;
-  }
-
   const mutacionCrear = useMutation({
     mutationFn: async (datos: DatosFormulario) => {
       await crearReserva({
@@ -440,7 +418,7 @@ export function ModalCrearReservaManual({
         studioName: estudio.name,
         clientName: datos.nombreCliente,
         clientPhone: datos.telefonoCliente,
-        fechaNacimiento: fechaCumpleanosSeleccionada || datos.fechaNacimiento,
+        fechaNacimiento: datos.fechaNacimiento,
         email: datos.email,
         services: serviciosSeleccionados,
         totalDuration: totalDuracion,
@@ -475,7 +453,6 @@ export function ModalCrearReservaManual({
       setPersonalSeleccionado('');
       setServiciosSeleccionados([]);
       setHoraSeleccionada('');
-      setFechaCumpleanosSeleccionada('');
       setProductosSeleccionados({});
       onReservaCreada();
       onCerrar();
@@ -836,10 +813,6 @@ export function ModalCrearReservaManual({
                   </span>
                 </p>
                 <p>
-                  Birthday:{' '}
-                  <span className="font-bold">{fechaCumpleanosSeleccionada || 'Pendiente'}</span>
-                </p>
-                <p>
                   Email: <span className="font-bold">{formulario.watch('email') || 'N/A'}</span>
                 </p>
                 <p>
@@ -944,40 +917,6 @@ export function ModalCrearReservaManual({
               <p className="mt-1 text-[11px] text-slate-400">
                 El cobro se realiza al finalizar el servicio, directamente en el salón.
               </p>
-            </div>
-            <div>
-              <input type="hidden" {...formulario.register('fechaNacimiento')} />
-              <label
-                htmlFor="fechaCumpleanos"
-                className="mb-1 block text-xs font-bold uppercase text-slate-500"
-              >
-                Fecha de cumpleaños (día y mes)
-              </label>
-              <input
-                id="fechaCumpleanos"
-                type="date"
-                value={fechaCumpleanosSeleccionada}
-                min={limiteCumpleInicio}
-                max={limiteCumpleFin}
-                onChange={(evento) => {
-                  const valorNormalizado = normalizarCumpleanosAnual(evento.target.value);
-                  setFechaCumpleanosSeleccionada(valorNormalizado);
-                  formulario.setValue('fechaNacimiento', valorNormalizado, {
-                    shouldDirty: true,
-                    shouldTouch: true,
-                    shouldValidate: true,
-                  });
-                }}
-                className="w-full rounded-2xl border border-slate-200 px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-pink-400"
-              />
-              <p className="mt-1 text-[11px] text-slate-400">
-                Selecciona solo día y mes. El año está fijo en {anioActual}.
-              </p>
-              {formulario.formState.errors.fechaNacimiento && (
-                <p className="mt-1 text-xs text-red-500">
-                  {formulario.formState.errors.fechaNacimiento.message}
-                </p>
-              )}
             </div>
             <div>
               <label

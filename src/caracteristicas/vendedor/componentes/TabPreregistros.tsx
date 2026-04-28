@@ -7,19 +7,9 @@ import {
   type SetStateAction,
 } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import {
-  AlertTriangle,
-  CheckCircle2,
-  Clock3,
-  FileText,
-  PlusCircle,
-  Search,
-  UserRoundCheck,
-  X,
-  XCircle,
-} from 'lucide-react';
+import { FileText, PlusCircle, Search, X } from 'lucide-react';
 import { crearPreregistro, obtenerMisPreregistros } from '../../../servicios/servicioVendedor';
-import type { DatosPreregistro, PreregistroSalon } from '../../../servicios/servicioVendedor';
+import type { DatosPreregistro } from '../../../servicios/servicioVendedor';
 import {
   esEmailSalonValido,
   limpiarNombrePersonaEntrada,
@@ -325,10 +315,76 @@ export function TabPreregistros() {
           <p className="font-medium text-slate-500">No hay pre-registros para este filtro.</p>
         </div>
       ) : (
-        <div className="space-y-3">
-          {preregistros.map((item) => (
-            <TarjetaPreregistro key={item.id} preregistro={item} />
-          ))}
+        <div className="overflow-x-auto rounded-3xl border border-slate-200 bg-white shadow-sm">
+          <table className="w-full min-w-[640px] text-sm">
+            <thead>
+              <tr className="border-b border-slate-100 bg-slate-50">
+                <th className="px-5 py-3 text-left text-[10px] font-black uppercase tracking-[0.18em] text-slate-500">
+                  Salon
+                </th>
+                <th className="px-5 py-3 text-left text-[10px] font-black uppercase tracking-[0.18em] text-slate-500">
+                  Propietario
+                </th>
+                <th className="px-5 py-3 text-left text-[10px] font-black uppercase tracking-[0.18em] text-slate-500">
+                  Email
+                </th>
+                <th className="px-5 py-3 text-left text-[10px] font-black uppercase tracking-[0.18em] text-slate-500">
+                  País
+                </th>
+                <th className="px-5 py-3 text-left text-[10px] font-black uppercase tracking-[0.18em] text-slate-500">
+                  Plan
+                </th>
+                <th className="px-5 py-3 text-left text-[10px] font-black uppercase tracking-[0.18em] text-slate-500">
+                  Estado
+                </th>
+                <th className="px-5 py-3 text-left text-[10px] font-black uppercase tracking-[0.18em] text-slate-500">
+                  Fecha
+                </th>
+              </tr>
+            </thead>
+            <tbody>
+              {preregistros.map((item, indice) => {
+                const estilo = ESTILOS_ESTADO[item.estado] ?? ESTILOS_ESTADO.pendiente;
+                return (
+                  <tr
+                    key={item.id}
+                    className={`border-b border-slate-100 transition hover:bg-slate-50 ${indice % 2 === 0 ? '' : 'bg-slate-50/40'}`}
+                  >
+                    <td className="px-5 py-3">
+                      <p className="font-black text-slate-900">{item.nombreSalon}</p>
+                      {item.telefonoPropietario && (
+                        <p className="text-[11px] text-slate-500">{item.telefonoPropietario}</p>
+                      )}
+                    </td>
+                    <td className="px-5 py-3 font-semibold text-slate-700">{item.propietario}</td>
+                    <td className="px-5 py-3 text-slate-600">{item.emailPropietario}</td>
+                    <td className="px-5 py-3 text-slate-600">{item.pais}</td>
+                    <td className="px-5 py-3">
+                      <span
+                        className={`rounded-full px-2.5 py-1 text-[10px] font-black uppercase tracking-wide ${item.plan === 'PRO' ? 'bg-purple-100 text-purple-800' : 'bg-slate-100 text-slate-700'}`}
+                      >
+                        {item.plan}
+                      </span>
+                    </td>
+                    <td className="px-5 py-3">
+                      <span className={estilo.clase}>{estilo.etiqueta}</span>
+                      {item.estado === 'rechazado' && item.motivoRechazo && (
+                        <p
+                          className="mt-1 max-w-[180px] truncate text-[11px] text-rose-600"
+                          title={item.motivoRechazo}
+                        >
+                          {item.motivoRechazo}
+                        </p>
+                      )}
+                    </td>
+                    <td className="px-5 py-3 text-[11px] text-slate-500 whitespace-nowrap">
+                      {formatearFechaHumana(item.creadoEn)}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
         </div>
       )}
 
@@ -620,80 +676,5 @@ function TarjetaResumen({
       <p className="text-[11px] font-black uppercase tracking-[0.2em] opacity-70">{etiqueta}</p>
       <p className="mt-2 text-3xl font-black">{valor}</p>
     </article>
-  );
-}
-
-function TarjetaPreregistro({ preregistro }: { preregistro: PreregistroSalon }) {
-  const estilo = ESTILOS_ESTADO[preregistro.estado] ?? ESTILOS_ESTADO.pendiente;
-
-  return (
-    <article className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div className="min-w-0">
-          <p className="truncate text-lg font-black text-slate-900">{preregistro.nombreSalon}</p>
-          <p className="mt-1 flex items-center gap-2 text-sm text-slate-600">
-            <UserRoundCheck className="h-4 w-4 text-slate-400" aria-hidden="true" />
-            {preregistro.propietario}
-          </p>
-          <p className="mt-1 text-sm text-slate-500">{preregistro.emailPropietario}</p>
-          <p className="mt-2 text-xs font-semibold uppercase tracking-[0.15em] text-slate-400">
-            {preregistro.pais} · {preregistro.plan} · {formatearFechaHumana(preregistro.creadoEn)}
-          </p>
-        </div>
-
-        <span className={estilo.clase}>
-          {preregistro.estado === 'pendiente' && (
-            <Clock3 className="h-3.5 w-3.5" aria-hidden="true" />
-          )}
-          {preregistro.estado === 'aprobado' && (
-            <CheckCircle2 className="h-3.5 w-3.5" aria-hidden="true" />
-          )}
-          {preregistro.estado === 'rechazado' && (
-            <XCircle className="h-3.5 w-3.5" aria-hidden="true" />
-          )}
-          {estilo.etiqueta}
-        </span>
-      </div>
-
-      <div className="mt-4 grid gap-3 sm:grid-cols-3">
-        <Detalle etiqueta="Telefono" valor={preregistro.telefonoPropietario} />
-        <Detalle etiqueta="Direccion" valor={preregistro.direccion || 'Sin direccion'} />
-        <Detalle etiqueta="Categorias" valor={preregistro.categorias || 'Sin categorias'} />
-      </div>
-
-      {preregistro.descripcion && (
-        <div className="mt-3 rounded-2xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-600">
-          {preregistro.descripcion}
-        </div>
-      )}
-
-      {preregistro.estado === 'aprobado' && preregistro.estudioCreadoId && (
-        <div className="mt-3 inline-flex items-center gap-2 rounded-xl bg-emerald-50 px-3 py-2 text-xs font-bold text-emerald-800">
-          <CheckCircle2 className="h-4 w-4" aria-hidden="true" />
-          Salon creado: {preregistro.estudioCreadoId}
-        </div>
-      )}
-
-      {preregistro.estado === 'rechazado' && (
-        <div className="mt-3 rounded-xl bg-rose-50 px-3 py-2 text-sm text-rose-700">
-          <div className="mb-1 inline-flex items-center gap-2 text-xs font-black uppercase tracking-[0.14em]">
-            <AlertTriangle className="h-4 w-4" aria-hidden="true" />
-            Motivo de rechazo
-          </div>
-          <p>{preregistro.motivoRechazo || 'Sin motivo registrado.'}</p>
-        </div>
-      )}
-    </article>
-  );
-}
-
-function Detalle({ etiqueta, valor }: { etiqueta: string; valor: string }) {
-  return (
-    <div className="rounded-2xl bg-slate-50 px-3 py-2">
-      <p className="text-[10px] font-black uppercase tracking-[0.16em] text-slate-400">
-        {etiqueta}
-      </p>
-      <p className="mt-1 text-sm font-semibold text-slate-800">{valor}</p>
-    </div>
   );
 }

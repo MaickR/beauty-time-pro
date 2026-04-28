@@ -604,7 +604,7 @@ export function GestionAdmins() {
               <select
                 value={orden}
                 onChange={(evento) => setOrden(evento.target.value as OrdenColaboradores)}
-                className="w-full rounded-lg bg-slate-50 px-2 py-1.5 text-sm font-semibold text-slate-900 outline-none"
+                className="w-full rounded-lg bg-transparent px-2 py-1.5 text-sm font-semibold text-slate-900 outline-none"
               >
                 <option value="recientes">Último acceso</option>
                 <option value="nombre">Nombre</option>
@@ -617,7 +617,7 @@ export function GestionAdmins() {
               <select
                 value={direccionOrden}
                 onChange={(evento) => setDireccionOrden(evento.target.value as DireccionOrden)}
-                className="w-full rounded-lg bg-slate-50 px-2 py-1.5 text-sm font-semibold text-slate-900 outline-none"
+                className="w-full rounded-lg bg-transparent px-2 py-1.5 text-sm font-semibold text-slate-900 outline-none"
               >
                 <option value="asc">Ascendente</option>
                 <option value="desc">Descendente</option>
@@ -672,7 +672,7 @@ export function GestionAdmins() {
         <select
           value={filtroRol}
           onChange={(evento) => setFiltroRol(evento.target.value as 'todos' | CargoColaborador)}
-          className="rounded-xl border border-slate-200 px-3 py-3 text-sm font-medium outline-none focus:ring-2 focus:ring-pink-400"
+          className="rounded-xl border border-slate-200 bg-white px-3 py-3 text-sm font-medium text-slate-900 outline-none focus:ring-2 focus:ring-pink-400"
         >
           <option value="todos">Todos los roles</option>
           <option value="maestro">Administrador</option>
@@ -684,7 +684,7 @@ export function GestionAdmins() {
           onChange={(evento) =>
             setFiltroEstado(evento.target.value as 'todos' | 'activo' | 'inactivo')
           }
-          className="rounded-xl border border-slate-200 px-3 py-3 text-sm font-medium outline-none focus:ring-2 focus:ring-pink-400"
+          className="rounded-xl border border-slate-200 bg-white px-3 py-3 text-sm font-medium text-slate-900 outline-none focus:ring-2 focus:ring-pink-400"
         >
           <option value="todos">Todos los estados</option>
           <option value="activo">Activos</option>

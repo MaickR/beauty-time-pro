@@ -22,12 +22,12 @@ export interface CrearMensajeMasivoPayload {
   titulo: string;
   texto: string;
   imagenUrl?: string;
+  segmento?: 'todos' | 'activos' | 'inactivos';
+  incluirEmpleados?: boolean;
+  correosExtra?: string[];
 }
 
-export async function subirImagenMensajeMasivo(
-  estudioId: string,
-  archivo: File,
-): Promise<string> {
+export async function subirImagenMensajeMasivo(estudioId: string, archivo: File): Promise<string> {
   const datos = new FormData();
   datos.append('archivo', archivo);
 

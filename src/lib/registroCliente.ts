@@ -21,7 +21,7 @@ function obtenerAnioActual(): number {
 }
 
 function normalizarEspacios(valor: string): string {
-  return valor.replace(/\s+/g, ' ').trim();
+  return valor.replace(/\s+/g, ' ').trimStart();
 }
 
 export function limpiarTextoSoloLetras(valor: string): string {
@@ -38,7 +38,10 @@ export function limpiarCorreoCliente(valor: string): string {
 
 export function esDominioClientePermitido(email: string): boolean {
   const dominio = limpiarCorreoCliente(email).split('@')[1];
-  return dominio !== undefined && DOMINIOS_CLIENTE_PERMITIDOS.includes(dominio as (typeof DOMINIOS_CLIENTE_PERMITIDOS)[number]);
+  return (
+    dominio !== undefined &&
+    DOMINIOS_CLIENTE_PERMITIDOS.includes(dominio as (typeof DOMINIOS_CLIENTE_PERMITIDOS)[number])
+  );
 }
 
 export function esCumpleanosActualValido(valor: string): boolean {
@@ -118,7 +121,12 @@ export function obtenerFortalezaContrasenaCliente(contrasena: string) {
     };
   }
 
-  return { nivel: cumplidos, etiqueta: 'Aceptable', color: 'bg-green-500', texto: 'text-green-700' };
+  return {
+    nivel: cumplidos,
+    etiqueta: 'Aceptable',
+    color: 'bg-green-500',
+    texto: 'text-green-700',
+  };
 }
 
 function textoSoloLetrasSchema(campo: string, maximo: number, minimo = 1) {
@@ -156,20 +164,22 @@ export const esquemaRegistroCliente = z
       .string()
       .trim()
       .max(80, 'Máximo 80 caracteres')
-      .refine((valor) => valor.length === 0 || REGEX_TEXTO_SOLO_LETRAS.test(valor), 'La ciudad solo acepta texto')
+      .refine(
+        (valor) => valor.length === 0 || REGEX_TEXTO_SOLO_LETRAS.test(valor),
+        'La ciudad solo acepta texto',
+      )
       .optional()
       .or(z.literal('')),
     pais: z.enum(['Mexico', 'Colombia']),
-    fechaNacimiento: z
-      .string()
-      .min(1, 'Selecciona el cumpleaños')
-      .refine(esCumpleanosActualValido, 'Selecciona un cumpleaños válido del año actual'),
+    fechaNacimiento: z.string().optional().or(z.literal('')),
     contrasena: z
       .string()
       .min(8, MENSAJE_CONTRASENA_CLIENTE)
       .refine((valor) => REGEX_CONTRASENA_SEGURA.test(valor), MENSAJE_CONTRASENA_CLIENTE),
     confirmarContrasena: z.string(),
-    aceptaTerminos: z.boolean().refine((valor) => valor, 'Debes aceptar los términos para continuar'),
+    aceptaTerminos: z
+      .boolean()
+      .refine((valor) => valor, 'Debes aceptar los términos para continuar'),
   })
   .refine((datos) => datos.contrasena === datos.confirmarContrasena, {
     path: ['confirmarContrasena'],

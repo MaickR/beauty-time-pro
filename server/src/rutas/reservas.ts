@@ -467,7 +467,8 @@ const esquemaDatosClienteReserva = z.object({
     .string()
     .trim()
     .refine((valor) => /^\d{4}-\d{2}-\d{2}$/.test(valor), 'La fecha de nacimiento debe usar formato YYYY-MM-DD')
-    .refine((valor) => !Number.isNaN(new Date(`${valor}T00:00:00`).getTime()), 'La fecha de nacimiento no es válida'),
+    .refine((valor) => !Number.isNaN(new Date(`${valor}T00:00:00`).getTime()), 'La fecha de nacimiento no es válida')
+    .optional(),
 });
 
 async function sincronizarResumenReserva(reservaId: string) {
@@ -1132,7 +1133,7 @@ export async function rutasReservas(servidor: FastifyInstance): Promise<void> {
 
     // Calcular edad para detectar menor de edad solo en reserva pública de cliente app.
     // En reserva manual interna se captura cumpleaños (día/mes), no una fecha de nacimiento completa.
-    const nacimiento = new Date(`${fechaNacimiento}T00:00:00`);
+    const nacimiento = fechaNacimiento ? new Date(`${fechaNacimiento}T00:00:00`) : null;
     const edad = esClienteApp && fechaNacimiento
       ? calcularEdadDesdeFechaNacimiento(fechaNacimiento)
       : null;
@@ -1151,7 +1152,7 @@ export async function rutasReservas(servidor: FastifyInstance): Promise<void> {
 
     const datosCliente = {
       nombre: sanitizarTexto(nombreCliente),
-      fechaNacimiento: nacimiento,
+      ...(nacimiento && !Number.isNaN(nacimiento.getTime()) ? { fechaNacimiento: nacimiento } : {}),
       ...(emailNormalizado !== undefined && { email: emailNormalizado }),
     };
 

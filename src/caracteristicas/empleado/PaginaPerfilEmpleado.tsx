@@ -1,5 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import {
+  ArrowLeft,
   BellRing,
   Building2,
   CalendarDays,
@@ -11,6 +12,7 @@ import {
   ShieldCheck,
   UserRound,
 } from 'lucide-react';
+import { Link } from 'react-router-dom';
 import { NavegacionEmpleado } from '../../componentes/diseno/NavegacionEmpleado';
 import { obtenerMiPerfilEmpleado } from '../../servicios/servicioEmpleados';
 import { usarTiendaAuth } from '../../tienda/tiendaAuth';
@@ -96,6 +98,15 @@ export function PaginaPerfilEmpleado() {
       <NavegacionEmpleado />
 
       <main className="mx-auto max-w-6xl space-y-6 px-4 py-6">
+        <div className="hidden md:flex">
+          <Link
+            to="/empleado/agenda"
+            className="inline-flex items-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-bold text-slate-600 shadow-sm transition hover:bg-slate-50 hover:text-slate-900"
+          >
+            <ArrowLeft className="h-4 w-4" aria-hidden="true" />
+            Back to agenda
+          </Link>
+        </div>
         {consultaPerfil.isLoading && (
           <div className="grid gap-6 lg:grid-cols-[minmax(0,1.2fr)_360px]" aria-busy="true">
             <div className="h-72 animate-pulse rounded-[2.5rem] bg-white shadow-sm" />
@@ -134,7 +145,9 @@ export function PaginaPerfilEmpleado() {
                       {perfil.nombre}
                     </h1>
                     <p className="mt-2 text-sm font-bold uppercase tracking-[0.24em] text-slate-200">
-                      Especialista del salón
+                      {perfil.especialidades.length > 0
+                        ? `Specialist in ${perfil.especialidades.slice(0, 2).join(' & ')}`
+                        : 'Specialist'}
                     </p>
                     <div className="mt-4 flex flex-wrap gap-2">
                       {perfil.especialidades.map((especialidad) => (
@@ -158,7 +171,9 @@ export function PaginaPerfilEmpleado() {
                     <p className="mt-2 text-2xl font-black text-white">
                       {horarioInicio} - {horarioFin}
                     </p>
-                    <p className="mt-2 text-sm text-slate-200">{totalDiasActivos} día(s) activos por semana</p>
+                    <p className="mt-2 text-sm text-slate-200">
+                      {totalDiasActivos} día(s) activos por semana
+                    </p>
                   </div>
 
                   <div className="rounded-4xl border border-white/15 bg-white/10 p-4 backdrop-blur-sm">
@@ -259,10 +274,14 @@ export function PaginaPerfilEmpleado() {
                           key={dia}
                           className="grid grid-cols-[1.1fr_0.9fr] border-t border-slate-100 px-4 py-3 text-sm"
                         >
-                          <span className={`font-bold ${activo ? 'text-slate-900' : 'text-slate-400'}`}>
+                          <span
+                            className={`font-bold ${activo ? 'text-slate-900' : 'text-slate-400'}`}
+                          >
                             {dia}
                           </span>
-                          <span className={activo ? 'font-medium text-slate-700' : 'text-slate-400'}>
+                          <span
+                            className={activo ? 'font-medium text-slate-700' : 'text-slate-400'}
+                          >
                             {activo ? `${horarioInicio} - ${horarioFin}` : 'Descanso'}
                           </span>
                         </div>
@@ -314,7 +333,9 @@ export function PaginaPerfilEmpleado() {
                       <p className="text-[10px] font-black uppercase tracking-[0.22em] text-slate-500">
                         Salón
                       </p>
-                      <p className="mt-2 text-base font-black text-slate-900">{perfil.estudio.nombre}</p>
+                      <p className="mt-2 text-base font-black text-slate-900">
+                        {perfil.estudio.nombre}
+                      </p>
                     </div>
 
                     <div className="rounded-3xl border border-slate-200 bg-slate-50 p-4">
@@ -394,10 +415,12 @@ export function PaginaPerfilEmpleado() {
                       Tu acceso, contraseña y permisos son administrados por el salón.
                     </div>
                     <div className="rounded-3xl border border-slate-200 bg-slate-50 p-4">
-                      Cualquier cambio de datos personales, horario o privilegios debe gestionarlo el administrador.
+                      Cualquier cambio de datos personales, horario o privilegios debe gestionarlo
+                      el administrador.
                     </div>
                     <div className="rounded-3xl border border-slate-200 bg-slate-50 p-4">
-                      Este panel solo te permite operar tus propias citas dentro del rango permitido por tu alta.
+                      Este panel solo te permite operar tus propias citas dentro del rango permitido
+                      por tu alta.
                     </div>
                   </div>
                 </div>

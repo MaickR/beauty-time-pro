@@ -66,7 +66,7 @@ export function SelectorCalendario({
   const fechasMarcadasSet = new Set(fechasMarcadas);
 
   return (
-    <section className="mx-auto w-full max-w-4xl overflow-hidden rounded-[2.5rem] border border-slate-200 bg-white shadow-lg">
+    <section className="mx-auto w-full max-w-xl overflow-hidden rounded-[2.5rem] border border-slate-200 bg-white shadow-lg">
       <div className="border-b border-slate-100 bg-slate-50 px-4 py-5 text-center md:px-8 md:py-7">
         <h3 className="text-xl md:text-2xl font-black italic uppercase tracking-tighter text-slate-800 flex items-center justify-center gap-3">
           <span className="bg-pink-100 text-pink-600 w-8 h-8 rounded-full flex items-center justify-center text-sm">

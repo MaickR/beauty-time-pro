@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { ImagePlus, Mail, MessageCircle, Send, X } from 'lucide-react';
+import { ImagePlus, Mail, MessageCircle, Send, Users, X } from 'lucide-react';
 import { usarToast } from '../../../componentes/ui/ProveedorToast';
 import {
   enviarMensajeMasivo,
@@ -37,6 +37,10 @@ export function MensajesMasivos({ estudioId, plan }: PropsMensajesMasivos) {
   const [texto, setTexto] = useState('');
   const [imagenArchivo, setImagenArchivo] = useState<File | null>(null);
   const [imagenVistaPrevia, setImagenVistaPrevia] = useState<string | null>(null);
+  const [segmento, setSegmento] = useState<'todos' | 'activos' | 'inactivos'>('todos');
+  const [incluirEmpleados, setIncluirEmpleados] = useState(false);
+  const [correosExtra, setCorreosExtra] = useState<string[]>([]);
+  const [correoExtraInput, setCorreoExtraInput] = useState('');
 
   const mutacion = useMutation({
     mutationFn: async (datos: { titulo: string; texto: string; imagenArchivo: File | null }) => {
@@ -48,6 +52,9 @@ export function MensajesMasivos({ estudioId, plan }: PropsMensajesMasivos) {
         titulo: datos.titulo,
         texto: datos.texto,
         imagenUrl,
+        segmento,
+        incluirEmpleados,
+        correosExtra,
       });
     },
     onSuccess: (resultado) => {
@@ -58,6 +65,10 @@ export function MensajesMasivos({ estudioId, plan }: PropsMensajesMasivos) {
       setTexto('');
       setImagenArchivo(null);
       setImagenVistaPrevia(null);
+      setSegmento('todos');
+      setIncluirEmpleados(false);
+      setCorreosExtra([]);
+      setCorreoExtraInput('');
     },
     onError: (error: { codigo?: string; message?: string }) => {
       if (error.codigo === 'LIMITE_MENSAJES_ALCANZADO') {
@@ -67,6 +78,26 @@ export function MensajesMasivos({ estudioId, plan }: PropsMensajesMasivos) {
       }
     },
   });
+
+  const agregarCorreoExtra = () => {
+    const email = correoExtraInput.trim().toLowerCase();
+    const REGEX_EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!REGEX_EMAIL.test(email)) {
+      mostrarToast('Ingresa un correo válido');
+      return;
+    }
+    if (correosExtra.includes(email)) {
+      mostrarToast('Ese correo ya fue agregado');
+      setCorreoExtraInput('');
+      return;
+    }
+    setCorreosExtra((anterior) => [...anterior, email]);
+    setCorreoExtraInput('');
+  };
+
+  const quitarCorreoExtra = (email: string) => {
+    setCorreosExtra((anterior) => anterior.filter((e) => e !== email));
+  };
 
   // Si no es PRO, no renderizar nada (el guard PRO está en ConfigFidelidad)
   if (!esPro) return null;
@@ -158,7 +189,7 @@ export function MensajesMasivos({ estudioId, plan }: PropsMensajesMasivos) {
             <button
               type="button"
               onClick={() => setMostrarFormulario(true)}
-              className="px-6 py-3 rounded-2xl bg-[var(--color-primario)] hover:bg-[var(--color-primario-oscuro)] text-white text-sm font-black uppercase tracking-widest transition-colors shadow-sm"
+              className="px-6 py-3 rounded-2xl bg-(--color-primario) hover:bg-(--color-primario-oscuro) text-white text-sm font-black uppercase tracking-widest transition-colors shadow-sm"
             >
               Nuevo mensaje masivo
             </button>
@@ -248,12 +279,123 @@ export function MensajesMasivos({ estudioId, plan }: PropsMensajesMasivos) {
                 )}
               </div>
 
+              <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4 space-y-3">
+                <div className="flex items-center gap-2 text-sm font-bold text-slate-700">
+                  <Users className="h-4 w-4 text-slate-500" aria-hidden="true" />
+                  Recipients
+                </div>
+                <div className="grid gap-2 sm:grid-cols-3">
+                  {(
+                    [
+                      {
+                        valor: 'todos',
+                        etiqueta: 'All clients',
+                        descripcion: 'Everyone with email',
+                      },
+                      {
+                        valor: 'activos',
+                        etiqueta: 'Recent clients',
+                        descripcion: 'Active last 30 days',
+                      },
+                      {
+                        valor: 'inactivos',
+                        etiqueta: 'Inactive',
+                        descripcion: 'No visits in 30 days',
+                      },
+                    ] as const
+                  ).map((opcion) => (
+                    <label
+                      key={opcion.valor}
+                      className={`flex cursor-pointer items-start gap-3 rounded-2xl border p-3 transition ${
+                        segmento === opcion.valor
+                          ? 'border-pink-400 bg-pink-50'
+                          : 'border-slate-200 bg-white hover:border-slate-300'
+                      }`}
+                    >
+                      <input
+                        type="radio"
+                        name="segmento"
+                        value={opcion.valor}
+                        checked={segmento === opcion.valor}
+                        onChange={() => setSegmento(opcion.valor)}
+                        className="mt-0.5 shrink-0 accent-pink-600"
+                      />
+                      <div>
+                        <p className="text-xs font-black text-slate-800">{opcion.etiqueta}</p>
+                        <p className="text-[11px] text-slate-500">{opcion.descripcion}</p>
+                      </div>
+                    </label>
+                  ))}
+                </div>
+              </div>
+
+              {/* Empleados + correos adicionales */}
+              <div className="space-y-3 rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                <label className="flex items-center gap-3 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={incluirEmpleados}
+                    onChange={(e) => setIncluirEmpleados(e.target.checked)}
+                    className="h-4 w-4 rounded accent-pink-600"
+                  />
+                  <span className="text-sm font-bold text-slate-700">
+                    Also send to active employees
+                  </span>
+                </label>
+
+                <div>
+                  <p className="mb-2 text-xs font-bold text-slate-600">Custom emails (optional)</p>
+                  <div className="flex gap-2">
+                    <input
+                      type="email"
+                      value={correoExtraInput}
+                      onChange={(e) => setCorreoExtraInput(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') {
+                          e.preventDefault();
+                          agregarCorreoExtra();
+                        }
+                      }}
+                      placeholder="email@example.com"
+                      className="flex-1 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-medium text-slate-700 outline-none transition focus:border-pink-400"
+                    />
+                    <button
+                      type="button"
+                      onClick={agregarCorreoExtra}
+                      className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-black text-slate-600 transition hover:bg-slate-100"
+                    >
+                      Add
+                    </button>
+                  </div>
+                  {correosExtra.length > 0 && (
+                    <div className="mt-2 flex flex-wrap gap-2">
+                      {correosExtra.map((email) => (
+                        <span
+                          key={email}
+                          className="inline-flex items-center gap-1.5 rounded-full border border-pink-200 bg-pink-50 px-3 py-1 text-[11px] font-bold text-pink-700"
+                        >
+                          {email}
+                          <button
+                            type="button"
+                            onClick={() => quitarCorreoExtra(email)}
+                            aria-label={`Remove ${email}`}
+                            className="ml-0.5 rounded-full p-0.5 text-pink-400 transition hover:text-pink-700"
+                          >
+                            <X className="h-3 w-3" aria-hidden="true" />
+                          </button>
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+
               <div className="flex gap-3">
                 <button
                   type="button"
                   onClick={enviar}
                   disabled={mutacion.isPending || !titulo.trim() || !texto.trim()}
-                  className="inline-flex items-center gap-2 px-6 py-3 rounded-2xl bg-[var(--color-primario)] hover:bg-[var(--color-primario-oscuro)] text-white text-sm font-black uppercase tracking-widest transition-colors shadow-sm disabled:opacity-60"
+                  className="inline-flex items-center gap-2 px-6 py-3 rounded-2xl bg-(--color-primario) hover:bg-(--color-primario-oscuro) text-white text-sm font-black uppercase tracking-widest transition-colors shadow-sm disabled:opacity-60"
                 >
                   <Send className="w-4 h-4" />
                   {mutacion.isPending ? 'Enviando...' : 'Enviar mensaje'}
@@ -264,6 +406,9 @@ export function MensajesMasivos({ estudioId, plan }: PropsMensajesMasivos) {
                     setMostrarFormulario(false);
                     setTitulo('');
                     setTexto('');
+                    setIncluirEmpleados(false);
+                    setCorreosExtra([]);
+                    setCorreoExtraInput('');
                     manejarSeleccionImagen(null);
                   }}
                   className="px-6 py-3 rounded-2xl border border-slate-200 text-slate-600 text-sm font-bold hover:bg-slate-50 transition-colors"

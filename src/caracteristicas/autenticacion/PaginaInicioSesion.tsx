@@ -430,7 +430,11 @@ export function PaginaInicioSesion() {
     setRequiereIdentificador(false);
     setRequiereContrasenaSecundaria(false);
     const rutaDestino =
-      resultado.ruta === '/vendedor' ? '/vendedor' : (rutaDesde ?? resultado.ruta ?? '/');
+      resultado.ruta === '/vendedor'
+        ? '/vendedor'
+        : rutaDesde && !/^\/reservar\//.test(rutaDesde)
+          ? rutaDesde
+          : (resultado.ruta ?? '/');
     navegar(rutaDestino);
   };
 

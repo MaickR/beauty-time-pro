@@ -1,7 +1,10 @@
 import { useEffect, useMemo, useState } from 'react';
 import { X, Eye, EyeOff, RefreshCw, Shield, KeyRound, CalendarClock, Mail } from 'lucide-react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { actualizarAccesoEmpleado, crearAccesoEmpleado } from '../../../servicios/servicioEmpleados';
+import {
+  actualizarAccesoEmpleado,
+  crearAccesoEmpleado,
+} from '../../../servicios/servicioEmpleados';
 import { usarToast } from '../../../componentes/ui/ProveedorToast';
 import { generarContrasenaColaborador } from '../../../utils/formularioSalon';
 import type { EmpleadoAccesoInfo } from '../../../tipos';
@@ -100,7 +103,10 @@ export function ModalCrearAccesoEmpleado({
       alCerrar();
     },
     onError: (error: Error) => {
-      mostrarToast({ mensaje: error.message ?? 'No se pudo actualizar el estado', variante: 'error' });
+      mostrarToast({
+        mensaje: error.message ?? 'No se pudo actualizar el estado',
+        variante: 'error',
+      });
     },
   });
 
@@ -118,7 +124,10 @@ export function ModalCrearAccesoEmpleado({
     }
 
     if (!contrasena.trim()) {
-      mostrarToast({ mensaje: 'Define una nueva contraseña para guardar los cambios', variante: 'error' });
+      mostrarToast({
+        mensaje: 'Define una nueva contraseña para guardar los cambios',
+        variante: 'error',
+      });
       return;
     }
 
@@ -127,7 +136,10 @@ export function ModalCrearAccesoEmpleado({
 
   const manejarGuardarEstado = () => {
     if (!activoPersonal && !desactivarHasta) {
-      mostrarToast({ mensaje: 'Selecciona la fecha hasta la que quedará suspendido', variante: 'error' });
+      mostrarToast({
+        mensaje: 'Selecciona la fecha hasta la que quedará suspendido',
+        variante: 'error',
+      });
       return;
     }
 
@@ -163,7 +175,7 @@ export function ModalCrearAccesoEmpleado({
               <p className="text-[11px] font-black uppercase tracking-[0.25em] text-pink-100">
                 Seguridad del especialista
               </p>
-              <h2 id="titulo-modal-acceso" className="text-xl font-black tracking-tight">
+              <h2 id="titulo-modal-acceso" className="text-xl font-black tracking-tight text-white">
                 {nombreEmpleado}
               </h2>
               <p className="text-sm text-pink-50/80">
@@ -260,7 +272,8 @@ export function ModalCrearAccesoEmpleado({
                   className="w-full rounded-2xl border border-slate-200 px-4 py-3 text-sm outline-none transition focus:border-pink-400 focus:ring-2 focus:ring-pink-100"
                 />
                 <p className="mt-2 text-xs text-slate-500">
-                  Al llegar el día siguiente, el especialista se reactiva automáticamente en el sistema.
+                  Al llegar el día siguiente, el especialista se reactiva automáticamente en el
+                  sistema.
                 </p>
               </div>
 
@@ -357,7 +370,8 @@ export function ModalCrearAccesoEmpleado({
               </div>
 
               <div className="rounded-3xl border border-blue-100 bg-blue-50 p-5 text-sm text-blue-900">
-                Al guardar, se actualizan las credenciales en tiempo real y se envía un correo al especialista con su correo, nueva contraseña y enlace de acceso.
+                Al guardar, se actualizan las credenciales en tiempo real y se envía un correo al
+                especialista con su correo, nueva contraseña y enlace de acceso.
               </div>
 
               <div className="flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">

@@ -150,7 +150,7 @@ export function PaginaMaestro() {
         </button>
       </header>
 
-      <main className="max-w-7xl mx-auto p-8">
+      <main className="max-w-7xl 2xl:max-w-screen-2xl mx-auto p-8">
         {tabsDisponibles.length > 0 && (
           <nav className="no-imprimir mb-8 flex flex-col gap-1 rounded-2xl border border-slate-200 bg-slate-100 p-1 sm:flex-row sm:flex-nowrap sm:justify-center sm:overflow-x-auto">
             {tabsDisponibles.includes('directorio') && (

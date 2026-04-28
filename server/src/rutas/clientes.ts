@@ -88,14 +88,14 @@ export async function rutasClientes(servidor: FastifyInstance): Promise<void> {
       const resultado = clientes.map((c) => {
         const total = c.reservas.length;
         const ultimaVisita = c.reservas[0]?.fecha ?? null;
-        const edad = calcularEdadDesdeFechaNacimiento(c.fechaNacimiento);
+        const edad = c.fechaNacimiento ? calcularEdadDesdeFechaNacimiento(c.fechaNacimiento) : null;
 
         return {
           id: c.id,
           nombre: c.nombre,
           telefono: c.telefono,
           email: c.email,
-          fechaNacimiento: c.fechaNacimiento.toISOString().split('T')[0],
+          fechaNacimiento: c.fechaNacimiento?.toISOString().split('T')[0] ?? null,
           edad,
           notas: c.notas,
           activo: c.activo,
@@ -127,12 +127,12 @@ export async function rutasClientes(servidor: FastifyInstance): Promise<void> {
         return respuesta.code(403).send({ error: 'Sin permisos para esta acción' });
       }
 
-      const edad = calcularEdadDesdeFechaNacimiento(cliente.fechaNacimiento);
+      const edad = cliente.fechaNacimiento ? calcularEdadDesdeFechaNacimiento(cliente.fechaNacimiento) : null;
 
       return respuesta.send({
         datos: {
           ...cliente,
-          fechaNacimiento: cliente.fechaNacimiento.toISOString().split('T')[0],
+          fechaNacimiento: cliente.fechaNacimiento?.toISOString().split('T')[0] ?? null,
           edad,
         },
       });

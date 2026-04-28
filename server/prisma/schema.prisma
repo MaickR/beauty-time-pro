@@ -301,7 +301,7 @@ model Cliente {
   estudio         Estudio   @relation(fields: [estudioId], references: [id], onDelete: Cascade)
   nombre          String
   telefono        String
-  fechaNacimiento DateTime
+  fechaNacimiento DateTime?
   email           String?
   notas           String?   @db.Text
   activo          Boolean   @default(true)

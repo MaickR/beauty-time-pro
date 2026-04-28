@@ -3,7 +3,6 @@ import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { KeyRound, Mail, UserPlus } from 'lucide-react';
 import { MedidorContrasena } from '../../../componentes/ui/MedidorContrasena';
-import { SelectorCumpleanos } from '../../../componentes/ui/SelectorCumpleanos';
 import {
   esquemaCorreoCliente,
   esquemaRegistroCliente,
@@ -22,7 +21,7 @@ export interface ClienteReservaVinculado {
   nombre: string;
   apellido: string;
   telefono: string;
-  fechaNacimiento: string;
+  fechaNacimiento?: string;
   ciudad: string | null;
   pais: Pais;
   origen: 'registrado' | 'nuevo';
@@ -61,7 +60,7 @@ export function PanelIdentificacionReserva({
       telefono: clienteVinculado?.telefono ?? '',
       ciudad: clienteVinculado?.ciudad ?? '',
       pais: clienteVinculado?.pais ?? 'Mexico',
-      fechaNacimiento: clienteVinculado?.fechaNacimiento ?? '',
+      fechaNacimiento: '',
       contrasena: '',
       confirmarContrasena: '',
       aceptaTerminos: false,
@@ -85,7 +84,7 @@ export function PanelIdentificacionReserva({
       nombre: perfil.nombre,
       apellido: perfil.apellido,
       telefono: perfil.telefono ?? '',
-      fechaNacimiento: perfil.fechaNacimiento ?? '',
+
       ciudad: perfil.ciudad ?? null,
       pais: perfil.pais,
       origen,
@@ -131,7 +130,6 @@ export function PanelIdentificacionReserva({
         telefono: datos.telefono,
         ciudad: datos.ciudad || undefined,
         pais: datos.pais,
-        fechaNacimiento: datos.fechaNacimiento,
         contrasena: datos.contrasena,
       });
 
@@ -143,7 +141,7 @@ export function PanelIdentificacionReserva({
           nombre: nombre ?? '',
           apellido: resto.join(' '),
           telefono: datos.telefono || null,
-          fechaNacimiento: datos.fechaNacimiento,
+          fechaNacimiento: null,
           ciudad: datos.ciudad || null,
           pais: datos.pais,
         },
@@ -199,8 +197,7 @@ export function PanelIdentificacionReserva({
           <p className="mt-2 text-lg font-black">{nombreClienteVinculado}</p>
           <p className="mt-1 font-semibold">{clienteVinculado.email}</p>
           <p className="mt-1 text-emerald-800">
-            Teléfono: {clienteVinculado.telefono || 'Pendiente'} · Cumpleaños:{' '}
-            {clienteVinculado.fechaNacimiento || 'Pendiente'}
+            Teléfono: {clienteVinculado.telefono || 'Pendiente'}
           </p>
           {clienteVinculado.mensajeSecundario ? (
             <p className="mt-3 rounded-2xl bg-white/70 px-4 py-3 text-xs font-bold text-emerald-800">
@@ -367,27 +364,6 @@ export function PanelIdentificacionReserva({
                   {formularioRegistro.formState.errors.ciudad ? (
                     <p className="mt-2 text-xs font-bold text-red-600">
                       {formularioRegistro.formState.errors.ciudad.message}
-                    </p>
-                  ) : null}
-                </label>
-
-                <label className="block md:col-span-2">
-                  <span className="mb-2 block text-[10px] font-black uppercase tracking-[0.18em] text-slate-500">
-                    Fecha de cumpleaños
-                  </span>
-                  <SelectorCumpleanos
-                    valor={formularioRegistro.watch('fechaNacimiento') ?? ''}
-                    alCambiar={(valor) =>
-                      formularioRegistro.setValue('fechaNacimiento', valor, {
-                        shouldDirty: true,
-                        shouldTouch: true,
-                        shouldValidate: true,
-                      })
-                    }
-                  />
-                  {formularioRegistro.formState.errors.fechaNacimiento ? (
-                    <p className="mt-2 text-xs font-bold text-red-600">
-                      {formularioRegistro.formState.errors.fechaNacimiento.message}
                     </p>
                   ) : null}
                 </label>

@@ -12,6 +12,8 @@ import {
   ExternalLink,
   Wallet,
   Calendar,
+  Users,
+  X,
 } from 'lucide-react';
 import { usarContextoApp } from '../../contextos/ContextoApp';
 import { usarTituloPagina } from '../../hooks/usarTituloPagina';
@@ -53,6 +55,7 @@ export function PaginaAgenda() {
   const { mostrarToast } = usarToast();
   const [fechaVista, setFechaVista] = useState(new Date());
   const [mostrarBienvenida, setMostrarBienvenida] = useState(true);
+  const [bannerEspecialistaDismisado, setBannerEspecialistaDismisado] = useState(false);
   const [mostrarModalCrearCita, setMostrarModalCrearCita] = useState(false);
   const [activandoPush, setActivandoPush] = useState(false);
   const [qrReserva, setQrReserva] = useState<string | null>(null);
@@ -86,7 +89,24 @@ export function PaginaAgenda() {
     : null;
 
   useEffect(() => {
-    setMostrarBienvenida(Boolean(estudio?.primeraVez));
+    if (!estudio?.id) return;
+    const clave = `btp_especialista_aviso_${estudio.id}`;
+    if (sessionStorage.getItem(clave)) {
+      setBannerEspecialistaDismisado(true);
+    }
+  }, [estudio?.id]);
+
+  useEffect(() => {
+    if (!estudio?.id || !estudio?.primeraVez) {
+      setMostrarBienvenida(false);
+      return;
+    }
+    const claveSession = `btp_bienvenida_vista_${estudio.id}`;
+    if (sessionStorage.getItem(claveSession)) {
+      setMostrarBienvenida(false);
+      return;
+    }
+    setMostrarBienvenida(true);
   }, [estudio?.id, estudio?.primeraVez]);
 
   useEffect(() => {
@@ -138,6 +158,14 @@ export function PaginaAgenda() {
     );
 
   const reservasEstudio = reservasDisponibles.filter((r) => r.studioId === estudio.id);
+
+  const sinEspecialistas = (estudio.staff?.length ?? 0) === 0;
+  const mostrarBannerEspecialista = sinEspecialistas && !bannerEspecialistaDismisado;
+
+  const descartarBannerEspecialista = () => {
+    sessionStorage.setItem(`btp_especialista_aviso_${estudio.id}`, '1');
+    setBannerEspecialistaDismisado(true);
+  };
 
   const ahora = new Date();
   const horaActual = ahora.getHours();
@@ -261,7 +289,7 @@ export function PaginaAgenda() {
         </div>
       </header>
 
-      <main className="max-w-7xl mx-auto p-4 md:p-8 space-y-8">
+      <main className="max-w-7xl 2xl:max-w-screen-2xl mx-auto p-4 md:p-8 space-y-8">
         <MetricasSalon
           estudioId={estudio.id}
           nombreSalon={estudio.name}
@@ -273,6 +301,37 @@ export function PaginaAgenda() {
             month: 'long',
           })}
         />
+
+        {mostrarBannerEspecialista && (
+          <div className="flex items-start gap-4 rounded-2xl border border-amber-200 bg-amber-50 px-5 py-4 shadow-sm">
+            <div className="rounded-xl bg-amber-100 p-2 text-amber-600 shrink-0">
+              <Users className="h-5 w-5" aria-hidden="true" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-black text-amber-900">Add your first specialist</p>
+              <p className="mt-1 text-xs text-amber-700">
+                Your salon doesn't have any specialists yet. Add one so clients can book
+                appointments.
+              </p>
+              <button
+                type="button"
+                onClick={() => navegar(`/estudio/${identificadorRutaPrivada}/admin#equipo`)}
+                className="mt-3 inline-flex items-center gap-2 rounded-full bg-amber-600 px-4 py-2 text-xs font-black text-white transition hover:bg-amber-700"
+              >
+                <Users className="h-3.5 w-3.5" aria-hidden="true" />
+                Go to team
+              </button>
+            </div>
+            <button
+              type="button"
+              aria-label="Dismiss notification"
+              onClick={descartarBannerEspecialista}
+              className="shrink-0 rounded-xl p-1.5 text-amber-500 transition hover:bg-amber-100 hover:text-amber-700"
+            >
+              <X className="h-4 w-4" aria-hidden="true" />
+            </button>
+          </div>
+        )}
 
         <div className="no-imprimir flex bg-slate-200/50 p-1 rounded-2xl w-fit border border-slate-200 mx-auto md:mx-0">
           <button
@@ -385,8 +444,8 @@ export function PaginaAgenda() {
           onCerrar={() => {
             setMostrarBienvenida(false);
             if (estudioId) {
+              sessionStorage.setItem(`btp_bienvenida_vista_${estudioId}`, '1');
               void actualizarEstudio(estudioId, { primeraVez: false }).catch(() => {
-                setMostrarBienvenida(true);
                 mostrarToast({
                   mensaje: 'No se pudo guardar que esta guia de bienvenida ya fue vista.',
                   variante: 'error',

@@ -15,6 +15,7 @@ import {
   ShoppingBag,
   CalendarRange,
   CalendarCheck,
+  BarChart3,
 } from 'lucide-react';
 import { usarContextoApp } from '../../contextos/ContextoApp';
 import { usarTituloPagina } from '../../hooks/usarTituloPagina';
@@ -35,7 +36,49 @@ import { ModalSuspension } from './componentes/ModalSuspension';
 import { PanelNotificaciones } from './componentes/PanelNotificaciones';
 import { usarNotificacionesEstudio } from './hooks/usarNotificacionesEstudio';
 import { GestorFestivos } from './componentes/GestorFestivos';
-import type { Moneda } from '../../tipos';
+import type { Moneda, Reserva, Personal, Servicio } from '../../tipos';
+
+type FiltroSeguimientoIngresos = 'hoy' | 'semana' | 'mes' | 'historico';
+
+interface FilaSeguimientoIngresos {
+  idPersonal: string;
+  nombrePersonal: string;
+  citasCompletadas: number;
+  ventasTotales: number;
+  comisionesTotales: number;
+}
+
+function calcularComisionServicios(
+  reserva: Reserva,
+  personal: Personal | undefined,
+): { montoComision: number; serviciosContabilizados: number } {
+  const porcentajeBase = personal?.commissionBasePercentage ?? 0;
+  const comisionPorServicio = personal?.serviceCommissionPercentages ?? {};
+
+  const serviciosFuente: Servicio[] =
+    reserva.serviceDetails && reserva.serviceDetails.length > 0
+      ? reserva.serviceDetails.map((servicioDetalle) => ({
+          name: servicioDetalle.name,
+          duration: servicioDetalle.duration,
+          price: servicioDetalle.price,
+          category: servicioDetalle.category,
+        }))
+      : reserva.services;
+
+  if (serviciosFuente.length === 0) {
+    return {
+      montoComision: Math.round(((reserva.totalPrice ?? 0) * porcentajeBase) / 100),
+      serviciosContabilizados: 0,
+    };
+  }
+
+  const montoComision = serviciosFuente.reduce((acumulado, servicio) => {
+    const porcentajeServicio = comisionPorServicio[servicio.name] ?? porcentajeBase;
+    return acumulado + Math.round(((servicio.price ?? 0) * porcentajeServicio) / 100);
+  }, 0);
+
+  return { montoComision, serviciosContabilizados: serviciosFuente.length };
+}
 
 export function PaginaAdminEstudio() {
   usarTituloPagina('Administración');
@@ -46,6 +89,8 @@ export function PaginaAdminEstudio() {
   const [seccion, setSeccion] = useState<
     'ingresos' | 'clientes' | 'fidelidad' | 'salon' | 'equipo' | 'productos' | 'contacto'
   >('ingresos');
+  const [filtroSeguimientoIngresos, setFiltroSeguimientoIngresos] =
+    useState<FiltroSeguimientoIngresos>('mes');
   const [subseccionSalon, setSubseccionSalon] = useState<'perfil' | 'horario'>('perfil');
   const [activandoPush, setActivandoPush] = useState(false);
   const push = usarNotificacionesPush();
@@ -113,6 +158,67 @@ export function PaginaAdminEstudio() {
       return diferenciaDias >= 0 && diferenciaDias < 7;
     })
     .reduce((acc, b) => acc + (b.totalPrice ?? 0), 0);
+
+  const reservasFiltradasSeguimiento = completadas.filter((reserva) => {
+    if (filtroSeguimientoIngresos === 'historico') return true;
+
+    if (filtroSeguimientoIngresos === 'hoy') {
+      return reserva.date === hoySrt;
+    }
+
+    if (filtroSeguimientoIngresos === 'mes') {
+      return reserva.date.startsWith(mesPrefijo);
+    }
+
+    const fechaReserva = new Date(`${reserva.date}T00:00:00`);
+    const fechaHoy = new Date(`${hoySrt}T00:00:00`);
+    const diferenciaDias = Math.floor((fechaHoy.getTime() - fechaReserva.getTime()) / 86400000);
+    return diferenciaDias >= 0 && diferenciaDias < 7;
+  });
+
+  const seguimientoPorPersonal = reservasFiltradasSeguimiento.reduce<
+    Map<string, FilaSeguimientoIngresos>
+  >((acumulado, reserva) => {
+    const personal = estudio.staff.find((persona) => persona.id === reserva.staffId);
+    const idPersonal = reserva.staffId || 'sin-personal';
+    const nombrePersonal = personal?.name || reserva.staffName || 'Sin asignar';
+    const registroActual = acumulado.get(idPersonal) ?? {
+      idPersonal,
+      nombrePersonal,
+      citasCompletadas: 0,
+      ventasTotales: 0,
+      comisionesTotales: 0,
+    };
+    const resumenComision = calcularComisionServicios(reserva, personal);
+
+    acumulado.set(idPersonal, {
+      ...registroActual,
+      citasCompletadas: registroActual.citasCompletadas + 1,
+      ventasTotales: registroActual.ventasTotales + (reserva.totalPrice ?? 0),
+      comisionesTotales: registroActual.comisionesTotales + resumenComision.montoComision,
+    });
+
+    return acumulado;
+  }, new Map<string, FilaSeguimientoIngresos>());
+
+  const filasSeguimientoIngresos = Array.from(seguimientoPorPersonal.values()).sort(
+    (a, b) => b.ventasTotales - a.ventasTotales,
+  );
+
+  const totalVentasSeguimiento = reservasFiltradasSeguimiento.reduce(
+    (acumulado, reserva) => acumulado + (reserva.totalPrice ?? 0),
+    0,
+  );
+
+  const totalComisionesSeguimiento = filasSeguimientoIngresos.reduce(
+    (acumulado, fila) => acumulado + fila.comisionesTotales,
+    0,
+  );
+
+  const ticketPromedioSeguimiento =
+    reservasFiltradasSeguimiento.length > 0
+      ? Math.round(totalVentasSeguimiento / reservasFiltradasSeguimiento.length)
+      : 0;
 
   const tarjetas = [
     {
@@ -201,7 +307,7 @@ export function PaginaAdminEstudio() {
         </div>
       </header>
 
-      <main className="max-w-7xl mx-auto p-4 md:p-8 space-y-8">
+      <main className="max-w-7xl 2xl:max-w-screen-2xl mx-auto p-4 md:p-8 space-y-8">
         <div className="no-imprimir -mx-4 overflow-x-auto px-4 pb-2 md:mx-0 md:px-0">
           <div className="mx-auto inline-flex min-w-max gap-1 rounded-2xl border border-slate-200 bg-slate-200/50 p-1 md:mx-0">
             <button
@@ -268,9 +374,42 @@ export function PaginaAdminEstudio() {
 
         {seccion === 'ingresos' && (
           <>
-            <h2 className="text-3xl font-black italic uppercase tracking-tighter">
-              Resumen de ingresos
-            </h2>
+            <div className="space-y-4">
+              <div>
+                <h2 className="text-3xl font-black italic uppercase tracking-tighter">
+                  Resumen de ingresos
+                </h2>
+                <p className="mt-1 text-sm text-slate-500">
+                  Consulta ventas generales y seguimiento de comisiones por integrante del equipo.
+                </p>
+              </div>
+
+              <div className="no-imprimir -mx-4 overflow-x-auto px-4 pb-1 md:mx-0 md:px-0">
+                <div className="inline-flex min-w-max gap-1 rounded-2xl border border-slate-200 bg-slate-100 p-1">
+                  {(
+                    [
+                      { valor: 'hoy', etiqueta: 'Hoy' },
+                      { valor: 'semana', etiqueta: 'Semana' },
+                      { valor: 'mes', etiqueta: 'Mes' },
+                      { valor: 'historico', etiqueta: 'Histórico' },
+                    ] as const
+                  ).map((opcion) => (
+                    <button
+                      key={opcion.valor}
+                      type="button"
+                      onClick={() => setFiltroSeguimientoIngresos(opcion.valor)}
+                      className={`inline-flex items-center gap-2 rounded-xl px-4 py-2.5 text-[10px] font-black uppercase tracking-widest transition-all md:text-xs ${
+                        filtroSeguimientoIngresos === opcion.valor
+                          ? 'bg-white text-slate-900 shadow-sm'
+                          : 'text-slate-500 hover:text-slate-800'
+                      }`}
+                    >
+                      <BarChart3 className="h-4 w-4" /> {opcion.etiqueta}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
 
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
               {tarjetas.map(({ titulo, monto, icono: Icono, color }) => (
@@ -291,6 +430,91 @@ export function PaginaAdminEstudio() {
                   </p>
                 </div>
               ))}
+            </div>
+
+            <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
+              <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
+                <p className="text-[11px] font-black uppercase tracking-widest text-slate-400">
+                  Ventas filtradas
+                </p>
+                <p className="mt-1 text-2xl font-black tracking-tight text-slate-900">
+                  {formatearDinero(totalVentasSeguimiento, moneda)}
+                </p>
+              </div>
+              <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
+                <p className="text-[11px] font-black uppercase tracking-widest text-slate-400">
+                  Comisiones estimadas
+                </p>
+                <p className="mt-1 text-2xl font-black tracking-tight text-slate-900">
+                  {formatearDinero(totalComisionesSeguimiento, moneda)}
+                </p>
+              </div>
+              <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
+                <p className="text-[11px] font-black uppercase tracking-widest text-slate-400">
+                  Ticket promedio
+                </p>
+                <p className="mt-1 text-2xl font-black tracking-tight text-slate-900">
+                  {formatearDinero(ticketPromedioSeguimiento, moneda)}
+                </p>
+              </div>
+            </div>
+
+            <div className="overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm">
+              <div className="border-b border-slate-100 px-5 py-4">
+                <p className="text-[11px] font-black uppercase tracking-widest text-slate-400">
+                  Seguimiento por colaborador
+                </p>
+                <h3 className="text-xl font-black tracking-tight text-slate-900">
+                  Ventas y comisiones
+                </h3>
+              </div>
+
+              {filasSeguimientoIngresos.length === 0 ? (
+                <div className="px-5 py-10 text-center">
+                  <p className="text-sm font-bold text-slate-500">
+                    No hay reservas completadas en este filtro.
+                  </p>
+                </div>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="min-w-full divide-y divide-slate-100">
+                    <thead className="bg-slate-50">
+                      <tr>
+                        <th className="px-5 py-3 text-left text-[11px] font-black uppercase tracking-widest text-slate-500">
+                          Colaborador
+                        </th>
+                        <th className="px-5 py-3 text-right text-[11px] font-black uppercase tracking-widest text-slate-500">
+                          Citas
+                        </th>
+                        <th className="px-5 py-3 text-right text-[11px] font-black uppercase tracking-widest text-slate-500">
+                          Ventas
+                        </th>
+                        <th className="px-5 py-3 text-right text-[11px] font-black uppercase tracking-widest text-slate-500">
+                          Comisión
+                        </th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100">
+                      {filasSeguimientoIngresos.map((fila) => (
+                        <tr key={fila.idPersonal}>
+                          <td className="px-5 py-3 text-sm font-bold text-slate-800">
+                            {fila.nombrePersonal}
+                          </td>
+                          <td className="px-5 py-3 text-right text-sm font-semibold text-slate-600">
+                            {fila.citasCompletadas}
+                          </td>
+                          <td className="px-5 py-3 text-right text-sm font-semibold text-slate-800">
+                            {formatearDinero(fila.ventasTotales, moneda)}
+                          </td>
+                          <td className="px-5 py-3 text-right text-sm font-black text-slate-900">
+                            {formatearDinero(fila.comisionesTotales, moneda)}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
             </div>
 
             <CatalogoServicios estudio={estudio} />

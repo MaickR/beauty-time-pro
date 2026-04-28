@@ -46,7 +46,7 @@ interface DatosRegistroCliente {
   email: string;
   contrasena: string;
   nombreCompleto: string;
-  fechaNacimiento: string;
+  fechaNacimiento?: string;
   pais: Pais;
   ciudad?: string;
   telefono?: string;

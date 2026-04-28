@@ -390,11 +390,11 @@ function TarjetaReservaEmpleado({
           : reserva.estado === 'cancelled' || reserva.estado === 'no_show'
             ? 'border-red-100 bg-red-50/40 opacity-70'
             : reserva.estado === 'working'
-              ? 'border-sky-100 bg-sky-50/30 hover:border-sky-200 hover:shadow-sm'
-              : 'border-slate-100 bg-white hover:border-pink-200 hover:shadow-sm',
+              ? 'border-sky-200 bg-sky-50/30 shadow-sm hover:border-sky-300'
+              : 'border-slate-100 bg-white shadow-sm hover:border-pink-200 hover:shadow-md',
       ].join(' ')}
     >
-      <div className={`h-0.75 w-full ${barraEstado}`} />
+      <div className={`h-1 w-full ${barraEstado}`} />
 
       <div className="space-y-3 p-4">
         <div className="flex items-start justify-between gap-2">
@@ -447,10 +447,26 @@ function TarjetaReservaEmpleado({
                 className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-[12.5px] text-slate-700 shadow-sm"
               >
                 <div className="flex items-center justify-between gap-3">
-                  <span className="font-medium text-slate-800">{servicio.name}</span>
-                  <span className="text-[11px] font-black text-slate-500">
-                    {servicio.duration} min
-                  </span>
+                  <div className="min-w-0">
+                    <span className="block truncate font-semibold text-slate-800">
+                      {servicio.name}
+                    </span>
+                    {servicio.category ? (
+                      <span className="text-[10px] font-medium uppercase tracking-wide text-slate-400">
+                        {servicio.category}
+                      </span>
+                    ) : null}
+                  </div>
+                  <div className="shrink-0 text-right">
+                    <span className="block text-[11px] font-black text-slate-500">
+                      {servicio.duration} min
+                    </span>
+                    {servicio.price > 0 ? (
+                      <span className="text-[11px] font-black text-pink-600">
+                        {formatearMontoSinDecimales(servicio.price, moneda)}
+                      </span>
+                    ) : null}
+                  </div>
                 </div>
               </div>
             ))}

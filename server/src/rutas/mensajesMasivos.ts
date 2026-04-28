@@ -3,6 +3,7 @@ import path from 'path';
 import { randomUUID } from 'crypto';
 import type { FastifyInstance } from 'fastify';
 import sharp from 'sharp';
+import type { Prisma } from '../generated/prisma/client.js';
 import { prisma } from '../prismaCliente.js';
 import { verificarJWT } from '../middleware/autenticacion.js';
 import { tieneAccesoAdministrativoEstudio } from '../lib/accesoEstudio.js';
@@ -195,6 +196,9 @@ export async function rutasMensajesMasivos(servidor: FastifyInstance): Promise<v
       titulo: string;
       texto: string;
       imagenUrl?: string;
+      segmento?: 'todos' | 'activos' | 'inactivos';
+      incluirEmpleados?: boolean;
+      correosExtra?: string[];
     };
   }>(
     '/estudio/:id/mensajes-masivos',
@@ -242,6 +246,15 @@ export async function rutasMensajesMasivos(servidor: FastifyInstance): Promise<v
       }
 
       const { titulo, texto, imagenUrl } = solicitud.body;
+  const segmento = solicitud.body.segmento ?? 'todos';
+  const incluirEmpleados = solicitud.body.incluirEmpleados ?? false;
+  const correosExtraRaw: string[] = solicitud.body.correosExtra ?? [];
+
+  const REGEX_EMAIL = /^[^\s@]+@[^^\s@]+\.[^\s@]+$/;
+  const correosExtra = correosExtraRaw
+    .map((e) => e.toLowerCase().trim())
+    .filter((e) => REGEX_EMAIL.test(e));
+
 
       if (!titulo || titulo.trim().length === 0) {
         return respuesta.code(400).send({ error: 'El título es obligatorio' });
@@ -256,17 +269,53 @@ export async function rutasMensajesMasivos(servidor: FastifyInstance): Promise<v
       }
 
       // Obtener clientes con email del salón
+      const hace30Dias = new Date();
+      hace30Dias.setDate(hace30Dias.getDate() - 30);
+
+      let filtroClientes: Prisma.ClienteWhereInput = { estudioId: id, email: { not: null } };
+
+      if (segmento === 'activos') {
+        filtroClientes = {
+          ...filtroClientes,
+          reservas: { some: { creadoEn: { gte: hace30Dias } } },
+        };
+      } else if (segmento === 'inactivos') {
+        filtroClientes = {
+          ...filtroClientes,
+          reservas: { none: { creadoEn: { gte: hace30Dias } } },
+        };
+      }
+
       const clientes = await prisma.cliente.findMany({
-        where: {
-          estudioId: id,
-          email: { not: null },
-        },
+        where: filtroClientes,
         select: { email: true, nombre: true },
       });
 
-      if (clientes.length === 0) {
+      // Obtener empleados activos con correo cuando se solicita
+      let emailsEmpleados: string[] = [];
+      if (incluirEmpleados) {
+        const empleados = await prisma.personal.findMany({
+          where: { estudioId: id, activo: true, acceso: { isNot: null } },
+          select: { acceso: { select: { email: true, activo: true } } },
+        });
+        emailsEmpleados = empleados
+          .filter((e) => e.acceso?.activo)
+          .map((e) => e.acceso!.email)
+          .filter((email): email is string => typeof email === 'string' && email.length > 0);
+      }
+
+      // Combinar y deduplicar todos los destinatarios
+      const todosLosEmails = Array.from(
+        new Set([
+          ...clientes.map((c) => c.email as string).filter(Boolean),
+          ...emailsEmpleados,
+          ...correosExtra,
+        ]),
+      );
+
+      if (todosLosEmails.length === 0) {
         return respuesta.code(400).send({
-          error: 'No hay clientes con correo electrónico registrado para enviar el mensaje.',
+          error: 'No hay destinatarios con correo electrónico registrado para enviar el mensaje.',
         });
       }
 
@@ -298,20 +347,18 @@ export async function rutasMensajesMasivos(servidor: FastifyInstance): Promise<v
         nombreSalon: estudio.nombre,
       });
 
-      // Encolar correos para cada cliente
+      // Encolar correos para cada destinatario
       let encolados = 0;
-      for (const cliente of clientes) {
-        if (cliente.email) {
-          await encolarCorreo({
-            destinatario: cliente.email,
-            asunto: `${estudio.nombre} — ${titulo.trim()}`,
-            html: htmlCorreo,
-            tipoEvento: 'mensaje_masivo',
-            referenciaId: mensaje.id,
-            claveUnica: `masivo_${mensaje.id}_${cliente.email}`,
-          });
-          encolados++;
-        }
+      for (const email of todosLosEmails) {
+        await encolarCorreo({
+          destinatario: email,
+          asunto: `${estudio.nombre} — ${titulo.trim()}`,
+          html: htmlCorreo,
+          tipoEvento: 'mensaje_masivo',
+          referenciaId: mensaje.id,
+          claveUnica: `masivo_${mensaje.id}_${email}`,
+        });
+        encolados++;
       }
 
       // Auditoría

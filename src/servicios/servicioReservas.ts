@@ -52,7 +52,7 @@ function normalizarSlots(slots: SlotBackend[]): SlotTiempo[] {
 
 interface DatosCrearReserva extends Omit<Reserva, 'id' | 'services'> {
   services: ServicioReservaPayload[];
-  fechaNacimiento: string; // "YYYY-MM-DD"
+  fechaNacimiento?: string; // "YYYY-MM-DD"
   email: string;
   usarRecompensa?: boolean;
   productosSeleccionados?: Array<{ productoId: string; cantidad: number }>;

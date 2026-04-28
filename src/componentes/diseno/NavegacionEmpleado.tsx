@@ -156,6 +156,15 @@ export function NavegacionEmpleado() {
             <User className="w-5 h-5" aria-hidden="true" />
             <span className="text-[10px] font-bold">Mi perfil</span>
           </Link>
+          <button
+            type="button"
+            onClick={handleCerrarSesion}
+            className="flex flex-1 flex-col items-center gap-1 py-3 text-slate-400 transition-colors hover:text-red-600"
+            aria-label="Cerrar sesión"
+          >
+            <LogOut className="w-5 h-5" aria-hidden="true" />
+            <span className="text-[10px] font-bold">Salir</span>
+          </button>
         </div>
       </nav>
     </>

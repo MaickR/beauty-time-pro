@@ -272,9 +272,14 @@ export async function actualizarExcepcionesDisponibilidad(
   id: string,
   excepcionesDisponibilidad: ExcepcionDisponibilidad[],
 ): Promise<void> {
+  // Filtrar excepciones sin fecha válida antes de enviar al backend
+  const excepcionesValidas = excepcionesDisponibilidad.filter(
+    (excepcion) =>
+      typeof excepcion.fecha === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(excepcion.fecha),
+  );
   await peticion(`/estudios/${id}/disponibilidad-excepciones`, {
     method: 'PUT',
-    body: JSON.stringify({ excepcionesDisponibilidad }),
+    body: JSON.stringify({ excepcionesDisponibilidad: excepcionesValidas }),
   });
 }
 

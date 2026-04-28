@@ -55,7 +55,7 @@ export function PaginaFinanzasMaestro() {
         </button>
       </header>
 
-      <main className="max-w-7xl mx-auto p-8">
+      <main className="max-w-7xl 2xl:max-w-screen-2xl mx-auto p-8">
         <div className="flex bg-slate-200/50 p-1 rounded-2xl w-fit mb-8 border border-slate-200">
           <button
             onClick={() => navegar('/maestro')}

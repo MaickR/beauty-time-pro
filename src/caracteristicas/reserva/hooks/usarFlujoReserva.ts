@@ -1,16 +1,19 @@
 import { useState } from 'react';
 import { crearReserva } from '../../../servicios/servicioReservas';
 import { obtenerFechaLocalISO } from '../../../utils/formato';
-import type { Estudio, ProductoAdicionalReserva, ProductoPublicoReserva, Servicio, SlotTiempo } from '../../../tipos';
-import {
-  construirNotaServicio,
-  obtenerClaveServicioReserva,
-} from '../utils/detallesServicios';
+import type {
+  Estudio,
+  ProductoAdicionalReserva,
+  ProductoPublicoReserva,
+  Servicio,
+  SlotTiempo,
+} from '../../../tipos';
+import { construirNotaServicio, obtenerClaveServicioReserva } from '../utils/detallesServicios';
 
 interface DatosContactoFormulario {
   nombreCliente: string;
   telefonoCliente: string;
-  fechaNacimiento: string;
+  fechaNacimiento?: string;
   email?: string;
   observaciones?: string;
   metodoPago?: 'cash' | 'card' | 'bank_transfer' | 'digital_transfer';
@@ -84,14 +87,19 @@ export function usarFlujoReserva(): Omit<HookFlujoReserva, 'slots'> {
   const [fechaSeleccionada, setFechaSeleccionada] = useState(new Date());
   const [horaSeleccionada, setHoraSeleccionada] = useState('');
   const [sucursalSeleccionada, setSucursalSeleccionada] = useState('');
-  const [productosSeleccionados, setProductosSeleccionados] = useState<ProductoAdicionalReserva[]>([]);
+  const [productosSeleccionados, setProductosSeleccionados] = useState<ProductoAdicionalReserva[]>(
+    [],
+  );
   const [nombreCliente, setNombreCliente] = useState('');
   const [telefonoCliente, setTelefonoCliente] = useState('');
   const [fechaNacimiento, setFechaNacimiento] = useState('');
   const [email, setEmail] = useState('');
-  const [metodoPago, setMetodoPago] =
-    useState<'cash' | 'card' | 'bank_transfer' | 'digital_transfer'>('cash');
-  const [detallesServicios, setDetallesServicios] = useState<Record<string, Record<string, string>>>({});
+  const [metodoPago, setMetodoPago] = useState<
+    'cash' | 'card' | 'bank_transfer' | 'digital_transfer'
+  >('cash');
+  const [detallesServicios, setDetallesServicios] = useState<
+    Record<string, Record<string, string>>
+  >({});
   const [reservaExitosa, setReservaExitosa] = useState(false);
   const [nombreClienteReservado, setNombreClienteReservado] = useState('');
   const [descripcionRecompensaGanada, setDescripcionRecompensaGanada] = useState('');
@@ -239,7 +247,10 @@ export function usarFlujoReserva(): Omit<HookFlujoReserva, 'slots'> {
 
     const totalDuracion = serviciosSeleccionados.reduce((acc, s) => acc + s.duration, 0);
     const totalPrecio = serviciosSeleccionados.reduce((acc, s) => acc + (s.price ?? 0), 0);
-    const totalProductos = productosSeleccionados.reduce((acc, producto) => acc + producto.total, 0);
+    const totalProductos = productosSeleccionados.reduce(
+      (acc, producto) => acc + producto.total,
+      0,
+    );
     const fechaStr = obtenerFechaLocalISO(fechaSeleccionada);
     const serviciosConDetalles = serviciosSeleccionados.map((servicio) => ({
       ...servicio,
