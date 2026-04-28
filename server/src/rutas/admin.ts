@@ -4461,7 +4461,9 @@ export async function rutasAdmin(servidor: FastifyInstance): Promise<void> {
         return respuesta.code(403).send({ error: 'Sin permisos para esta acción' });
       }
 
-      // Mantener maestros para no perder acceso administrativo al sistema.
+      const EMAIL_MAESTRO_PRINCIPAL = 'miguel@salonpromaster.com';
+
+      // Mantener solo el maestro principal para no perder acceso administrativo.
       await prisma.$executeRawUnsafe('SET FOREIGN_KEY_CHECKS = 0');
       let resumen: Record<string, number> = {};
       try {
@@ -4486,6 +4488,12 @@ export async function rutasAdmin(servidor: FastifyInstance): Promise<void> {
         const configFidelidad = await prisma.configFidelidad.deleteMany({});
         const permisosSupervisor = await prisma.permisosSupervisor.deleteMany({});
         const auditLogs = await prisma.auditLog.deleteMany({});
+        const maestrosSecundarios = await prisma.usuario.deleteMany({
+          where: {
+            rol: 'maestro',
+            email: { not: EMAIL_MAESTRO_PRINCIPAL },
+          },
+        });
         const usuariosNoMaestro = await prisma.usuario.deleteMany({ where: { rol: { not: 'maestro' } } });
         const estudios = await prisma.estudio.deleteMany({});
 
@@ -4511,6 +4519,7 @@ export async function rutasAdmin(servidor: FastifyInstance): Promise<void> {
           configFidelidad: configFidelidad.count,
           permisosSupervisor: permisosSupervisor.count,
           auditLogs: auditLogs.count,
+          maestrosSecundarios: maestrosSecundarios.count,
           usuariosNoMaestro: usuariosNoMaestro.count,
           estudios: estudios.count,
         };
